@@ -60,26 +60,31 @@ namespace hpl {
         // preset traits that are expected throughout the engine
         struct PostionTrait {
             using Type = float3;
+            static constexpr TinyImageFormat format = TinyImageFormat_R32G32B32_SFLOAT;
             static constexpr uint32_t Stride = sizeof(float3);
             static constexpr ShaderSemantic Semantic = ShaderSemantic::SEMANTIC_POSITION;
         };
         struct NormalTrait {
             using Type = float3;
+            static constexpr TinyImageFormat format = TinyImageFormat_R32G32B32_SFLOAT;
             static constexpr uint32_t Stride = sizeof(float3);
             static constexpr ShaderSemantic Semantic = ShaderSemantic::SEMANTIC_NORMAL;
         };
         struct ColorTrait {
             using Type = float4;
+            static constexpr TinyImageFormat format = TinyImageFormat_R32G32B32A32_SFLOAT;
             static constexpr uint32_t Stride = sizeof(float4);
             static constexpr ShaderSemantic Semantic = ShaderSemantic::SEMANTIC_COLOR;
         };
         struct TangentTrait {
             using Type = float3;
+            static constexpr TinyImageFormat format = TinyImageFormat_R32G32B32_SFLOAT;
             static constexpr uint32_t Stride = sizeof(float3);
             static constexpr ShaderSemantic Semantic = ShaderSemantic::SEMANTIC_TANGENT;
         };
         struct TextureTrait {
             using Type = float2;
+            static constexpr TinyImageFormat format = TinyImageFormat_R32G32_SFLOAT;
             static constexpr uint32_t Stride = sizeof(float2);
             static constexpr ShaderSemantic Semantic = ShaderSemantic::SEMANTIC_TEXCOORD0;
         };

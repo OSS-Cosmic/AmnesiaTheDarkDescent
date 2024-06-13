@@ -44,6 +44,8 @@
 
 #include "math/Math.h"
 
+#include "tinyimageformat_query.h"
+
 namespace hpl {
 
     static constexpr bool gbLogMSHLoad = false;
@@ -329,7 +331,22 @@ namespace hpl {
 		return pMesh;
 	}
 
-	//-----------------------------------------------------------------------
+    template<typename Trait>
+    void LegacySerializeStream(cBinaryBuffer& binBuff ,cSubMesh::StreamBufferInfo& stream, eVertexBufferElement legacyFormat, uint16_t legacyChannelCount) {
+        binBuff.AddShort16(legacyFormat);
+        binBuff.AddShort16(eVertexBufferElementFormat_Float);
+        binBuff.AddInt32(0);
+        binBuff.AddInt32(legacyChannelCount);
+        auto view = stream.GetStructuredView<typename Trait::Type>();
+        uint32_t channelCount = TinyImageFormat_ChannelCount(Trait::format);
+        for(uint16_t i = 0; i < legacyChannelCount; i++) {
+            if(i < channelCount) {
+                binBuff.AddFloat32(view.Get(i)[i]);
+            } else {
+                binBuff.AddFloat32(0);
+            }
+        }
+    }
 
 	bool cMeshLoaderMSH::SaveMesh(cMesh* apMesh, const tWString& asFile)
 	{
@@ -418,7 +435,6 @@ namespace hpl {
 				}
 			}
 
-			////////////////////
 			// Vertex Bone Pairs
 			{
 				if(gbLogMSHLoad) Log(" VertexBonePairs: %d\n",pSubMesh->GetVertexBonePairNum());
@@ -434,60 +450,57 @@ namespace hpl {
 				}
 			}
 
-			////////////////////////////
 			//Add Vertices
 			{
-				int lVtxNum =  pVtxBuff->GetVertexNum();
-				binBuff.AddInt32(lVtxNum);
+                auto posIt = pSubMesh->getStreamBySemantic(SEMANTIC_POSITION);
+                if(posIt == pSubMesh->streamBuffers().end()) {
+                    LOGF(LogLevel::eERROR, "Position stream is required for subMesh");
+                    continue;
+                }
+                const int lVtxNum = posIt->m_numberElements;
+                int lVtxTypeNum = 0;
+                for (auto& streamBuffer : pSubMesh->streamBuffers()) {
+                    lVtxTypeNum++;
+                }
 
-				//////////////////////////////
-				// Calculate the number of vertex buffer types
-				int lVtxTypeNum =  0;
-				for(int i=0; i < eVertexBufferElement_LastEnum;i++)
-				{
-					if(pVtxBuff->GetElementNum((eVertexBufferElement)i) > 0) ++lVtxTypeNum;
-				}
-				binBuff.AddInt32(lVtxTypeNum);
+                LOGF_IF(LogLevel::eDEBUG, gbLogMSHLoad, " VertexBuffers num: %d typenum: %d\n", lVtxNum, lVtxTypeNum);
 
-				if(gbLogMSHLoad) Log(" VertexBuffers num: %d typenum: %d\n",lVtxNum, lVtxTypeNum);
-
-				//////////////////////////////
-				// Iterate the Vertices
-				for(int i=0; i < eVertexBufferElement_LastEnum;i++)
-				{
-					eVertexBufferElement arrayType = (eVertexBufferElement)i;
-
-					if(pVtxBuff->GetElementNum(arrayType) <= 0) continue;
-
-					int lElementNum = pVtxBuff->GetElementNum(arrayType);
-					eVertexBufferElementFormat elementFormat = pVtxBuff->GetElementFormat(arrayType);
-
-					binBuff.AddShort16(arrayType);
-					binBuff.AddShort16(elementFormat);
-					binBuff.AddInt32(pVtxBuff->GetElementProgramVarIndex(arrayType));
-					binBuff.AddInt32(lElementNum);
-
-					if(gbLogMSHLoad) Log("  Vtx %d: %d %d %d\n", i, arrayType, pVtxBuff->GetElementProgramVarIndex(arrayType), lElementNum);
-
-					void *pData = GetVertexBufferWithFormat(pVtxBuff, arrayType, elementFormat);
-					AddBinaryBufferDataWithFormat(&binBuff, pData, (size_t)(lVtxNum * lElementNum), elementFormat);
-				}
+                binBuff.AddInt32(posIt->m_numberElements);
+                binBuff.AddInt32(lVtxTypeNum);
+                for (auto& streamBuffer : pSubMesh->streamBuffers()) {
+                    switch (streamBuffer.m_semantic) {
+                        case ShaderSemantic::SEMANTIC_POSITION:
+                            LegacySerializeStream<cSubMesh::PostionTrait>(binBuff,streamBuffer, eVertexBufferElement_Position, 4);
+                            break;
+                        case ShaderSemantic::SEMANTIC_NORMAL:
+                            LegacySerializeStream<cSubMesh::NormalTrait>(binBuff, streamBuffer, eVertexBufferElement_Normal, 3);
+                            break;
+                        case ShaderSemantic::SEMANTIC_COLOR:
+                            LegacySerializeStream<cSubMesh::ColorTrait>(binBuff, streamBuffer, eVertexBufferElement_Color0, 4);
+                            break;
+                        case ShaderSemantic::SEMANTIC_TEXCOORD0:
+                            LegacySerializeStream<cSubMesh::TextureTrait>(binBuff, streamBuffer, eVertexBufferElement_Texture0, 3);
+                            break;
+                        case ShaderSemantic::SEMANTIC_TANGENT:
+                            LegacySerializeStream<cSubMesh::TangentTrait>(binBuff, streamBuffer, eVertexBufferElement_Texture1Tangent, 4);
+                            break;
+                        default:
+                            LOGF(LogLevel::eWARNING, "unsuppoted semantic: %d", streamBuffer.m_semantic);
+                            break;
+                    }
+                }
 			}
+		    auto& indexStream = pSubMesh->IndexStream();
 
-			////////////////////////////
-			//Add Indices
-			{
-				int lIdxNum =  pVtxBuff->GetIndexNum();
-
-				if(gbLogMSHLoad) Log("Indices: %d\n", lIdxNum);
-
-				binBuff.AddInt32(lIdxNum);
-				binBuff.AddInt32Array((int*)pVtxBuff->GetIndices(), lIdxNum);
-			}
+            LOGF_IF(LogLevel::eDEBUG, gbLogMSHLoad, "Indices: %d\n", indexStream.m_numberElements);
+            auto view = indexStream.GetView();
+			binBuff.AddInt32(indexStream.m_numberElements);
+            for(size_t i = 0; i < indexStream.m_numberElements; i++) {
+				binBuff.AddInt32(view.Get(i));
+            }
 		}
 
 
-		////////////////////////////
 		// Animations
 		{
 			binBuff.AddInt32(apMesh->GetAnimationNum());
