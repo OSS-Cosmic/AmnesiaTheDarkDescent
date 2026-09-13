@@ -38,7 +38,7 @@ namespace hpl {
 
 	cParticleManager::cParticleManager(cGraphics* apGraphics,cResources *apResources)
 		: iResourceManager(apResources->GetFileSearcher(), apResources->GetLowLevel(),
-							apResources->GetLowLevelSystem())
+							apResources->GetLowLevelSystem(), true)
 	{
 		mpGraphics = apGraphics;
 		mpResources = apResources;

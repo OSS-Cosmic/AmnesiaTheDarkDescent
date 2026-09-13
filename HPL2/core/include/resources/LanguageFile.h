@@ -61,7 +61,7 @@ namespace hpl {
 		cLanguageFile(cResources *apResources);
 		~cLanguageFile();
 		
-		bool AddFromFile(const tWString& asFile, bool abAddResourceDirs, const tWString& asAltPath = _W(""));
+		bool AddFromFile(const tWString& asFile, bool abAddResourceDirs, const tWString& asAltPath = _W(""), const tString& asResourceScope = "");
 		
 		const tWString& Translate(const tString& asCat, const tString& asName);
 

@@ -137,6 +137,8 @@ function link_engine()
     link_nrd()
     link_fsr()
     link_xess()
+    memory_consumer()
+    memory_rebuild_consumer()
     filter "system:linux"
         links { "pthread", "dl" }
     filter "system:windows"

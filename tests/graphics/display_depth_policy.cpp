@@ -1,20 +1,11 @@
 #include "graphics/DisplayDepthPolicy.h"
-
-#include <cstdio>
+#include "utest.h"
 
 namespace {
 
 using hpl::DisplayDepthCandidate;
 using hpl::DisplayDepthInputs;
 using hpl::DisplayDepthSource;
-
-bool Check(bool condition, const char *name) {
-  if (!condition) {
-    std::printf("failed: %s\n", name);
-    return false;
-  }
-  return true;
-}
 
 DisplayDepthCandidate Candidate(uint32_t width, uint32_t height,
                                 bool hasImage = true,
@@ -35,127 +26,107 @@ DisplayDepthInputs NativeSceneInputs() {
   return inputs;
 }
 
-bool CheckAllocationContract() {
+} // namespace
+
+UTEST(DisplayDepthPolicy, AllocationContract) {
   DisplayDepthInputs inputs;
   inputs.displayExtent = {1920, 1080};
   inputs.scene = Candidate(960, 540);
   inputs.sceneIndexInRange = true;
-  if (!Check(hpl::SelectDisplayDepth(inputs) == DisplayDepthSource::None,
-             "reduced scene allocation is rejected"))
-    return false;
+  EXPECT_TRUE_MSG(hpl::SelectDisplayDepth(inputs) == DisplayDepthSource::None,
+                  "reduced scene allocation is rejected");
 
   inputs.sceneExtentCompatible = true;
-  return Check(hpl::SelectDisplayDepth(inputs) == DisplayDepthSource::None,
-               "compatible logical extent does not prove allocation size");
+  EXPECT_TRUE_MSG(hpl::SelectDisplayDepth(inputs) == DisplayDepthSource::None,
+                  "compatible logical extent does not prove allocation size");
 }
 
-bool CheckPresentationPreference() {
+UTEST(DisplayDepthPolicy, PresentationPreference) {
   DisplayDepthInputs inputs = NativeSceneInputs();
   inputs.presentation = Candidate(1920, 1080);
   inputs.presentationCurrent = true;
   inputs.scene = Candidate(960, 540);
-  return Check(hpl::SelectDisplayDepth(inputs) ==
-                   DisplayDepthSource::Presentation,
-               "current presentation depth wins over reduced scene depth");
+  EXPECT_TRUE_MSG(hpl::SelectDisplayDepth(inputs) ==
+                      DisplayDepthSource::Presentation,
+                  "current presentation depth wins over reduced scene depth");
 }
 
-bool CheckSceneFallback() {
+UTEST(DisplayDepthPolicy, SceneFallback) {
   DisplayDepthInputs inputs = NativeSceneInputs();
   inputs.presentation = Candidate(1920, 1080);
   inputs.presentationCurrent = false;
-  if (!Check(hpl::SelectDisplayDepth(inputs) == DisplayDepthSource::Scene,
-             "stale presentation falls back to native scene depth"))
-    return false;
+  EXPECT_TRUE_MSG(hpl::SelectDisplayDepth(inputs) == DisplayDepthSource::Scene,
+                  "stale presentation falls back to native scene depth");
 
   inputs.scene.hasAttachmentView = false;
-  if (!Check(hpl::SelectDisplayDepth(inputs) == DisplayDepthSource::None,
-             "missing scene attachment view has no fallback"))
-    return false;
+  EXPECT_TRUE_MSG(hpl::SelectDisplayDepth(inputs) == DisplayDepthSource::None,
+                  "missing scene attachment view has no fallback");
 
   inputs.scene.hasAttachmentView = true;
   inputs.sceneIndexInRange = false;
-  return Check(hpl::SelectDisplayDepth(inputs) == DisplayDepthSource::None,
-               "out-of-range scene index has no fallback");
+  EXPECT_TRUE_MSG(hpl::SelectDisplayDepth(inputs) == DisplayDepthSource::None,
+                  "out-of-range scene index has no fallback");
 }
 
-bool CheckRequestedExtent() {
+UTEST(DisplayDepthPolicy, RequestedExtent) {
   DisplayDepthInputs inputs;
   inputs.displayExtent = {960, 540};
   inputs.scene = Candidate(960, 540);
   inputs.sceneIndexInRange = true;
   inputs.sceneExtentCompatible = true;
-  if (!Check(hpl::SelectDisplayDepthForExtent(inputs, 1920, 1080) ==
-                 DisplayDepthSource::None,
-             "offscreen depth is rejected for a larger GUI extent"))
-    return false;
+  EXPECT_TRUE_MSG(hpl::SelectDisplayDepthForExtent(inputs, 1920, 1080) ==
+                      DisplayDepthSource::None,
+                  "offscreen depth is rejected for a larger GUI extent");
 
-  return Check(hpl::SelectDisplayDepthForExtent(inputs, 960, 540) ==
-                   DisplayDepthSource::Scene,
-               "offscreen depth is selected at its own extent");
+  EXPECT_TRUE_MSG(hpl::SelectDisplayDepthForExtent(inputs, 960, 540) ==
+                      DisplayDepthSource::Scene,
+                  "offscreen depth is selected at its own extent");
 }
 
-bool CheckExtentMismatches() {
+UTEST(DisplayDepthPolicy, ExtentMismatches) {
   DisplayDepthInputs inputs;
   inputs.displayExtent = {1920, 1080};
   inputs.presentation = Candidate(1919, 1080);
   inputs.presentationCurrent = true;
-  if (!Check(hpl::SelectDisplayDepth(inputs) == DisplayDepthSource::None,
-             "presentation width mismatch is rejected"))
-    return false;
+  EXPECT_TRUE_MSG(hpl::SelectDisplayDepth(inputs) == DisplayDepthSource::None,
+                  "presentation width mismatch is rejected");
 
   inputs.presentation = Candidate(1920, 1079);
-  if (!Check(hpl::SelectDisplayDepth(inputs) == DisplayDepthSource::None,
-             "presentation height mismatch is rejected"))
-    return false;
+  EXPECT_TRUE_MSG(hpl::SelectDisplayDepth(inputs) == DisplayDepthSource::None,
+                  "presentation height mismatch is rejected");
 
   inputs.presentationCurrent = false;
   inputs.sceneIndexInRange = true;
   inputs.sceneExtentCompatible = true;
   inputs.scene = Candidate(1919, 1080);
-  if (!Check(hpl::SelectDisplayDepth(inputs) == DisplayDepthSource::None,
-             "scene width mismatch is rejected"))
-    return false;
+  EXPECT_TRUE_MSG(hpl::SelectDisplayDepth(inputs) == DisplayDepthSource::None,
+                  "scene width mismatch is rejected");
 
   inputs.scene = Candidate(1920, 1079);
-  return Check(hpl::SelectDisplayDepth(inputs) == DisplayDepthSource::None,
-               "scene height mismatch is rejected");
+  EXPECT_TRUE_MSG(hpl::SelectDisplayDepth(inputs) == DisplayDepthSource::None,
+                  "scene height mismatch is rejected");
 }
 
-bool CheckInvalidInputs() {
+UTEST(DisplayDepthPolicy, InvalidInputs) {
   DisplayDepthInputs inputs = NativeSceneInputs();
   inputs.displayExtent = {0, 0};
-  if (!Check(hpl::SelectDisplayDepth(inputs) == DisplayDepthSource::None,
-             "zero display extent is rejected"))
-    return false;
+  EXPECT_TRUE_MSG(hpl::SelectDisplayDepth(inputs) == DisplayDepthSource::None,
+                  "zero display extent is rejected");
 
   inputs = NativeSceneInputs();
-  if (!Check(hpl::SelectDisplayDepthForExtent(inputs, 0, 1080) ==
-                 DisplayDepthSource::None,
-             "zero requested width is rejected") ||
-      !Check(hpl::SelectDisplayDepthForExtent(inputs, 1920, 0) ==
-                 DisplayDepthSource::None,
-             "zero requested height is rejected"))
-    return false;
+  EXPECT_TRUE_MSG(hpl::SelectDisplayDepthForExtent(inputs, 0, 1080) ==
+                      DisplayDepthSource::None,
+                  "zero requested width is rejected");
+  EXPECT_TRUE_MSG(hpl::SelectDisplayDepthForExtent(inputs, 1920, 0) ==
+                      DisplayDepthSource::None,
+                  "zero requested height is rejected");
 
   inputs = NativeSceneInputs();
   inputs.scene = Candidate(1920, 1080, false, true);
-  if (!Check(hpl::SelectDisplayDepth(inputs) == DisplayDepthSource::None,
-             "missing scene image is rejected"))
-    return false;
+  EXPECT_TRUE_MSG(hpl::SelectDisplayDepth(inputs) == DisplayDepthSource::None,
+                  "missing scene image is rejected");
 
   inputs.scene = Candidate(1920, 1080, true, false);
-  return Check(hpl::SelectDisplayDepth(inputs) == DisplayDepthSource::None,
-               "missing scene attachment view is rejected");
-}
-
-} // namespace
-
-bool RunDisplayDepthPolicyTests() {
-  if (!CheckAllocationContract() || !CheckPresentationPreference() ||
-      !CheckSceneFallback() || !CheckRequestedExtent() ||
-      !CheckExtentMismatches() || !CheckInvalidInputs())
-    return false;
-
-  std::printf("display depth policy checks passed\n");
-  return true;
+  EXPECT_TRUE_MSG(hpl::SelectDisplayDepth(inputs) == DisplayDepthSource::None,
+                  "missing scene attachment view is rejected");
 }

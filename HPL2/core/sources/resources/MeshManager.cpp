@@ -39,7 +39,7 @@ namespace hpl {
 
 	cMeshManager::cMeshManager(cGraphics* apGraphic,cResources *apResources)
 		: iResourceManager(apResources->GetFileSearcher(), apResources->GetLowLevel(),
-							apResources->GetLowLevelSystem())
+							apResources->GetLowLevelSystem(), true)
 	{
 		mpGraphics = apGraphic;
 		mpResources = apResources;

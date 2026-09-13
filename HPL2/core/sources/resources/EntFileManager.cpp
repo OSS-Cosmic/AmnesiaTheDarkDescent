@@ -98,7 +98,7 @@ namespace hpl {
 	//-----------------------------------------------------------------------
 
 	cEntFileManager::cEntFileManager(cResources *apResources)
-		: iResourceManager(apResources->GetFileSearcher(), apResources->GetLowLevel(), apResources->GetLowLevelSystem())
+		: iResourceManager(apResources->GetFileSearcher(), apResources->GetLowLevel(), apResources->GetLowLevelSystem(), true)
 	{
 		mpResources = apResources;
 	}

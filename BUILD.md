@@ -60,6 +60,20 @@ Inside the container, the wrapper optionally removes `build-premake/` for `--cle
 - `--game-dir <path>` — path to the installed game (fallback: `AMNESIA_GAME_DIRECTORY`)
 - `-- <args>` — forward extra arguments to `premake5 gmake2`
 
+Memory tracking is an opt-in Debug/Release build option. It defaults to `no` in
+both configurations. See the [memory-tracking note](notes/memory_tracking.md)
+for report paths, lifecycle guidance, and verification boundaries. The
+canonical Linux rollout sequence is:
+
+```bash
+./build-linux-docker.sh debug --no-deploy -- --memory-tracking=yes
+./build-linux-docker.sh debug --no-deploy -- --memory-tracking=no
+```
+
+The second command returns to the normal build. Regenerate the Premake project
+and rebuild after changing `--memory-tracking`; changing the option does not
+retrofit an already generated or compiled build.
+
 Examples:
 
 ```bash
@@ -214,6 +228,7 @@ The options below are defined in [`premake/options.lua`](premake/options.lua). P
 | `--with-tools=yes\|no` | `yes` | Build the HPL2 editors and tools. |
 | `--with-tests=yes\|no` | `yes` | Build and run the headless unit tests. |
 | `--with-python-tests=yes\|no` | `yes` | Build and run the Python unit tests in the Premake test projects. |
+| `--memory-tracking=yes\|no` | `no` | Opt in to FluidStudios tracking for global replaceable C++ operators and HPL buffers; applies to Debug and Release. Regenerate and rebuild when changing it. |
 | `--graphics-x11=on\|off` | `on` on Linux | Enable the X11 Vulkan surface backend. |
 | `--graphics-wayland=on\|off` | `on` on Linux | Enable the Wayland Vulkan surface backend. |
 | `--cmake=PATH` | `cmake` on `PATH` | Select the CMake executable Premake uses for the bundled SDL2 and openal-soft builds and the FSR wrapper. |

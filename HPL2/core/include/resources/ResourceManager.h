@@ -44,10 +44,14 @@ namespace hpl {
 	{
 	public:
 		iResourceManager(cFileSearcher *apFileSearcher, iLowLevelResources *apLowLevelResources,
-						iLowLevelSystem *apLowLevelSystem);
+						iLowLevelSystem *apLowLevelSystem, bool abResolutionDependent=false);
 		virtual ~iResourceManager(){}
 
+		// Ordinary lookup uses the manager's dependency policy. The explicit flag
+		// requests dependent lookup, but cannot disable a dependent manager.
+		// Dependent results must belong to the current FileSearcher generation.
 		iResourceBase* GetResource(const tWString& asFullPath);
+		iResourceBase* GetResource(const tWString& asFullPath, bool abResolutionDependent);
 
 		cResourceBaseIterator GetResourceBaseIterator();
 
@@ -76,6 +80,7 @@ namespace hpl {
 		cFileSearcher *mpFileSearcher;
 		iLowLevelResources *mpLowLevelResources;
 		iLowLevelSystem *mpLowLevelSystem;
+		bool mbResolutionDependent;
 
 		void BeginLoad(const tString& asFile);
 		void EndLoad();
@@ -89,7 +94,11 @@ namespace hpl {
 		 * \return A pointer to the resource. NULL if not in manager.
 		 */
 		iResourceBase* FindLoadedResource(const tString &asName, tWString &asFilePath, int *apEqualCount=NULL);
-		void AddResource(iResourceBase* apResource, bool abLog=true, bool abAddToSet=true);
+		// Registers a resource with the effective policy (manager default OR flag).
+		// Registration stamps dependent generation once; duplicate pointers are left
+		// unchanged. The flag is independent of the resource's reference lifetime.
+		void AddResource(iResourceBase* apResource, bool abLog=true, bool abAddToSet=true,
+						 bool abResolutionDependent=false);
 		void RemoveResource(iResourceBase* apResource);
 
 		tString GetTabs();

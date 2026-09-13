@@ -77,6 +77,13 @@ public:
   iResourceManager *GetOwningManager() const { return mpOwningManager; }
   void SetOwningManager(iResourceManager *apManager) { mpOwningManager = apManager; }
 
+  // Manager-assigned generation for dependent resources. It is valid only for
+  // the current FileSearcher generation; independent resources remain 0.
+  uint64_t GetResolutionGeneration() const { return mResolutionGeneration; }
+  void SetResolutionGeneration(uint64_t alGeneration) { mResolutionGeneration = alGeneration; }
+  bool IsResolutionDependent() const { return mbResolutionDependent; }
+  void SetResolutionDependent(bool abDependent) { mbResolutionDependent = abDependent; }
+
   unsigned long GetTime() { return mlTime; }
   unsigned long GetPrio() { return mlPrio; }
 
@@ -112,6 +119,8 @@ protected:
   uint64_t mUniqueCookie;
   bool mbLogDestruction;
   iResourceManager *mpOwningManager = nullptr;
+  uint64_t mResolutionGeneration = 0;
+  bool mbResolutionDependent = false;
 
 private:
   tWString msFullPath;

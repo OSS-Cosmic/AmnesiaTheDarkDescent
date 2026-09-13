@@ -1,7 +1,7 @@
 #include "../../amnesia/slang/LightGridCulling.h"
+#include "utest.h"
 
 #include <cmath>
-#include <cstdio>
 #include <initializer_list>
 
 namespace {
@@ -11,11 +11,6 @@ using hpl::float4;
 float3 Add(float3 a, float3 b) { return {a.x + b.x, a.y + b.y, a.z + b.z}; }
 float3 Scale(float3 a, float s) { return {a.x * s, a.y * s, a.z * s}; }
 float Dot(float3 a, float3 b) { return a.x * b.x + a.y * b.y + a.z * b.z; }
-
-bool Check(bool condition, const char *message) {
-  if (!condition) std::printf("failed: light grid: %s\n", message);
-  return condition;
-}
 
 struct Projection {
   float3 apex, right, up, forward;
@@ -51,37 +46,41 @@ Projection MakeProjection(float fov, float aspect, float yaw, float pitch,
   return p;
 }
 
-bool CheckOldArchives() {
+void CheckOldArchives(int *utest_result) {
   constexpr float unit = 62.5f / 32.0f;
   constexpr float fov = 0.872665f;
   const auto p = MakeProjection(fov, 2.0f, 0, 0, float3(0));
   const float3 point(8, 0, 10);
   const float oldConeDistance = std::cos(fov * 0.5f) * 8 - std::sin(fov * 0.5f) * 10;
-  return Check(point.x < 10 * p.halfWidth && std::sqrt(Dot(point, point)) < 17.068f,
-               "Old Archives witness lies inside gobo and reach") &&
-         Check(oldConeDistance > unit * std::sqrt(3.0f) * 0.5f,
-               "old circular cull incorrectly rejects witness cell") &&
-         Check(p.Intersects(point, unit * 0.5f), "rectangular cull retains witness cell");
+  ASSERT_TRUE_MSG(point.x < 10 * p.halfWidth &&
+                      std::sqrt(Dot(point, point)) < 17.068f,
+                  "Old Archives witness lies inside gobo and reach");
+  ASSERT_TRUE_MSG(oldConeDistance > unit * std::sqrt(3.0f) * 0.5f,
+                  "old circular cull incorrectly rejects witness cell");
+  ASSERT_TRUE_MSG(p.Intersects(point, unit * 0.5f),
+                  "rectangular cull retains witness cell");
 }
 
-bool CheckBoundaries() {
+void CheckBoundaries(int *utest_result) {
   for (float scale : {0.0001f, 1.0f, 10000.0f}) {
     const float4 plane(scale, 0, 0, -1001 * scale);
-    if (!Check(hpl::lightGridPlaneIntersectsBox(plane, float3(1000, 0, 0), 1),
-               "translated touching box retained at every plane scale") ||
-        !Check(!hpl::lightGridPlaneIntersectsBox(plane, float3(998, 0, 0), 1),
-               "fully outside box rejected at every plane scale")) return false;
+    ASSERT_TRUE_MSG(hpl::lightGridPlaneIntersectsBox(
+                        plane, float3(1000, 0, 0), 1),
+                    "translated touching box retained at every plane scale");
+    ASSERT_FALSE_MSG(hpl::lightGridPlaneIntersectsBox(
+                         plane, float3(998, 0, 0), 1),
+                     "fully outside box rejected at every plane scale");
   }
   const auto p = MakeProjection(0.872665f, 2, 0, 0, float3(0));
-  return Check(!p.Intersects(float3(0, 0, -4), 0.5f), "box behind apex rejected") &&
-         Check(p.Intersects(float3(0), 0.1f), "box crossing apex retained") &&
-         Check(!p.Intersects(p.Point(4, 0, 10), 0.1f), "box outside horizontal side rejected") &&
-         Check(!p.Intersects(p.Point(0, -4, 10), 0.1f), "box outside vertical side rejected") &&
-         Check(p.Intersects(p.Point(0, 0, 0.001f), 0), "no unintended near clip") &&
-         Check(p.Intersects(p.Point(0, 0, 500), 0), "no unintended far clip");
+  ASSERT_FALSE_MSG(p.Intersects(float3(0, 0, -4), 0.5f), "box behind apex rejected");
+  ASSERT_TRUE_MSG(p.Intersects(float3(0), 0.1f), "box crossing apex retained");
+  ASSERT_FALSE_MSG(p.Intersects(p.Point(4, 0, 10), 0.1f), "box outside horizontal side rejected");
+  ASSERT_FALSE_MSG(p.Intersects(p.Point(0, -4, 10), 0.1f), "box outside vertical side rejected");
+  ASSERT_TRUE_MSG(p.Intersects(p.Point(0, 0, 0.001f), 0), "no unintended near clip");
+  ASSERT_TRUE_MSG(p.Intersects(p.Point(0, 0, 500), 0), "no unintended far clip");
 }
 
-bool CheckCameraSweeps() {
+void CheckCameraSweeps(int *utest_result) {
   constexpr float unit = 62.5f / 32.0f;
   const float edges[] = {-1, -0.999f, -0.5f, 0, 0.5f, 0.999f, 1};
   unsigned checked = 0;
@@ -105,21 +104,20 @@ bool CheckCameraSweeps() {
                           std::nearbyint((point.y - camera.y) / unit),
                           std::nearbyint((point.z - camera.z) / unit));
         const float3 center = Add(camera, Scale(cell, unit));
-        if (!Check(std::fabs(cell.x) < 16 && std::fabs(cell.y) < 16 && std::fabs(cell.z) < 16,
-                   "sweep stays inside grid coverage") ||
-            !Check(p.Intersects(center, unit * 0.5f),
-                   "illuminated point's cell retained across camera movement")) return false;
+        ASSERT_TRUE_MSG(std::fabs(cell.x) < 16 && std::fabs(cell.y) < 16 &&
+                            std::fabs(cell.z) < 16,
+                        "sweep stays inside grid coverage");
+        ASSERT_TRUE_MSG(p.Intersects(center, unit * 0.5f),
+                        "illuminated point's cell retained across camera movement");
         ++checked;
       }
     }
   }
-  std::printf("light grid camera sweep: %u illuminated cells retained\n", checked);
-  return Check(checked > 100000, "camera sweep covers projection interiors, edges and corners");
+  ASSERT_GT_MSG(checked, 100000u,
+                "camera sweep covers projection interiors, edges and corners");
 }
 } // namespace
 
-bool RunLightGridCullingTests() {
-  if (!CheckOldArchives() || !CheckBoundaries() || !CheckCameraSweeps()) return false;
-  std::printf("light grid culling checks passed\n");
-  return true;
-}
+UTEST(LightGridCulling, OldArchives) { CheckOldArchives(utest_result); }
+UTEST(LightGridCulling, Boundaries) { CheckBoundaries(utest_result); }
+UTEST(LightGridCulling, CameraSweeps) { CheckCameraSweeps(utest_result); }

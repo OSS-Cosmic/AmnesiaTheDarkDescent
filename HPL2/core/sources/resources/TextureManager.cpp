@@ -284,7 +284,7 @@ SharedResourceHandle<Image> cTextureManager::CreateCubeMapImage(
   // cBitmap.
   tString sName = cString::SetFileExt(asPathName, "");
   tWString sFakeFullPath = cString::To16Char(sName);
-  Image *image = static_cast<Image *>(GetResource(sFakeFullPath));
+  Image *image = static_cast<Image *>(GetResource(sFakeFullPath, true));
 
   BeginLoad(asPathName);
 
@@ -364,7 +364,7 @@ SharedResourceHandle<Image> cTextureManager::CreateCubeMapImage(
     }
 
     image = new Image(sName, sFakeFullPath, std::move(singleImage));
-    AddResource(image);
+    AddResource(image, true, true, true);
     m_imageResources.push_back(image);
     // Pin the just-uploaded Image for a frame (see _wrapperImageResource).
     mpGraphics->graphicsDefer.push(PinResource(image));
@@ -414,7 +414,7 @@ cTextureManager::CreateAnimImage(const tString &asName, bool abUseMipMaps,
   tWString sFakeFullPath = cString::GetFilePathW(sFirstFramePath) +
                            cString::To16Char(cString::GetFileName(sBaseName));
 
-  Image *image = static_cast<Image *>(GetResource(sFakeFullPath));
+  Image *image = static_cast<Image *>(GetResource(sFakeFullPath, true));
 
   if (image == nullptr) {
     tString sFileExt = cString::GetFileExt(sBaseName);
@@ -515,7 +515,7 @@ cTextureManager::CreateAnimImage(const tString &asName, bool abUseMipMaps,
       }
       image = new Image(sBaseName, sFakeFullPath, std::move(anim));
     }
-    AddResource(image);
+    AddResource(image, true, true, true);
     m_imageResources.push_back(image);
     // Pin the just-uploaded Image for a frame (see _wrapperImageResource).
     mpGraphics->graphicsDefer.push(PinResource(image));

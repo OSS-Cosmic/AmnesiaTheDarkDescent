@@ -31,8 +31,10 @@ namespace tinyxml2 {
 
 namespace hpl {
 
-	/** Priority every resource dir gets unless resources.cfg asks for another. */
+	/** Priority for resource directories without an explicit override. */
 	const int klFileSearchDefaultPriority = 0;
+	/** Priority for a selected custom story, so it can override shipped files. */
+	const int klFileSearchCustomStoryPriority = 1;
 
 	//change to own file type?
 	typedef FILE tFile;

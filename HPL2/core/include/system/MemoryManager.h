@@ -16,138 +16,67 @@
  * You should have received a copy of the GNU General Public License
  * along with Amnesia: The Dark Descent.  If not, see <https://www.gnu.org/licenses/>.
  */
-
 #ifndef HPL_MEMORY_MANAGER_H
 #define HPL_MEMORY_MANAGER_H
 
-#include <map>
+#include <cstddef>
+#include <cstdlib>
 #include <string>
+#include "system/MemoryManagerBridge.h"
 
 namespace hpl {
+struct sMemoryStatistics {
+	std::size_t totalReportedMemory, totalActualMemory, peakReportedMemory, peakActualMemory;
+	std::size_t accumulatedReportedMemory, accumulatedActualMemory, accumulatedAllocUnitCount;
+	std::size_t totalAllocUnitCount, peakAllocUnitCount;
+	bool enabled;
+};
 
-	//------------------------------------
-	
-	class cAllocatedPointer
-	{
-	public:
-		cAllocatedPointer(void *apData, const std::string& asFile, int alLine, size_t alMemory);
-
-		std::string msFile;
-		int mlLine;
-		size_t mlMemory;
-		void *mpData;
-	};
-
-	//------------------------------------
-
-	typedef std::map<void*, cAllocatedPointer> tAllocatedPointerMap;
-	typedef tAllocatedPointerMap::iterator tAllocatedPointerMapIt;
-	
-	//------------------------------------
-
-	class cMemoryManager
-	{
-	public:
-
-		static void* AddPointer(const cAllocatedPointer& aAllocatedPointer);
-		static void* UpdatePointer(void *apOldData, const cAllocatedPointer& aNewAllocatedPointer);
-
-		static bool RemovePointer(void *apData,const char* apFileString, int alLine);
-
-		/**
-		 * Checks if data is valid, and can even be used on sub data (like pData + x )
-		 */
-		static bool IsValid(void *apData);
-
-		static void LogResults();
-		
-		static 	tAllocatedPointerMap m_mapPointers;
-		static size_t mlTotalMemoryUsage;
-
-		static bool mbLogDeletion;
-
-		template<class T>
-		static void RemoveAndDelete(T* apData, const char* apFileString, int alLine)
-		{
-			RemovePointer(apData, apFileString, alLine);
-			delete apData;
-		}
-
-		template<class T>
-		static void RemoveAndDeleteArray(T* apData, const char* apFileString, int alLine)
-		{
-			RemovePointer(apData, apFileString, alLine);
-			delete[] apData;
-		}
-
-		template<class T>
-		static void RemoveAndFree(T* apData, const char* apFileString, int alLine)
-		{
-			RemovePointer(apData, apFileString, alLine);
-			free(apData);
-		}
-
-		static void SetLogCreation(bool abX);
-		static bool GetLogCreation(){ return mbLogCreation;}
-
-		static int GetCreationCount(){ return mlCreationCount;}
-
-	private:
-		static bool mbLogCreation;
-		static int mlCreationCount;
-	};
-
-	//------------------------------------
+class cMemoryManager {
+public:
+	static bool IsValid(const void *apData);
+	static void LogResults();
+	static void SetReportPath(const char *apPath);
+	static void SetReportPath(const std::wstring &asPath);
+	// Statistics and creation counts use size_t for long-running processes.
+	static sMemoryStatistics GetStatistics();
+	static sMemoryStatistics GetMemoryStatistics(); // compatibility alias
+	// Counts successful explicitly annotated allocations/reallocations while
+	// enabled. Toggling the window does not reset the cumulative count.
+	static void SetLogCreation(bool abX);
+	static bool GetLogCreation();
+	static std::size_t GetCreationCount();
+};
 
 #ifdef MEMORY_MANAGER_ACTIVE
-    
-	#define hplNew(classType, constructor) \
-			( classType *)hpl::cMemoryManager::AddPointer(hpl::cAllocatedPointer(new classType constructor ,__FILE__,__LINE__,sizeof(classType)))
-
-	#define hplNewArray(classType, amount) \
-			( classType *) hpl::cMemoryManager::AddPointer(hpl::cAllocatedPointer(new classType [ amount ] ,__FILE__,__LINE__,amount * sizeof(classType)))
-
-	#define hplMalloc(amount) \
-			hpl::cMemoryManager::AddPointer(hpl::cAllocatedPointer(malloc( amount ) ,__FILE__,__LINE__,amount))
-
-	#define hplRealloc(data, amount) \
-			hpl::cMemoryManager::UpdatePointer(data, hpl::cAllocatedPointer(realloc( data, amount ) ,__FILE__,__LINE__,amount))
-
-	#define hplDelete(data) \
-			hpl::cMemoryManager::RemoveAndDelete(data,__FILE__,__LINE__)
-		
-	#define hplDeleteArray(data) \
-			hpl::cMemoryManager::RemoveAndDeleteArray(data,__FILE__,__LINE__)
-
-	#define hplFree(data) \
-			hpl::cMemoryManager::RemoveAndFree(data,__FILE__,__LINE__)
-
+// Keep the native new-expression at the macro callsite: this preserves access
+// to private constructors and exact constructor argument semantics. Accessible
+// class-specific allocation functions are deliberately unannotated because
+// they may bypass the global allocator; global allocations remain tracked.
+#if defined(__cpp_aligned_new)
+#define hplNew(classType, constructor) \
+	(hpl::memory::ScopedAllocationSite(__FILE__, __LINE__, __FUNCTION__, !(hpl::memory::HasApplicableClassSpecificScalarNew<classType>([](auto *hplProbe) -> decltype(hplProbe->operator new(std::size_t{})) { return nullptr; }) || hpl::memory::HasApplicableClassSpecificAlignedScalarNew<classType>([](auto *hplProbe) -> decltype(hplProbe->operator new(std::size_t{}, std::align_val_t{})) { return nullptr; }))) << new classType constructor)
+#define hplNewArray(classType, amount) \
+	[](auto hplArrayCount, const char *hplFile, unsigned int hplLine, const char *hplFunction) { return hpl::memory::ScopedAllocationSite(hplFile, hplLine, hplFunction, !(hpl::memory::HasApplicableClassSpecificArrayNew<classType>([](auto *hplProbe) -> decltype(hplProbe->operator new[](std::size_t{})) { return nullptr; }) || hpl::memory::HasApplicableClassSpecificAlignedArrayNew<classType>([](auto *hplProbe) -> decltype(hplProbe->operator new[](std::size_t{}, std::align_val_t{})) { return nullptr; }))) << new classType[hplArrayCount]; }(amount, __FILE__, __LINE__, __FUNCTION__)
 #else
-	#define hplNew(classType, constructor) \
-			new classType constructor 
-	
-	#define hplNewArray(classType, amount) \
-			new classType [ amount ] 
-	
-	#define hplMalloc(amount) \
-			malloc( amount )
-
-	#define hplRealloc(data, amount) \
-			realloc( data, amount )
-	
-	#define hplDelete(data) \
-			delete data
-
-	#define hplDeleteArray(data) \
-			delete [] data
-
-	#define hplFree(data) \
-			free(data)
-
+#define hplNew(classType, constructor) \
+	(hpl::memory::ScopedAllocationSite(__FILE__, __LINE__, __FUNCTION__, !hpl::memory::HasApplicableClassSpecificScalarNew<classType>([](auto *hplProbe) -> decltype(hplProbe->operator new(std::size_t{})) { return nullptr; })) << new classType constructor)
+#define hplNewArray(classType, amount) \
+	[](auto hplArrayCount, const char *hplFile, unsigned int hplLine, const char *hplFunction) { return hpl::memory::ScopedAllocationSite(hplFile, hplLine, hplFunction, !hpl::memory::HasApplicableClassSpecificArrayNew<classType>([](auto *hplProbe) -> decltype(hplProbe->operator new[](std::size_t{})) { return nullptr; })) << new classType[hplArrayCount]; }(amount, __FILE__, __LINE__, __FUNCTION__)
 #endif
-
-	//------------------------------------
-
-
-};
+#define hplMalloc(amount) hpl::memory::AllocateBuffer((amount), __FILE__, __LINE__, __FUNCTION__)
+#define hplRealloc(data, amount) hpl::memory::ReallocateBuffer((data), (amount), __FILE__, __LINE__, __FUNCTION__)
+#define hplDelete(data) delete (data)
+#define hplDeleteArray(data) delete [] (data)
+#define hplFree(data) hpl::memory::FreeBuffer((data), __FILE__, __LINE__, __FUNCTION__)
+#else
+#define hplNew(classType, constructor) new classType constructor
+#define hplNewArray(classType, amount) new classType [ amount ]
+#define hplMalloc(amount) malloc(amount)
+#define hplRealloc(data, amount) realloc((data), (amount))
+#define hplDelete(data) delete (data)
+#define hplDeleteArray(data) delete [] (data)
+#define hplFree(data) free(data)
+#endif
+} // namespace hpl
 #endif // HPL_MEMORY_MANAGER_H

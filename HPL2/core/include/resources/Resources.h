@@ -182,11 +182,14 @@ namespace hpl {
 
 		/**
 		 * \param alPriority Higher-priority directories shadow lower-priority directories for files with the same name.
+		 * \param asScope Ownership key for removable registrations; empty means permanent.
 		 */
-		bool AddResourceDir(const tWString &asDir, bool abAddSubDirectories, const tString &asMask = "*.*", int alPriority = klFileSearchDefaultPriority);
+		bool AddResourceDir(const tWString &asDir, bool abAddSubDirectories, const tString &asMask = "*.*", int alPriority = klFileSearchDefaultPriority, const tString &asScope = "");
+		void RemoveResourceDirScope(const tString &asScope);
 		void ClearResourceDirs();
 
-		bool AddLanguageFile(const tString &asFilePath, bool abAddResourceDirs, const tWString &asAltPath = _W(""));
+		// asResourceScope owns directories declared by this language file, including alternate paths.
+		bool AddLanguageFile(const tString &asFilePath, bool abAddResourceDirs, const tWString &asAltPath = _W(""), const tString &asResourceScope = "");
 		void ClearTranslations();
 		const tWString& Translate(const tString& asCat, const tString& asName);
 

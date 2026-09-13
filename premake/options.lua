@@ -85,6 +85,14 @@ newoption {
 }
 
 newoption {
+    trigger = "memory-tracking",
+    value = "yes/no",
+    description = "Enable HPL2 memory tracking (default no).",
+    allowed = { { "yes", "Enable memory tracking" }, { "no", "Disable memory tracking" } },
+    default = "no",
+}
+
+newoption {
     trigger = "with-python-tests",
     value = "yes/no",
     description = "Build and run the Python unit tests (default yes).",

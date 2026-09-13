@@ -44,6 +44,8 @@ project "HPL2"
     table.insert(patterns, CORE .. "/sources/platform/sdl2/*.cpp")
     files (glob(patterns))
     files { CORE .. "/include/**.h" }   -- headers for IDE/source groups
+    memory_engine()
+    memory_rebuild_engine()
 
     filter "system:linux"
         files (glob { IMPL .. "PlatformUnix.cpp", IMPL .. "PlatformSDL.cpp" })

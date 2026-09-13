@@ -15,3 +15,8 @@ the GLSL/Vulkan tool build and run on non-Windows hosts. `FSR_GLSLANG` and
 The standalone `tests/fsr/check_patch_restaging.py` checker configures and
 builds this project in a disposable copy of `cmake/fsr`, so it exercises both
 this staging flow and the SDK source restaging without modifying the checkout.
+
+The shader driver also stages an anchor-checked correction to SDK 1.1.4's GLSL
+luma-history storage format: `rgba16f` matches the SDK's RGBA16F allocation;
+the upstream `rgba8` declaration produces undefined history data on Vulkan.
+`FsrShaderBlobTests` checks the embedded SPIR-V format across permutations.

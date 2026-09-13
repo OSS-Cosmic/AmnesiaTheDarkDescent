@@ -183,7 +183,10 @@ void cDirectoryHandler::RefreshLookupDirs()
 
 			if(lookupDir.mbIsUpdated)
 			{
-				mpEditor->GetEngine()->GetResources()->AddResourceDir(lookupDir.msDir, lookupDir.mbAddSubDirs);
+				// Editor lookup categories are generic directories, not a selected
+				// story, so they retain the normal resource priority.
+				mpEditor->GetEngine()->GetResources()->AddResourceDir(
+					lookupDir.msDir, lookupDir.mbAddSubDirs, "*.*", klFileSearchDefaultPriority);
 				lookupDir.mbIsUpdated = false;
 			}
 		}
@@ -202,7 +205,8 @@ void cDirectoryHandler::ForceRefreshLookupDirs()
 		{
 			cLookupDirectory& lookupDir = vDirs[i];
 
-			mpEditor->GetEngine()->GetResources()->AddResourceDir(lookupDir.msDir, lookupDir.mbAddSubDirs);
+			mpEditor->GetEngine()->GetResources()->AddResourceDir(
+				lookupDir.msDir, lookupDir.mbAddSubDirs, "*.*", klFileSearchDefaultPriority);
 			lookupDir.mbIsUpdated = false;
 		}
 	}

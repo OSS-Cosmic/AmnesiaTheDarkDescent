@@ -43,6 +43,12 @@ local function add_python_test_postbuild()
     filter {}
 end
 
+-- Keep the test foundation entirely local and offline. Every C++ test project
+-- calls this helper, including memory variants and conditional FSR projects.
+local function add_utest()
+    includedirs { ROOT .. "/tests/third_party/utest" }
+end
+
 project "TemporalCameraTests"
     kind "ConsoleApp"
     language "C++"
@@ -61,6 +67,7 @@ project "TemporalCameraTests"
         ROOT .. "/HPL2/core/sources/graphics/RIFormat.c",
     }
     includedirs { ROOT .. "/HPL2/core/include" }
+    add_utest()
     add_test_postbuild()
     -- gmake2 drops postbuildcommands on kind "Utility" projects, so the python
     -- suite rides on the first test project instead of getting its own.
@@ -78,6 +85,7 @@ project "FsrUpscalerParamsTests"
         ROOT .. "/HPL2/core/sources/graphics/FsrUpscalerParams.cpp",
     }
     includedirs { ROOT .. "/HPL2/core/include" }
+    add_utest()
     add_test_postbuild()
 
 -- The bindless slot pools are pure CPU data structures (IndexPool + ObjectPool),
@@ -95,10 +103,11 @@ project "BindlessPoolTests"
         ROOT .. "/HPL2/core/sources/graphics/IndexPool.cpp",
     }
     includedirs { ROOT .. "/HPL2/core/include" }
+    add_utest()
     add_test_postbuild()
 
 -- Keep this one-main-per-project rule for the non-recursive tests/resources/*.cpp
--- glob; this project owns the FileSearcher test executable.
+-- glob; the cache test is nested and therefore not part of this project.
 project "FileSearcherTests"
     kind "ConsoleApp"
     language "C++"
@@ -116,6 +125,123 @@ project "FileSearcherTests"
     includedirs { ROOT .. "/HPL2/core/include" }
     defines { "USE_SDL2" }
     link_sdl2()
+    add_utest()
+    add_test_postbuild()
+
+-- ResourceCacheTests deliberately links only the CPU resource seams.  In
+-- particular, do not pull in TextureManager/ImageManager: their constructors
+-- require live graphics resources and would turn this into a GPU test.
+project "ResourceCacheTests"
+    kind "ConsoleApp"
+    language "C++"
+    cppdialect "C++17"
+    objdir (BUILD_OUT .. "/obj/%{prj.name}/%{cfg.buildcfg}")
+    targetdir (BUILD_OUT .. "/tests/%{cfg.buildcfg}")
+    files {
+        ROOT .. "/tests/resources/cache/cache.cpp",
+        ROOT .. "/HPL2/core/sources/resources/ResourceManager.cpp",
+        ROOT .. "/HPL2/core/sources/resources/ResourceBase.cpp",
+        ROOT .. "/HPL2/core/sources/resources/FileSearcher.cpp",
+        ROOT .. "/HPL2/core/sources/system/String.cpp",
+        ROOT .. "/HPL2/core/sources/system/Hasher.cpp",
+        ROOT .. "/HPL2/core/sources/graphics/Color.cpp",
+    }
+    includedirs { ROOT .. "/HPL2/core/include" }
+    defines { "USE_SDL2" }
+    link_sdl2()
+    add_utest()
+    add_test_postbuild()
+
+-- The Fluid Studios adapter is intentionally tested as a small standalone
+-- executable. Do not link HPL2 or any graphics/audio dependency here: this
+-- project exercises the C allocator and C++ platform boundary in isolation.
+project "FluidStudiosMemoryTests"
+    kind "ConsoleApp"
+    language "C++"
+    cppdialect "C++17"
+    objdir (BUILD_OUT .. "/obj/%{prj.name}/%{cfg.buildcfg}")
+    targetdir (BUILD_OUT .. "/tests/%{cfg.buildcfg}")
+    files {
+        ROOT .. "/tests/memory/fluid_studios_platform_test.cpp",
+    }
+    defines { "MMGR_TESTING" }
+    memory_backend(true)
+    memory_platform(true)
+    add_utest()
+    add_test_postbuild()
+
+project "FluidStudiosMemoryTestsNoBacktrace"
+    kind "ConsoleApp"
+    language "C++"
+    cppdialect "C++17"
+    objdir (BUILD_OUT .. "/obj/%{prj.name}/%{cfg.buildcfg}")
+    targetdir (BUILD_OUT .. "/tests/%{cfg.buildcfg}")
+    files {
+        ROOT .. "/tests/memory/fluid_studios_platform_test.cpp",
+    }
+    defines { "MMGR_BACKTRACE=0", "MMGR_TESTING" }
+    memory_backend(true)
+    memory_platform(true)
+    add_utest()
+    add_test_postbuild()
+
+-- The HPL bridge is compiled directly with the backend and operators so this
+-- test never acquires production-engine linkage or changes the other memory
+-- test projects above.
+project "HplMemoryManagerTests"
+    kind "ConsoleApp"
+    language "C++"
+    cppdialect "C++17"
+    objdir (BUILD_OUT .. "/obj/%{prj.name}/%{cfg.buildcfg}")
+    targetdir (BUILD_OUT .. "/tests/%{cfg.buildcfg}")
+    files {
+        ROOT .. "/tests/memory/hpl_memory_manager_test.cpp",
+        ROOT .. "/tests/memory/hpl_memory_manager_fixture_before_main.cpp",
+        ROOT .. "/tests/memory/hpl_memory_manager_fixture_after_report.cpp",
+        ROOT .. "/tests/memory/hpl_memory_manager_lifetime_tests.cpp",
+        ROOT .. "/tests/memory/hpl_memory_manager_macro_contract_test.cpp",
+        ROOT .. "/tests/memory/hpl_memory_manager_attribution_tests.cpp",
+        ROOT .. "/tests/memory/hpl_memory_log_stub.cpp",
+        ROOT .. "/HPL2/core/sources/system/MemoryManager.cpp",
+    }
+    includedirs {
+        ROOT .. "/HPL2/core/include",
+        ROOT .. "/HPL2/extern/FluidStudios/MemoryManager",
+        ROOT .. "/tests/memory",
+    }
+    defines { "MEMORY_MANAGER_ACTIVE", "MMGR_TESTING" }
+    memory_engine(true)
+    memory_consumer(true)
+    exceptionhandling "On"
+    -- Keep observable allocation-count assertions portable across compilers
+    -- that may elide new/delete pairs. The bridge/backend retain Release flags;
+    -- the standalone runner also tests optimized callers with a probed flag.
+    filter "files:**/tests/memory/hpl_memory_manager*.cpp"
+        optimize "Off"
+    filter "system:not windows"
+        buildoptions { "-fexceptions" }
+    filter {}
+    add_utest()
+    add_test_postbuild()
+
+project "HplMemoryManagerDisabledFacadeTests"
+    kind "ConsoleApp"
+    language "C++"
+    cppdialect "C++17"
+    objdir (BUILD_OUT .. "/obj/%{prj.name}/%{cfg.buildcfg}")
+    targetdir (BUILD_OUT .. "/tests/%{cfg.buildcfg}")
+    files {
+        ROOT .. "/tests/memory/hpl_memory_manager_disabled_compile_test.cpp",
+        ROOT .. "/tests/memory/hpl_memory_log_stub.cpp",
+        ROOT .. "/HPL2/core/sources/system/MemoryManager.cpp",
+        -- The disabled facade has no consumer helper sources; retain an
+        -- explicit empty operator TU as its compile/link contract.
+        ROOT .. "/HPL2/core/sources/memory/MemoryOperators.cpp",
+    }
+    includedirs { ROOT .. "/HPL2/core/include" }
+    memory_consumer(false)
+    exceptionhandling "Off"
+    add_utest()
     add_test_postbuild()
 
 -- Same one-main-per-project rule as above applies to the tests/fsr/*.cpp glob.
@@ -138,6 +264,7 @@ if _OPTIONS["with-fsr"] ~= "no" then
         }
         fsr_shader_blob_test_use()
         link_fsr()
+        add_utest()
         add_test_postbuild()
 
     project "FsrVulkanLoaderTests"
@@ -156,5 +283,6 @@ if _OPTIONS["with-fsr"] ~= "no" then
         filter "system:linux"
             links { "dl", "pthread" }
         filter {}
+        add_utest()
         add_test_postbuild()
 end

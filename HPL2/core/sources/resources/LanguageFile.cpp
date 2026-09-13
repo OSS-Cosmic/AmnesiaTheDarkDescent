@@ -55,7 +55,7 @@ namespace hpl {
 
 	//-----------------------------------------------------------------------
 	
-	bool cLanguageFile::AddFromFile(const tWString& asFile, bool abAddResourceDirs, const tWString& asAltPath)
+	bool cLanguageFile::AddFromFile(const tWString& asFile, bool abAddResourceDirs, const tWString& asAltPath, const tString& asResourceScope)
 	{
 		const bool bLog =false;
 		// Collapse whitespace like the old TinyXML default did — wrapped entry
@@ -106,9 +106,9 @@ namespace hpl {
 #ifndef HPL_MINIMAL
 						//Log("Adding lang path: '%s' %d\n", sPath.c_str(), bAddSubDirs);
 						if (asAltPath.length()) {
-							mpResources->AddResourceDir(asAltPath + cString::To16Char(sPath),bAddSubDirs);
+							mpResources->AddResourceDir(asAltPath + cString::To16Char(sPath),bAddSubDirs,"*.*",klFileSearchDefaultPriority,asResourceScope);
 						}
-						mpResources->AddResourceDir(cString::To16Char(sPath),bAddSubDirs);
+						mpResources->AddResourceDir(cString::To16Char(sPath),bAddSubDirs,"*.*",klFileSearchDefaultPriority,asResourceScope);
 #endif
 				}
 			}

@@ -42,11 +42,13 @@ namespace hpl {
 
 	iResourceManager::iResourceManager(cFileSearcher *apFileSearcher, 
 										iLowLevelResources *apLowLevelResources,
-										iLowLevelSystem *apLowLevelSystem)
+										iLowLevelSystem *apLowLevelSystem,
+										bool abResolutionDependent)
 	{
 		mpFileSearcher = apFileSearcher;
 		mpLowLevelResources = apLowLevelResources;
 		mpLowLevelSystem = apLowLevelSystem;
+		mbResolutionDependent = abResolutionDependent;
 	}
 
 	//-----------------------------------------------------------------------
@@ -69,17 +71,30 @@ namespace hpl {
 
 	iResourceBase* iResourceManager::GetResource(const tWString& asFullPath)
 	{
+		return GetResource(asFullPath, mbResolutionDependent);
+	}
+
+	iResourceBase* iResourceManager::GetResource(const tWString& asFullPath,
+												 bool abResolutionDependent)
+	{
 		unsigned int lHash = cString::GetHashW(asFullPath);
 
-		tResourceBaseMapIt it = m_mapResources.find(lHash);
+		tResourceBaseMapIt it = m_mapResources.lower_bound(lHash);
 		if(it == m_mapResources.end())return NULL;
+		const bool bResolutionDependent = mbResolutionDependent || abResolutionDependent;
+		const uint64_t lCurrentGeneration = mpFileSearcher
+			? mpFileSearcher->GetResolutionGeneration() : 0;
 
         size_t lCount = m_mapResources.count(lHash);
 		for(size_t i=0; i<lCount; ++i, ++it)
 		{
 			iResourceBase *pResource = it->second;
 
-			if(pResource->GetFullPath() == asFullPath) return pResource;
+			if(pResource->GetFullPath() == asFullPath &&
+				pResource->IsResolutionDependent() == bResolutionDependent &&
+				(!bResolutionDependent ||
+				 pResource->GetResolutionGeneration() == lCurrentGeneration))
+				return pResource;
 		}
 
 		return NULL;
@@ -229,17 +244,57 @@ namespace hpl {
 		return sTabs;
 	}
 
-	void iResourceManager::AddResource(iResourceBase* apResource, bool abLog, bool abAddToSet)
+	void iResourceManager::AddResource(iResourceBase* apResource, bool abLog, bool abAddToSet,
+										bool abResolutionDependent)
 	{
+		if(apResource == NULL) return;
 		tString sName = cString::ToLowerCase(apResource->GetName());
+		const bool bResolutionDependent = mbResolutionDependent || abResolutionDependent;
+		const int lHash = cString::GetHashW(apResource->GetFullPath());
+
+		// A fresh resource has no owner and needs no duplicate scan. For an
+		// existing resource, check before changing its cache metadata; the fallback
+		// also finds registrations whose path was changed after insertion.
+		if(apResource->GetOwningManager() == this)
+		{
+			bool bAlreadyRegistered = false;
+			tResourceBaseMapIt it = m_mapResources.lower_bound(lHash);
+			if(it != m_mapResources.end())
+			{
+				size_t lCount = m_mapResources.count(lHash);
+				for(size_t i=0; i<lCount; ++i, ++it)
+				{
+					if(it->second == apResource)
+					{
+						bAlreadyRegistered = true;
+						break;
+					}
+				}
+			}
+			if(!bAlreadyRegistered)
+			{
+				for(it = m_mapResources.begin(); it != m_mapResources.end(); ++it)
+				{
+					if(it->second == apResource)
+					{
+						bAlreadyRegistered = true;
+						break;
+					}
+				}
+			}
+			if(bAlreadyRegistered) return;
+		}
 
 		// Record the owning manager so a keep-alive minted from a raw pointer
 		// (RetainResource) frees this resource through FreeResource, not delete.
-		if(apResource) apResource->SetOwningManager(this);
+		apResource->SetOwningManager(this);
+		apResource->SetResolutionDependent(bResolutionDependent);
+		apResource->SetResolutionGeneration(
+			bResolutionDependent && mpFileSearcher
+				? mpFileSearcher->GetResolutionGeneration() : 0);
 
 		if(abAddToSet)
 		{
-			int lHash = cString::GetHashW(apResource->GetFullPath());
 			m_mapResources.insert(tResourceBaseMap::value_type(lHash, apResource));
 		}
 
@@ -259,34 +314,34 @@ namespace hpl {
 
 	void iResourceManager::RemoveResource(iResourceBase* apResource)
 	{
+		if(apResource == NULL) return;
 		if(apResource->HasReferences())
 			Warning("Deleting resource '%s' that still has %d reference(s)\n",
 					apResource->GetName().c_str(), apResource->GetReferenceCount());
 		//Log("Removing resource name: '%s' path: '%s' ", apResource->GetName().c_str(), cString::To8Char(apResource->GetFullPath()).c_str());
 
 		unsigned int lHash = cString::GetHashW(apResource->GetFullPath());
-
-		tResourceBaseMapIt it = m_mapResources.find(lHash);
-		if(it == m_mapResources.end())
+		tResourceBaseMapIt it = m_mapResources.lower_bound(lHash);
+		if(it != m_mapResources.end())
 		{
-			//Log("%d was not removed! '%s' Hash: %u\n", apResource, cString::To8Char(apResource->GetFullPath()).c_str(),lHash);
-
-			//Log("...not found!\n");
-			return;
+			size_t lCount = m_mapResources.count(lHash);
+			for(size_t i=0; i<lCount; ++i, ++it)
+			{
+				if(it->second == apResource)
+				{
+					m_mapResources.erase(it);
+					return;
+				}
+			}
 		}
 
-		size_t lCount = m_mapResources.count(lHash);
-		for(size_t i=0; i<lCount; ++i, ++it)
-		{
-			iResourceBase *pResource = it->second;
-
-			if(pResource == apResource)
+		// SetFullPath may have changed the key since registration.
+		for(it = m_mapResources.begin(); it != m_mapResources.end(); ++it)
+			if(it->second == apResource)
 			{
-				//Log("...done!\n");
 				m_mapResources.erase(it);
 				return;
 			}
-		}
  	}
 
 	//-----------------------------------------------------------------------

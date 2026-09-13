@@ -21,7 +21,7 @@
 #define kDiffuseBrdfDisney    1
 #define kDiffuseBrdfFrostbite 2
 #ifndef kDiffuseBrdf
-#define kDiffuseBrdf kDiffuseBrdfFrostbite
+#define kDiffuseBrdf kDiffuseBrdfFrostbite 
 #endif
 
 // The typed constants below are emitted in:

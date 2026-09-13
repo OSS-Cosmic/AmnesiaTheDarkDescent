@@ -1475,6 +1475,10 @@ void cLuxBase::SetCustomStory(cLuxCustomStorySettings* apCustomStory)
 
 	if(mpCustomStory)
 	{
+		// Remove every registration owned by the outgoing story before deleting
+		// its settings or installing the replacement.
+		mpEngine->GetResources()->RemoveResourceDirScope("story-language");
+		mpEngine->GetResources()->RemoveResourceDirScope("story");
 		hplDelete(mpCustomStory);
 		mpCustomStory = NULL;
 	}
@@ -1491,7 +1495,8 @@ void cLuxBase::SetCustomStory(cLuxCustomStorySettings* apCustomStory)
 		msProfileSavePath = cString::AddSlashAtEndW(msMainProfileSavePath + _W("custom")) +
 								cString::AddSlashAtEndW(sStoryFolder);
 
-		mpEngine->GetResources()->AddResourceDir(mpCustomStory->msStoryRootFolder, true);
+		mpEngine->GetResources()->AddResourceDir(mpCustomStory->msStoryRootFolder, true,
+								"*.*", klFileSearchCustomStoryPriority, "story");
 	}
 	else
 		msProfileSavePath = msMainProfileSavePath;
@@ -1509,6 +1514,10 @@ bool cLuxBase::LoadLanguage(const tString& asName, bool abForceReload)
 	//Check if the language is already loaded.
 	tString sLowName = cString::ToLowerCase(asName);
 	if(msCurrentLanguage == sLowName && abForceReload==false) return false;
+
+	// Refresh language-owned directories without removing the active story root
+	// or permanent registrations supplied by stock language/config files.
+	pResources->RemoveResourceDirScope("story-language");
 
 	if(msCurrentLanguage != "")
 	{
@@ -1536,7 +1545,8 @@ bool cLuxBase::LoadLanguage(const tString& asName, bool abForceReload)
 	pResources->LoadResourceDirsFile(msResourceConfigPath);
 
 	if(mpCustomStory)
-		mpEngine->GetResources()->AddResourceDir(mpCustomStory->msStoryRootFolder, true);
+		mpEngine->GetResources()->AddResourceDir(mpCustomStory->msStoryRootFolder, true,
+								"*.*", klFileSearchCustomStoryPriority, "story");
 	*/
 
 	////////////////////////////////////////////
@@ -1547,7 +1557,7 @@ bool cLuxBase::LoadLanguage(const tString& asName, bool abForceReload)
 	{
 		tString sExtraLangFileName = cString::To8Char(mpCustomStory->msStoryRootFolder) + mpCustomStory->msExtraLangFilePrefix + sGameFileName;
 		if(gpBase->mpEngine->GetResources()->GetFileSearcher()->GetFilePath(sExtraLangFileName)!=_W(""))
-			pResources->AddLanguageFile(sExtraLangFileName, true);
+			pResources->AddLanguageFile(sExtraLangFileName, true, _W(""), "story-language");
 	}
 	
 	// Main game lang

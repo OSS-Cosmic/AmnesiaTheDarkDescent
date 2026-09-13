@@ -1,26 +1,37 @@
 #include "graphics/RayConeLod.h"
+#include "utest.h"
 
 #include <cmath>
 #include <cstdint>
-#include <cstdio>
 #include <limits>
 
 namespace {
 
-bool Check(bool condition, const char *name) {
-  if (!condition) {
-    std::printf("failed: %s\n", name);
-    return false;
-  }
-  return true;
+void CheckAssert(bool condition, int *utest_result, const char *name) {
+  EXPECT_TRUE_MSG(condition, name);
 }
 
-bool CheckFloatClose(float actual, float expected, float tolerance,
-                     const char *name) {
-  return Check(std::fabs(actual - expected) <= tolerance, name);
+void CheckFloatCloseAssert(float actual, float expected, float tolerance,
+                           int *utest_result, const char *name) {
+  EXPECT_NEAR_MSG(actual, expected, tolerance, name);
 }
 
-bool CheckPrimarySpread() {
+#define Check(condition, name)                                                 \
+  ([&]() {                                                                     \
+    const bool result = (condition);                                           \
+    CheckAssert(result, utest_result, (name));                                 \
+    return result;                                                              \
+  }())
+#define CheckFloatClose(actual, expected, tolerance, name)                     \
+  ([&]() {                                                                     \
+    const float actualValue = (actual);                                         \
+    const float expectedValue = (expected);                                     \
+    CheckFloatCloseAssert(actualValue, expectedValue, (tolerance),              \
+                          utest_result, (name));                               \
+    return std::fabs(actualValue - expectedValue) <= (tolerance);               \
+  }())
+
+bool CheckPrimarySpread(int *utest_result) {
   // 60 degrees is 1.04719755 radians. The literal result is the hand-worked
   // atan(2*tan(30 degrees)/1080), not a restatement of the implementation.
   return CheckFloatClose(
@@ -35,7 +46,7 @@ bool CheckPrimarySpread() {
                          0.0f, "negative FOV has no spread");
 }
 
-bool CheckSurfaceSpreadAngle() {
+bool CheckSurfaceSpreadAngle(int *utest_result) {
   return CheckFloatClose(
              hpl::RayConeSurfaceSpreadAngle(0.0f, true), 0.0f, 0.0f,
              "perfect mirror has zero surface spread") &&
@@ -68,7 +79,7 @@ bool CheckSurfaceSpreadAngle() {
              "negative GGX alpha clamps to zero spread");
 }
 
-bool CheckSurfaceSpreadMonotonic() {
+bool CheckSurfaceSpreadMonotonic(int *utest_result) {
   const float alphas[] = {0.0f, 0.04f, 0.1f, 0.25f, 0.5f, 0.75f, 1.0f};
   float previousSpread = -1.0f;
   for (const float alpha : alphas) {
@@ -83,7 +94,7 @@ bool CheckSurfaceSpreadMonotonic() {
   return true;
 }
 
-bool CheckWaterGuideNormalSpreadAlpha() {
+bool CheckWaterGuideNormalSpreadAlpha(int *utest_result) {
   const float flatNormalSum[3] = {0.0f, 0.0f, 4.0f};
   const float nonFiniteNormalSum[3] = {
       0.0f, std::numeric_limits<float>::infinity(), 0.0f};
@@ -134,7 +145,7 @@ bool CheckWaterGuideNormalSpreadAlpha() {
   return true;
 }
 
-bool CheckWaterNrdLinearRoughness() {
+bool CheckWaterNrdLinearRoughness(int *utest_result) {
   // This is the load-bearing mirror case: a flat guide must preserve the
   // previously hardcoded NRD mirror packing bit for bit.
   if (!CheckFloatClose(hpl::WaterNrdLinearRoughness(0.0f), 0.0f, 0.0f,
@@ -174,7 +185,7 @@ bool CheckWaterNrdLinearRoughness() {
   return true;
 }
 
-bool CheckRayConeWidenSpreadAngle() {
+bool CheckRayConeWidenSpreadAngle(int *utest_result) {
   const float nearMirrorSpread =
       hpl::RayConeSurfaceSpreadAngle(0.04f, true);
   return CheckFloatClose(
@@ -195,7 +206,7 @@ bool CheckRayConeWidenSpreadAngle() {
                          0.0f, "negative surface spread does not shrink a cone");
 }
 
-bool CheckWidenedConeWidensFootprint() {
+bool CheckWidenedConeWidensFootprint(int *utest_result) {
   const float primarySpread =
       hpl::RayConePrimarySpreadAngle(1.04719755f, 1080);
   const float firstWidth = hpl::RayConeWidthAt(primarySpread, 0.0f, 10.0f);
@@ -229,7 +240,7 @@ bool CheckWidenedConeWidensFootprint() {
                          "mirror second-hit width matches the literal baseline");
 }
 
-bool CheckWidthAndDistanceLod() {
+bool CheckWidthAndDistanceLod(int *utest_result) {
   const float nearWidth = hpl::RayConeWidthAt(0.001f, 0.0f, 8.0f);
   const float farWidth = hpl::RayConeWidthAt(0.001f, 0.0f, 16.0f);
   const float nearLod =
@@ -247,7 +258,7 @@ bool CheckWidthAndDistanceLod() {
                          "doubling hit distance costs one mip");
 }
 
-bool CheckTriangleLodConstant() {
+bool CheckTriangleLodConstant(int *utest_result) {
   const float ratioOne = hpl::RayConeTriangleLodConstant(1.0f, 1.0f);
   const float ratioFour = hpl::RayConeTriangleLodConstant(4.0f, 1.0f);
   return CheckFloatClose(ratioOne, 0.0f, 0.0f,
@@ -258,7 +269,7 @@ bool CheckTriangleLodConstant() {
                          "quadrupling the area ratio costs one mip");
 }
 
-bool CheckTextureLod() {
+bool CheckTextureLod(int *utest_result) {
   const float noBias =
       hpl::RayConeTextureLod(0.0f, 1.0f, 1.0f, 1024.0f, 1024.0f, 0.0f);
   const float negativeBias =
@@ -271,7 +282,7 @@ bool CheckTextureLod() {
                          "material mip bias adds through exactly");
 }
 
-bool CheckGrazingCosineFloor() {
+bool CheckGrazingCosineFloor(int *utest_result) {
   const float zeroCosine =
       hpl::RayConeTextureLod(0.0f, 1.0f, 0.0f, 1.0f, 1.0f, 0.0f);
   const float floorCosine =
@@ -283,7 +294,7 @@ bool CheckGrazingCosineFloor() {
          Check(zeroCosine < 4.322f, "grazing cosine boost is bounded");
 }
 
-bool CheckSurfaceFootprint() {
+bool CheckSurfaceFootprint(int *utest_result) {
   // These literal diameters are hand-worked from the cone width and cosine,
   // not a restatement of the implementation.
   const float headOn = hpl::RayConeSurfaceFootprint(2.0f, 1.0f);
@@ -317,7 +328,7 @@ static float WaterWaveGradientPairMagnitude(const float gradientX[2],
                    gradientY[1] * gradientY[1]);
 }
 
-static bool CheckWaterWaveUvJacobianIdentity() {
+static bool CheckWaterWaveUvJacobianIdentity(int *utest_result) {
   const float baseGradient[2] = {0.37f, -0.23f};
   float amplitudeZeroJacobian[4] = {};
   float frequencyZeroJacobian[4] = {};
@@ -358,7 +369,7 @@ static bool CheckWaterWaveUvJacobianIdentity() {
                          "zero water-wave frequency preserves gradient y");
 }
 
-static bool CheckWaterWaveUvJacobianHandWorked() {
+static bool CheckWaterWaveUvJacobianHandWorked(int *utest_result) {
   const float baseGradient[2] = {2.0f, 3.0f};
   float jacobian[4] = {};
   float sampleGradient[2] = {};
@@ -381,7 +392,7 @@ static bool CheckWaterWaveUvJacobianHandWorked() {
                          "hand-worked water-wave gradient y is literal");
 }
 
-static bool CheckWaterWaveUvJacobianFiniteDifference() {
+static bool CheckWaterWaveUvJacobianFiniteDifference(int *utest_result) {
   const float u = 0.37f;
   const float v = -0.22f;
   const float amplitude = 0.17f;
@@ -434,7 +445,7 @@ static bool CheckWaterWaveUvJacobianFiniteDifference() {
                          "water-wave gradient y agrees with finite difference");
 }
 
-static bool CheckWaterWaveSampleGradients() {
+static bool CheckWaterWaveSampleGradients(int *utest_result) {
   // These are the shader's two water samples at waveT = 0.91, including their
   // distinct scrolls and phases. The material values are scaled exactly as in
   // WaterCommon.slang: A = 0.2 * 0.04 and F = 1 * 10.
@@ -497,7 +508,7 @@ static bool CheckWaterWaveSampleGradients() {
                          "second water gradient shifts less than a quarter mip");
 }
 
-bool CheckProjectedGoboUvPerWorldUnit() {
+bool CheckProjectedGoboUvPerWorldUnit(int *utest_result) {
   const float orthographicX[4] = {0.5f, 0.0f, 0.0f, 0.5f};
   const float orthographicY[4] = {0.0f, 0.5f, 0.0f, 0.5f};
   const float orthographicW[4] = {0.0f, 0.0f, 0.0f, 1.0f};
@@ -539,7 +550,7 @@ bool CheckProjectedGoboUvPerWorldUnit() {
              0.0f, 0.0f, "gobo point behind light has no UV rate");
 }
 
-bool CheckProjectedGoboTexLodBase() {
+bool CheckProjectedGoboTexLodBase(int *utest_result) {
   // These literal LODs are hand-worked from the UV diameters, not a
   // restatement of the implementation: 0.5 * 0.5 = 0.25, whose log2 is -2.
   const float base = hpl::ProjectedGoboTexLodBase(0.5f, 0.5f);
@@ -569,7 +580,7 @@ bool CheckProjectedGoboTexLodBase() {
                "top-mip escape hatch is not zero");
 }
 
-bool CheckCubeFaceUvPerRadian() {
+bool CheckCubeFaceUvPerRadian(int *utest_result) {
   const float axisDirection[3] = {0.0f, 0.0f, 1.0f};
   const float scaledAxisDirection[3] = {0.0f, 0.0f, 2.0f};
   const float faceEdgeDirection[3] = {1.0f, 0.0f, 1.0f};
@@ -591,7 +602,7 @@ bool CheckCubeFaceUvPerRadian() {
                          "zero cube-face direction has no UV rate");
 }
 
-bool CheckCubeGoboTexLodBase() {
+bool CheckCubeGoboTexLodBase(int *utest_result) {
   const float axisDirection[3] = {0.0f, 0.0f, 1.0f};
   const float cornerDirection[3] = {1.0f, 1.0f, 1.0f};
   const float zeroDirection[3] = {0.0f, 0.0f, 0.0f};
@@ -641,7 +652,7 @@ bool CheckCubeGoboTexLodBase() {
                "cube-gobo top-mip escape hatch is not zero");
 }
 
-bool CheckDecalUvPerWorldUnit() {
+bool CheckDecalUvPerWorldUnit(int *utest_result) {
   const float identityX[4] = {1.0f, 0.0f, 0.0f, 0.0f};
   const float identityZ[4] = {0.0f, 0.0f, 1.0f, 0.0f};
   const float halfScaleX[4] = {0.5f, 0.0f, 0.0f, 0.0f};
@@ -668,7 +679,7 @@ bool CheckDecalUvPerWorldUnit() {
              "four horizontal decal cells quarter the horizontal rate");
 }
 
-bool CheckDecalTexLodBase() {
+bool CheckDecalTexLodBase(int *utest_result) {
   // These literal LODs are hand-worked from the UV diameters and atlas cells,
   // not a restatement of the implementation: unit footprint/rate is 0, a
   // half rate is -1, and a four-cell cap is -2 after the raw +2 rate case.
@@ -710,7 +721,7 @@ bool CheckDecalTexLodBase() {
                "decal top-mip escape hatch is not zero");
 }
 
-bool CheckAreaLightSourceTexLodBase() {
+bool CheckAreaLightSourceTexLodBase(int *utest_result) {
   // These literal LODs are hand-worked, not a restatement of the
   // implementation: distance 2 over the smaller extent 4 is 0.5 (-1 mip),
   // while footprint 8 over 4 is 2 (+1 mip).
@@ -733,7 +744,7 @@ bool CheckAreaLightSourceTexLodBase() {
                          "degenerate area-light extent uses top-mip escape hatch");
 }
 
-bool CheckDegenerateGuards() {
+bool CheckDegenerateGuards(int *utest_result) {
   return CheckFloatClose(
              hpl::RayConeTriangleLodConstant(0.0f, 1.0f), 0.0f, 0.0f,
              "zero UV area returns zero") &&
@@ -762,24 +773,69 @@ bool CheckDegenerateGuards() {
 
 } // namespace
 
-bool RunRayConeLodTests() {
-  if (!CheckPrimarySpread() || !CheckSurfaceSpreadAngle() ||
-      !CheckSurfaceSpreadMonotonic() || !CheckWaterGuideNormalSpreadAlpha() ||
-      !CheckWaterNrdLinearRoughness() ||
-      !CheckRayConeWidenSpreadAngle() ||
-      !CheckWidenedConeWidensFootprint() || !CheckWidthAndDistanceLod() ||
-      !CheckTriangleLodConstant() || !CheckTextureLod() ||
-      !CheckGrazingCosineFloor() || !CheckSurfaceFootprint() ||
-      !CheckWaterWaveUvJacobianIdentity() ||
-      !CheckWaterWaveUvJacobianHandWorked() ||
-      !CheckWaterWaveUvJacobianFiniteDifference() ||
-      !CheckWaterWaveSampleGradients() ||
-      !CheckProjectedGoboUvPerWorldUnit() || !CheckProjectedGoboTexLodBase() ||
-      !CheckCubeFaceUvPerRadian() || !CheckCubeGoboTexLodBase() ||
-      !CheckDecalUvPerWorldUnit() || !CheckDecalTexLodBase() ||
-      !CheckAreaLightSourceTexLodBase() || !CheckDegenerateGuards())
-    return false;
-
-  std::printf("ray cone LOD checks passed\n");
-  return true;
+UTEST(RayConeLod, PrimarySpread) { CheckPrimarySpread(utest_result); }
+UTEST(RayConeLod, SurfaceSpreadAngle) {
+  CheckSurfaceSpreadAngle(utest_result);
 }
+UTEST(RayConeLod, SurfaceSpreadMonotonic) {
+  CheckSurfaceSpreadMonotonic(utest_result);
+}
+UTEST(RayConeLod, WaterGuideNormalSpreadAlpha) {
+  CheckWaterGuideNormalSpreadAlpha(utest_result);
+}
+UTEST(RayConeLod, WaterNrdLinearRoughness) {
+  CheckWaterNrdLinearRoughness(utest_result);
+}
+UTEST(RayConeLod, RayConeWidenSpreadAngle) {
+  CheckRayConeWidenSpreadAngle(utest_result);
+}
+UTEST(RayConeLod, WidenedConeWidensFootprint) {
+  CheckWidenedConeWidensFootprint(utest_result);
+}
+UTEST(RayConeLod, WidthAndDistanceLod) {
+  CheckWidthAndDistanceLod(utest_result);
+}
+UTEST(RayConeLod, TriangleLodConstant) {
+  CheckTriangleLodConstant(utest_result);
+}
+UTEST(RayConeLod, TextureLod) { CheckTextureLod(utest_result); }
+UTEST(RayConeLod, GrazingCosineFloor) {
+  CheckGrazingCosineFloor(utest_result);
+}
+UTEST(RayConeLod, SurfaceFootprint) {
+  CheckSurfaceFootprint(utest_result);
+}
+UTEST(RayConeLod, WaterWaveUvJacobianIdentity) {
+  CheckWaterWaveUvJacobianIdentity(utest_result);
+}
+UTEST(RayConeLod, WaterWaveUvJacobianHandWorked) {
+  CheckWaterWaveUvJacobianHandWorked(utest_result);
+}
+UTEST(RayConeLod, WaterWaveUvJacobianFiniteDifference) {
+  CheckWaterWaveUvJacobianFiniteDifference(utest_result);
+}
+UTEST(RayConeLod, WaterWaveSampleGradients) {
+  CheckWaterWaveSampleGradients(utest_result);
+}
+UTEST(RayConeLod, ProjectedGoboUvPerWorldUnit) {
+  CheckProjectedGoboUvPerWorldUnit(utest_result);
+}
+UTEST(RayConeLod, ProjectedGoboTexLodBase) {
+  CheckProjectedGoboTexLodBase(utest_result);
+}
+UTEST(RayConeLod, CubeFaceUvPerRadian) {
+  CheckCubeFaceUvPerRadian(utest_result);
+}
+UTEST(RayConeLod, CubeGoboTexLodBase) {
+  CheckCubeGoboTexLodBase(utest_result);
+}
+UTEST(RayConeLod, DecalUvPerWorldUnit) {
+  CheckDecalUvPerWorldUnit(utest_result);
+}
+UTEST(RayConeLod, DecalTexLodBase) {
+  CheckDecalTexLodBase(utest_result);
+}
+UTEST(RayConeLod, AreaLightSourceTexLodBase) {
+  CheckAreaLightSourceTexLodBase(utest_result);
+}
+UTEST(RayConeLod, DegenerateGuards) { CheckDegenerateGuards(utest_result); }

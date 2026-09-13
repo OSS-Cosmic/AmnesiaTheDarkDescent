@@ -18,6 +18,8 @@ ROOT = _MAIN_SCRIPT_DIR
 
 dofile "premake/options.lua"
 dofile "premake/helpers.lua"
+dofile "premake/memory.lua"
+dofile "premake/memory_rebuild.lua"
 dofile "premake/slang.lua"   -- Slang slangc download + per-file SPIR-V build rule (uses runtime_dir from helpers)
 dofile "premake/modules/export-compile-commands.lua"   -- `premake5 export-compile-commands` action
 

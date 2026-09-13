@@ -342,12 +342,17 @@ namespace hpl {
 	 * \param alPriority Directory priority.
 	 * \return true always; no caller checks the result.
 	 */
-	bool cResources::AddResourceDir(const tWString &asDir, bool abAddSubDirectories, const tString &asMask, int alPriority)
+	bool cResources::AddResourceDir(const tWString &asDir, bool abAddSubDirectories, const tString &asMask, int alPriority, const tString &asScope)
 	{
-		mpFileSearcher->AddDirectory(asDir, asMask, abAddSubDirectories, alPriority);
+		mpFileSearcher->AddDirectory(asDir, asMask, abAddSubDirectories, alPriority, asScope);
 		if(iResourceBase::GetLogCreateAndDelete())
 			Log(" Added resource directory '%s'\n",cString::To8Char(asDir).c_str());
 		return true;
+	}
+
+	void cResources::RemoveResourceDirScope(const tString &asScope)
+	{
+		mpFileSearcher->RemoveDirectoryScope(asScope);
 	}
 
 	void cResources::ClearResourceDirs()
@@ -357,14 +362,14 @@ namespace hpl {
 
 	//-----------------------------------------------------------------------
 
-	bool cResources::AddLanguageFile(const tString &asFilePath, bool abAddResourceDirs, const tWString &asAltPath)
+	bool cResources::AddLanguageFile(const tString &asFilePath, bool abAddResourceDirs, const tWString &asAltPath, const tString &asResourceScope)
 	{
 		if(mpLanguageFile == NULL)
 		{
 			mpLanguageFile = hplNew( cLanguageFile, (this) );
 		}
 
-		return mpLanguageFile->AddFromFile(cString::To16Char(asFilePath), abAddResourceDirs, asAltPath);
+		return mpLanguageFile->AddFromFile(cString::To16Char(asFilePath), abAddResourceDirs, asAltPath, asResourceScope);
 	}
 
 	void cResources::ClearTranslations()

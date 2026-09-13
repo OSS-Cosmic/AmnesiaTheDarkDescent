@@ -5,7 +5,7 @@
 -- All helpers are global so the dofile'd sub-scripts can use them directly.
 
 -- Pinned Slang release for the premake auto-download.
-SLANG_VERSION  = "2026.11"
+SLANG_VERSION  = "2026.17.1"
 SLANG_PREBUILT = ROOT .. "/build-premake/_deps/slang-prebuilt"
 
 local function slangc_exe()

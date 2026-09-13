@@ -213,6 +213,9 @@ namespace hpl {
 	void SetLogFile(const tWString &asFile)
 	{
 		gLogWriter.SetFileName(asFile);
+		// Reports are siblings formed by appending the suffix, and the facade
+		// performs a locale-independent UTF-16/UTF-32 to UTF-8 conversion.
+		cMemoryManager::SetReportPath(asFile + _W(".memreport"));
 	}
 
 	//-----------------------------------------------------------------------

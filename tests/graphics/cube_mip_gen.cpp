@@ -1,25 +1,17 @@
 #include "graphics/CubeMipGen.h"
+#include "utest.h"
 
 #include <algorithm>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
-#include <cstdio>
 #include <vector>
 
 namespace {
 
-bool Check(bool condition, const char *name) {
-  if (!condition) {
-    std::printf("failed: %s\n", name);
-    return false;
-  }
-  return true;
-}
-
-bool CheckFloatClose(float actual, float expected, float tolerance,
-                     const char *name) {
-  return Check(std::fabs(actual - expected) <= tolerance, name);
+void CheckFloatClose(int *utest_result, float actual, float expected,
+                     float tolerance, const char *name) {
+  EXPECT_TRUE_MSG(std::fabs(actual - expected) <= tolerance, name);
 }
 
 uint8_t ReadByte(const std::vector<std::vector<uint8_t>> &levels,
@@ -51,7 +43,7 @@ void FillFaces(std::vector<std::vector<uint8_t>> &storage,
   }
 }
 
-bool CheckFaceDirectionRoundTrip() {
+void CheckFaceDirectionRoundTrip(int *utest_result) {
   // This mirrors the cube spec equations used by the generator so the
   // sampled directions cover every face, edge-near region, and both axes.
   const float samples[] = {0.07f, 0.23f, 0.41f, 0.59f, 0.77f, 0.93f};
@@ -115,18 +107,31 @@ bool CheckFaceDirectionRoundTrip() {
           resolvedS = dz >= 0.0f ? dx / az : -dx / az;
           resolvedT = -dy / az;
         }
-        if (!Check(resolvedFace == face &&
-                       std::fabs(0.5f * (resolvedS + 1.0f) - u) < 1.0e-6f &&
-                       std::fabs(0.5f * (resolvedT + 1.0f) - v) < 1.0e-6f,
-                   "cube face UV direction round trip is stable"))
-          return false;
+        EXPECT_TRUE_MSG(
+            resolvedFace == face &&
+                std::fabs(0.5f * (resolvedS + 1.0f) - u) < 1.0e-6f &&
+                std::fabs(0.5f * (resolvedT + 1.0f) - v) < 1.0e-6f,
+            "cube face UV direction round trip is stable");
       }
     }
   }
-  return true;
 }
 
-bool CheckConstantCube() {
+void AssertCubeLevels(int *utest_result,
+                      const std::vector<std::vector<uint8_t>> &levels,
+                      uint32_t faceSize, uint32_t mipCount,
+                      const char *countName, const char *sizeName) {
+  ASSERT_EQ_MSG(levels.size(), static_cast<size_t>(mipCount - 1) * 6,
+                countName);
+  for (uint32_t mip = 1; mip < mipCount; ++mip) {
+    const uint32_t size = std::max(1u, faceSize >> mip);
+    for (uint32_t face = 0; face < 6; ++face)
+      ASSERT_EQ_MSG(levels[(mip - 1) * 6 + face].size(),
+                    static_cast<size_t>(size) * size * 4, sizeName);
+  }
+}
+
+void CheckConstantCube(int *utest_result) {
   const uint32_t faceSize = 8;
   const uint8_t values[6] = {73, 73, 73, 73, 73, 73};
   std::vector<std::vector<uint8_t>> source;
@@ -134,28 +139,29 @@ bool CheckConstantCube() {
   FillFaces(source, faces, faceSize, values);
   hpl::CubeMipTexelLayout layout;
   std::vector<std::vector<uint8_t>> levels;
-  if (!Check(hpl::GenerateSeamAwareCubeMips(faces, faceSize, layout, 6,
-                                            levels),
-             "constant cube mip generation succeeds") ||
-      !Check(levels.size() == 30, "constant cube has all requested levels"))
-    return false;
+  ASSERT_TRUE_MSG(hpl::GenerateSeamAwareCubeMips(faces, faceSize, layout, 6,
+                                                 levels),
+                  "constant cube mip generation succeeds");
+  AssertCubeLevels(utest_result, levels, faceSize, 6,
+                   "constant cube has all requested levels",
+                   "constant cube level has expected byte size");
+  if (*utest_result != UTEST_TEST_PASSED)
+    return;
 
   for (uint32_t mip = 1; mip < 6; ++mip) {
     const uint32_t size = std::max(1u, faceSize >> mip);
     for (uint32_t face = 0; face < 6; ++face) {
       for (uint32_t y = 0; y < size; ++y) {
         for (uint32_t x = 0; x < size; ++x) {
-          if (!Check(ReadByte(levels, mip, face, x, y, faceSize) == 73,
-                     "constant cube stays constant through wrapped taps"))
-            return false;
+          EXPECT_EQ_MSG(ReadByte(levels, mip, face, x, y, faceSize), 73,
+                        "constant cube stays constant through wrapped taps");
         }
       }
     }
   }
-  return CheckFaceDirectionRoundTrip();
 }
 
-bool CheckSeamColourMixing() {
+void CheckSeamColourMixing(int *utest_result) {
   const uint32_t faceSize = 8;
   const uint8_t values[6] = {32, 32, 32, 32, 32, 224};
   std::vector<std::vector<uint8_t>> source;
@@ -163,23 +169,27 @@ bool CheckSeamColourMixing() {
   FillFaces(source, faces, faceSize, values);
   hpl::CubeMipTexelLayout layout;
   std::vector<std::vector<uint8_t>> levels;
-  if (!Check(hpl::GenerateSeamAwareCubeMips(faces, faceSize, layout, 5,
-                                            levels),
-             "seam colour cube mip generation succeeds"))
-    return false;
+  ASSERT_TRUE_MSG(hpl::GenerateSeamAwareCubeMips(faces, faceSize, layout, 5,
+                                                 levels),
+                  "seam colour cube mip generation succeeds");
+  AssertCubeLevels(utest_result, levels, faceSize, 5,
+                   "seam colour cube has all requested levels",
+                   "seam colour cube level has expected byte size");
+  if (*utest_result != UTEST_TEST_PASSED)
+    return;
 
   // +X and -Z share the +X right edge. Normal 8-to-4 filtering keeps the
   // centre texel on +X at its own colour. The later 2-to-1 and 1-to-1 passes
   // exercise the wrapped edge taps, so the final +X texel includes -Z.
   const uint8_t centre = ReadByte(levels, 1, 0, 1, 1, faceSize);
   const uint8_t edge = ReadByte(levels, 4, 0, 0, 0, faceSize);
-  return Check(centre == values[0],
-               "a face-centre texel keeps its own constant colour") &&
-         Check(edge > values[0] && edge < values[5],
-               "a seam texel is strictly between adjacent face colours");
+  EXPECT_EQ_MSG(centre, values[0],
+                "a face-centre texel keeps its own constant colour");
+  EXPECT_TRUE_MSG(edge > values[0] && edge < values[5],
+                  "a seam texel is strictly between adjacent face colours");
 }
 
-bool CheckSrgbAverage() {
+void CheckSrgbAverage(int *utest_result) {
   const uint32_t faceSize = 2;
   std::vector<std::vector<uint8_t>> source(6,
                                            std::vector<uint8_t>(2 * 2 * 4));
@@ -197,19 +207,23 @@ bool CheckSrgbAverage() {
   hpl::CubeMipTexelLayout layout;
   layout.sRGB = true;
   std::vector<std::vector<uint8_t>> levels;
-  if (!Check(hpl::GenerateSeamAwareCubeMips(faces, faceSize, layout, 2,
-                                            levels),
-             "sRGB cube mip generation succeeds"))
-    return false;
+  ASSERT_TRUE_MSG(hpl::GenerateSeamAwareCubeMips(faces, faceSize, layout, 2,
+                                                 levels),
+                  "sRGB cube mip generation succeeds");
+  AssertCubeLevels(utest_result, levels, faceSize, 2,
+                   "sRGB cube has all requested levels",
+                   "sRGB cube level has expected byte size");
+  if (*utest_result != UTEST_TEST_PASSED)
+    return;
   const uint8_t value = levels[0][0];
-  return CheckFloatClose(static_cast<float>(value), 188.0f, 1.0f,
-                         "linear half encodes near sRGB 188") &&
-         Check(std::abs(static_cast<int>(value) - 188) <
-                   std::abs(static_cast<int>(value) - 128),
-               "sRGB averaging happens in linear space");
+  CheckFloatClose(utest_result, static_cast<float>(value), 188.0f, 1.0f,
+                  "linear half encodes near sRGB 188");
+  EXPECT_TRUE_MSG(std::abs(static_cast<int>(value) - 188) <
+                      std::abs(static_cast<int>(value) - 128),
+                  "sRGB averaging happens in linear space");
 }
 
-bool CheckSizingAndRejection() {
+void CheckSizingAndRejection(int *utest_result) {
   const uint32_t faceSize = 4;
   const uint8_t values[6] = {1, 2, 3, 4, 5, 6};
   std::vector<std::vector<uint8_t>> source;
@@ -217,52 +231,37 @@ bool CheckSizingAndRejection() {
   FillFaces(source, faces, faceSize, values);
   hpl::CubeMipTexelLayout layout;
   std::vector<std::vector<uint8_t>> levels;
-  if (!Check(hpl::GenerateSeamAwareCubeMips(faces, faceSize, layout, 4,
-                                            levels),
-             "sizing cube mip generation succeeds") ||
-      !Check(levels.size() == (4 - 1) * 6,
-             "output level count follows mip count"))
-    return false;
-
-  for (uint32_t mip = 1; mip < 4; ++mip) {
-    const uint32_t size = std::max(1u, faceSize >> mip);
-    for (uint32_t face = 0; face < 6; ++face) {
-      if (!Check(levels[(mip - 1) * 6 + face].size() ==
-                     static_cast<size_t>(size) * size * 4,
-                 "output level byte size is tightly packed"))
-        return false;
-    }
-  }
+  ASSERT_TRUE_MSG(hpl::GenerateSeamAwareCubeMips(faces, faceSize, layout, 4,
+                                                 levels),
+                  "sizing cube mip generation succeeds");
+  AssertCubeLevels(utest_result, levels, faceSize, 4,
+                   "output level count follows mip count",
+                   "output level byte size is tightly packed");
+  if (*utest_result != UTEST_TEST_PASSED)
+    return;
 
   hpl::CubeMipTexelLayout unsupported = layout;
   unsupported.bytesPerChannel = 2;
   levels.resize(1);
-  if (!Check(!hpl::GenerateSeamAwareCubeMips(faces, faceSize, unsupported, 2,
-                                             levels) &&
-                 levels.empty(),
-             "unsupported channel width is rejected"))
-    return false;
+  EXPECT_TRUE_MSG(!hpl::GenerateSeamAwareCubeMips(faces, faceSize, unsupported,
+                                                  2, levels) && levels.empty(),
+                  "unsupported channel width is rejected");
   levels.resize(1);
-  if (!Check(!hpl::GenerateSeamAwareCubeMips(faces, 3, layout, 2, levels) &&
-                 levels.empty(),
-             "non-power-of-two face size is rejected"))
-    return false;
+  EXPECT_TRUE_MSG(!hpl::GenerateSeamAwareCubeMips(faces, 3, layout, 2, levels) &&
+                      levels.empty(),
+                  "non-power-of-two face size is rejected");
   levels.resize(1);
-  if (!Check(!hpl::GenerateSeamAwareCubeMips(faces, faceSize, layout, 1,
-                                             levels) &&
-                 levels.empty(),
-             "single-level request is rejected"))
-    return false;
-  return true;
+  EXPECT_TRUE_MSG(!hpl::GenerateSeamAwareCubeMips(faces, faceSize, layout, 1,
+                                                  levels) && levels.empty(),
+                  "single-level request is rejected");
 }
 
 } // namespace
 
-bool RunCubeMipGenTests() {
-  if (!CheckConstantCube() || !CheckSeamColourMixing() ||
-      !CheckSrgbAverage() || !CheckSizingAndRejection())
-    return false;
-
-  std::printf("cube mip generation checks passed\n");
-  return true;
+UTEST(CubeMipGen, FaceDirectionRoundTrip) {
+  CheckFaceDirectionRoundTrip(utest_result);
 }
+UTEST(CubeMipGen, ConstantCube) { CheckConstantCube(utest_result); }
+UTEST(CubeMipGen, SeamColourMixing) { CheckSeamColourMixing(utest_result); }
+UTEST(CubeMipGen, SrgbAverage) { CheckSrgbAverage(utest_result); }
+UTEST(CubeMipGen, SizingAndRejection) { CheckSizingAndRejection(utest_result); }

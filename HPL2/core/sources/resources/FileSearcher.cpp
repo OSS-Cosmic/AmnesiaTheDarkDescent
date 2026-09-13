@@ -37,6 +37,7 @@ namespace hpl {
 	{
 		msPath = asPath;
 		mlPriority = alPriority;
+		m_mapScopePriorities[""] = alPriority;
         
 		tWString sSepp = _W("/\\");
 		cString::GetStringVecW(msPath,mvPathDirs,&sSepp);
@@ -54,6 +55,7 @@ namespace hpl {
 	cFileSearcher::cFileSearcher()
 	{
 		msNull = _W("");
+		mResolutionGeneration = 0;
 	}
 
 	//-----------------------------------------------------------------------
@@ -70,7 +72,7 @@ namespace hpl {
 
 	//-----------------------------------------------------------------------
 	
-	void cFileSearcher::AddDirectory(const tWString& asSearchPath, const tString &asMask, bool abAddSubDirectories, int alPriority)
+	void cFileSearcher::AddDirectory(const tWString& asSearchPath, const tString &asMask, bool abAddSubDirectories, int alPriority, const tString& asScope)
 	{
 		//Make the path with only "/" and lower case.
 		tWString sPath = cString::ReplaceCharToW(asSearchPath,_W("\\"),_W("/"));
@@ -90,19 +92,35 @@ namespace hpl {
 			//Check if file and path already exist. The whole equivalent range is scanned:
 			//another directory may have contributed a file of this bare name first, and find()
 			//is not guaranteed to return the first element of the range (see GetFilePath).
-			//On re-add the highest priority is kept, so the index does not depend on the order
-			//the dirs were added in -- which is what the Priority attribute in resources.cfg
-			//promises (see the resolution order in GetFilePath). A re-add can raise a path's priority, never lower it.
+			//Keep each scope's highest priority separately so removing an override
+			//restores surviving registrations. Re-adds can raise a scope's priority;
+			//only removing its contribution can lower the effective path priority.
 			std::pair<tFilePathMapIt, tFilePathMapIt> range = m_mapFiles.equal_range(sLowFile);
 			tFilePathMapIt pathIt = range.first;
 			for(; pathIt != range.second; ++pathIt)
 			{
 				if(pathIt->second.msPath == sFilePath)
 				{
+					bool bChanged = false;
+					std::map<tString, int>& mapScopes = pathIt->second.m_mapScopePriorities;
+					std::map<tString, int>::iterator scopeIt = mapScopes.find(asScope);
+					if(scopeIt == mapScopes.end())
+					{
+						mapScopes[asScope] = alPriority;
+						bChanged = true;
+					}
+					else if(scopeIt->second < alPriority)
+					{
+						scopeIt->second = alPriority;
+						bChanged = true;
+					}
+
 					if(pathIt->second.mlPriority < alPriority)
 					{
 						pathIt->second.mlPriority = alPriority;
+						bChanged = true;
 					}
+					if(bChanged) ++mResolutionGeneration;
 					break;
 				}
 			}
@@ -114,7 +132,14 @@ namespace hpl {
 			//Add file
 			//Log("Adding lowercase file: '%s' with path: '%s'\n 8bitHash: %u 16bitHash %u\n", sLowFile.c_str(), cString::To8Char(sFilePath).c_str(),
 			//	cString::GetHash(cString::To8Char(sFilePath)), cString::GetHashW(sFilePath));
-			m_mapFiles.insert(tFilePathMap::value_type(sLowFile, cFileSearcherEntry(sFilePath, alPriority) ));
+			cFileSearcherEntry entry(sFilePath, alPriority);
+			if(!asScope.empty())
+			{
+				entry.m_mapScopePriorities.clear();
+				entry.m_mapScopePriorities[asScope] = alPriority;
+			}
+			m_mapFiles.insert(tFilePathMap::value_type(sLowFile, entry));
+			++mResolutionGeneration;
 		}
 		
 		//////////////////////////////////
@@ -128,8 +153,44 @@ namespace hpl {
 			{
 				tWString sNewPath = cString::SetFilePathW(*it, sPath);
 
-				AddDirectory(sNewPath,asMask,true,alPriority);
+				AddDirectory(sNewPath,asMask,true,alPriority,asScope);
 			}
+		}
+	}
+
+	//-----------------------------------------------------------------------
+
+	void cFileSearcher::RemoveDirectoryScope(const tString& asScope)
+	{
+		if(asScope.empty()) return;
+
+		for(tFilePathMapIt it = m_mapFiles.begin(); it != m_mapFiles.end(); )
+		{
+			std::map<tString, int>& mapScopes = it->second.m_mapScopePriorities;
+			if(mapScopes.find(asScope) == mapScopes.end())
+			{
+				++it;
+				continue;
+			}
+			mapScopes.erase(asScope);
+			++mResolutionGeneration;
+
+			if(mapScopes.empty())
+			{
+				tFilePathMapIt eraseIt = it++;
+				m_mapFiles.erase(eraseIt);
+				continue;
+			}
+
+			int lEffectivePriority = mapScopes.begin()->second;
+			for(std::map<tString, int>::const_iterator scopeIt = mapScopes.begin();
+				scopeIt != mapScopes.end(); ++scopeIt)
+			{
+				if(scopeIt->second > lEffectivePriority)
+					lEffectivePriority = scopeIt->second;
+			}
+			it->second.mlPriority = lEffectivePriority;
+			++it;
 		}
 	}
 
@@ -137,7 +198,9 @@ namespace hpl {
 
 	void cFileSearcher::ClearDirectories()
 	{
+		if(m_mapFiles.empty()) return;
 		m_mapFiles.clear();
+		++mResolutionGeneration;
 	}
 
 	//-----------------------------------------------------------------------

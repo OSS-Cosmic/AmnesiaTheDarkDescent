@@ -21,6 +21,7 @@
 #define HPL_FILESEARCHER_H
 
 #include <map>
+#include <cstdint>
 #include "resources/ResourcesTypes.h"
 #include "system/SystemTypes.h"
 
@@ -38,6 +39,7 @@ namespace hpl {
 		tWString msPath;
 		tWStringVec mvPathDirs;
 		int mlPriority;
+		std::map<tString, int> m_mapScopePriorities;
 	};
 
 	//----------------------------------
@@ -58,13 +60,28 @@ namespace hpl {
 		 * \param asMask What files that should be searched for, for example: "*.jpeg".
 		 * \param asPath The path to the directory.
 		 * \param alPriority Priority assigned to files indexed from this directory.
+		 * \param asScope Ownership key; empty means permanent until ClearDirectories.
+		 * Re-adds keep the highest priority within each scope. Different scopes
+		 * contribute independently even when they index the same exact path.
 		 */
-		void AddDirectory(const tWString& asSearchPath, const tString& asMask, bool abAddSubDirectories, int alPriority = klFileSearchDefaultPriority);
+		void AddDirectory(const tWString& asSearchPath, const tString& asMask, bool abAddSubDirectories, int alPriority = klFileSearchDefaultPriority, const tString& asScope = "");
+
+		/**
+		 * Removes all indexed contributions belonging to a non-empty scope.
+		 * Overlapping paths keep their other contributions and highest remaining
+		 * priority. Empty or unknown scopes are no-ops. Existing resources are not freed.
+		 */
+		void RemoveDirectoryScope(const tString& asScope);
 
 		/**
 		 * Clears all directories
 		 */
 		void ClearDirectories();
+
+		// Monotonic identity of indexed scope contributions. Actual additions,
+		// priority raises, removals and non-empty clears advance it; repeated
+		// no-op registrations do not. Existing resource handles are unaffected.
+		uint64_t GetResolutionGeneration() const { return mResolutionGeneration; }
 
         /**
          * Gets a file pointer and searches through all added resources.
@@ -89,6 +106,7 @@ namespace hpl {
 
 	private:
 		tFilePathMap m_mapFiles;
+		uint64_t mResolutionGeneration;
 
 		tWString msNull;
 	};

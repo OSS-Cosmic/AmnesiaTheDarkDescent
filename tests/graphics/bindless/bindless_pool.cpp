@@ -13,20 +13,11 @@
 // stb_ds_impl.cpp rather than the engine's System.cpp, which would drag in the
 // whole engine.
 #include "graphics/BindlessPool.h"
+#include "utest.h"
 
 #include <cstdint>
 #include <cstdio>
 #include <set>
-
-namespace {
-
-bool Check(bool condition, const char *name) {
-  if (!condition) {
-    std::printf("failed: %s\n", name);
-    return false;
-  }
-  return true;
-}
 
 // ---------------------------------------------------------------- LRUCache
 
@@ -37,7 +28,7 @@ bool Check(bool condition, const char *name) {
 // capacity until nothing can be evicted and every request reports exhausted.
 // Drive that exact access pattern, then check the pool can still hold a full
 // capacity's worth of live cookies.
-bool CheckTailHitDoesNotOrphanSlots() {
+UTEST(LRUCache, TailHitDoesNotOrphanSlots) {
   constexpr uint32_t kCapacity = 4;
   hpl::LRUCache cache(kCapacity, /*frameInFlight*/ 0);
 
@@ -58,12 +49,12 @@ bool CheckTailHitDoesNotOrphanSlots() {
     if (req.exhausted) {
       std::printf("  exhausted after %u of %u slots were recycled\n", i,
                   kCapacity);
-      return Check(false, "no slot is orphaned by a hit on the queue tail");
     }
+    ASSERT_FALSE_MSG(req.exhausted, "LRUCache recycled-slot loop exhausted");
+    ASSERT_LT(req.id, kCapacity);
     ids.insert(req.id);
   }
-  return Check(ids.size() == kCapacity,
-               "recycling the whole pool hands back every distinct id");
+  ASSERT_EQ(ids.size(), kCapacity);
 }
 
 
@@ -71,7 +62,7 @@ bool CheckTailHitDoesNotOrphanSlots() {
 // the accesses are ordered. The ordering here is the one that used to orphan
 // slots: touch an entry twice in a row (so it is hit while it is the tail),
 // push another entry behind it, then touch it again from the middle.
-bool CheckWorkingSetNeverExhausts() {
+UTEST(LRUCache, WorkingSetNeverExhausts) {
   constexpr uint32_t kCapacity = 8;
   hpl::LRUCache cache(kCapacity, /*frameInFlight*/ 0);
 
@@ -84,99 +75,83 @@ bool CheckWorkingSetNeverExhausts() {
       if (req.exhausted) {
         std::printf("  exhausted at frame %u on cookie %llu\n", frame,
                     (unsigned long long)cookie);
-        return Check(false,
-                     "8-slot pool holding an 8-cookie working set never exhausts");
       }
-      if (req.id >= kCapacity)
-        return Check(false, "returned id stays inside the pool capacity");
+      ASSERT_FALSE_MSG(req.exhausted, "LRUCache working-set loop exhausted");
+      ASSERT_LT(req.id, kCapacity);
     }
   }
-  return true;
 }
 
 // Cycling through far more cookies than the pool holds must keep working: the
 // least-recently-used entry is recycled once it is older than frameInFlight.
-bool CheckEvictionKeepsRecycling() {
+UTEST(LRUCache, EvictionKeepsRecycling) {
   constexpr uint32_t kCapacity = 4;
   hpl::LRUCache cache(kCapacity, /*frameInFlight*/ 1);
 
   std::set<uint32_t> seenIds;
   for (uint32_t frame = 0; frame < 200; ++frame) {
     auto req = cache.request(500 + frame, frame);
-    if (req.exhausted)
-      return Check(false, "a 4-slot pool keeps recycling across 200 cookies");
+    ASSERT_FALSE_MSG(req.exhausted, "LRUCache eviction loop exhausted");
+    ASSERT_LT(req.id, kCapacity);
     seenIds.insert(req.id);
   }
-  return Check(seenIds.size() <= kCapacity,
-               "recycling reuses the same ids rather than growing the pool");
+  ASSERT_LE(seenIds.size(), kCapacity);
 }
 
 // A one-element queue makes the entry both head and tail; detaching it has to
 // clear both, or the next attach links the entry to itself.
-bool CheckSingleSlotQueue() {
+UTEST(LRUCache, SingleSlotQueue) {
   hpl::LRUCache cache(/*numElements*/ 1, /*frameInFlight*/ 0);
 
   auto first = cache.request(/*cookie*/ 11, /*frameIndex*/ 0);
-  if (!Check(!first.exhausted && !first.found, "first cookie takes the only slot"))
-    return false;
+  ASSERT_TRUE(!first.exhausted && !first.found);
 
   auto second = cache.request(/*cookie*/ 22, /*frameIndex*/ 5);
-  if (!Check(!second.exhausted && !second.found && second.id == first.id,
-             "the second cookie evicts the first and reuses its id"))
-    return false;
+  ASSERT_TRUE(!second.exhausted && !second.found && second.id == first.id);
 
   auto again = cache.request(/*cookie*/ 22, /*frameIndex*/ 5);
-  if (!Check(again.found && again.id == second.id,
-             "the surviving cookie is still a cache hit"))
-    return false;
+  ASSERT_TRUE(again.found && again.id == second.id);
 
   auto evicted = cache.request(/*cookie*/ 11, /*frameIndex*/ 9);
-  return Check(!evicted.found, "the evicted cookie is gone, not resurrected");
+  ASSERT_FALSE(evicted.found);
 }
 
 // With free ids left, a new cookie takes one instead of recycling a live entry
 // (recycling would throw away that entry's already-uploaded payload).
-bool CheckFreeIdsBeatEviction() {
+UTEST(LRUCache, FreeIdsBeatEviction) {
   hpl::LRUCache cache(/*numElements*/ 4, /*frameInFlight*/ 0);
 
   auto a = cache.request(/*cookie*/ 1, /*frameIndex*/ 0);
   auto b = cache.request(/*cookie*/ 2, /*frameIndex*/ 10);
-  if (!Check(!a.exhausted && !b.exhausted && a.id != b.id,
-             "a fresh id is handed out while the pool has room"))
-    return false;
+  ASSERT_TRUE(!a.exhausted && !b.exhausted && a.id != b.id);
 
   auto aAgain = cache.request(/*cookie*/ 1, /*frameIndex*/ 10);
-  return Check(aAgain.found && aAgain.id == a.id,
-               "the older entry survives because nothing was evicted");
+  ASSERT_TRUE(aAgain.found && aAgain.id == a.id);
 }
 
 // free() must unlink before the slot memory goes back to the pool, and must
 // hand the id back.
-bool CheckFreeReleasesSlot() {
+UTEST(LRUCache, FreeReleasesSlot) {
   hpl::LRUCache cache(/*numElements*/ 2, /*frameInFlight*/ 0);
 
   auto a = cache.request(/*cookie*/ 7, /*frameIndex*/ 0);
   auto b = cache.request(/*cookie*/ 8, /*frameIndex*/ 0);
-  if (!Check(!a.exhausted && !b.exhausted, "both cookies fit"))
-    return false;
+  ASSERT_TRUE(!a.exhausted && !b.exhausted);
 
   cache.free(/*cookie*/ 7);
 
   auto reborn = cache.request(/*cookie*/ 7, /*frameIndex*/ 0);
-  if (!Check(!reborn.exhausted && !reborn.found,
-             "the freed cookie comes back as a miss on a reclaimed id"))
-    return false;
+  ASSERT_TRUE(!reborn.exhausted && !reborn.found);
 
   auto stillThere = cache.request(/*cookie*/ 8, /*frameIndex*/ 0);
-  return Check(stillThere.found && stillThere.id == b.id,
-               "freeing one cookie leaves the other's hash bucket intact");
+  ASSERT_TRUE(stillThere.found && stillThere.id == b.id);
 }
 
 // ----------------------------------------------------- LRUCacheState<T>
 
 // The templated copy carries its own duplicate of the queue mechanics, so it
-// needs the same orphan check (see CheckTailHitDoesNotOrphanSlots).
-bool CheckStateTailHitDoesNotOrphanSlots() {
+// needs the same orphan check (see TailHitDoesNotOrphanSlots).
+UTEST(LRUCacheState, TailHitDoesNotOrphanSlots) {
   constexpr uint32_t kCapacity = 4;
   hpl::LRUCacheState<int> cache(kCapacity, /*frameInFlight*/ 0);
 
@@ -190,19 +165,19 @@ bool CheckStateTailHitDoesNotOrphanSlots() {
   std::set<uint32_t> ids;
   for (uint32_t i = 0; i < kCapacity; ++i) {
     auto req = cache.request(/*cookie*/ 100 + i, /*frameIndex*/ 10);
-    if (req.exhausted)
-      return Check(false,
-                   "the templated pool orphans no slot on a queue-tail hit");
+    ASSERT_FALSE_MSG(req.exhausted,
+                     "LRUCacheState recycled-slot loop exhausted");
+    ASSERT_LT(req.id, kCapacity);
+    ASSERT_NE(req.state, nullptr);
     ids.insert(req.id);
   }
-  return Check(ids.size() == kCapacity,
-               "recycling the whole templated pool hands back every id");
+  ASSERT_EQ(ids.size(), kCapacity);
 }
 
 
 // Same contracts against the templated copy, which carries its own duplicate
 // of the queue mechanics.
-bool CheckStateWorkingSetNeverExhausts() {
+UTEST(LRUCacheState, WorkingSetNeverExhausts) {
   constexpr uint32_t kCapacity = 8;
   hpl::LRUCacheState<int> cache(kCapacity, /*frameInFlight*/ 0);
 
@@ -213,83 +188,68 @@ bool CheckStateWorkingSetNeverExhausts() {
     for (hash_t cookie : cookies) {
       auto req = cache.request(cookie, frame);
       if (req.exhausted)
-        return Check(false,
-                     "templated pool holding a fitting working set never exhausts");
-      if (req.state == nullptr)
-        return Check(false, "a non-exhausted request always yields state");
+        std::printf("  exhausted at frame %u on cookie %llu\n", frame,
+                    (unsigned long long)cookie);
+      ASSERT_FALSE_MSG(req.exhausted,
+                       "LRUCacheState working-set loop exhausted");
+      ASSERT_LT(req.id, kCapacity);
+      ASSERT_NE(req.state, nullptr);
     }
   }
-  return true;
 }
 
 // The per-entry state is reset when a slot is recycled for a new cookie, and
 // preserved across cache hits.
-bool CheckStateLifetime() {
+UTEST(LRUCacheState, Lifetime) {
   hpl::LRUCacheState<int> cache(/*numElements*/ 1, /*frameInFlight*/ 0);
 
   auto first = cache.request(/*cookie*/ 11, /*frameIndex*/ 0);
-  if (!Check(!first.exhausted && *first.state == 0, "fresh state starts default"))
-    return false;
+  ASSERT_TRUE(!first.exhausted && first.state != nullptr);
+  ASSERT_EQ(*first.state, 0);
   *first.state = 42;
 
   auto hit = cache.request(/*cookie*/ 11, /*frameIndex*/ 0);
-  if (!Check(hit.found && *hit.state == 42, "a cache hit keeps the state"))
-    return false;
+  ASSERT_TRUE(hit.found && hit.state != nullptr);
+  ASSERT_EQ(*hit.state, 42);
 
   auto recycled = cache.request(/*cookie*/ 22, /*frameIndex*/ 5);
-  return Check(!recycled.exhausted && !recycled.found && *recycled.state == 0,
-               "an evicted slot drops the previous owner's state");
+  ASSERT_TRUE(!recycled.exhausted && !recycled.found && recycled.state != nullptr);
+  ASSERT_EQ(*recycled.state, 0);
 }
 
-bool CheckStateEvictionKeepsRecycling() {
+UTEST(LRUCacheState, EvictionKeepsRecycling) {
   constexpr uint32_t kCapacity = 4;
   hpl::LRUCacheState<int> cache(kCapacity, /*frameInFlight*/ 1);
 
   std::set<uint32_t> seenIds;
   for (uint32_t frame = 0; frame < 200; ++frame) {
     auto req = cache.request(500 + frame, frame);
-    if (req.exhausted)
-      return Check(false, "the templated pool keeps recycling across 200 cookies");
+    ASSERT_FALSE_MSG(req.exhausted,
+                     "LRUCacheState eviction loop exhausted");
+    ASSERT_LT(req.id, kCapacity);
+    ASSERT_NE(req.state, nullptr);
     seenIds.insert(req.id);
   }
-  return Check(seenIds.size() <= kCapacity,
-               "templated recycling reuses ids rather than growing the pool");
+  ASSERT_LE(seenIds.size(), kCapacity);
 }
 
-bool CheckStateFreeReleasesSlot() {
+UTEST(LRUCacheState, FreeReleasesSlot) {
   hpl::LRUCacheState<int> cache(/*numElements*/ 2, /*frameInFlight*/ 0);
 
   auto a = cache.request(/*cookie*/ 7, /*frameIndex*/ 0);
   auto b = cache.request(/*cookie*/ 8, /*frameIndex*/ 0);
-  if (!Check(!a.exhausted && !b.exhausted, "both cookies fit"))
-    return false;
+  ASSERT_TRUE(!a.exhausted && a.state != nullptr && !b.exhausted &&
+              b.state != nullptr);
   *b.state = 5;
 
   cache.free(/*cookie*/ 7);
 
   auto reborn = cache.request(/*cookie*/ 7, /*frameIndex*/ 0);
-  if (!Check(!reborn.exhausted && !reborn.found,
-             "the freed cookie comes back as a miss on a reclaimed id"))
-    return false;
+  ASSERT_TRUE(!reborn.exhausted && !reborn.found && reborn.state != nullptr);
 
   auto stillThere = cache.request(/*cookie*/ 8, /*frameIndex*/ 0);
-  return Check(stillThere.found && *stillThere.state == 5,
-               "freeing one cookie leaves the other entry untouched");
+  ASSERT_TRUE(stillThere.found && stillThere.state != nullptr);
+  ASSERT_EQ(*stillThere.state, 5);
 }
 
-} // namespace
-
-int main() {
-  const bool ok = CheckTailHitDoesNotOrphanSlots() &&
-                  CheckWorkingSetNeverExhausts() &&
-                  CheckEvictionKeepsRecycling() && CheckSingleSlotQueue() &&
-                  CheckFreeIdsBeatEviction() && CheckFreeReleasesSlot() &&
-                  CheckStateTailHitDoesNotOrphanSlots() &&
-                  CheckStateWorkingSetNeverExhausts() && CheckStateLifetime() &&
-                  CheckStateEvictionKeepsRecycling() &&
-                  CheckStateFreeReleasesSlot();
-  if (!ok)
-    return 1;
-  std::printf("bindless pool tests passed\n");
-  return 0;
-}
+UTEST_MAIN();
