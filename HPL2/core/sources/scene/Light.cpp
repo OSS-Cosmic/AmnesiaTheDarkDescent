@@ -18,6 +18,7 @@
  */
 
 #include "scene/Light.h"
+#include "scene/LightParameters.h"
 
 #include "system/String.h"
 
@@ -65,17 +66,8 @@ namespace hpl {
 
 	float DeriveLightIntensityForReach(float afReach, const cColor &aLitDiffuseColor)
 	{
-		if(afReach <= 0) return 0;
-
-		const cColor linear = sRGBToLinear(aLitDiffuseColor);
-		const float fMaxChannel = cMath::Max(linear.r, cMath::Max(linear.g, linear.b));
-
-		//No colour to solve against - any intensity leaves the light black, so
-		//there is no meaningful answer. Hand back the reach, matching the same
-		//degenerate-case fallback EngineFileLoading's forward derivation uses.
-		if(fMaxChannel <= 0) return afReach;
-
-		return (afReach*afReach + kPointLightSourceRadiusSq) * kLightRadianceFloor / fMaxChannel;
+		return DeriveLightIntensityForReach(afReach, aLitDiffuseColor.r, aLitDiffuseColor.g,
+		                                    aLitDiffuseColor.b);
 	}
 
 	//////////////////////////////////////////////////////////////////////////
@@ -117,6 +109,8 @@ namespace hpl {
 		mbFlickering = false;
 	
 		mfFlickerStateLength = 0;
+		mfFlickerOffValue = 0;
+		mfFlickerOnValue = 0;
 
 		mfFadeTime =0;
 
@@ -153,7 +147,7 @@ namespace hpl {
 	{ 
 		if(mDiffuseColor.r <=0 && mDiffuseColor.g <=0 && mDiffuseColor.b <=0 && mDiffuseColor.a <=0) 
 			return false;
-		if(mfIntensity <= 0) return false;
+		if(GetAnimatedValue() <= 0) return false;
 
 		return mbIsVisible; 
 	}
@@ -176,6 +170,7 @@ namespace hpl {
 		}
 
 		OnSetDiffuse();
+		UpdateDerivedReach();
 	}
 
 	//-----------------------------------------------------------------------
@@ -188,8 +183,7 @@ namespace hpl {
 		{
 			//Log("Fading: %f / %f\n",afTimeStep,mfFadeTime);
 
-			float fNewRadius = mfIntensity + mfIntensityAdd*afTimeStep;
-			SetIntensity(fNewRadius);
+			SetAnimatedValue(GetAnimatedValue() + mfIntensityAdd*afTimeStep);
 			
 			mDiffuseColor.r += mColAdd.r*afTimeStep;
 			mDiffuseColor.g += mColAdd.g*afTimeStep;
@@ -204,7 +198,7 @@ namespace hpl {
 			{
 				mfFadeTime =0;
 				SetDiffuseColor(mDestCol);
-				mfIntensity = mfDestIntensity;
+				SetAnimatedValue(mfDestIntensity);
 			}
 		}
 
@@ -222,11 +216,12 @@ namespace hpl {
 					if(!mbFlickerFade)
 					{
 						SetDiffuseColor(mFlickerOffColor);
-						SetIntensity(mfFlickerOffIntensity);
+						SetAnimatedValue(mfFlickerOffValue);
 					}
 					else
 					{
-						FadeTo(mFlickerOffColor,mfFlickerOffIntensity, cMath::RandRectf(mfFlickerOffFadeMinLength, mfFlickerOffFadeMaxLength));
+						FadeTo(mFlickerOffColor, mfFlickerOffValue,
+							cMath::RandRectf(mfFlickerOffFadeMinLength, mfFlickerOffFadeMaxLength));
 					}
 					//Sound
 					if(msFlickerOffSound!=""){
@@ -255,11 +250,12 @@ namespace hpl {
 					if(!mbFlickerFade)
 					{
 						SetDiffuseColor(mFlickerOnColor);
-						SetIntensity(mfFlickerOnIntensity);
+						SetAnimatedValue(mfFlickerOnValue);
 					}
 					else
 					{
-						FadeTo(mFlickerOnColor,mfFlickerOnIntensity,cMath::RandRectf(mfFlickerOnFadeMinLength, mfFlickerOnFadeMaxLength));
+						FadeTo(mFlickerOnColor, mfFlickerOnValue,
+							cMath::RandRectf(mfFlickerOnFadeMinLength, mfFlickerOnFadeMaxLength));
 					}
 					if(msFlickerOnSound!=""){
 						cSoundEntity *pSound = mpWorld->CreateSoundEntity("FlickerOn", msFlickerOnSound,true);
@@ -299,7 +295,7 @@ namespace hpl {
 		mColAdd.b = (aCol.b - mDiffuseColor.b)/afTime;
 		mColAdd.a = (aCol.a - mDiffuseColor.a)/afTime;
 
-		mfIntensityAdd = (afIntensity - mfIntensity)/afTime;
+		mfIntensityAdd = (afIntensity - GetAnimatedValue())/afTime;
 
 		mfDestIntensity = afIntensity;
 		mDestCol = aCol;
@@ -329,7 +325,7 @@ namespace hpl {
 						float afOffFadeMinLength, float afOffFadeMaxLength)
 	{
 		mFlickerOffColor = aOffCol;
-		mfFlickerOffIntensity = afOffIntensity;
+		mfFlickerOffValue = afOffIntensity;
 
 		mfFlickerOnMinLength = afOnMinLength;
 		mfFlickerOnMaxLength = afOnMaxLength;
@@ -349,7 +345,7 @@ namespace hpl {
 		mfFlickerOffFadeMaxLength = afOffFadeMaxLength;
 
 		mFlickerOnColor = mDiffuseColor;
-		mfFlickerOnIntensity = mfIntensity;
+		mfFlickerOnValue = GetAnimatedValue();
 
 		mbFlickerOn = true;
 		mfFlickerTime =0;
@@ -396,6 +392,22 @@ namespace hpl {
 		
 		//This is so that the render container is updated.
 		SetTransformUpdated();
+
+		UpdateDerivedReach();
+	}
+
+	//-----------------------------------------------------------------------
+
+	void iLight::SetReachFollowsIntensity(bool abX)
+	{
+		mbReachFollowsIntensity = abX;
+		UpdateDerivedReach();
+	}
+
+	void iLight::UpdateDerivedReach()
+	{
+		if(mbReachFollowsIntensity==false || mLightModel != eLightModel_Overdrive) return;
+		SetRadius(DeriveLightReach(mfIntensity, mDiffuseColor.r, mDiffuseColor.g, mDiffuseColor.b));
 	}
 
 	//-----------------------------------------------------------------------
@@ -409,6 +421,40 @@ namespace hpl {
 		mbUpdateBoundingVolume = true;
 
 		//This is so that the render container is updated.
+		SetTransformUpdated();
+	}
+
+	//-----------------------------------------------------------------------
+
+	float iLight::GetAnimatedValue() const
+	{
+		return mLightModel == eLightModel_Legacy ? mfRadius : mfIntensity;
+	}
+
+	void iLight::SetAnimatedValue(float afX)
+	{
+		if (mLightModel == eLightModel_Legacy)
+			SetRadius(afX);
+		else
+			SetIntensity(afX);
+	}
+
+	
+
+	
+
+	//-----------------------------------------------------------------------
+
+	void iLight::SetRendererMask(unsigned aMask)
+	{
+		const unsigned masked = SanitizeRendererMask(aMask);
+		if (mRendererMask == masked) return;
+
+		mRendererMask = masked;
+
+		mbUpdateBoundingVolume = true;
+
+		// This is so that the render container is updated.
 		SetTransformUpdated();
 	}
 

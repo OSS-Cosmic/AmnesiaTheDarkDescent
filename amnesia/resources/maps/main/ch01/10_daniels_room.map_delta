@@ -1,12 +1,24 @@
 <MapDelta Version="1" Target="maps/main/ch01/10_daniels_room.map">
-    <Remove Category="Entities" ID="275" Name="BoxLight_1" />
-    <Remove Category="Entities" ID="562" Name="PointLight_1" />
-    <Remove Category="Entities" ID="563" Name="PointLight_2" />
-    <Remove Category="Entities" ID="564" Name="PointLight_3" />
+    <Modify Category="Entities" ID="275" Name="BoxLight_1">
+        <SetAttr RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="562" Name="PointLight_1">
+        <SetAttr RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="563" Name="PointLight_2">
+        <SetAttr RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="564" Name="PointLight_3">
+        <SetAttr RendererMask="1" />
+    </Modify>
     <Modify Category="Entities" ID="250" Name="SpotLight_2">
-        <SetAttr Intensity="15" Radius="29.0707" SourceRadius="0.12" />
+        <SetAttr RendererMask="1" />
     </Modify>
     <Modify Category="Entities" ID="561" Name="SpotLight_3">
-        <SetAttr Intensity="15" Radius="26.5362" SourceRadius="0.12" />
+        <SetAttr RendererMask="1" />
     </Modify>
+    <Add Category="Entities">
+        <Re_SpotLight Active="true" Aspect="1" CastShadows="true" DiffuseColor="0.8 0.7 0.6 0.7" FOV="1.0472" FalloffMap="" FlickerActive="false" FlickerFade="false" FlickerOffColor="0 0 0 1" FlickerOffFadeMaxLength="0" FlickerOffFadeMinLength="0" FlickerOffMaxLength="0" FlickerOffMinLength="0" FlickerOffPS="" FlickerOffIntensity="0" FlickerOffSound="" FlickerOnFadeMaxLength="0" FlickerOnFadeMinLength="0" FlickerOnMaxLength="0" FlickerOnMinLength="0" FlickerOnPS="" FlickerOnSound="" Gobo="lights/gobo_mansionbase_window02_large.dds" GoboAnimFrameTime="6.35767e+028" GoboAnimMode="None" Name="SpotLight_2" NearClipPlane="0.1" Intensity="15" Radius="29.0707" SourceRadius="0.12" Rotation="1.0472 0 -3.14159" Scale="1 1 1" ShadowResolution="High" ShadowsAffectDynamic="true" ShadowsAffectStatic="true" SpotFalloffMap="" Tag="" WorldPos="20 3.25 15.25" RendererMask="2" />
+        <Re_SpotLight Active="true" Aspect="1" CastShadows="true" DiffuseColor="0.79 0.72 0.6 0.7" FOV="1.0472" FalloffMap="" FlickerActive="false" FlickerFade="false" FlickerOffColor="0 0 0 1" FlickerOffFadeMaxLength="0" FlickerOffFadeMinLength="0" FlickerOffMaxLength="0" FlickerOffMinLength="0" FlickerOffPS="" FlickerOffIntensity="0" FlickerOffSound="" FlickerOnFadeMaxLength="0" FlickerOnFadeMinLength="0" FlickerOnMaxLength="0" FlickerOnMinLength="0" FlickerOnPS="" FlickerOnSound="" Gobo="lights/gobo_mansionbase_window.dds" GoboAnimFrameTime="6.35767e+028" GoboAnimMode="None" Name="SpotLight_3" NearClipPlane="0.1" Intensity="15" Radius="26.5362" SourceRadius="0.12" Rotation="1.0472 0 -3.14159" Scale="1 1 1" ShadowResolution="High" ShadowsAffectDynamic="true" ShadowsAffectStatic="true" SpotFalloffMap="" Tag="" WorldPos="10 3 14.75" RendererMask="2" />
+    </Add>
 </MapDelta>

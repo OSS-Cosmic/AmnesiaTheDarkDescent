@@ -143,6 +143,10 @@ struct RIPool {
 struct RICmd {
   RICmd() { memset(this, 0, sizeof(*this)); }
 
+  // Captured at init so every barrier side uses the same logical-device
+  // feature set, including command recording after device queries change.
+  RIBarrierCapabilities barrierCapabilities;
+
   // Allocates the command buffer from the pool.
   void init(struct RIDevice *device, struct RIPool *pool);
   // Begins/ends recording (one-time-submit).
@@ -256,9 +260,14 @@ struct RICmd {
       const struct RIMemoryBarrier &src = memoryBarriers[i];
       VkMemoryBarrier2 &dst = mem[i];
       dst = {VK_STRUCTURE_TYPE_MEMORY_BARRIER_2};
-      dst.srcStageMask = ri_vk_RIStageBitsToVK(src.beforeStages, src.before);
+      bool valid = true;
+      dst.srcStageMask = ri_vk_RIStageBitsToVK(src.beforeStages, src.before, barrierCapabilities, &valid);
+      if (!valid)
+        hpl::FatalError("RI: unsupported memory barrier source state/stage\n");
       dst.srcAccessMask = ri_vk_RIResourceStateToAccess(src.before);
-      dst.dstStageMask = ri_vk_RIStageBitsToVK(src.afterStages, src.after);
+      dst.dstStageMask = ri_vk_RIStageBitsToVK(src.afterStages, src.after, barrierCapabilities, &valid);
+      if (!valid)
+        hpl::FatalError("RI: unsupported memory barrier destination state/stage\n");
       dst.dstAccessMask = ri_vk_RIResourceStateToAccess(src.after);
     }
 
@@ -266,9 +275,14 @@ struct RICmd {
       const struct RIBufferBarrier &src = bufferBarriers[i];
       VkBufferMemoryBarrier2 &dst = buf[i];
       dst = {VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2};
-      dst.srcStageMask = ri_vk_RIStageBitsToVK(src.beforeStages, src.before);
+      bool valid = true;
+      dst.srcStageMask = ri_vk_RIStageBitsToVK(src.beforeStages, src.before, barrierCapabilities, &valid);
+      if (!valid)
+        hpl::FatalError("RI: unsupported buffer barrier source state/stage\n");
       dst.srcAccessMask = ri_vk_RIResourceStateToAccess(src.before);
-      dst.dstStageMask = ri_vk_RIStageBitsToVK(src.afterStages, src.after);
+      dst.dstStageMask = ri_vk_RIStageBitsToVK(src.afterStages, src.after, barrierCapabilities, &valid);
+      if (!valid)
+        hpl::FatalError("RI: unsupported buffer barrier destination state/stage\n");
       dst.dstAccessMask = ri_vk_RIResourceStateToAccess(src.after);
       dst.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
       dst.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
@@ -281,9 +295,14 @@ struct RICmd {
       const struct RITextureBarrier &src = textureBarriers[i];
       VkImageMemoryBarrier2 &dst = img[i];
       dst = {VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2};
-      dst.srcStageMask = ri_vk_RIStageBitsToVK(src.beforeStages, src.before);
+      bool valid = true;
+      dst.srcStageMask = ri_vk_RIStageBitsToVK(src.beforeStages, src.before, barrierCapabilities, &valid);
+      if (!valid)
+        hpl::FatalError("RI: unsupported image barrier source state/stage\n");
       dst.srcAccessMask = ri_vk_RIResourceStateToAccess(src.before);
-      dst.dstStageMask = ri_vk_RIStageBitsToVK(src.afterStages, src.after);
+      dst.dstStageMask = ri_vk_RIStageBitsToVK(src.afterStages, src.after, barrierCapabilities, &valid);
+      if (!valid)
+        hpl::FatalError("RI: unsupported image barrier destination state/stage\n");
       dst.dstAccessMask = ri_vk_RIResourceStateToAccess(src.after);
       dst.oldLayout = ri_vk_RIResourceStateToImageLayout(src.before);
       dst.newLayout = ri_vk_RIResourceStateToImageLayout(src.after);

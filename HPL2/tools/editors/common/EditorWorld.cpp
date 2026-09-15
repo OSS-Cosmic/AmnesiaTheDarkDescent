@@ -29,6 +29,7 @@
 #include "PrefabManager.h"
 
 #include "resources/XmlHelper.h"
+#include "scene/LightParameters.h"
 #include <tinyxml2.h>
 
 #include <algorithm>
@@ -67,7 +68,7 @@ iEditorWorld::iEditorWorld(iEditorBase* apEditor, const tString& asElementName)
 
 	//////////////////////////////////////////////
 	// Global light creation
-	mpGlobalPointLight = mpWorld->CreateLightPoint("GlobalPoint");
+	mpGlobalPointLight = mpWorld->CreateLightPointLegacy("GlobalPoint");
 	mpGlobalPointLight->SetPosition(cVector3f(0,100,0));
 	mpGlobalPointLight->SetRadius(500);
 	mpGlobalPointLight->SetDiffuseColor(cColor(1,1));
@@ -159,6 +160,7 @@ void iEditorWorld::Reset()
 	SetSkyboxColor(cColor(1));
 	SetSkyboxActive(false);
 
+	mbShowOtherRendererObjects = false;
 	SetShowFog(true);
 	SetFogActive(false);
 	SetFogCulling(true);
@@ -777,7 +779,10 @@ bool iEditorWorld::ImportObjects(tinyxml2::XMLElement* apRootElem, tIntList& als
 			int lNewID = GetFreeID();
 			int lID = GetAttributeInt(pXmlEntity, "ID", lNewID);
 			tString sName = GetAttributeString(pXmlEntity, "Name", "");
-			if(IsNameAvailable(sName)==false)
+			const hpl::cLightElementInfo lightInfo = hpl::GetLightElementInfo(sVal.c_str());
+			const int lRendererMask = GetAttributeInt(pXmlEntity, "RendererMask",
+				static_cast<int>(lightInfo.mbValid ? hpl::GetDefaultLightRendererMask(lightInfo) : hpl::kRendererMaskAll));
+			if(IsNameAvailable(sName, lRendererMask)==false)
 				SetAttributeString(pXmlEntity, "Name", GenerateName(sName));
 
 			mapIDRedirectors.insert(std::pair<int, int>(lID, lNewID));
@@ -846,7 +851,18 @@ void iEditorWorld::DecModifications()
 
 //----------------------------------------------------------------------------
 
-bool iEditorWorld::IsNameAvailable(const tString& asName)
+void iEditorWorld::SetShowOtherRendererObjects(bool abX)
+{
+	if(mbShowOtherRendererObjects==abX) return;
+
+	mbShowOtherRendererObjects = abX;
+	SetVisibilityUpdated();
+	UpdateVisibility();
+}
+
+//----------------------------------------------------------------------------
+
+bool iEditorWorld::IsNameAvailable(const tString& asName, int alRendererMask)
 {
 	if(asName=="")
 		return false;
@@ -858,7 +874,8 @@ bool iEditorWorld::IsNameAvailable(const tString& asName)
 	{
 		iEntityWrapper* pEnt = it->second;
 		if(pEnt==NULL)continue;
-		if(asName == pEnt->GetName())
+		if(asName == pEnt->GetName() &&
+			(static_cast<unsigned>(pEnt->GetRendererMask()) & static_cast<unsigned>(alRendererMask)) != 0)
 		{
 			bAvailable = false;
 			break;

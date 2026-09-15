@@ -41,16 +41,15 @@
         <RemoveAttr Name="GroupID" />
         <RemoveAttr Name="Type" />
     </Modify>
-    <Remove Category="Entities" ID="14" Name="SpotLight_1" />
+    <Modify Category="Entities" ID="14" Name="SpotLight_1">
+        <SetAttr RendererMask="1" />
+    </Modify>
     <Modify Category="Entities" ID="1" Name="ParticleSystem_1">
         <RemoveAttr Name="GroupID" />
         <RemoveAttr Name="Type" />
     </Modify>
     <Modify Category="Entities" ID="11" Name="PointLight_1">
-        <SetAttr FlickerOffRadius="10" Intensity="5" Radius="12.028" SourceRadius="0.2" WorldPos="-0.0181751 0.491239 -0.0111523" />
-        <RemoveAttr Name="GroupID" />
-        <RemoveAttr Name="SubType" />
-        <RemoveAttr Name="Type" />
+        <SetAttr RendererMask="1" />
     </Modify>
     <Modify Category="Entities" ID="12" Name="Sound_1">
         <RemoveAttr Name="GroupID" />
@@ -62,4 +61,10 @@
         <RemoveAttr Name="Scale" />
         <RemoveAttr Name="Type" />
     </Modify>
+    <Add Category="Entities" After="11">
+        <Re_PointLight Active="true" CastShadows="true" DiffuseColor="0.800000 0.700000 0.600000 0.700000" FalloffMap="" FlickerActive="true" FlickerFade="true" FlickerOffColor="0.750000 0.600000 0.400000 0.500000" FlickerOffFadeMaxLength="2.000000" FlickerOffFadeMinLength="0.100000" FlickerOffMaxLength="0.000000" FlickerOffMinLength="0.000000" FlickerOffPS="" FlickerOffIntensity="30.8" FlickerOffSound="" FlickerOnFadeMaxLength="2.000000" FlickerOnFadeMinLength="0.100000" FlickerOnMaxLength="0.000000" FlickerOnMinLength="0.000000" FlickerOnPS="" FlickerOnSound="" Gobo="" GoboAnimFrameTime="0.000000" GoboAnimMode="None" Name="PointLight_1" Intensity="35" Radius="22" SourceRadius="0.2" Rotation="0.000000 0.000000 0.000000" Scale="1.000000 1.000000 1.000000" ShadowResolution="High" ShadowsAffectDynamic="true" ShadowsAffectStatic="true" Tag="" WorldPos="0.028483 0.561034 -0.001537" RendererMask="2" />
+    </Add>
+    <Add Category="Entities" After="14">
+        <Re_SpotLight Active="true" Aspect="1.000000" CastShadows="true" DiffuseColor="0.800000 0.700000 0.600000 0.700000" FOV="1.570796" FalloffMap="lights/light_falloff_short_fade.tga" FlickerActive="true" FlickerFade="true" FlickerOffColor="0.750000 0.600000 0.400000 0.600000" FlickerOffFadeMaxLength="2.000000" FlickerOffFadeMinLength="0.100000" FlickerOffMaxLength="0.000000" FlickerOffMinLength="0.000000" FlickerOffPS="" FlickerOffIntensity="15.4" FlickerOffSound="" FlickerOnFadeMaxLength="2.000000" FlickerOnFadeMinLength="0.100000" FlickerOnMaxLength="0.000000" FlickerOnMinLength="0.000000" FlickerOnPS="" FlickerOnSound="" Gobo="" GoboAnimFrameTime="0.000000" GoboAnimMode="None" Name="SpotLight_1" NearClipPlane="0.100000" Intensity="17.5" Radius="22" SourceRadius="0.2" Rotation="-0.523599 -1.047198 0.000000" ShadowResolution="High" ShadowsAffectDynamic="true" ShadowsAffectStatic="true" SpotFalloffMap="" Tag="" WorldPos="0.223852 0.659942 -0.141616" RendererMask="2" />
+    </Add>
 </EntDelta>

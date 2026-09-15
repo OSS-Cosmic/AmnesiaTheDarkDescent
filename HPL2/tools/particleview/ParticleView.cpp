@@ -43,7 +43,7 @@ int glCurrentAnimaiton = 0;
 cParticleSystem *gpParticleSystem=NULL;
 std::vector<cMeshEntity*> gvFloors;
 
-std::vector<cLightSpot*> gvLights;
+std::vector<iLightSpot*> gvLights;
 
 std::vector<iPhysicsBody*> gvFloorBodies;
 
@@ -70,7 +70,7 @@ public:
 
 		/*for(size_t i=0; i<gvLights.size(); ++i)
 		{
-			cLightSpot *pLight = gvLights[i];
+			iLightSpot *pLight = gvLights[i];
 
             pLight->GetFrustum()->Draw(...);
 		}*/
@@ -229,15 +229,17 @@ public:
 
 		/////////////////////////////////
 		// Create Lights
-		cLightSpot *pLightSpot=NULL;
-		cLightPoint *pLightPoint=NULL;
+		iLightSpot *pLightSpot=NULL;
+		iLightPoint *pLightPoint=NULL;
 
 		// Main spotlights
 		for(int i=0; i<3; ++i)
 		{
 			cVector3f vPos;
 
-			pLightSpot = mpWorld->CreateLightSpot("SpotLight","");
+			pLightSpot = (mpWorld->GetRendererBackend() == eRendererBackend_Standard
+				? mpWorld->CreateLightSpotLegacy("SpotLight","")
+				: mpWorld->CreateLightSpot("SpotLight",""));
 			pLightSpot->SetDiffuseColor(cColor(1,1,1,1.0f));
 			
 			//Key

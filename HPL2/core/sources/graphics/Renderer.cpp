@@ -25,6 +25,8 @@
 namespace hpl {
 
 	int iRenderer::mlRenderFrameCount = 0;
+	bool iRenderer::mbRefractionEnabled = true;
+	eShadowMapQuality iRenderer::mShadowMapQuality = eShadowMapQuality_Medium;
 	
 	//-----------------------------------------------------------------------
 	

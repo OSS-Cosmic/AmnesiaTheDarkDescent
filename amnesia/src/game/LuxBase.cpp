@@ -1103,6 +1103,7 @@ bool cLuxBase::InitEngine()
 	vars.mGraphics.mlDisplay = mpConfigHandler->mlDisplay;
 	vars.mGraphics.mbFullscreen = mpConfigHandler->mbFullscreen;
 	vars.mGraphics.mbVsync = mpConfigHandler->mbVSync;
+	vars.mGraphics.mRendererBackend = mpConfigHandler->mRendererBackend;
 	vars.mGraphics.msWindowCaption = msGameName + " Loading...";
 	vars.mSound.mlSoundDeviceID = mpConfigHandler->mlSoundDevID;
 	vars.mSound.mlMaxChannels = mpConfigHandler->mlMaxSoundChannels;
@@ -1117,7 +1118,7 @@ bool cLuxBase::InitEngine()
 #endif
 	
 	////renderer variables
-	//iRenderer::SetShadowMapQuality((eShadowMapQuality)mpConfigHandler->mlShadowQuality);
+	iRenderer::SetShadowMapQuality((eShadowMapQuality)mpConfigHandler->mlShadowQuality);
 	//iRenderer::SetShadowMapResolution((eShadowMapResolution)mpConfigHandler->mlShadowRes);
 	//
 	//iRenderer::SetParallaxQuality((eParallaxQuality)mpConfigHandler->mlParallaxQuality);
@@ -1132,11 +1133,18 @@ bool cLuxBase::InitEngine()
 	// .map_delta / .ent_delta overlays: on for the game, off for the editors and
 	// the offline tools (they must see unpatched files to author deltas against).
 	cResources::SetDeltasEnabled(true);
+	// Deltas keep each original object for Standard and add its Redux
+	// replacement for Overdrive; load only the running backend's half.
+	cResources::SetRendererMaskFilterEnabled(true);
     
 	/////////////////////////
 	// Create the engine
 	mpEngine = CreateHPLEngine(eHplAPI_OpenGL, eHplSetup_All, &vars);
-	
+
+	// Graphics starts Standard when the GPU cannot ray trace; keep the config in
+	// step so Options shows, and the next save writes, the backend that runs.
+	mpConfigHandler->mRendererBackend = mpEngine->GetGraphics()->GetRendererBackend();
+
 	/////////////////////////
 	// Set up more properties
 	mpConfigHandler->SetRenderScale(mpConfigHandler->GetRenderScale());

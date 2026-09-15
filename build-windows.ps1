@@ -12,7 +12,6 @@ Usage: .\build-windows.ps1 [release|debug] [options] [-- <extra premake args>]
 
 Options:
     -Clean              Remove build-premake\ before generating
-    -NoDeploy           Skip the premake deploy action
     -GameDir <path>     Path to your Amnesia: The Dark Descent install
                         (default: ATDD_DIR or AMNESIA_GAME_DIRECTORY)
     -Help               Show this help
@@ -21,7 +20,6 @@ Examples:
     .\build-windows.ps1
     .\build-windows.ps1 debug
     .\build-windows.ps1 release -Clean
-    .\build-windows.ps1 release -NoDeploy
     .\build-windows.ps1 release -GameDir "C:\Games\Amnesia The Dark Descent"
     .\build-windows.ps1 release -- --with-tools=no
 '@
@@ -29,7 +27,6 @@ Examples:
 
 $config = 'release'
 $clean = $false
-$noDeploy = $false
 $gameDir = $null
 $extraArgs = @()
 
@@ -50,7 +47,7 @@ while ($i -lt $scriptArgs.Count) {
         $clean = $true
         $i++
     } elseif ($arg -ieq '-NoDeploy' -or $arg -ieq '--no-deploy') {
-        $noDeploy = $true
+        Write-Host "==> -NoDeploy is obsolete: builds no longer stage assets"
         $i++
     } elseif ($arg -ieq '-GameDir' -or $arg -ieq '--game-dir') {
         if ($i + 1 -ge $scriptArgs.Count) {
@@ -151,15 +148,5 @@ if (-not $msbuild) {
 Write-Host "==> Building $cfgName with $msbuild"
 & $msbuild $sln "/p:Configuration=$cfgName" '/p:Platform=x64' '/m' '/v:m'
 if ($LASTEXITCODE -ne 0) { throw "msbuild failed" }
-
-if ($noDeploy) {
-    Write-Host "==> -NoDeploy: skipping asset staging"
-} elseif (-not $gameDir) {
-    Write-Host "==> No game dir set; skipping deploy. Pass -GameDir or set ATDD_DIR."
-} else {
-    Write-Host "==> Deploying assets from $gameDir"
-    & $premake deploy "--game-dir=$gameDir"
-    if ($LASTEXITCODE -ne 0) { throw "deploy failed" }
-}
 
 Write-Host "==> Build complete: build-premake\amnesia\$cfgName\"

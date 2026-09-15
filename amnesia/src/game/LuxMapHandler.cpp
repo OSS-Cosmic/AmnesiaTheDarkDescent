@@ -266,6 +266,7 @@ void cLuxMapHandler::UpdateViewportRenderProperties()
 	cRenderSettings *pRenderSettings = mpViewport->GetRenderSettings();
 	pRenderSettings->mbRenderWorldReflection = gpBase->mpConfigHandler->mbWorldReflection;
 	pRenderSettings->mbRenderShadows = gpBase->mpConfigHandler->mbShadowsActive;
+	pRenderSettings->mbSSAOActive = gpBase->mpConfigHandler->mbSSAOActive;
 	// The viewport resolves provider availability itself; unavailable providers fall back to native extent and are reported via cViewport::GetTemporalUpscalerStatus().
 	mpViewport->SetTemporalUpscalerSettings(gpBase->mpConfigHandler->mSuperSampling);
 }

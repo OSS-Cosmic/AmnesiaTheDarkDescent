@@ -2177,7 +2177,7 @@ void __stdcall cLuxScriptHandler::FadeLightTo(std::string& asLightName, float af
 		afB >=0 ? afB : pLight->GetDiffuseColor().b,
 		afA >=0 ? afA : pLight->GetDiffuseColor().a);
 	
-	float fNewRadius = afRadius >=0 ? afRadius : pLight->GetIntensity();
+	float fNewRadius = afRadius >=0 ? afRadius : pLight->GetAnimatedValue();
 
 	pLight->SetVisible(true);
     pLight->FadeTo(newColor, fNewRadius, afTime);
@@ -3703,5 +3703,4 @@ bool __stdcall cLuxScriptHandler::ScriptStringToBool(std::string& asString)
 
 
 //-----------------------------------------------------------------------
-
 

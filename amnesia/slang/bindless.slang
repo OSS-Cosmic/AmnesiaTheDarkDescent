@@ -228,9 +228,6 @@ public RWStructuredBuffer<SpotLight> gSpotLights;
 [vk::binding(kBindingWorldAreaLights, kWorldSet)]
 public RWStructuredBuffer<RectLight> gAreaLights;
 
-[vk::binding(kBindingWorldFogAreas, kWorldSet)]
-public RWStructuredBuffer<FogAreaParams> gFogAreas;
-
 // -----------------------------------------------------------------------------
 // V-buffer. Written by VBufferPomBary.cs (fed by the raster VBufferRaster.3d
 // hit), consumed by the shading passes.

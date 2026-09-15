@@ -907,6 +907,41 @@ kEndSerialize()
 
 //------------------------------------------------------------------------
 
+cEngineLight_SaveData::cEngineLight_SaveData()
+{
+	// Missing version data selects the historical contract. Version-2 defaults
+	// are placeholders: old saves leave those resolved map values intact.
+	mlVersion = 1;
+	mlLightModel = -1;
+	mlID = 0;
+	mbActive = false;
+	mbVisible = true;
+	mbOnlyAffectInSector = false;
+	mfFarAttenuation = 0;
+	mfRadius = 0;
+	mfSourceRadius = 0;
+	mfLegacyRadius = 0;
+	mlRendererMask = kRendererMaskAll;
+	mbFlickering = false;
+	mfFlickerOnMinLength = 0;
+	mfFlickerOffMinLength = 0;
+	mfFlickerOnMaxLength = 0;
+	mfFlickerOffMaxLength = 0;
+	mfFlickerOffRadius = 0;
+	mfFlickerOffIntensity = 0;
+	mfFlickerOffLegacyRadius = 0;
+	mfFlickerOnIntensity = 0;
+	mfFlickerOnLegacyRadius = 0;
+	mfFlickerOnValue = 0;
+	mbFlickerFade = false;
+	mfFlickerOnFadeMinLength = 0;
+	mfFlickerOnFadeMaxLength = 0;
+	mfFlickerOffFadeMinLength = 0;
+	mfFlickerOffFadeMaxLength = 0;
+}
+
+//------------------------------------------------------------------------
+
 void cEngineLight_SaveData::FromLight(iLight *apLight)
 {
 	bool bHasParent = true;
@@ -917,6 +952,8 @@ void cEngineLight_SaveData::FromLight(iLight *apLight)
 
 	msName = apLight->GetName();
 	mlID = apLight->GetUniqueID();
+	mlVersion = 3;
+	mlLightModel = apLight->GetLightModel() == eLightModel_Legacy ? 0 : 1;
 
 	mbActive = apLight->IsActive();
 	mbVisible = apLight->GetVisibleVar();
@@ -927,19 +964,23 @@ void cEngineLight_SaveData::FromLight(iLight *apLight)
 		if(apLight->IsFading() && apLight->GetFlickerActive()==false)
 		{
 			apLight->SetDiffuseColor(apLight->GetDestColor());
-			apLight->SetIntensity(apLight->GetDestIntensity());
+			apLight->SetAnimatedValue(apLight->GetDestIntensity());
 		}
 
 		if(apLight->GetFlickerActive())
 		{
 			mDiffuseColor = apLight->GetFlickerOnColor();
-			mfFarAttenuation = apLight->GetFlickerOnIntensity();
+			mfFarAttenuation = apLight->GetFlickerOnValue();
 		}
 		else
 		{
 			mDiffuseColor = apLight->GetDiffuseColor();
-			mfFarAttenuation = apLight->GetIntensity();
+			mfFarAttenuation = apLight->GetAnimatedValue();
 		}
+		mfRadius = apLight->GetRadius();
+		mfSourceRadius = apLight->GetSourceRadius();
+		mfLegacyRadius = apLight->GetRadius();
+		mlRendererMask = apLight->GetRendererMask();
 
 		//TODO: Add billboard attaching!
 		
@@ -953,7 +994,13 @@ void cEngineLight_SaveData::FromLight(iLight *apLight)
 		mfFlickerOnMaxLength = apLight->GetFlickerOnMaxLength();
 		mfFlickerOffMaxLength = apLight->GetFlickerOffMaxLength();
 		mFlickerOffColor = apLight->GetFlickerOffColor();
-		mfFlickerOffRadius = apLight->GetFlickerOffIntensity();
+		mfFlickerOffRadius = apLight->GetFlickerOffValue();
+		mfFlickerOnValue = apLight->GetFlickerOnValue();
+		// Version-2 fields keep the same values for readers of the dual contract.
+		mfFlickerOffIntensity = mfFlickerOffRadius;
+		mfFlickerOffLegacyRadius = mfFlickerOffRadius;
+		mfFlickerOnIntensity = mfFlickerOnValue;
+		mfFlickerOnLegacyRadius = mfFlickerOnValue;
 		mbFlickerFade = apLight->GetFlickerFade();
 		mfFlickerOnFadeMinLength = apLight->GetFlickerOnFadeMinLength();
 		mfFlickerOnFadeMaxLength = apLight->GetFlickerOnFadeMaxLength();
@@ -980,12 +1027,54 @@ void cEngineLight_SaveData::ToLight(iLight *apLight)
 	if(bHasParent==false)
 	{
 		apLight->SetDiffuseColor(mDiffuseColor);
-		apLight->SetIntensity(mfFarAttenuation);
+
+		// The renderer mask is decided by the loaded map data, never the save.
+		const bool bLegacy = apLight->GetLightModel() == eLightModel_Legacy;
+		float fOnValue = mfFarAttenuation;
+		float fOffValue = mfFlickerOffRadius;
+		if(mlVersion >= 3)
+		{
+			const bool bSameModel = (mlLightModel == 0) == bLegacy;
+			if(bSameModel)
+			{
+				apLight->SetRadius(mfRadius);
+				if(bLegacy==false) apLight->SetSourceRadius(mfSourceRadius);
+				fOnValue = mbFlickering ? mfFlickerOnValue : mfFarAttenuation;
+			}
+			else
+			{
+				// Saved on the other renderer backend: the values belong to the
+				// other light class, so keep the map-loaded ones. A light saved
+				// dark stays dark.
+				fOnValue = mfFarAttenuation > 0 ? apLight->GetAnimatedValue() : 0;
+				fOffValue = apLight->GetFlickerOffValue();
+			}
+		}
+		else if(mlVersion == 2)
+		{
+			// The dual contract stored both value sets; take this class's set.
+			if(bLegacy)
+			{
+				apLight->SetRadius(mfLegacyRadius);
+				fOnValue = mbFlickering ? mfFlickerOnLegacyRadius : mfLegacyRadius;
+				fOffValue = mfFlickerOffLegacyRadius;
+			}
+			else
+			{
+				apLight->SetRadius(mfRadius);
+				apLight->SetSourceRadius(mfSourceRadius);
+				fOnValue = mbFlickering ? mfFlickerOnIntensity : mfFarAttenuation;
+				fOffValue = mfFlickerOffIntensity;
+			}
+		}
+		// Version 1 restores only the historical scalar; geometry stays map-authored.
 
 		//TODO: Attach billboards.
 
+		// SetFlicker captures the on value from the light, so set it first.
+		apLight->SetAnimatedValue(fOnValue);
 		apLight->SetFlickerActive(mbFlickering);
-		apLight->SetFlicker(mFlickerOffColor,mfFlickerOffRadius,
+		apLight->SetFlicker(mFlickerOffColor,fOffValue,
 			mfFlickerOnMinLength,mfFlickerOnMaxLength,
 			msFlickerOnSound,msFlickerOnPS,
 			mfFlickerOffMinLength,mfFlickerOffMaxLength,
@@ -998,6 +1087,8 @@ void cEngineLight_SaveData::ToLight(iLight *apLight)
 //------------------------------------------------------------------------
 
 kBeginSerializeBase(cEngineLight_SaveData)
+kSerializeVar(mlVersion,eSerializeType_Int32)
+kSerializeVar(mlLightModel,eSerializeType_Int32)
 kSerializeVar(msName,eSerializeType_String)
 kSerializeVar(mlID, eSerializeType_Int32)
 kSerializeVar(mbActive,eSerializeType_Bool)
@@ -1006,6 +1097,10 @@ kSerializeVar(mbOnlyAffectInSector,eSerializeType_Bool)
 
 kSerializeVar(mDiffuseColor, eSerializeType_Color)
 kSerializeVar(mfFarAttenuation, eSerializeType_Float32)
+kSerializeVar(mfRadius, eSerializeType_Float32)
+kSerializeVar(mfSourceRadius, eSerializeType_Float32)
+kSerializeVar(mfLegacyRadius, eSerializeType_Float32)
+kSerializeVar(mlRendererMask, eSerializeType_Int32)
 
 kSerializeVar(mbFlickering,eSerializeType_Bool)
 kSerializeVar(msFlickerOffSound,eSerializeType_String)
@@ -1018,6 +1113,11 @@ kSerializeVar(mfFlickerOnMaxLength, eSerializeType_Float32)
 kSerializeVar(mfFlickerOffMaxLength, eSerializeType_Float32)
 kSerializeVar(mFlickerOffColor, eSerializeType_Color)
 kSerializeVar(mfFlickerOffRadius, eSerializeType_Float32)
+kSerializeVar(mfFlickerOffIntensity, eSerializeType_Float32)
+kSerializeVar(mfFlickerOffLegacyRadius, eSerializeType_Float32)
+kSerializeVar(mfFlickerOnIntensity, eSerializeType_Float32)
+kSerializeVar(mfFlickerOnLegacyRadius, eSerializeType_Float32)
+kSerializeVar(mfFlickerOnValue, eSerializeType_Float32)
 kSerializeVar(mbFlickerFade,eSerializeType_Bool)
 kSerializeVar(mfFlickerOnFadeMinLength, eSerializeType_Float32)
 kSerializeVar(mfFlickerOnFadeMaxLength, eSerializeType_Float32)
@@ -1026,6 +1126,3 @@ kSerializeVar(mfFlickerOffFadeMaxLength, eSerializeType_Float32)
 kEndSerialize()
 
 //------------------------------------------------------------------------
-
-
-

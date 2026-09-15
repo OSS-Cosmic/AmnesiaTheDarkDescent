@@ -64,6 +64,7 @@ namespace hpl {
 	bool cResources::mbForceCacheLoadingAndSkipSaving = false;
 	bool cResources::mbCreateAndLoadCompressedMaps= false; 
 	bool cResources::mbDeltasEnabled = false;
+	bool cResources::mbRendererMaskFilterEnabled = false;
 
 	//-----------------------------------------------------------------------
 

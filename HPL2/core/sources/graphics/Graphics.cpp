@@ -31,6 +31,7 @@
 
 #include "graphics/DecalCreator.h"
 #include "graphics/HybridRenderer.h"
+#include "graphics/StandardRenderer.h"
 #include "graphics/LightProbeQuery.h"
 #include "graphics/MaterialType.h"
 #include "graphics/MeshCreator.h"
@@ -182,6 +183,11 @@ void cGraphics::Init(const cEngineInitVars::cGraphicsVars &aVars,
   m_vsync = aVars.mbVsync;
   m_requestedVsync = aVars.mbVsync;
 
+  mRendererBackend = aVars.mRendererBackend;
+  if (mRendererBackend != eRendererBackend_Standard && mRendererBackend != eRendererBackend_Overdrive) {
+    mRendererBackend = eRendererBackend_Overdrive;
+  }
+
   Log("Initializing Graphics Module\n");
   Log("--------------------------------------------------------\n");
 
@@ -254,13 +260,37 @@ void cGraphics::Init(const cEngineInitVars::cGraphicsVars &aVars,
           physicalAdapters[selectedAdapterIdx].videoMemorySize)
         selectedAdapterIdx = static_cast<uint32_t>(i);
     }
+    const RIPhysicalAdapter &selectedAdapter =
+        physicalAdapters[selectedAdapterIdx];
     struct RIDeviceDesc deviceInit = {0};
     deviceInit.physicalAdapter = &physicalAdapters[selectedAdapterIdx];
-    if (device.init(&deviceInit) != RI_SUCCESS) {
+    // Only Overdrive needs hardware ray tracing; Standard's raster shaders use
+    // no ray query or acceleration structure, so it runs on any Vulkan GPU.
+    deviceInit.requestRayTracing =
+        (mRendererBackend == eRendererBackend_Overdrive) ? 1 : 0;
+    int deviceResult = device.init(&deviceInit);
+    bool overdriveFallback = false;
+    if (deviceResult != RI_SUCCESS && deviceInit.requestRayTracing) {
+      Log("Renderer backend: ray tracing unsupported on '%s', falling back to "
+          "Standard\n",
+          selectedAdapter.name);
+      mRendererBackend = eRendererBackend_Standard;
+      overdriveFallback = true;
+      deviceInit.requestRayTracing = 0;
+      deviceResult = device.init(&deviceInit);
+    }
+    if (deviceResult != RI_SUCCESS) {
       FatalError("Failed to create Vulkan device on adapter '%s'! Make sure "
                  "your drivers are up to date.\n",
-                 physicalAdapters[selectedAdapterIdx].name);
+                 selectedAdapter.name);
     }
+    if (overdriveFallback)
+      mbOverdriveSupported = false;
+    else if (mRendererBackend == eRendererBackend_Overdrive)
+      mbOverdriveSupported = true;
+    else
+      mbOverdriveSupported = selectedAdapter.rayTracingTier >= 1 &&
+                             selectedAdapter.isRayQuerySupported;
     RI_InitResourceUploader(&device, &uploader);
 
     // Swapchain + per-image views. Same RISwapchain::create path as the rebuild
@@ -311,15 +341,17 @@ void cGraphics::Init(const cEngineInitVars::cGraphicsVars &aVars,
           .alloc = RIUniformScratchAllocHandler};
       InitRIScratchAlloc(&device, &set.uboScratchAlloc, &uboDesc);
 
-      // AS build scratch pool. 1 MiB blocks fit typical TLAS/BLAS scratch
-      // for moderate scenes; oversized builds spill through the allocator's
-      // one-shot path.
-      struct RIScratchAllocDesc accelDesc = {
-          .blockSize = 1024 * 1024,
-          .alignmentReq = device.physicalAdapter
-                              .accelerationStructureScratchOffsetAlignment,
-          .alloc = RIAccelScratchAllocHandler};
-      InitRIScratchAlloc(&device, &set.accelScratchAlloc, &accelDesc);
+      if (device.accelerationStructureEnabled) {
+        // AS build scratch pool. 1 MiB blocks fit typical TLAS/BLAS scratch
+        // for moderate scenes; oversized builds spill through the allocator's
+        // one-shot path.
+        struct RIScratchAllocDesc accelDesc = {
+            .blockSize = 1024 * 1024,
+            .alignmentReq = device.physicalAdapter
+                                .accelerationStructureScratchOffsetAlignment,
+            .alloc = RIAccelScratchAllocHandler};
+        InitRIScratchAlloc(&device, &set.accelScratchAlloc, &accelDesc);
+      }
     }
   }
   {
@@ -523,7 +555,13 @@ void cGraphics::Init(const cEngineInitVars::cGraphicsVars &aVars,
   if (alHplSetupFlags & eHplSetup_Screen) {
 
     mvRenderers.resize(eRenderer_LastEnum, NULL);
-    mvRenderers[eRenderer_Main] = hplNew(cHybridRenderer, (this, apResources));
+    if (mRendererBackend == eRendererBackend_Standard) {
+      mvRenderers[eRenderer_Main] = hplNew(cStandardRenderer, (this, apResources));
+      Log("Renderer backend: Standard\n");
+    } else {
+      mvRenderers[eRenderer_Main] = hplNew(cHybridRenderer, (this, apResources));
+      Log("Renderer backend: Overdrive\n");
+    }
     mvRenderers[eRenderer_WireFrame] =
         hplNew(cRendererWireFrame, (this, apResources));
     mvRenderers[eRenderer_Simple] =
@@ -593,6 +631,12 @@ iRenderer *cGraphics::GetRenderer(eRenderer aType) {
     return NULL;
 
   return mvRenderers[aType];
+}
+
+//-----------------------------------------------------------------------
+
+eRendererBackend cGraphics::GetRendererBackend() const {
+  return mRendererBackend;
 }
 
 //-----------------------------------------------------------------------
@@ -796,7 +840,8 @@ void cGraphics::Dispose() {
 
   for (auto &set : frameSets) {
     FreeRIScratchAlloc(&device, &set.uboScratchAlloc);
-    FreeRIScratchAlloc(&device, &set.accelScratchAlloc);
+    if (device.accelerationStructureEnabled)
+      FreeRIScratchAlloc(&device, &set.accelScratchAlloc);
   }
 
   graphicsCmdRing.dispose(&device);
@@ -841,7 +886,8 @@ void cGraphics::CloseAndSubmitActiveSet() {
     // in lockstep with BeginActiveSet's graphicsCmdRing.advance(). Touch no
     // fences (they stay signaled) and reserve no timeline value.
     primary.cmds[0].end(&device);
-    blasSubmit.cmds[0].end(&device);
+    if (device.accelerationStructureEnabled)
+      blasSubmit.cmds[0].end(&device);
     IncrementFrame();
     return;
   }
@@ -859,7 +905,8 @@ void cGraphics::CloseAndSubmitActiveSet() {
     primary.cmds[0].vk_d3d12_textureBarrier(toPresent);
   }
   primary.cmds[0].end(&device);
-  blasSubmit.cmds[0].end(&device);
+  if (device.accelerationStructureEnabled)
+    blasSubmit.cmds[0].end(&device);
 
   // Flush pending resource uploads once, up front, so both the BLAS submit
   // and the primary chain off it.
@@ -867,7 +914,7 @@ void cGraphics::CloseAndSubmitActiveSet() {
       RI_VKFlushResourceUpdate(&device, &uploader, 0, NULL);
 
   // Submit the dedicated BLAS-build command buffer ahead of the primary.
-  {
+  if (device.accelerationStructureEnabled) {
     VkCommandBufferSubmitInfo blasCmd = {
         VK_STRUCTURE_TYPE_COMMAND_BUFFER_SUBMIT_INFO};
     blasCmd.commandBuffer = blasSubmit.cmds[0].vk.cmd;
@@ -902,19 +949,29 @@ void cGraphics::CloseAndSubmitActiveSet() {
     submitInfo.pCommandBufferInfos = &cmdSubmitInfo;
     submitInfo.commandBufferInfoCount = 1;
 
-    // Wait on acquire (layout transition) and the BLAS submit's semaphore.
+    // Wait on acquire (layout transition), and on the uploader directly when
+    // acceleration structures are disabled (the enabled path chains through
+    // the BLAS submit above).
     VkSemaphoreSubmitInfo waitInfos[2] = {};
     uint32_t waitCount = 0;
+    if (!device.accelerationStructureEnabled && uploadResult.signaled) {
+      waitInfos[waitCount].sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO;
+      waitInfos[waitCount].semaphore = uploadResult.vk.semaphore;
+      waitInfos[waitCount].stageMask = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT;
+      waitCount++;
+    }
     waitInfos[waitCount].sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO;
     waitInfos[waitCount].semaphore =
         swapchain->vk.imageAcquireSem[swapchain->vk.frameIndex];
     waitInfos[waitCount].stageMask =
         VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
     waitCount++;
-    waitInfos[waitCount].sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO;
-    waitInfos[waitCount].semaphore = blasSubmit.vk.semaphore;
-    waitInfos[waitCount].stageMask = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT;
-    waitCount++;
+    if (device.accelerationStructureEnabled) {
+      waitInfos[waitCount].sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO;
+      waitInfos[waitCount].semaphore = blasSubmit.vk.semaphore;
+      waitInfos[waitCount].stageMask = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT;
+      waitCount++;
+    }
     submitInfo.waitSemaphoreInfoCount = waitCount;
     submitInfo.pWaitSemaphoreInfos = waitInfos;
 
@@ -963,9 +1020,11 @@ void cGraphics::BeginActiveSet() {
 
   graphicsCmdRing.advance();
   primary = graphicsCmdRing.acquire(&device, 1);
-  blasSubmit = graphicsCmdRing.acquire(&device, 1);
+  if (device.accelerationStructureEnabled)
+    blasSubmit = graphicsCmdRing.acquire(&device, 1);
   primary.wait(&device);
-  blasSubmit.wait(&device);
+  if (device.accelerationStructureEnabled)
+    blasSubmit.wait(&device);
   primary.pool->reset(&device);
 
   const uint64_t completedTimeline = graphicsTimeline.completed(&device);
@@ -1047,9 +1106,11 @@ void cGraphics::BeginActiveSet() {
 
   // cleanup
   RIResetScratchAlloc(&device, &cntx->uboScratchAlloc);
-  RIResetScratchAlloc(&device, &cntx->accelScratchAlloc);
+  if (device.accelerationStructureEnabled)
+    RIResetScratchAlloc(&device, &cntx->accelScratchAlloc);
 
-  blasSubmit.cmds[0].begin(&device);
+  if (device.accelerationStructureEnabled)
+    blasSubmit.cmds[0].begin(&device);
   primary.cmds[0].begin(&device);
   // Only touch the swapchain image when we actually acquired one — a skipped
   // frame (see CloseAndSubmitActiveSet) has a stale swapchainIndex.

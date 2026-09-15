@@ -57,12 +57,9 @@ static void __InitTransferCommandGroup( struct RIDevice *device, struct RITransf
 			group->cmd_pool[i].vk.queue = queue->vk.queue;
 			VK_WrapResult( vkCreateCommandPool( device->vk.device, &info, NULL, &group->cmd_pool[i].vk.pool ) );
 
-			VkCommandBufferAllocateInfo allocInfo = { VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO };
-			allocInfo.commandPool = group->cmd_pool[i].vk.pool;
-			allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
-			allocInfo.commandBufferCount = 1;
-			VK_WrapResult( vkAllocateCommandBuffers( device->vk.device, &allocInfo, &group->cmd[i].vk.cmd ) );
-			group->cmd[i].vk.pool = group->cmd_pool[i].vk.pool;
+			// Keep command allocation and capability capture in one path. Direct
+			// Vulkan allocation here left barrier conversion with zero features.
+			group->cmd[i].init( device, &group->cmd_pool[i] );
 		}
 
 		group->staging_buffer[i] = RIBuffer::create(

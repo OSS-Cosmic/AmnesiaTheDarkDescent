@@ -37,6 +37,15 @@ namespace hpl
 
 	//-----------------------------------------
 
+	enum eLightBoxBlendFunc
+	{
+		eLightBoxBlendFunc_Replace,
+		eLightBoxBlendFunc_Add,
+		eLightBoxBlendFunc_LastEnum
+	};
+
+	//-----------------------------------------
+
 	typedef tFlag tObjectVariabilityFlag;
 
 	#define eObjectVariabilityFlag_Static	(0x00000001)

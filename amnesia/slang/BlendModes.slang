@@ -89,6 +89,30 @@ public float4 encodeBlendOutputLinear(uint blendMode, float4 color)
     return color;
 }
 
+// Standard renderer scene convention: the RGBA16F target stores
+// sRGBToLinear(display) / kSceneExposure and the tonemap multiplies exposure
+// back. Radiance sources (Add, Alpha, PremulAlpha) divide once to share that
+// scale. Mul/MulX2 prepared colours are display-space multipliers; decoding
+// them makes the linear hardware multiply match the legacy display-space one
+// while keeping the 1 / 0.5 neutrals. Apply after applyBlendModulation and
+// before encodeBlendOutputLinear.
+public float4 encodeStandardBlendSource(uint blendMode, float4 color)
+{
+    switch (blendMode)
+    {
+        case kBlendModeMul:
+            color.rgb = sRGBToLinear(saturate(color.rgb));
+            break;
+        case kBlendModeMulX2:
+            color.rgb = sRGBToLinear(saturate(color.rgb) * 2.0f) * 0.5f;
+            break;
+        default:
+            color.rgb /= kSceneExposure;
+            break;
+    }
+    return color;
+}
+
 // EXACT display-space software blend — composite-time clustered decals, where
 // dst is in hand so the legacy hardware blend is replicated bit-for-bit (no
 // powered-weight approximation). NOTE: takes the RAW eMaterialBlendMode

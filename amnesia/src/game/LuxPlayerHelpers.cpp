@@ -1769,9 +1769,20 @@ void cLuxPlayerLantern::CreateWorldEntities(cLuxMap *apMap)
 
 	cCamera *pCam = mpPlayer->GetCamera();
 
-	mpLight = pWorld->CreateLightPoint("PlayerLantern",msGobo,false);
+	// The lantern's Radius is the legacy light radius on Standard and both the
+	// reach and the intensity on Overdrive (a light with no reach is dropped by
+	// the Overdrive light grid).
+	if(pWorld->GetRendererBackend() == eRendererBackend_Standard)
+	{
+		mpLight = pWorld->CreateLightPointLegacy("PlayerLantern",msGobo,false);
+	}
+	else
+	{
+		mpLight = pWorld->CreateLightPoint("PlayerLantern",msGobo,false);
+		mpLight->SetIntensity(mfRadius);
+	}
+	mpLight->SetRadius(mfRadius);
 	mpLight->SetDiffuseColor(cColor(0,0));
-	mpLight->SetIntensity(mfRadius);
 	
 	mpLight->SetIsSaved(false);
 
@@ -2785,17 +2796,40 @@ void cLuxPlayerLightLevel::Update(float afTimeStep)
 			vPos - cVector3f(0,vSize.y-0.1f, 0) + vForward * vSize.z*0.8f //In front of feet.
 		};
 
-		////////////////////////////////
-		//Get lights to skip.
-		//The darkness ambient light follows the camera and brightens BECAUSE the
-		//player is in the dark, so sensing it would cancel the darkness that
-		//switched it on.
-		std::vector<iLight*> vSkipLights;
-		vSkipLights.push_back(mpPlayer->GetHelperInDarkness()->GetAmbientLight());
+		cLuxMap *pCurrentMap = gpBase->mpMapHandler->GetCurrentMap();
+		cWorld *pWorld = pCurrentMap ? pCurrentMap->GetWorld() : NULL;
+		if(pWorld && pWorld->GetRendererBackend() == eRendererBackend_Standard)
+		{
+			// The darkness ambient light follows the camera and brightens BECAUSE
+			// the player is in the dark. The lantern is a gameplay bonus, so neither
+			// light may contribute to the environmental CPU reading.
+			std::vector<iLight*> vSkipLights;
+			vSkipLights.push_back(mpPlayer->GetHelperInDarkness()->GetAmbientLight());
+			if(mpPlayer->GetHelperLantern()->GetLight())
+				vSkipLights.push_back(mpPlayer->GetHelperLantern()->GetLight());
 
-		////////////////////////////////
-		//Read physical lighting; no result retains the last environmental level.
-		mbUsingProbe = UpdateFromProbe(vTestPos, lTestPos, vSkipLights);
+			float fLegacyLightLevel = 0.0f;
+			for(int i = 0; i < lTestPos; ++i)
+			{
+				fLegacyLightLevel = std::max(fLegacyLightLevel,
+					gpBase->mpMapHelper->GetLightLevelAtPos(vTestPos[i], &vSkipLights));
+			}
+			mProbeBrightness.UpdateLegacy(fLegacyLightLevel);
+			mbUsingProbe = false;
+		}
+		else
+		{
+			//Get lights to skip.
+			//The darkness ambient light follows the camera and brightens BECAUSE the
+			//player is in the dark, so sensing it would cancel the darkness that
+			//switched it on.
+			std::vector<iLight*> vSkipLights;
+			vSkipLights.push_back(mpPlayer->GetHelperInDarkness()->GetAmbientLight());
+
+			////////////////////////////////
+			//Read physical lighting; no result retains the last environmental level.
+			mbUsingProbe = UpdateFromProbe(vTestPos, lTestPos, vSkipLights);
+		}
 		//The gameplay lantern bonus is separate from the retained environment.
 		mProbeBrightness.SetLantern(mpPlayer->GetHelperLantern()->IsActive());
 	}
@@ -2843,8 +2877,8 @@ bool cLuxPlayerLightLevel::UpdateFromProbe(const cVector3f *apTestPos, int alTes
 void cLuxPlayerLightLevel::OnMapEnter(cLuxMap *apMap)
 {
 	Reset();
-	//Discard all prior-map answers and use the fully-lit startup default until
-	//the renderer has completed probes for this world.
+	//Discard prior-map answers. The next update publishes a Legacy CPU reading
+	//or retains the fully-lit startup default until Overdrive probes complete.
 	cGraphics *pGraphics = gpBase->mpEngine->GetGraphics();
 	if(pGraphics && pGraphics->lightProbe)
 		pGraphics->lightProbe->Reset();
@@ -2937,7 +2971,7 @@ void cLuxPlayerInDarkness::Update(float afTimeStep)
 		if(mbAmbientLightIsOn)
 		{
 			mbAmbientLightIsOn = false;
-			mpAmbientLight->FadeTo(cColor(0.0f, 0.0f),mpAmbientLight->GetIntensity(),mfAmbientLightFadeOutTime);
+			mpAmbientLight->FadeTo(cColor(0.0f, 0.0f),mpAmbientLight->GetAnimatedValue(),mfAmbientLightFadeOutTime);
 		}
 	}
 	////////////////////////////
@@ -2951,9 +2985,9 @@ void cLuxPlayerInDarkness::Update(float afTimeStep)
 			////////////////////////
 			// HARDMODE
 			if (gpBase->mbHardMode)
-				mpAmbientLight->FadeTo(mAmbientLightColor*mfAmbientLightIntensity * 0.75f , mpAmbientLight->GetIntensity(), mfAmbientLightFadeInTime * 2.5f);
+				mpAmbientLight->FadeTo(mAmbientLightColor*mfAmbientLightIntensity * 0.75f , mpAmbientLight->GetAnimatedValue(), mfAmbientLightFadeInTime * 2.5f);
 			else
-				mpAmbientLight->FadeTo(mAmbientLightColor*mfAmbientLightIntensity, mpAmbientLight->GetIntensity(), mfAmbientLightFadeInTime);
+				mpAmbientLight->FadeTo(mAmbientLightColor*mfAmbientLightIntensity, mpAmbientLight->GetAnimatedValue(), mfAmbientLightFadeInTime);
 
 		}
 
@@ -3046,9 +3080,6 @@ void cLuxPlayerInDarkness::CreateWorldEntities(cLuxMap *apMap)
 {
 	cWorld *pWorld = apMap->GetWorld();
 
-	mpAmbientLight = pWorld->CreateLightPoint("PlayerDarknessAmbient","",false);
-	mpAmbientLight->SetDiffuseColor(cColor(0.0f, 0.0f));
-
 	float fReach = mfAmbientLightRadius;
 
 	/////////////////////
@@ -3056,21 +3087,14 @@ void cLuxPlayerInDarkness::CreateWorldEntities(cLuxMap *apMap)
 	if(gpBase->mbHardMode)
 		fReach = mfAmbientLightRadius*0.5f;
 
-	//iLight splits what the original engine called "radius" into two values, and
-	//a light created in code has to set BOTH. `radius` is the cull reach, and it
-	//is what LightGridBuildPass bins on - a light left at the default radius of
-	//0 is skipped by the grid, so it lights nothing at all. `intensity` is the
-	//PBR gain, a different quantity entirely.
-	//
-	//AmbientLightRadius is an authored DISTANCE, so it is the reach directly.
-	//The intensity is then solved from it: pick the gain whose inverse-square
-	//falloff reaches the cull floor exactly at that distance, so the glow ends
-	//where the authored radius says and the cull introduces no visible edge.
+	//AmbientLightRadius is an authored DISTANCE: the legacy light's radius and
+	//the Overdrive light's reach. On Overdrive the intensity is solved from it so
+	//the inverse-square falloff reaches the cull floor exactly at that distance.
 	//The colour passed is the lit one - the light starts black and fades in, and
 	//a black colour has no brightness to solve against.
-	mpAmbientLight->SetRadius(fReach);
-	mpAmbientLight->SetIntensity(
-		DeriveLightIntensityForReach(fReach, mAmbientLightColor*mfAmbientLightIntensity) * mfAmbientLightIntensityMul);
+	mpAmbientLight = static_cast<iLightPoint*>(pWorld->CreateCodePointLight("PlayerDarknessAmbient", "", false,
+		fReach, mAmbientLightColor*mfAmbientLightIntensity, mfAmbientLightIntensityMul));
+	mpAmbientLight->SetDiffuseColor(cColor(0.0f, 0.0f));
 
 
 	mpAmbientLight->SetCastShadows(false);
@@ -3102,7 +3126,7 @@ void cLuxPlayerInDarkness::SetActive(bool abX)
 		if(mbAmbientLightIsOn)
 		{
 			mbAmbientLightIsOn = false;
-			mpAmbientLight->FadeTo(cColor(0.0f, 0.0f),mpAmbientLight->GetIntensity(),mfAmbientLightFadeOutTime);
+			mpAmbientLight->FadeTo(cColor(0.0f, 0.0f),mpAmbientLight->GetAnimatedValue(),mfAmbientLightFadeOutTime);
 		}
         
 		mfLoopSoundCount = 0;

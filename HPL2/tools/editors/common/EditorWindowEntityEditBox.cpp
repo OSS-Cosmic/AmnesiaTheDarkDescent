@@ -53,6 +53,8 @@ cEditorWindowEntityEditBox::cEditorWindowEntityEditBox(cEditorEditModeSelect* ap
 	mpInpName = NULL;
 	mpInpTag = NULL;
 	mpInpActive = NULL;
+	mpInpRendererStandard = NULL;
+	mpInpRendererOverdrive = NULL;
 	mpInpPosition = NULL;
 	mpInpScale = NULL;
 	mpInpRotation = NULL;
@@ -170,6 +172,18 @@ void cEditorWindowEntityEditBox::AddPropertyScale(cWidgetTab* apParentTab)
 void cEditorWindowEntityEditBox::AddPropertyActive(cWidgetTab* apParentTab)
 {
 	mpInpActive = CreateInputBool(0, _W("Active"), "", apParentTab);
+}
+
+//----------------------------------------------------------------------------
+
+void cEditorWindowEntityEditBox::AddPropertyRendererMask(cWidgetTab* apParentTab)
+{
+	// Which renderers load the object in the game. Objects split by renderer
+	// share a name: one keeps only Standard, its replacement only Overdrive.
+	cVector3f vPos = cVector3f(10,10,0.1f);
+	mpInpRendererStandard = CreateInputBool(vPos, _W("Standard"), "", apParentTab);
+	vPos.y += mpInpRendererStandard->GetSize().y + 5;
+	mpInpRendererOverdrive = CreateInputBool(vPos, _W("Overdrive"), "", apParentTab);
 }
 
 //----------------------------------------------------------------------------
@@ -293,6 +307,8 @@ void cEditorWindowEntityEditBox::OnInitLayout()
 	mpTabs = mpSet->CreateWidgetTabFrame(cVector3f(5,10,0.1f),cVector2f(190,600),_W(""), mpBGFrame);
 
 	Create();
+
+	if(mpEntity) AddPropertyRendererMask(mpTabs->AddTab(_W("Renderer")));
 }
 
 //----------------------------------------------------------------------------
@@ -307,6 +323,12 @@ void cEditorWindowEntityEditBox::OnUpdate(float afTimeStep)
 		mpInpTag->SetValue(cString::To16Char(mpEntity->GetTag()), false);
 	if(mpInpActive)
 		mpInpActive->SetValue(mpEntity->IsActive(), false);
+	if(mpInpRendererStandard)
+	{
+		const unsigned lRendererMask = static_cast<unsigned>(mpEntity->GetRendererMask());
+		mpInpRendererStandard->SetValue((lRendererMask & hpl::kRendererMaskStandard) != 0, false);
+		mpInpRendererOverdrive->SetValue((lRendererMask & hpl::kRendererMaskOverdrive) != 0, false);
+	}
 
 	if(mpInpPosition)
 		mpInpPosition->SetValue(mpEntity->GetPosition(), false);
@@ -384,7 +406,7 @@ bool cEditorWindowEntityEditBox::WindowSpecificInputCallback(iEditorInput* apInp
 	if(apInput==mpInpName)
 	{
 		tString sName = cString::To8Char(mpInpName->GetValue());
-		if(mpEntity->GetName()!=sName && pWorld->IsNameAvailable(sName)==false)
+		if(mpEntity->GetName()!=sName && pWorld->IsNameAvailable(sName, mpEntity->GetRendererMask())==false)
 			mpEditor->ShowMessageBox(_W("Warning"), _W("There is already an object with same name"), _W("OK"), _W(""), NULL, NULL);
 		else
             pAction = mpEntity->CreateSetPropertyActionString(eObjStr_Name, sName);
@@ -397,6 +419,15 @@ bool cEditorWindowEntityEditBox::WindowSpecificInputCallback(iEditorInput* apInp
 	else if(apInput==mpInpActive)
 	{
 		pAction = mpEntity->CreateSetPropertyActionBool(eObjBool_Active, mpInpActive->GetValue());
+	}
+	else if(apInput==mpInpRendererStandard || apInput==mpInpRendererOverdrive)
+	{
+		// Change only the toggled renderer so the other keeps its state.
+		const unsigned lBit = apInput==mpInpRendererStandard ? hpl::kRendererMaskStandard : hpl::kRendererMaskOverdrive;
+		const bool bEnabled = static_cast<cEditorInputBool*>(apInput)->GetValue();
+		unsigned lRendererMask = static_cast<unsigned>(mpEntity->GetRendererMask());
+		lRendererMask = bEnabled ? (lRendererMask | lBit) : (lRendererMask & ~lBit);
+		pAction = mpEntity->CreateSetPropertyActionInt(eObjInt_RendererMask, static_cast<int>(lRendererMask));
 	}
 	else if(apInput==mpInpPosition)
 	{

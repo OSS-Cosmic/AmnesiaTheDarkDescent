@@ -72,6 +72,20 @@ namespace hpl {
 
 	typedef std::list<cBinaryBuffer*> tBinaryBufferList;
 	typedef tBinaryBufferList::iterator tBinaryBufferListIt;
+
+	//-------------------------------------------------------
+
+	// Billboard with a ConnectLight attribute, resolved once all of a file's
+	// objects exist. The light tints the billboard by its diffuse colour.
+	class cEFL_LightBillboardConnection
+	{
+	public:
+		int msBillboardID;
+		tString msLightName;
+	};
+
+	typedef std::list<cEFL_LightBillboardConnection> tEFL_LightBillboardConnectionList;
+	typedef tEFL_LightBillboardConnectionList::iterator tEFL_LightBillboardConnectionListIt;
 	
 	//-------------------------------------------------------
 

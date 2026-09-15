@@ -19,6 +19,8 @@
 
 #include "EntityWrapperLight.h"
 
+#include "scene/LightParameters.h"
+
 #include "EditorWorld.h"
 #include "EditorClipPlane.h"
 #include "EditorHelper.h"
@@ -31,8 +33,6 @@
 #include "EntityWrapperBillboard.h"
 
 #include <tinyxml2.h>
-
-#include <algorithm>
 
 //------------------------------------------------------------------------------
 
@@ -58,9 +58,12 @@ void iIconEntityLight::Update()
 {
 	iEditorWorld* pWorld = mpParent->GetEditorWorld();
 	iLight* pLight = (iLight*)mpEntity;
-	pLight->SetVisible(mpParent->IsVisible() && mpParent->IsActive() && mpParent->GetType()->IsActive());
-	
 	iEntityWrapperLight* pParent = (iEntityWrapperLight*)mpParent;
+	// The editor shows both halves of a Standard/Overdrive light pair, but
+	// only the half the editor renderer loads lights the scene.
+	pLight->SetVisible(mpParent->IsVisible() && mpParent->IsActive() && mpParent->GetType()->IsActive() &&
+					   pParent->IsLitByEditorRenderer());
+	
 	pParent->UpdateFlickerParams();
 
 	tObjectVariabilityFlag lFlags =0;
@@ -78,6 +81,15 @@ void iEntityWrapperTypeLight::SetVisible(bool abX)
 
 	mbLightsVisible = abX; 
 	mpWorld->SetVisibilityUpdated(); 
+}
+
+//------------------------------------------------------------------------------
+
+bool iEntityWrapperTypeLight::IsVisible()
+{
+	const eEditorVisibilityType set = mbOverdrive ? eEditorVisibilityType_OverdriveLights
+											  : eEditorVisibilityType_LegacyLights;
+	return mbLightsVisible && cEditorHelper::GetVisibilityTypeState(set);
 }
 
 //------------------------------------------------------------------------------
@@ -137,29 +149,33 @@ bool iEntityWrapperDataLight::Load(tinyxml2::XMLElement* apElement)
 {
 	bool bRet = iEntityWrapperData::Load(apElement);
 
-	// Legacy map (no "Intensity" attribute): the base Load read "Radius" into
-	// the reach property, but in old maps "Radius" is the value the PBR model
-	// uses as intensity. Remap to intensity + derive the reach. Mirrors the
-	// runtime path in cEngineFileLoading.
-	if(apElement->Attribute("Intensity")==NULL)
+	// Same rules as cEngineFileLoading::LoadLight: an Overdrive light without a
+	// Radius reaches as far as its intensity and colour carry, and it never
+	// loads for the Standard renderer.
+	if(static_cast<iEntityWrapperTypeLight*>(mpType)->IsOverdrive())
 	{
-		const float kLightRadianceFloor       = 0.005f;
-		const float kPointLightSourceRadiusSq = 0.25f;
-		auto sRGBToLinear = [](float c){
-			return c <= 0.04045f ? c/12.92f : powf((c+0.055f)/1.055f, 2.4f); };
-
-		const float fIntensity = GetFloat(eLightFloat_Radius); // base read XML "Radius" here
-		const cColor c = GetColor(eLightCol_Diffuse);
-		const float maxC = std::max(sRGBToLinear(c.r),
-							std::max(sRGBToLinear(c.g), sRGBToLinear(c.b)));
-		const float reachSq = maxC > 0.f
-			? maxC * fIntensity / kLightRadianceFloor - kPointLightSourceRadiusSq
-			: 0.f;
-		const float fReach = reachSq > 0.f ? sqrtf(reachSq) : fIntensity;
-
-		SetFloat(eLightFloat_Intensity, fIntensity);
-		SetFloat(eLightFloat_Radius, fReach);
+		const bool bRadiusDerived = apElement->Attribute("Radius")==NULL;
+		SetBool(eLightBool_RadiusDerived, bRadiusDerived);
+		if(bRadiusDerived)
+		{
+			const cColor color = GetColor(eLightCol_Diffuse);
+			SetFloat(eLightFloat_Radius, hpl::DeriveLightReach(GetFloat(eLightFloat_Intensity), color.r, color.g, color.b));
+		}
+		SetInt(eObjInt_RendererMask, GetInt(eObjInt_RendererMask) & static_cast<int>(hpl::kRendererMaskOverdrive));
 	}
+
+	return bRet;
+}
+
+//------------------------------------------------------------------------------
+
+bool iEntityWrapperDataLight::SaveSpecific(tinyxml2::XMLElement* apElement)
+{
+	bool bRet = iEntityWrapperData::SaveSpecific(apElement);
+
+	// A derived reach stays out of the file so it keeps following the intensity.
+	if(static_cast<iEntityWrapperTypeLight*>(mpType)->IsOverdrive() && GetBool(eLightBool_RadiusDerived))
+		apElement->DeleteAttribute("Radius");
 
 	return bRet;
 }
@@ -177,6 +193,13 @@ bool iEntityWrapperDataLight::Load(tinyxml2::XMLElement* apElement)
 
 iEntityWrapperLight::iEntityWrapperLight(iEntityWrapperData* apData) : iEntityWrapper(apData)
 {
+	mfIntensity = 1.0f;
+	mfRadius = 1.0f;
+	mfSourceRadius = 0.0f;
+	mbRadiusDerived = false;
+	mfFlickerOffRadius = 0.0f;
+	mfFlickerOffIntensity = 0.0f;
+	mcolDiffuseColor = cColor(1);
 }
 
 //------------------------------------------------------------------------------
@@ -262,6 +285,9 @@ bool iEntityWrapperLight::GetProperty(int alPropID, float& afX)
 	case eLightFloat_FlickerOffRadius:
 		afX = GetFlickerOffRadius();
 		break;
+	case eLightFloat_FlickerOffIntensity:
+		afX = GetFlickerOffIntensity();
+		break;
 	case eLightFloat_FlickerOnFadeMinLength:
 		afX = GetFlickerOnFadeMinLength();
 		break;
@@ -284,10 +310,7 @@ bool iEntityWrapperLight::GetProperty(int alPropID, float& afX)
 
 bool iEntityWrapperLight::GetProperty(int alPropID, int& alX)
 {
-	if(iEntityWrapper::GetProperty(alPropID, alX))
-		return true;
-
-	return true;
+	return iEntityWrapper::GetProperty(alPropID, alX);
 }
 
 bool iEntityWrapperLight::GetProperty(int alPropID, tString& asX)
@@ -344,6 +367,9 @@ bool iEntityWrapperLight::GetProperty(int alPropID, bool& abX)
 	case eLightBool_ShadowsAffectDynamic:
 		abX = GetShadowsAffectDynamic();
 		break;
+	case eLightBool_RadiusDerived:
+		abX = IsRadiusDerived();
+		break;
 	default:
 		return iEntityWrapper::GetProperty(alPropID, abX);
 	}
@@ -399,6 +425,9 @@ bool iEntityWrapperLight::SetProperty(int alPropID, const float& afX)
 	case eLightFloat_FlickerOffRadius:
 		SetFlickerOffRadius(afX);
 		break;
+	case eLightFloat_FlickerOffIntensity:
+		SetFlickerOffIntensity(afX);
+		break;
 	case eLightFloat_FlickerOnFadeMinLength:
 		SetFlickerOnFadeMinLength(afX);
 		break;
@@ -420,10 +449,7 @@ bool iEntityWrapperLight::SetProperty(int alPropID, const float& afX)
 
 bool iEntityWrapperLight::SetProperty(int alPropID, const int& aX)
 {
-	if(iEntityWrapper::SetProperty(alPropID, aX))
-		return true;
-
-	return true;
+	return iEntityWrapper::SetProperty(alPropID, aX);
 }
 
 bool iEntityWrapperLight::SetProperty(int alPropID, const tString& asX)
@@ -481,6 +507,9 @@ bool iEntityWrapperLight::SetProperty(int alPropID, const bool& abX)
 	case eLightBool_ShadowsAffectDynamic:
 		SetShadowsAffectDynamic(abX);
 		break;
+	case eLightBool_RadiusDerived:
+		SetRadiusDerived(abX);
+		break;
 	default:
 		return iEntityWrapper::SetProperty(alPropID, abX);
 	}
@@ -513,11 +542,73 @@ void iEntityWrapperLight::SetShadowsAffectDynamic(bool abX)
 
 //------------------------------------------------------------------------------
 
+bool iEntityWrapperLight::UsesOverdriveLightClass()
+{
+	if(IsOverdrive()) return true;
+	cWorld* pWorld = GetEditorWorld()->GetWorld();
+	return pWorld->GetRendererBackend() != eRendererBackend_Standard;
+}
+
+//------------------------------------------------------------------------------
+
+bool iEntityWrapperLight::IsLitByEditorRenderer()
+{
+	iEditorWorld* pWorld = GetEditorWorld();
+	if(pWorld==NULL || pWorld->GetWorld()==NULL) return true;
+	return (static_cast<unsigned>(GetRendererMask()) & pWorld->GetWorld()->GetRendererMaskBit()) != 0;
+}
+
+//------------------------------------------------------------------------------
+
+cColor iEntityWrapperLight::GetIconTint()
+{
+	cColor col = IsOverdrive() ? cColor(0.45f, 0.7f, 1.0f, 1.0f) : cColor(1.0f, 0.75f, 0.4f, 1.0f);
+	if(IsLitByEditorRenderer()==false)
+	{
+		col.r *= 0.4f; col.g *= 0.4f; col.b *= 0.4f;
+	}
+	return col;
+}
+
+//------------------------------------------------------------------------------
+
+void iEntityWrapperLight::ApplyLightValues()
+{
+	iLight* pLight = (iLight*)mpEngineEntity->GetEntity();
+
+	if(IsOverdrive())
+	{
+		if(mbRadiusDerived)
+			mfRadius = hpl::DeriveLightReach(mfIntensity, mcolDiffuseColor.r, mcolDiffuseColor.g, mcolDiffuseColor.b);
+		pLight->SetReachFollowsIntensity(mbRadiusDerived);
+		pLight->SetIntensity(mfIntensity);
+		pLight->SetRadius(mfRadius);
+		pLight->SetSourceRadius(mfSourceRadius);
+	}
+	else if(pLight->GetLightModel() == eLightModel_Overdrive)
+	{
+		// A legacy light previewed in an Overdrive editor is promoted the way
+		// the game promotes it (PromoteLegacyLightParameters).
+		pLight->SetIntensity(mfRadius);
+		pLight->SetRadius(hpl::DeriveLightReach(mfRadius, mcolDiffuseColor.r, mcolDiffuseColor.g, mcolDiffuseColor.b));
+		pLight->SetSourceRadius(0.0f);
+		pLight->SetReachFollowsIntensity(true);
+	}
+	else
+	{
+		// SetRadius is virtual on the runtime light, so spotlights also rebuild
+		// their frustum and bounding volume here.
+		pLight->SetRadius(mfRadius);
+	}
+}
+
+//------------------------------------------------------------------------------
+
 void iEntityWrapperLight::SetIntensity(float afIntensity)
 {
 	mfIntensity = afIntensity;
 
-	((iLight*)mpEngineEntity->GetEntity())->SetIntensity(mfIntensity);
+	ApplyLightValues();
 }
 
 //------------------------------------------------------------------------------
@@ -525,8 +616,25 @@ void iEntityWrapperLight::SetIntensity(float afIntensity)
 void iEntityWrapperLight::SetRadius(float afRadius)
 {
 	mfRadius = afRadius;
+	mbRadiusDerived = false;
 
-	((iLight*)mpEngineEntity->GetEntity())->SetRadius(mfRadius);
+	ApplyLightValues();
+}
+
+//------------------------------------------------------------------------------
+
+void iEntityWrapperLight::SetRendererMask(int alMask)
+{
+	iEntityWrapper::SetRendererMask(IsOverdrive() ? (alMask & static_cast<int>(hpl::kRendererMaskOverdrive)) : alMask);
+}
+
+//------------------------------------------------------------------------------
+
+void iEntityWrapperLight::SetRadiusDerived(bool abX)
+{
+	mbRadiusDerived = abX && IsOverdrive();
+
+	ApplyLightValues();
 }
 
 //------------------------------------------------------------------------------
@@ -535,7 +643,7 @@ void iEntityWrapperLight::SetSourceRadius(float afSourceRadius)
 {
 	mfSourceRadius = afSourceRadius;
 
-	((iLight*)mpEngineEntity->GetEntity())->SetSourceRadius(mfSourceRadius);
+	ApplyLightValues();
 }
 
 //------------------------------------------------------------------------------
@@ -545,6 +653,8 @@ void iEntityWrapperLight::SetDiffuseColor(const cColor& aDiffuseColor)
 	mcolDiffuseColor =  aDiffuseColor;
 
 	((iLight*)mpEngineEntity->GetEntity())->SetDiffuseColor(mcolDiffuseColor);
+	// A promoted legacy light's reach follows its colour.
+	ApplyLightValues();
 }
 
 //------------------------------------------------------------------------------
@@ -597,6 +707,13 @@ void iEntityWrapperLight::SetFlickerOffMaxLength(float afX)
 void iEntityWrapperLight::SetFlickerOffRadius(float afX)
 {
 	mfFlickerOffRadius = afX;
+
+	mbFlickerUpdated = true;
+}
+
+void iEntityWrapperLight::SetFlickerOffIntensity(float afX)
+{
+	mfFlickerOffIntensity = afX;
 
 	mbFlickerUpdated = true;
 }
@@ -689,14 +806,14 @@ void iEntityWrapperLight::UpdateFlickerParams()
 
 	mbFlickerUpdated = false;
 	/////////////////////////////////////////////
-	// Reset radius and color to normal values
-	SetIntensity(mfIntensity);
+	// Reset the animated value and color to the authored ones; SetFlicker
+	// captures them as the on state.
 	SetDiffuseColor(mcolDiffuseColor);
 
 	iLight* pLight = (iLight*)mpEngineEntity->GetEntity();
 
     pLight->SetFlickerActive(mbFlickerActive);
-	pLight->SetFlicker(mcolFlickerOffColor, mfFlickerOffRadius,
+	pLight->SetFlicker(mcolFlickerOffColor, GetFlickerOffValue(),
 							mfFlickerOnMinLength, mfFlickerOnMaxLength, msFlickerOnSound, msFlickerOnPS,
 							mfFlickerOffMinLength, mfFlickerOffMaxLength, msFlickerOffSound, msFlickerOffPS,
 							mbFlickerFade, mfFlickerOnFadeMinLength, mfFlickerOnFadeMaxLength, mfFlickerOffFadeMinLength, mfFlickerOffFadeMaxLength);

@@ -106,6 +106,71 @@ project "BindlessPoolTests"
     add_utest()
     add_test_postbuild()
 
+-- The Standard shadow-atlas packer is pure CPU (no RI/Vulkan), so it tests
+-- without the engine. Own directory for the same main() reason as above.
+project "StandardShadowAtlasTests"
+    kind "ConsoleApp"
+    language "C++"
+    cppdialect "C++20"
+    objdir (BUILD_OUT .. "/obj/%{prj.name}/%{cfg.buildcfg}")
+    targetdir (BUILD_OUT .. "/tests/%{cfg.buildcfg}")
+    files {
+        ROOT .. "/tests/graphics/shadow_atlas/*.cpp",
+        ROOT .. "/HPL2/core/sources/graphics/StandardShadowAtlas.cpp",
+    }
+    includedirs { ROOT .. "/HPL2/core/include" }
+    add_utest()
+    add_test_postbuild()
+
+project "BarrierTests"
+    kind "ConsoleApp"
+    language "C++"
+    cppdialect "C++17"
+    objdir (BUILD_OUT .. "/obj/%{prj.name}/%{cfg.buildcfg}")
+    targetdir (BUILD_OUT .. "/tests/%{cfg.buildcfg}")
+    files { ROOT .. "/tests/graphics/barrier/barrier.cpp" }
+    includedirs {
+        ROOT .. "/HPL2/core/include",
+        ROOT .. "/HPL2/extern/volk",
+        ROOT .. "/HPL2/extern/Vulkan-Headers/include",
+        ROOT .. "/HPL2/extern/VulkanMemoryAllocator/include",
+    }
+    add_utest()
+    add_test_postbuild()
+
+-- The renderer capability policy is a pure CPU decision seam. Keep its
+-- matrix in a separate executable so this suite owns its own UTEST_MAIN().
+project "RendererCapabilityPolicyTests"
+    kind "ConsoleApp"
+    language "C++"
+    cppdialect "C++17"
+    objdir (BUILD_OUT .. "/obj/%{prj.name}/%{cfg.buildcfg}")
+    targetdir (BUILD_OUT .. "/tests/%{cfg.buildcfg}")
+    files {
+        ROOT .. "/tests/graphics/backend_policy/*.cpp",
+        ROOT .. "/HPL2/core/sources/graphics/RendererCapabilityPolicy.cpp",
+    }
+    includedirs { ROOT .. "/HPL2/core/include" }
+    add_utest()
+    add_test_postbuild()
+
+-- The light schema resolver is XML-free and links as a small standalone CPU
+-- test. Keep it separate so its UTEST_MAIN() does not collide with graphics
+-- test globs.
+project "LightParametersTests"
+    kind "ConsoleApp"
+    language "C++"
+    cppdialect "C++17"
+    objdir (BUILD_OUT .. "/obj/%{prj.name}/%{cfg.buildcfg}")
+    targetdir (BUILD_OUT .. "/tests/%{cfg.buildcfg}")
+    files {
+        ROOT .. "/tests/lights/*.cpp",
+        ROOT .. "/HPL2/core/sources/scene/LightParameters.cpp",
+    }
+    includedirs { ROOT .. "/HPL2/core/include" }
+    add_utest()
+    add_test_postbuild()
+
 -- Keep this one-main-per-project rule for the non-recursive tests/resources/*.cpp
 -- glob; the cache test is nested and therefore not part of this project.
 project "FileSearcherTests"

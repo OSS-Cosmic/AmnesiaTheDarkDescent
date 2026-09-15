@@ -72,7 +72,7 @@ public:
 private:
     // Three programs share the fullscreen vert. downsample builds the bloom
     // mip chain (with prefilter+Karis on the first mip); upsample tent-filters
-    // a coarser mip and additively blends it up; composite adds bloom mip[0]
+    // a coarser mip and lerps it up (weights sum to 1); composite adds bloom mip[0]
     // back into the HDR scene.
     RIProgram m_downsampleProgram;
     RIProgram m_upsampleProgram;

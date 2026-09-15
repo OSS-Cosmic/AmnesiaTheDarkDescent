@@ -37,7 +37,7 @@ public:
 class cEntityWrapperTypeLightPoint : public iEntityWrapperTypeLight
 {
 public:
-	cEntityWrapperTypeLightPoint(); 
+	cEntityWrapperTypeLightPoint(bool abOverdrive=false);
 
 	iEntityWrapperData* CreateSpecificData();
 };

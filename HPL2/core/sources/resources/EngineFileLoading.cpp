@@ -34,6 +34,8 @@
 #include "scene/LightPoint.h"
 #include "scene/LightSpot.h"
 #include "scene/LightArea.h"
+#include "scene/LightBox.h"
+#include "scene/LightParameters.h"
 #include "scene/MeshEntity.h"
 #include "scene/SoundEntity.h"
 #include "scene/ParticleEmitter.h"
@@ -73,6 +75,25 @@ namespace hpl {
 
 	//-----------------------------------------------------------------------
 
+	unsigned cEngineFileLoading::GetElementRendererMask(tinyxml2::XMLElement* apElement)
+	{
+		const cLightElementInfo lightInfo = GetLightElementInfo(apElement->Value());
+		unsigned lMask = apElement->Attribute("RendererMask")
+			? SanitizeRendererMask(static_cast<unsigned>(GetAttributeInt(apElement, "RendererMask", 0)))
+			: (lightInfo.mbValid ? GetDefaultLightRendererMask(lightInfo) : kRendererMaskAll);
+		// Overdrive light classes never load on Standard.
+		if(lightInfo.mbValid && lightInfo.mbOverdrive) lMask &= kRendererMaskOverdrive;
+		return lMask;
+	}
+
+	bool cEngineFileLoading::IsElementEnabledForWorld(tinyxml2::XMLElement* apElement, cWorld *apWorld)
+	{
+		if(cResources::GetRendererMaskFilterEnabled()==false || apWorld==NULL) return true;
+		return IsRendererMaskEnabled(GetElementRendererMask(apElement), apWorld->GetRendererMaskBit());
+	}
+
+	//-----------------------------------------------------------------------
+
 	cFogArea* cEngineFileLoading::LoadFogArea(tinyxml2::XMLElement* apElement, const tString& asNamePrefix, cWorld *apWorld, bool abStatic)
 	{
 		kBeginWorldEntityLoad();
@@ -81,6 +102,7 @@ namespace hpl {
 
 		if(pFog)
 		{
+			pFog->SetRendererMask(GetElementRendererMask(apElement));
 			pFog->SetColor(GetAttributeColor(apElement, "Color",cColor(1,1)));
 			pFog->SetStart(GetAttributeFloat(apElement, "Start", 0));
 			pFog->SetEnd(GetAttributeFloat(apElement, "End", 0));
@@ -150,7 +172,8 @@ namespace hpl {
 		return eBillboardType_Point;
 	}
 
-	cBillboard* cEngineFileLoading::LoadBillboard(tinyxml2::XMLElement* apElement, const tString& asNamePrefix, cWorld *apWorld, cResources *apResources, bool abStatic)
+	cBillboard* cEngineFileLoading::LoadBillboard(tinyxml2::XMLElement* apElement, const tString& asNamePrefix, cWorld *apWorld, cResources *apResources, bool abStatic,
+													tEFL_LightBillboardConnectionList *apLightBillboardList)
 	{
 		kBeginWorldEntityLoad();
 
@@ -160,6 +183,7 @@ namespace hpl {
 
 		cBillboard *pBillboard = apWorld->CreateBillboard(asNamePrefix+sName,vSize,bbType,sMat, abStatic);
 		if(pBillboard==NULL) return NULL;
+		pBillboard->SetRendererMask(GetElementRendererMask(apElement));
 
 		pBillboard->SetForwardOffset(GetAttributeFloat(apElement, "BillboardOffset"));
 		pBillboard->SetColor(GetAttributeColor(apElement, "BillboardColor",cColor(1,1)));
@@ -167,8 +191,14 @@ namespace hpl {
 		pBillboard->SetIsHalo(GetAttributeBool(apElement, "IsHalo",false));
 		pBillboard->SetHaloSourceSize(GetAttributeVector3f(apElement, "HaloSourceSize",1));
 
-		// The ConnectLight attribute is ignored — light-billboard color sync was
-		// a fake-bloom hack; the renderer has real bloom now.
+		tString sConnectLight = GetAttributeString(apElement, "ConnectLight");
+		if(apLightBillboardList && sConnectLight!="")
+		{
+			cEFL_LightBillboardConnection lightBBConnection;
+			lightBBConnection.msBillboardID = GetAttributeInt(apElement, "ID");
+			lightBBConnection.msLightName = asNamePrefix+sConnectLight;
+			apLightBillboardList->push_back(lightBBConnection);
+		}
 
 		kEndWorldEntityLoad(pBillboard);
 	}
@@ -200,31 +230,26 @@ namespace hpl {
 
 		iLight *pLight = NULL;
 
+		const cLightElementInfo info = GetLightElementInfo(apElement->Value());
+		if(info.mbValid==false)
+		{
+			Error("Unknown light type '%s'\n", apElement->Value());
+			return NULL;
+		}
+
+		// Retail lights with no Overdrive replacement load as the Overdrive class
+		// on Overdrive, with values derived from their Radius. The class choice
+		// ignores the load filter so editors preview the backend they run.
+		const unsigned int lElementMask = GetElementRendererMask(apElement);
+		const bool bOverdriveBackend = apWorld->GetRendererBackend() != eRendererBackend_Standard;
+		const bool bOverdriveClass = info.mbOverdrive ||
+			ShouldPromoteLegacyLight(info, lElementMask, bOverdriveBackend);
+
 		bool bStatic = abStatic;
 
 		//////////////////////////
-		// Spotlightt
-		if(tString(apElement->Value()) == "SpotLight")
-		{
-			cLightSpot *pLightSpot = apWorld->CreateLightSpot(asNamePrefix+sName,"", bStatic);
-			pLight = pLightSpot;
-
-			//Frustum related
-			pLightSpot->SetFOV(GetAttributeFloat(apElement, "FOV", 1.0f));
-			pLightSpot->SetAspect(GetAttributeFloat(apElement, "Aspect", 1.0f));
-			pLightSpot->SetNearClipPlane(GetAttributeFloat(apElement, "NearClipPlane", 0.1f));
-
-			//Spot fall off
-			tString sSpotFalloffMap = GetAttributeString(apElement, "SpotFalloffMap");
-			if(sSpotFalloffMap != "")
-			{
-				Image *pFalloff = apResources->GetTextureManager()->Create1DImage(sSpotFalloffMap,true).Release();
-				if(pFalloff) pLightSpot->SetSpotFalloffMap(pFalloff);
-			}
-		}
-		//////////////////////////
 		// Area Light
-		else if(tString(apElement->Value()) == "AreaLight")
+		if(info.mShape == eLightElementShape_Area)
 		{
 			cLightArea *pLightArea = apWorld->CreateLightArea(asNamePrefix+sName, bStatic);
 			pLight = pLightArea;
@@ -243,16 +268,45 @@ namespace hpl {
 			}
 		}
 		//////////////////////////
-		// Point Light
-		else if(tString(apElement->Value()) == "PointLight")
+		// Box Light
+		else if(info.mShape == eLightElementShape_Box)
 		{
-			cLightPoint *pLightPoint  = apWorld->CreateLightPoint(asNamePrefix+sName,"", bStatic);
-			pLight = pLightPoint;
+			cLightBoxLegacy *pLightBox = apWorld->CreateLightBoxLegacy(asNamePrefix+sName, bStatic);
+			pLight = pLightBox;
+
+			pLightBox->SetSize(GetAttributeVector3f(apElement, "Size", cVector3f(1,1,1)));
+			pLightBox->SetBlendFunc((eLightBoxBlendFunc)GetAttributeInt(apElement, "BlendFunc", (int)eLightBoxBlendFunc_Add));
 		}
+		//////////////////////////
+		// Spotlightt
+		else if(info.mShape == eLightElementShape_Spot)
+		{
+			iLightSpot *pLightSpot = bOverdriveClass
+				? static_cast<iLightSpot*>(apWorld->CreateLightSpot(asNamePrefix+sName,"", bStatic))
+				: static_cast<iLightSpot*>(apWorld->CreateLightSpotLegacy(asNamePrefix+sName,"", bStatic));
+			pLight = pLightSpot;
+
+			//Frustum related
+			pLightSpot->SetFOV(GetAttributeFloat(apElement, "FOV", 1.0f));
+			pLightSpot->SetAspect(GetAttributeFloat(apElement, "Aspect", 1.0f));
+			pLightSpot->SetNearClipPlane(GetAttributeFloat(apElement, "NearClipPlane", 0.1f));
+
+			//Spot fall off
+			tString sSpotFalloffMap = GetAttributeString(apElement, "SpotFalloffMap");
+			if(sSpotFalloffMap != "")
+			{
+				Image *pFalloff = apResources->GetTextureManager()->Create1DImage(sSpotFalloffMap,true).Release();
+				if(pFalloff) pLightSpot->SetSpotFalloffMap(pFalloff);
+			}
+		}
+		//////////////////////////
+		// Point Light
 		else
 		{
-			Error("Unknown light type '%s'\n", apElement->Value());
-			return NULL;
+			if(bOverdriveClass)
+				pLight = apWorld->CreateLightPoint(asNamePrefix+sName,"", bStatic);
+			else
+				pLight = apWorld->CreateLightPointLegacy(asNamePrefix+sName,"", bStatic);
 		}
 
 		//////////////////////////
@@ -307,45 +361,64 @@ namespace hpl {
 		pLight->SetCastShadows(GetAttributeBool(apElement, "CastShadows", false));
 		pLight->SetDiffuseColor(GetAttributeColor(apElement, "DiffuseColor", cColor(1)));
 		pLight->SetDefaultDiffuseColor(pLight->GetDiffuseColor());
-		// Light brightness = "Intensity", reach = "Radius". Two input shapes:
-		//   - new map: authors "Intensity" + "Radius" (reach) explicitly.
-		//   - original/old map: only "Radius", which the PBR model uses directly
-		//     AS the intensity (matches the shipped renderer). The cull reach is
-		//     derived from intensity: the distance where the brightest channel's
-		//     radiance dims to kLightRadianceFloor. Constants mirror
-		//     amnesia/slang/Constants.h.
+		const cColor diffuseColor = pLight->GetDiffuseColor();
+		const bool bHasRendererMask = apElement->Attribute("RendererMask") != NULL;
+		const unsigned int lAuthoredMask = static_cast<unsigned int>(GetAttributeInt(apElement, "RendererMask", 0));
+		float fFlickerOffValue = 0.0f;
+		if(info.mbOverdrive)
 		{
-			const float kLightRadianceFloor       = 0.005f;
-			const float kPointLightSourceRadiusSq = 0.25f;
-			auto sRGBToLinear = [](float c){
-				return c <= 0.04045f ? c/12.92f : powf((c+0.055f)/1.055f, 2.4f); };
-			// reach where color·intensity·1/(d²+srcSq) falls to the radiance floor.
-			auto deriveReach = [&](float afIntensity){
-				const cColor c = pLight->GetDiffuseColor();
-				const float maxC = std::max(sRGBToLinear(c.r),
-									std::max(sRGBToLinear(c.g), sRGBToLinear(c.b)));
-				const float reachSq = maxC > 0.f
-					? maxC * afIntensity / kLightRadianceFloor - kPointLightSourceRadiusSq
-					: 0.f;
-				return reachSq > 0.f ? sqrtf(reachSq) : afIntensity;
-			};
-
-			float fIntensity, fReach;
-			if(apElement->Attribute("Intensity"))
+			cOverdriveLightInput input;
+			input.mbHasIntensity = apElement->Attribute("Intensity") != NULL;
+			input.mfIntensity = GetAttributeFloat(apElement, "Intensity", 1.0f);
+			input.mbHasRadius = apElement->Attribute("Radius") != NULL;
+			input.mfRadius = GetAttributeFloat(apElement, "Radius", 0.0f);
+			input.mbHasSourceRadius = apElement->Attribute("SourceRadius") != NULL;
+			input.mfSourceRadius = GetAttributeFloat(apElement, "SourceRadius", 0.0f);
+			input.mbHasFlickerOffIntensity = apElement->Attribute("FlickerOffIntensity") != NULL;
+			input.mfFlickerOffIntensity = GetAttributeFloat(apElement, "FlickerOffIntensity", 0.0f);
+			input.mfRed = diffuseColor.r;
+			input.mfGreen = diffuseColor.g;
+			input.mfBlue = diffuseColor.b;
+			input.mbHasRendererMask = bHasRendererMask;
+			input.mlRendererMask = lAuthoredMask;
+			const cOverdriveLightParameters params = ResolveOverdriveLightParameters(input);
+			if(params.mbStrippedStandardBit)
+				Warning("Overdrive light '%s' sets the Standard renderer bit; it only loads on Overdrive\n", sName.c_str());
+			pLight->SetIntensity(params.mfIntensity);
+			pLight->SetRadius(params.mfRadius);
+			pLight->SetSourceRadius(params.mfSourceRadius);
+			pLight->SetReachFollowsIntensity(input.mbHasRadius==false);
+			pLight->SetRendererMask(params.mlRendererMask);
+			fFlickerOffValue = params.mfFlickerOffIntensity;
+		}
+		else
+		{
+			cLegacyLightInput input;
+			input.mbHasRadius = apElement->Attribute("Radius") != NULL;
+			input.mfRadius = GetAttributeFloat(apElement, "Radius", 1.0f);
+			input.mbHasFlickerOffRadius = apElement->Attribute("FlickerOffRadius") != NULL;
+			input.mfFlickerOffRadius = GetAttributeFloat(apElement, "FlickerOffRadius", 0.0f);
+			input.mbHasRendererMask = bHasRendererMask;
+			input.mlRendererMask = lAuthoredMask;
+			const cLegacyLightParameters legacy = ResolveLegacyLightParameters(input);
+			if(bOverdriveClass)
 			{
-				fIntensity = GetAttributeFloat(apElement, "Intensity", 1);
-				fReach     = GetAttributeFloat(apElement, "Radius", deriveReach(fIntensity));
+				const cOverdriveLightParameters promoted =
+					PromoteLegacyLightParameters(legacy, diffuseColor.r, diffuseColor.g, diffuseColor.b);
+				pLight->SetIntensity(promoted.mfIntensity);
+				pLight->SetRadius(promoted.mfRadius);
+				pLight->SetSourceRadius(promoted.mfSourceRadius);
+				// Scripts fade retail lights by radius; the promoted reach follows.
+				pLight->SetReachFollowsIntensity(true);
+				pLight->SetRendererMask(promoted.mlRendererMask);
+				fFlickerOffValue = promoted.mfFlickerOffIntensity;
 			}
 			else
 			{
-				// Old map: "Radius" is the value the PBR renderer treats as
-				// intensity; reach is derived so existing maps look unchanged.
-				fIntensity = GetAttributeFloat(apElement, "Radius", 1);
-				fReach     = deriveReach(fIntensity);
+				pLight->SetRadius(legacy.mfRadius);
+				pLight->SetRendererMask(legacy.mlRendererMask);
+				fFlickerOffValue = legacy.mfFlickerOffRadius;
 			}
-			pLight->SetIntensity(fIntensity);
-			pLight->SetRadius(fReach);
-			pLight->SetSourceRadius(GetAttributeFloat(apElement, "SourceRadius", 0.f));
 		}
 
 		pLight->SetShadowMapResolution( ToShadowMapResolution(GetAttributeString(apElement, "ShadowResolution", "High")) );
@@ -365,7 +438,7 @@ namespace hpl {
 		pLight->SetFlickerActive(GetAttributeBool(apElement, "FlickerActive", false));
 		pLight->SetFlicker(
 			GetAttributeColor(apElement, "FlickerOffColor"),
-			GetAttributeFloat(apElement, "FlickerOffRadius"),
+			fFlickerOffValue,
 
 			GetAttributeFloat(apElement, "FlickerOnMinLength"),
 			GetAttributeFloat(apElement, "FlickerOnMaxLength"),

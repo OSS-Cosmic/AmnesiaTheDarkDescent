@@ -8,7 +8,7 @@ namespace hpl {
 
 ParticlePipelineDesc::ParticlePipelineDesc(RI_Format_e swapchainFormat,
                                            RI_Format_e depthFormat,
-                                           BlendMode mode) {
+                                           BlendMode mode, bool depthTest) {
   vertexInputState = {
       VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO};
   vertexInputState.vertexBindingDescriptionCount = 0;
@@ -49,7 +49,7 @@ ParticlePipelineDesc::ParticlePipelineDesc(RI_Format_e swapchainFormat,
 
   depthStencilState = {
       VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO};
-  depthStencilState.depthTestEnable = VK_TRUE;
+  depthStencilState.depthTestEnable = depthTest ? VK_TRUE : VK_FALSE;
   depthStencilState.depthWriteEnable = VK_FALSE;
   depthStencilState.depthCompareOp = VK_COMPARE_OP_LESS_OR_EQUAL;
   depthStencilState.minDepthBounds = 0.0f;
@@ -123,6 +123,8 @@ ParticlePipelineDesc::ParticlePipelineDesc(RI_Format_e swapchainFormat,
   hash = hash_u32(HASH_INITIAL_VALUE, swapchainFormat);
   hash = hash_u32(hash, depthFormat);
   hash = hash_u32(hash, (uint32_t)mode);
+  // A no-depth-test sprite must not reuse a depth-tested pipeline.
+  hash = hash_u32(hash, depthTest ? 1u : 0u);
 }
 
 } // namespace hpl

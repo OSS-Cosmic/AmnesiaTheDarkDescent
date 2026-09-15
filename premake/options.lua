@@ -63,12 +63,6 @@ newoption {
 }
 
 newoption {
-    trigger = "game-dir",
-    value = "PATH",
-    description = "Path to your installed Amnesia: The Dark Descent folder (used by the deploy action)."
-}
-
-newoption {
     trigger = "with-tools",
     value = "yes/no",
     description = "Build the HPL2 editors/tools (default yes).",

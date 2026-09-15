@@ -581,7 +581,14 @@ void cLuxMap::DestroyAllEntities()
 
 void cLuxMap::AddEntity(iLuxEntity *apEntity)
 {
-	m_mapEntitiesByName.insert(tLuxEntityNameMap::value_type(cString::ToLowerCase(apEntity->GetName()), apEntity));
+	tString sLowerName = cString::ToLowerCase(apEntity->GetName());
+	// Objects split by renderer share a name but load one half per backend, so a
+	// duplicate here means both halves (or a retail duplicate) were loaded and
+	// name lookups pick either.
+	if(sLowerName != "" && m_mapEntitiesByName.find(sLowerName) != m_mapEntitiesByName.end())
+		Warning("Map '%s': more than one entity is named '%s'; lookups by name pick one of them.\n",
+				msName.c_str(), apEntity->GetName().c_str());
+	m_mapEntitiesByName.insert(tLuxEntityNameMap::value_type(sLowerName, apEntity));
 	m_mapEntitiesByID.insert(tLuxEntityIDMap::value_type(apEntity->GetID(), apEntity));
 	mlstEntities.push_back(apEntity);
 
@@ -628,6 +635,9 @@ iLuxEntity *cLuxMap::GetEntityByName(const tString& asName, eLuxEntityType aType
 iLuxEntity *cLuxMap::GetEntityByID(int alID, eLuxEntityType aType, int alSubType)
 {
 	tLuxEntityIDMapIt it = m_mapEntitiesByID.find(alID);
+	// A save made on the other renderer backend can hold the ID of an object
+	// skipped here; use the same-named object loaded in its place.
+	if(it == m_mapEntitiesByID.end() && mpWorld) it = m_mapEntitiesByID.find(mpWorld->RemapRendererMaskID(alID));
 	if(it == m_mapEntitiesByID.end()) return NULL;
 
 	iLuxEntity *pEntity = it->second;

@@ -120,6 +120,10 @@ void cPropValInt::Load(tinyxml2::XMLElement* apElement)
 
 void cPropValInt::SaveSpecific(tinyxml2::XMLElement* apElement)
 {
+	// An object for every renderer leaves RendererMask out, so maps without
+	// renderer-specific objects save as before.
+	if(mpProp->GetID()==eObjInt_RendererMask && mlVal==static_cast<int>(hpl::kRendererMaskAll))
+		return;
 	SetAttributeInt(apElement, mpProp->GetName(), mlVal);
 }
 
@@ -392,6 +396,7 @@ iEntityWrapperType::iEntityWrapperType(int alID, const tWString& asName, const t
 	mbDeletable = true;
 
 	AddInt(eObjInt_ID, "ID", -1, ePropCopyStep_PreEnt);
+	AddInt(eObjInt_RendererMask, "RendererMask", static_cast<int>(hpl::kRendererMaskAll));
 
 	AddString(eObjStr_Name, "Name", cString::To8Char(msName), ePropCopyStep_PreEnt);
 	AddString(eObjStr_Tag, "Tag");
@@ -1083,6 +1088,7 @@ iEntityWrapper::iEntityWrapper(iEntityWrapperData* apData)
 
 	mbSelected = false;
 	mbCulledByPlane = false;
+	mlRendererMask = static_cast<int>(hpl::kRendererMaskAll);
 
 	mbEntityUpdated=true;
 	mbTranslationUpdated=true;
@@ -1393,7 +1399,7 @@ void iEntityWrapper::SetWorldMatrix(const cMatrixf& amtxX)
 void iEntityWrapper::Draw(cEditorWindowViewport* apViewport, DebugDraw* apFunctions, iEditorEditMode* apEditMode, bool abIsSelected, const cColor& aHighlightCol, const cColor& aDisabledCol)
 {
 	if(mpIcon)
-		mpIcon->DrawIcon(apViewport, apFunctions, apEditMode, mbSelected, mvPosition, mbActive && mpType->IsActive(), aDisabledCol);
+		mpIcon->DrawIcon(apViewport, apFunctions, apEditMode, mbSelected, mvPosition, mbActive && mpType->IsActive(), aDisabledCol, GetIconTint());
 	if(mpEngineEntity)
 		mpEngineEntity->Draw(apViewport, apFunctions, abIsSelected, mbActive && mpType->IsActive(), aHighlightCol);
 
@@ -1486,7 +1492,21 @@ void iEntityWrapper::UpdateEntity()
 
 bool iEntityWrapper::IsVisible()
 {
-	return mpType->IsVisible() && mbCulledByPlane==false && mbVisible;
+	return mpType->IsVisible() && mbCulledByPlane==false && mbVisible && (FiltersByEditorRenderer()==false || IsInEditorRenderer());
+}
+
+bool iEntityWrapper::IsInEditorRenderer()
+{
+	iEditorWorld* pWorld = GetEditorWorld();
+	if(pWorld==NULL || pWorld->GetWorld()==NULL || pWorld->GetShowOtherRendererObjects()) return true;
+	return (static_cast<unsigned>(mlRendererMask) & pWorld->GetWorld()->GetRendererMaskBit()) != 0;
+}
+
+void iEntityWrapper::SetRendererMask(int alMask)
+{
+	mlRendererMask = static_cast<int>(hpl::SanitizeRendererMask(static_cast<unsigned>(alMask)));
+	UpdateVisibility();
+	if(GetEditorWorld()) GetEditorWorld()->SetVisibilityUpdated();
 }
 
 void iEntityWrapper::UpdateVisibility()
@@ -1899,6 +1919,9 @@ bool iEntityWrapper::GetProperty(int alPropID, int& alX)
 	case eObjInt_ID:
 		alX = GetID();
 		break;
+	case eObjInt_RendererMask:
+		alX = GetRendererMask();
+		break;
 	default:
 		return false;
 	}
@@ -1985,6 +2008,9 @@ bool iEntityWrapper::SetProperty(int alPropID, const int& alX)
 	{
 	case eObjInt_ID:
 		SetID(alX);
+		break;
+	case eObjInt_RendererMask:
+		SetRendererMask(alX);
 		break;
 	default:
 		return false;

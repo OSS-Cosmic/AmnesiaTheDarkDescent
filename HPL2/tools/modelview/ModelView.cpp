@@ -52,7 +52,7 @@ int glCurrentAnimaiton = 0;
 cMeshEntity *gpFloor=NULL;
 cMeshEntity *gpEntity=NULL;
 
-std::vector<cLightSpot*> gvLights;
+std::vector<iLightSpot*> gvLights;
 
 std::vector<iPhysicsBody*> gvBodies;
 std::vector<iPhysicsJoint*> gvJoints;
@@ -188,7 +188,7 @@ public:
 
 		/*for(size_t i=0; i<gvLights.size(); ++i)
 		{
-			cLightSpot *pLight = gvLights[i];
+			iLightSpot *pLight = gvLights[i];
 
             pLight->GetFrustum()->Draw(...);
 		}*/
@@ -444,15 +444,17 @@ public:
 
 		/////////////////////////////////
 		// Create Lights
-		cLightSpot *pLightSpot=NULL;
-		cLightPoint *pLightPoint=NULL;
+		iLightSpot *pLightSpot=NULL;
+		iLightPoint *pLightPoint=NULL;
 
 		// Main spotlights
 		for(int i=0; i<3; ++i)
 		{
 			cVector3f vPos;
 
-			pLightSpot = mpWorld->CreateLightSpot("SpotLight"+cString::ToString(i),"");
+			pLightSpot = (mpWorld->GetRendererBackend() == eRendererBackend_Standard
+				? mpWorld->CreateLightSpotLegacy("SpotLight"+cString::ToString(i),"")
+				: mpWorld->CreateLightSpot("SpotLight"+cString::ToString(i),""));
 			pLightSpot->SetDiffuseColor(cColor(1,1,1,1.0f));
 			
 			//Key
@@ -1802,7 +1804,7 @@ public:
 	void SetCurrentLight(int alIdx)
 	{
 		mlCurrentLight = alIdx;
-		cLightSpot *pLight = gvLights[mlCurrentLight];
+		iLightSpot *pLight = gvLights[mlCurrentLight];
 
         mpCBLightCastShadows->SetChecked(pLight->GetCastShadows());
 		mpCBLightVisible->SetChecked(pLight->IsVisible());

@@ -5,122 +5,217 @@
     <Modify Category="Primitives" ID="505" Name="Plane_10">
         <SetAttr Corner1UV="0.5 0.41" Corner4UV="0.65 0.41" EndCorner="1.5 0 1" />
     </Modify>
-    <Remove Category="Entities" ID="90" Name="BoxLight_1" />
-    <Remove Category="Entities" ID="292" Name="PointLight_1" />
-    <Remove Category="Entities" ID="445" Name="PointLight_3" />
-    <Remove Category="Entities" ID="588" Name="PointLight_7" />
-    <Remove Category="Entities" ID="663" Name="PointLight_10" />
-    <Remove Category="Entities" ID="742" Name="PointLight_20" />
-    <Remove Category="Entities" ID="759" Name="PointLight_31" />
-    <Remove Category="Entities" ID="760" Name="PointLight_32" />
-    <Remove Category="Entities" ID="883" Name="PointLight_8" />
-    <Remove Category="Entities" ID="885" Name="PointLight_14" />
-    <Remove Category="Entities" ID="1033" Name="PointLight_39" />
-    <Remove Category="Entities" ID="1326" Name="PointLight_51" />
-    <Remove Category="Entities" ID="1327" Name="PointLight_52" />
-    <Remove Category="Entities" ID="1429" Name="PointLight_53" />
-    <Remove Category="Entities" ID="1434" Name="PointLight_54" />
-    <Remove Category="Entities" ID="1582" Name="PointLight_9" />
-    <Remove Category="Entities" ID="1583" Name="PointLight_15" />
-    <Remove Category="Entities" ID="1584" Name="PointLight_21" />
-    <Remove Category="Entities" ID="1635" Name="PointLight_40" />
-    <Remove Category="Entities" ID="1674" Name="PointLight_59" />
-    <Remove Category="Entities" ID="1681" Name="PointLight_60" />
-    <Remove Category="Entities" ID="1731" Name="PointLight_61" />
-    <Remove Category="Entities" ID="1803" Name="PointLight_62" />
-    <Remove Category="Entities" ID="1872" Name="PointLight_55" />
-    <Remove Category="Entities" ID="1904" Name="PointLight_58" />
-    <Remove Category="Entities" ID="1937" Name="SpotLight_10" />
-    <Remove Category="Entities" ID="2020" Name="PointLight_63" />
-    <Remove Category="Entities" ID="2145" Name="PointLight_24" />
-    <Remove Category="Entities" ID="2197" Name="PointLight_64" />
-    <Remove Category="Entities" ID="2198" Name="PointLight_65" />
-    <Remove Category="Entities" ID="2263" Name="PointLight_2" />
+    <Modify Category="Entities" ID="90" Name="BoxLight_1">
+        <SetAttr RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="292" Name="PointLight_1">
+        <SetAttr RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="445" Name="PointLight_3">
+        <SetAttr RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="588" Name="PointLight_7">
+        <SetAttr RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="663" Name="PointLight_10">
+        <SetAttr RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="742" Name="PointLight_20">
+        <SetAttr RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="759" Name="PointLight_31">
+        <SetAttr RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="760" Name="PointLight_32">
+        <SetAttr RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="883" Name="PointLight_8">
+        <SetAttr RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="885" Name="PointLight_14">
+        <SetAttr RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="1033" Name="PointLight_39">
+        <SetAttr RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="1326" Name="PointLight_51">
+        <SetAttr RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="1327" Name="PointLight_52">
+        <SetAttr RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="1429" Name="PointLight_53">
+        <SetAttr RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="1434" Name="PointLight_54">
+        <SetAttr RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="1582" Name="PointLight_9">
+        <SetAttr RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="1583" Name="PointLight_15">
+        <SetAttr RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="1584" Name="PointLight_21">
+        <SetAttr RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="1635" Name="PointLight_40">
+        <SetAttr RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="1674" Name="PointLight_59">
+        <SetAttr RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="1681" Name="PointLight_60">
+        <SetAttr RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="1731" Name="PointLight_61">
+        <SetAttr RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="1803" Name="PointLight_62">
+        <SetAttr RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="1872" Name="PointLight_55">
+        <SetAttr RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="1904" Name="PointLight_58">
+        <SetAttr RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="1937" Name="SpotLight_10">
+        <SetAttr RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="2020" Name="PointLight_63">
+        <SetAttr RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="2145" Name="PointLight_24">
+        <SetAttr RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="2197" Name="PointLight_64">
+        <SetAttr RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="2198" Name="PointLight_65">
+        <SetAttr RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="2263" Name="PointLight_2">
+        <SetAttr RendererMask="1" />
+    </Modify>
     <Modify Category="Entities" ID="719" Name="PointLight_6">
-        <SetAttr Intensity="4.5" Radius="29.9958" SourceRadius="0.35" />
+        <SetAttr RendererMask="1" />
     </Modify>
     <Modify Category="Entities" ID="733" Name="PointLight_11">
-        <SetAttr Intensity="4.5" Radius="0.169227" SourceRadius="0.0169" />
+        <SetAttr RendererMask="1" />
     </Modify>
     <Modify Category="Entities" ID="735" Name="PointLight_13">
-        <SetAttr Intensity="3" Radius="5.85329" SourceRadius="0.35" />
+        <SetAttr RendererMask="1" />
     </Modify>
     <Modify Category="Entities" ID="738" Name="PointLight_16">
-        <SetAttr Intensity="5" SourceRadius="0" />
+        <SetAttr RendererMask="1" />
     </Modify>
     <Modify Category="Entities" ID="739" Name="PointLight_17">
-        <SetAttr Intensity="4.5" SourceRadius="0" />
+        <SetAttr RendererMask="1" />
     </Modify>
     <Modify Category="Entities" ID="740" Name="PointLight_18">
-        <SetAttr Intensity="4.5" SourceRadius="0" />
+        <SetAttr RendererMask="1" />
     </Modify>
     <Modify Category="Entities" ID="741" Name="PointLight_19">
-        <SetAttr Intensity="5" SourceRadius="0" />
+        <SetAttr RendererMask="1" />
     </Modify>
     <Modify Category="Entities" ID="745" Name="PointLight_23">
-        <SetAttr Intensity="3" Radius="4.42864" SourceRadius="0.35" />
+        <SetAttr RendererMask="1" />
     </Modify>
     <Modify Category="Entities" ID="766" Name="PointLight_34">
-        <SetAttr Intensity="1" Radius="10.978" SourceRadius="0.35" />
+        <SetAttr RendererMask="1" />
     </Modify>
     <Modify Category="Entities" ID="925" Name="PointLight_12">
-        <SetAttr Intensity="5" SourceRadius="0" />
+        <SetAttr RendererMask="1" />
     </Modify>
     <Modify Category="Entities" ID="948" Name="PointLight_35">
-        <SetAttr Intensity="4.5" Radius="29.9958" SourceRadius="0.35" />
+        <SetAttr RendererMask="1" />
     </Modify>
     <Modify Category="Entities" ID="951" Name="PointLight_36">
-        <SetAttr Intensity="4.5" SourceRadius="0" />
+        <SetAttr RendererMask="1" />
     </Modify>
     <Modify Category="Entities" ID="952" Name="PointLight_37">
-        <SetAttr Intensity="4.5" SourceRadius="0" />
+        <SetAttr RendererMask="1" />
     </Modify>
     <Modify Category="Entities" ID="1020" Name="PointLight_38">
-        <SetAttr Intensity="1" Radius="14.1333" SourceRadius="0.35" />
+        <SetAttr RendererMask="1" />
     </Modify>
     <Modify Category="Entities" ID="1079" Name="PointLight_22">
-        <SetAttr Intensity="2" Radius="9.2394" SourceRadius="0.35" />
+        <SetAttr RendererMask="1" />
     </Modify>
     <Modify Category="Entities" ID="1088" Name="PointLight_42">
-        <SetAttr Intensity="4" SourceRadius="0" />
+        <SetAttr RendererMask="1" />
     </Modify>
     <Modify Category="Entities" ID="1240" Name="PointLight_44">
-        <SetAttr Intensity="0.8" Radius="8.45152" SourceRadius="0.35" />
+        <SetAttr RendererMask="1" />
     </Modify>
     <Modify Category="Entities" ID="1241" Name="PointLight_45">
-        <SetAttr Intensity="1" Radius="6.52367" SourceRadius="0.35" />
+        <SetAttr RendererMask="1" />
     </Modify>
     <Modify Category="Entities" ID="1270" Name="SpotLight_1">
-        <SetAttr Intensity="15" Radius="26.9136" SourceRadius="2.62" WorldPos="-14.8553 5.44443 27.8411" />
+        <SetAttr RendererMask="1" />
     </Modify>
     <Modify Category="Entities" ID="1318" Name="SpotLight_2">
-        <SetAttr Intensity="150" Radius="13.2485" SourceRadius="0.12" />
+        <SetAttr RendererMask="1" />
     </Modify>
     <Modify Category="Entities" ID="1523" Name="SpotLight_3">
-        <SetAttr Intensity="150" Radius="10.4694" SourceRadius="0" />
+        <SetAttr RendererMask="1" />
     </Modify>
     <Modify Category="Entities" ID="1524" Name="SpotLight_4">
-        <SetAttr Intensity="150" Radius="10.8135" SourceRadius="0" />
+        <SetAttr RendererMask="1" />
     </Modify>
     <Modify Category="Entities" ID="1525" Name="SpotLight_5">
-        <SetAttr Intensity="150" Radius="10.8135" SourceRadius="0" />
+        <SetAttr RendererMask="1" />
     </Modify>
     <Modify Category="Entities" ID="1526" Name="SpotLight_6">
-        <SetAttr Intensity="8" Radius="10.8135" SourceRadius="0" />
+        <SetAttr RendererMask="1" />
     </Modify>
     <Modify Category="Entities" ID="1527" Name="SpotLight_7">
-        <SetAttr Intensity="150" Radius="12.6171" SourceRadius="0" />
+        <SetAttr RendererMask="1" />
     </Modify>
     <Modify Category="Entities" ID="1577" Name="SpotLight_8">
-        <SetAttr Intensity="50" Radius="22.5704" SourceRadius="0.1" />
+        <SetAttr RendererMask="1" />
     </Modify>
     <Modify Category="Entities" ID="1873" Name="PointLight_57">
-        <SetAttr Intensity="1.5" Radius="3.87464" SourceRadius="0.35" />
+        <SetAttr RendererMask="1" />
     </Modify>
     <Modify Category="Entities" ID="2169" Name="PointLight_25">
-        <SetAttr Intensity="4.5" SourceRadius="0" />
+        <SetAttr RendererMask="1" />
     </Modify>
     <Modify Category="Entities" ID="2170" Name="PointLight_26">
-        <SetAttr Intensity="4" Radius="4.87948" SourceRadius="0.35" />
+        <SetAttr RendererMask="1" />
     </Modify>
+    <Add Category="Entities">
+        <Re_SpotLight Active="true" Aspect="1" CastShadows="true" DiffuseColor="0.8 0.7 0.6 0.5" FOV="1.0472" FalloffMap="" FlickerActive="false" FlickerFade="false" FlickerOffColor="0 0 0 1" FlickerOffFadeMaxLength="0" FlickerOffFadeMinLength="0" FlickerOffMaxLength="0" FlickerOffMinLength="0" FlickerOffPS="" FlickerOffIntensity="0" FlickerOffSound="" FlickerOnFadeMaxLength="0" FlickerOnFadeMinLength="0" FlickerOnMaxLength="0" FlickerOnMinLength="0" FlickerOnPS="" FlickerOnSound="" Gobo="" GoboAnimFrameTime="0" GoboAnimMode="None" Name="SpotLight_1" NearClipPlane="0.1" Intensity="15" Radius="26.9136" SourceRadius="2.62" Rotation="2.25984 1.23615 -2.7347" Scale="1 1 1" ShadowResolution="Medium" ShadowsAffectDynamic="true" ShadowsAffectStatic="true" SpotFalloffMap="lights/light_falloff_short_fade.tga" Tag="" WorldPos="-14.8553 5.44443 27.8411" RendererMask="2" />
+    </Add>
+    <Add Category="Entities">
+        <Re_PointLight Active="true" CastShadows="false" DiffuseColor="1 0.95 0.9 0.5" FalloffMap="" FlickerActive="false" FlickerFade="false" FlickerOffColor="0 0 0 1" FlickerOffFadeMaxLength="0" FlickerOffFadeMinLength="0" FlickerOffMaxLength="0" FlickerOffMinLength="0" FlickerOffPS="" FlickerOffIntensity="0" FlickerOffSound="" FlickerOnFadeMaxLength="0" FlickerOnFadeMinLength="0" FlickerOnMaxLength="0" FlickerOnMinLength="0" FlickerOnPS="" FlickerOnSound="" Gobo="" GoboAnimFrameTime="0" GoboAnimMode="None" Name="PointLight_6" Intensity="4.5" Radius="29.9958" SourceRadius="0.35" Rotation="0 0 0" Scale="1 1 1" ShadowResolution="High" ShadowsAffectDynamic="true" ShadowsAffectStatic="true" Tag="" WorldPos="-5.5 11.3234 38" RendererMask="2" />
+        <Re_PointLight Active="true" CastShadows="false" DiffuseColor="0 0.004 0 0" FalloffMap="" FlickerActive="false" FlickerFade="false" FlickerOffColor="0 0 0 1" FlickerOffFadeMaxLength="0" FlickerOffFadeMinLength="0" FlickerOffMaxLength="0" FlickerOffMinLength="0" FlickerOffPS="" FlickerOffIntensity="0" FlickerOffSound="" FlickerOnFadeMaxLength="0" FlickerOnFadeMinLength="0" FlickerOnMaxLength="0" FlickerOnMinLength="0" FlickerOnPS="" FlickerOnSound="" Gobo="" GoboAnimFrameTime="0" GoboAnimMode="None" Name="PointLight_11" Intensity="4.5" Radius="0.169227" SourceRadius="0.0169" Rotation="0 0 0" Scale="1 1 1" ShadowResolution="High" ShadowsAffectDynamic="true" ShadowsAffectStatic="true" Tag="" WorldPos="0.977674 1.39999 25.1389" RendererMask="2" />
+        <Re_PointLight Active="true" CastShadows="false" DiffuseColor="0.266 0.228 0.176 0.027" FalloffMap="" FlickerActive="false" FlickerFade="false" FlickerOffColor="0 0 0 1" FlickerOffFadeMaxLength="0" FlickerOffFadeMinLength="0" FlickerOffMaxLength="0" FlickerOffMinLength="0" FlickerOffPS="" FlickerOffIntensity="0" FlickerOffSound="" FlickerOnFadeMaxLength="0" FlickerOnFadeMinLength="0" FlickerOnMaxLength="0" FlickerOnMinLength="0" FlickerOnPS="" FlickerOnSound="" Gobo="" GoboAnimFrameTime="0" GoboAnimMode="None" Name="PointLight_13" Intensity="3" Radius="5.85329" SourceRadius="0.35" Rotation="0 0 0" Scale="1 1 1" ShadowResolution="High" ShadowsAffectDynamic="true" ShadowsAffectStatic="true" Tag="" WorldPos="0 0.771414 38.4202" RendererMask="2" />
+        <Re_PointLight Active="true" CastShadows="false" DiffuseColor="0 0 0 0" FalloffMap="" FlickerActive="false" FlickerFade="false" FlickerOffColor="0 0 0 1" FlickerOffFadeMaxLength="0" FlickerOffFadeMinLength="0" FlickerOffMaxLength="0" FlickerOffMinLength="0" FlickerOffPS="" FlickerOffIntensity="0" FlickerOffSound="" FlickerOnFadeMaxLength="0" FlickerOnFadeMinLength="0" FlickerOnMaxLength="0" FlickerOnMinLength="0" FlickerOnPS="" FlickerOnSound="" Gobo="" GoboAnimFrameTime="0" GoboAnimMode="None" Name="PointLight_16" Intensity="5" SourceRadius="0" Rotation="0 0 0" Scale="1 1 1" ShadowResolution="High" ShadowsAffectDynamic="true" ShadowsAffectStatic="true" Tag="" WorldPos="-0.896437 1.70252 16.162" RendererMask="2" />
+        <Re_PointLight Active="true" CastShadows="false" DiffuseColor="0 0 0 0" FalloffMap="" FlickerActive="false" FlickerFade="false" FlickerOffColor="0 0 0 1" FlickerOffFadeMaxLength="0" FlickerOffFadeMinLength="0" FlickerOffMaxLength="0" FlickerOffMinLength="0" FlickerOffPS="" FlickerOffIntensity="0" FlickerOffSound="" FlickerOnFadeMaxLength="0" FlickerOnFadeMinLength="0" FlickerOnMaxLength="0" FlickerOnMinLength="0" FlickerOnPS="" FlickerOnSound="" Gobo="" GoboAnimFrameTime="0" GoboAnimMode="None" Name="PointLight_17" Intensity="4.5" SourceRadius="0" Rotation="0 0 0" Scale="1 1 1" ShadowResolution="High" ShadowsAffectDynamic="true" ShadowsAffectStatic="true" Tag="" WorldPos="0.232572 1.94008 9.42449" RendererMask="2" />
+        <Re_PointLight Active="true" CastShadows="false" DiffuseColor="0 0 0 0" FalloffMap="" FlickerActive="false" FlickerFade="false" FlickerOffColor="0 0 0 1" FlickerOffFadeMaxLength="0" FlickerOffFadeMinLength="0" FlickerOffMaxLength="0" FlickerOffMinLength="0" FlickerOffPS="" FlickerOffIntensity="0" FlickerOffSound="" FlickerOnFadeMaxLength="0" FlickerOnFadeMinLength="0" FlickerOnMaxLength="0" FlickerOnMinLength="0" FlickerOnPS="" FlickerOnSound="" Gobo="" GoboAnimFrameTime="0" GoboAnimMode="None" Name="PointLight_18" Intensity="4.5" SourceRadius="0" Rotation="0 0 0" Scale="1 1 1" ShadowResolution="High" ShadowsAffectDynamic="true" ShadowsAffectStatic="true" Tag="" WorldPos="-6.22008 1.82918 16.2501" RendererMask="2" />
+        <Re_PointLight Active="true" CastShadows="false" DiffuseColor="0 0 0 0" FalloffMap="" FlickerActive="false" FlickerFade="false" FlickerOffColor="0 0 0 1" FlickerOffFadeMaxLength="0" FlickerOffFadeMinLength="0" FlickerOffMaxLength="0" FlickerOffMinLength="0" FlickerOffPS="" FlickerOffIntensity="0" FlickerOffSound="" FlickerOnFadeMaxLength="0" FlickerOnFadeMinLength="0" FlickerOnMaxLength="0" FlickerOnMinLength="0" FlickerOnPS="" FlickerOnSound="" Gobo="" GoboAnimFrameTime="0" GoboAnimMode="None" Name="PointLight_19" Intensity="5" SourceRadius="0" Rotation="0 0 0" Scale="1 1 1" ShadowResolution="High" ShadowsAffectDynamic="true" ShadowsAffectStatic="true" Tag="" WorldPos="-15.8554 0.756967 17.0291" RendererMask="2" />
+        <Re_PointLight Active="true" CastShadows="false" DiffuseColor="0.2 0.15 0.1 1" FalloffMap="" FlickerActive="false" FlickerFade="false" FlickerOffColor="0 0 0 1" FlickerOffFadeMaxLength="0" FlickerOffFadeMinLength="0" FlickerOffMaxLength="0" FlickerOffMinLength="0" FlickerOffPS="" FlickerOffIntensity="0" FlickerOffSound="" FlickerOnFadeMaxLength="0" FlickerOnFadeMinLength="0" FlickerOnMaxLength="0" FlickerOnMinLength="0" FlickerOnPS="" FlickerOnSound="" Gobo="" GoboAnimFrameTime="0" GoboAnimMode="None" Name="PointLight_23" Intensity="3" Radius="4.42864" SourceRadius="0.35" Rotation="0 0 0" Scale="1 1 1" ShadowResolution="High" ShadowsAffectDynamic="true" ShadowsAffectStatic="true" Tag="" WorldPos="-27.4609 2.20897 28.5454" RendererMask="2" />
+        <Re_PointLight Active="true" CastShadows="false" DiffuseColor="0.8 0.75 0.7 0" FalloffMap="" FlickerActive="false" FlickerFade="false" FlickerOffColor="0 0 0 1" FlickerOffFadeMaxLength="0" FlickerOffFadeMinLength="0" FlickerOffMaxLength="0" FlickerOffMinLength="0" FlickerOffPS="" FlickerOffIntensity="0" FlickerOffSound="" FlickerOnFadeMaxLength="0" FlickerOnFadeMinLength="0" FlickerOnMaxLength="0" FlickerOnMinLength="0" FlickerOnPS="" FlickerOnSound="" Gobo="" GoboAnimFrameTime="0" GoboAnimMode="None" Name="PointLight_34" Intensity="1" Radius="10.978" SourceRadius="0.35" Rotation="-3.14159 1.5708 3.14159" Scale="1 1 1" ShadowResolution="High" ShadowsAffectDynamic="true" ShadowsAffectStatic="true" Tag="" WorldPos="-20.0969 3.97385 39.9058" RendererMask="2" />
+        <Re_PointLight Active="true" CastShadows="false" DiffuseColor="0 0 0 0" FalloffMap="" FlickerActive="false" FlickerFade="false" FlickerOffColor="0 0 0 1" FlickerOffFadeMaxLength="0" FlickerOffFadeMinLength="0" FlickerOffMaxLength="0" FlickerOffMinLength="0" FlickerOffPS="" FlickerOffIntensity="0" FlickerOffSound="" FlickerOnFadeMaxLength="0" FlickerOnFadeMinLength="0" FlickerOnMaxLength="0" FlickerOnMinLength="0" FlickerOnPS="" FlickerOnSound="" Gobo="" GoboAnimFrameTime="0" GoboAnimMode="None" Name="PointLight_12" Intensity="5" SourceRadius="0" Rotation="0 0 0" Scale="1 1 1" ShadowResolution="High" ShadowsAffectDynamic="true" ShadowsAffectStatic="true" Tag="" WorldPos="5.5 1.5 32" RendererMask="2" />
+        <Re_PointLight Active="true" CastShadows="false" DiffuseColor="1 0.95 0.9 0.5" FalloffMap="" FlickerActive="false" FlickerFade="false" FlickerOffColor="0 0 0 1" FlickerOffFadeMaxLength="0" FlickerOffFadeMinLength="0" FlickerOffMaxLength="0" FlickerOffMinLength="0" FlickerOffPS="" FlickerOffIntensity="0" FlickerOffSound="" FlickerOnFadeMaxLength="0" FlickerOnFadeMinLength="0" FlickerOnMaxLength="0" FlickerOnMinLength="0" FlickerOnPS="" FlickerOnSound="" Gobo="" GoboAnimFrameTime="0" GoboAnimMode="None" Name="PointLight_35" Intensity="4.5" Radius="29.9958" SourceRadius="0.35" Rotation="0 0 0" Scale="1 1 1" ShadowResolution="High" ShadowsAffectDynamic="true" ShadowsAffectStatic="true" Tag="" WorldPos="-20.25 7.25 39.25" RendererMask="2" />
+        <Re_PointLight Active="true" CastShadows="false" DiffuseColor="0 0 0 0" FalloffMap="" FlickerActive="false" FlickerFade="false" FlickerOffColor="0 0 0 1" FlickerOffFadeMaxLength="0" FlickerOffFadeMinLength="0" FlickerOffMaxLength="0" FlickerOffMinLength="0" FlickerOffPS="" FlickerOffIntensity="0" FlickerOffSound="" FlickerOnFadeMaxLength="0" FlickerOnFadeMinLength="0" FlickerOnMaxLength="0" FlickerOnMinLength="0" FlickerOnPS="" FlickerOnSound="" Gobo="" GoboAnimFrameTime="0" GoboAnimMode="None" Name="PointLight_36" Intensity="4.5" SourceRadius="0" Rotation="0 0 0" Scale="1 1 1" ShadowResolution="High" ShadowsAffectDynamic="true" ShadowsAffectStatic="true" Tag="" WorldPos="5.60163 1.57137 37.6783" RendererMask="2" />
+        <Re_PointLight Active="true" CastShadows="false" DiffuseColor="0 0 0 0" FalloffMap="" FlickerActive="false" FlickerFade="false" FlickerOffColor="0 0 0 1" FlickerOffFadeMaxLength="0" FlickerOffFadeMinLength="0" FlickerOffMaxLength="0" FlickerOffMinLength="0" FlickerOffPS="" FlickerOffIntensity="0" FlickerOffSound="" FlickerOnFadeMaxLength="0" FlickerOnFadeMinLength="0" FlickerOnMaxLength="0" FlickerOnMinLength="0" FlickerOnPS="" FlickerOnSound="" Gobo="" GoboAnimFrameTime="0" GoboAnimMode="None" Name="PointLight_37" Intensity="4.5" SourceRadius="0" Rotation="0 0 0" Scale="1 1 1" ShadowResolution="High" ShadowsAffectDynamic="true" ShadowsAffectStatic="true" Tag="" WorldPos="4.96115 1.57137 26.7443" RendererMask="2" />
+        <Re_PointLight Active="true" CastShadows="false" DiffuseColor="1 1 1 0" FalloffMap="" FlickerActive="false" FlickerFade="false" FlickerOffColor="0 0 0 1" FlickerOffFadeMaxLength="0" FlickerOffFadeMinLength="0" FlickerOffMaxLength="0" FlickerOffMinLength="0" FlickerOffPS="" FlickerOffIntensity="0" FlickerOffSound="" FlickerOnFadeMaxLength="0" FlickerOnFadeMinLength="0" FlickerOnMaxLength="0" FlickerOnMinLength="0" FlickerOnPS="" FlickerOnSound="" Gobo="" GoboAnimFrameTime="0" GoboAnimMode="None" Name="PointLight_38" Intensity="1" Radius="14.1333" SourceRadius="0.35" Rotation="3.14159 1e-006 2.50325" Scale="1 1 1" ShadowResolution="High" ShadowsAffectDynamic="true" ShadowsAffectStatic="true" Tag="" WorldPos="-14.2869 5.80591 27.6945" RendererMask="2" />
+        <Re_PointLight Active="true" CastShadows="false" DiffuseColor="0.5 0.45 0.4 0" FalloffMap="" FlickerActive="false" FlickerFade="false" FlickerOffColor="0 0 0 1" FlickerOffFadeMaxLength="0" FlickerOffFadeMinLength="0" FlickerOffMaxLength="0" FlickerOffMinLength="0" FlickerOffPS="" FlickerOffIntensity="0" FlickerOffSound="" FlickerOnFadeMaxLength="0" FlickerOnFadeMinLength="0" FlickerOnMaxLength="0" FlickerOnMinLength="0" FlickerOnPS="" FlickerOnSound="" Gobo="" GoboAnimFrameTime="0" GoboAnimMode="None" Name="PointLight_22" Intensity="2" Radius="9.2394" SourceRadius="0.35" Rotation="0 0 0" Scale="1 1 1" ShadowResolution="High" ShadowsAffectDynamic="true" ShadowsAffectStatic="true" Tag="" WorldPos="3 2.06507 14.2696" RendererMask="2" />
+        <Re_PointLight Active="true" CastShadows="false" DiffuseColor="0 0 0 0" FalloffMap="" FlickerActive="false" FlickerFade="false" FlickerOffColor="0 0 0 1" FlickerOffFadeMaxLength="0" FlickerOffFadeMinLength="0" FlickerOffMaxLength="0" FlickerOffMinLength="0" FlickerOffPS="" FlickerOffIntensity="0" FlickerOffSound="" FlickerOnFadeMaxLength="0" FlickerOnFadeMinLength="0" FlickerOnMaxLength="0" FlickerOnMinLength="0" FlickerOnPS="" FlickerOnSound="" Gobo="" GoboAnimFrameTime="0" GoboAnimMode="None" Name="PointLight_42" Intensity="4" SourceRadius="0" Rotation="0 0 0" Scale="1 1 1" ShadowResolution="High" ShadowsAffectDynamic="true" ShadowsAffectStatic="true" Tag="" WorldPos="0 1.75 21.5" RendererMask="2" />
+        <Re_PointLight Active="true" CastShadows="false" DiffuseColor="0.7 0.7 0.6 0" FalloffMap="" FlickerActive="false" FlickerFade="false" FlickerOffColor="0 0 0 1" FlickerOffFadeMaxLength="0" FlickerOffFadeMinLength="0" FlickerOffMaxLength="0" FlickerOffMinLength="0" FlickerOffPS="" FlickerOffIntensity="0" FlickerOffSound="" FlickerOnFadeMaxLength="0" FlickerOnFadeMinLength="0" FlickerOnMaxLength="0" FlickerOnMinLength="0" FlickerOnPS="" FlickerOnSound="" Gobo="" GoboAnimFrameTime="0" GoboAnimMode="None" Name="PointLight_44" Intensity="0.8" Radius="8.45152" SourceRadius="0.35" Rotation="0 0 0" Scale="1 1 1" ShadowResolution="High" ShadowsAffectDynamic="true" ShadowsAffectStatic="true" Tag="" WorldPos="-14.8881 4.95772 27.111" RendererMask="2" />
+        <Re_PointLight Active="true" CastShadows="false" DiffuseColor="0.5 0.5 0.4 0" FalloffMap="" FlickerActive="false" FlickerFade="false" FlickerOffColor="0 0 0 1" FlickerOffFadeMaxLength="0" FlickerOffFadeMinLength="0" FlickerOffMaxLength="0" FlickerOffMinLength="0" FlickerOffPS="" FlickerOffIntensity="0" FlickerOffSound="" FlickerOnFadeMaxLength="0" FlickerOnFadeMinLength="0" FlickerOnMaxLength="0" FlickerOnMinLength="0" FlickerOnPS="" FlickerOnSound="" Gobo="" GoboAnimFrameTime="0" GoboAnimMode="None" Name="PointLight_45" Intensity="1" Radius="6.52367" SourceRadius="0.35" Rotation="0 0 0" Scale="1 1 1" ShadowResolution="High" ShadowsAffectDynamic="true" ShadowsAffectStatic="true" Tag="" WorldPos="-15.6171 4.89912 27.0713" RendererMask="2" />
+        <Re_SpotLight Active="true" Aspect="0.5" CastShadows="true" DiffuseColor="0.3 0.3 0.2 1" FOV="1.309" FalloffMap="" FlickerActive="false" FlickerFade="false" FlickerOffColor="0 0 0 1" FlickerOffFadeMaxLength="0" FlickerOffFadeMinLength="0" FlickerOffMaxLength="0" FlickerOffMinLength="0" FlickerOffPS="" FlickerOffIntensity="0" FlickerOffSound="" FlickerOnFadeMaxLength="0" FlickerOnFadeMinLength="0" FlickerOnMaxLength="0" FlickerOnMinLength="0" FlickerOnPS="" FlickerOnSound="" Gobo="" GoboAnimFrameTime="0" GoboAnimMode="None" Name="SpotLight_2" NearClipPlane="1.4" Intensity="150" Radius="13.2485" SourceRadius="0.12" Rotation="-1.52593 -1.5708 -0.0584607" Scale="1 1 1" ShadowResolution="Medium" ShadowsAffectDynamic="true" ShadowsAffectStatic="true" SpotFalloffMap="" Tag="" WorldPos="-5.75 7.5 38.25" RendererMask="2" />
+        <Re_SpotLight Active="true" Aspect="1" CastShadows="false" DiffuseColor="0.3 0.3 0.3 0" FOV="1.5708" FalloffMap="" FlickerActive="false" FlickerFade="false" FlickerOffColor="0 0 0 1" FlickerOffFadeMaxLength="0" FlickerOffFadeMinLength="0" FlickerOffMaxLength="0" FlickerOffMinLength="0" FlickerOffPS="" FlickerOffIntensity="0" FlickerOffSound="" FlickerOnFadeMaxLength="0" FlickerOnFadeMinLength="0" FlickerOnMaxLength="0" FlickerOnMinLength="0" FlickerOnPS="" FlickerOnSound="" Gobo="lights/gobo_water_001.dds" GoboAnimFrameTime="0.07" GoboAnimMode="Loop" Name="SpotLight_3" NearClipPlane="0.1" Intensity="150" Radius="10.4694" SourceRadius="0" Rotation="-3.04624 1.54057 -3.14159" Scale="1 1 1" ShadowResolution="High" ShadowsAffectDynamic="true" ShadowsAffectStatic="true" SpotFalloffMap="lights/light_falloff_short_fade.tga" Tag="" WorldPos="-27.8716 -0.550184 25.1847" RendererMask="2" />
+        <Re_SpotLight Active="true" Aspect="1" CastShadows="false" DiffuseColor="0.3 0.3 0.3 0" FOV="1.5708" FalloffMap="" FlickerActive="false" FlickerFade="false" FlickerOffColor="0 0 0 1" FlickerOffFadeMaxLength="0" FlickerOffFadeMinLength="0" FlickerOffMaxLength="0" FlickerOffMinLength="0" FlickerOffPS="" FlickerOffIntensity="0" FlickerOffSound="" FlickerOnFadeMaxLength="0" FlickerOnFadeMinLength="0" FlickerOnMaxLength="0" FlickerOnMinLength="0" FlickerOnPS="" FlickerOnSound="" Gobo="lights/gobo_water_001.dds" GoboAnimFrameTime="0.07" GoboAnimMode="Loop" Name="SpotLight_4" NearClipPlane="0.1" Intensity="150" Radius="10.8135" SourceRadius="0" Rotation="-0.000392 1.54057 -3.14159" Scale="1 1 1" ShadowResolution="High" ShadowsAffectDynamic="true" ShadowsAffectStatic="true" SpotFalloffMap="" Tag="" WorldPos="-31.8028 -0.550184 25.1847" RendererMask="2" />
+        <Re_SpotLight Active="true" Aspect="1" CastShadows="false" DiffuseColor="0.3 0.3 0.3 0" FOV="1.5708" FalloffMap="" FlickerActive="false" FlickerFade="false" FlickerOffColor="0 0 0 1" FlickerOffFadeMaxLength="0" FlickerOffFadeMinLength="0" FlickerOffMaxLength="0" FlickerOffMinLength="0" FlickerOffPS="" FlickerOffIntensity="0" FlickerOffSound="" FlickerOnFadeMaxLength="0" FlickerOnFadeMinLength="0" FlickerOnMaxLength="0" FlickerOnMinLength="0" FlickerOnPS="" FlickerOnSound="" Gobo="lights/gobo_water_001.dds" GoboAnimFrameTime="0.07" GoboAnimMode="Loop" Name="SpotLight_5" NearClipPlane="0.1" Intensity="150" Radius="10.8135" SourceRadius="0" Rotation="-3.14158 -0.079721 0.000391" Scale="1 1 1" ShadowResolution="High" ShadowsAffectDynamic="true" ShadowsAffectStatic="true" SpotFalloffMap="" Tag="" WorldPos="-30.1258 -0.550184 25.3603" RendererMask="2" />
+        <Re_SpotLight Active="true" Aspect="1" CastShadows="false" DiffuseColor="0.3 0.3 0.3 0" FOV="1.5708" FalloffMap="" FlickerActive="false" FlickerFade="false" FlickerOffColor="0 0 0 1" FlickerOffFadeMaxLength="0" FlickerOffFadeMinLength="0" FlickerOffMaxLength="0" FlickerOffMinLength="0" FlickerOffPS="" FlickerOffIntensity="0" FlickerOffSound="" FlickerOnFadeMaxLength="0" FlickerOnFadeMinLength="0" FlickerOnMaxLength="0" FlickerOnMinLength="0" FlickerOnPS="" FlickerOnSound="" Gobo="lights/gobo_water_001.dds" GoboAnimFrameTime="0.07" GoboAnimMode="Loop" Name="SpotLight_6" NearClipPlane="0.1" Intensity="8" Radius="10.8135" SourceRadius="0" Rotation="-1.2e-005 0.224905 -3.1412" Scale="1 1 1" ShadowResolution="High" ShadowsAffectDynamic="true" ShadowsAffectStatic="true" SpotFalloffMap="" Tag="" WorldPos="-30.1258 -0.550184 26.4706" RendererMask="2" />
+        <Re_SpotLight Active="true" Aspect="1" CastShadows="false" DiffuseColor="0.4 0.4 0.4 0" FOV="1.5708" FalloffMap="" FlickerActive="false" FlickerFade="false" FlickerOffColor="0 0 0 1" FlickerOffFadeMaxLength="0" FlickerOffFadeMinLength="0" FlickerOffMaxLength="0" FlickerOffMinLength="0" FlickerOffPS="" FlickerOffIntensity="0" FlickerOffSound="" FlickerOnFadeMaxLength="0" FlickerOnFadeMinLength="0" FlickerOnMaxLength="0" FlickerOnMinLength="0" FlickerOnPS="" FlickerOnSound="" Gobo="lights/gobo_water_001.dds" GoboAnimFrameTime="0.07" GoboAnimMode="Loop" Name="SpotLight_7" NearClipPlane="0.1" Intensity="150" Radius="12.6171" SourceRadius="0" Rotation="1.5708 0 0" Scale="1 1 1" ShadowResolution="High" ShadowsAffectDynamic="true" ShadowsAffectStatic="true" SpotFalloffMap="lights/light_falloff_short_fade.tga" Tag="" WorldPos="-30.1258 0.71926 25.7662" RendererMask="2" />
+        <Re_SpotLight Active="true" Aspect="1" CastShadows="true" DiffuseColor="0.6 0.6 0.5 0.6" FOV="1.22173" FalloffMap="" FlickerActive="false" FlickerFade="false" FlickerOffColor="0 0 0 1" FlickerOffFadeMaxLength="0" FlickerOffFadeMinLength="0" FlickerOffMaxLength="0" FlickerOffMinLength="0" FlickerOffPS="" FlickerOffIntensity="0" FlickerOffSound="" FlickerOnFadeMaxLength="0" FlickerOnFadeMinLength="0" FlickerOnMaxLength="0" FlickerOnMinLength="0" FlickerOnPS="" FlickerOnSound="" Gobo="" GoboAnimFrameTime="0" GoboAnimMode="None" Name="SpotLight_8" NearClipPlane="0.1" Intensity="50" Radius="22.5704" SourceRadius="0.1" Rotation="-1.87613 0 0.333266" Scale="1 1 1" ShadowResolution="Medium" ShadowsAffectDynamic="true" ShadowsAffectStatic="true" SpotFalloffMap="lights/light_falloff_short_fade.tga" Tag="" WorldPos="-20.1544 3.75 39.25" RendererMask="2" />
+        <Re_PointLight Active="true" CastShadows="false" DiffuseColor="0.25 0.2 0.2 0" FalloffMap="" FlickerActive="false" FlickerFade="false" FlickerOffColor="0 0 0 1" FlickerOffFadeMaxLength="0" FlickerOffFadeMinLength="0" FlickerOffMaxLength="0" FlickerOffMinLength="0" FlickerOffPS="" FlickerOffIntensity="0" FlickerOffSound="" FlickerOnFadeMaxLength="0" FlickerOnFadeMinLength="0" FlickerOnMaxLength="0" FlickerOnMinLength="0" FlickerOnPS="" FlickerOnSound="" Gobo="" GoboAnimFrameTime="0" GoboAnimMode="None" Name="PointLight_57" Intensity="1.5" Radius="3.87464" SourceRadius="0.35" Rotation="0 -1.5708 0" Scale="1 1 1" ShadowResolution="High" ShadowsAffectDynamic="true" ShadowsAffectStatic="true" Tag="" WorldPos="-21.0216 4.03836 27.3524" RendererMask="2" />
+        <Re_PointLight Active="true" CastShadows="false" DiffuseColor="0 0 0 0" FalloffMap="" FlickerActive="false" FlickerFade="false" FlickerOffColor="0 0 0 1" FlickerOffFadeMaxLength="0" FlickerOffFadeMinLength="0" FlickerOffMaxLength="0" FlickerOffMinLength="0" FlickerOffPS="" FlickerOffIntensity="0" FlickerOffSound="" FlickerOnFadeMaxLength="0" FlickerOnFadeMinLength="0" FlickerOnMaxLength="0" FlickerOnMinLength="0" FlickerOnPS="" FlickerOnSound="" Gobo="" GoboAnimFrameTime="0" GoboAnimMode="None" Name="PointLight_25" Intensity="4.5" SourceRadius="0" Rotation="0 0 0" Scale="1 1 1" ShadowResolution="High" ShadowsAffectDynamic="true" ShadowsAffectStatic="true" Tag="" WorldPos="-10.3627 1.82918 16.2501" RendererMask="2" />
+        <Re_PointLight Active="true" CastShadows="false" DiffuseColor="0.19 0.155 0.155 0" FalloffMap="" FlickerActive="false" FlickerFade="false" FlickerOffColor="0 0 0 1" FlickerOffFadeMaxLength="0" FlickerOffFadeMinLength="0" FlickerOffMaxLength="0" FlickerOffMinLength="0" FlickerOffPS="" FlickerOffIntensity="0" FlickerOffSound="" FlickerOnFadeMaxLength="0" FlickerOnFadeMinLength="0" FlickerOnMaxLength="0" FlickerOnMinLength="0" FlickerOnPS="" FlickerOnSound="" Gobo="" GoboAnimFrameTime="0" GoboAnimMode="None" Name="PointLight_26" Intensity="4" Radius="4.87948" SourceRadius="0.35" Rotation="0 0 0" Scale="1 1 1" ShadowResolution="High" ShadowsAffectDynamic="true" ShadowsAffectStatic="true" Tag="" WorldPos="-16.3831 1.11415 18.4888" RendererMask="2" />
+    </Add>
 </MapDelta>

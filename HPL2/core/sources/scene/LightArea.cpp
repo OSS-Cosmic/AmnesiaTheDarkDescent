@@ -41,6 +41,7 @@ namespace hpl {
 	cLightArea::cLightArea(tString asName, cResources *apResources) : iLight(asName,apResources)
 	{
 		mLightType = eLightType_Area;
+		mLightModel = eLightModel_Overdrive; // no legacy area light exists
 
 		mfWidth = 1.0f;
 		mfHeight = 1.0f;

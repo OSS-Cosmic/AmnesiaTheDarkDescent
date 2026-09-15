@@ -1,18 +1,27 @@
 <MapDelta Version="1" Target="maps/main/ch03/26_zimmerman_vision.map">
-    <Remove Category="Entities" ID="477" Name="BoxLight_1" />
+    <Modify Category="Entities" ID="477" Name="BoxLight_1">
+        <SetAttr RendererMask="1" />
+    </Modify>
     <Modify Category="Entities" ID="31" Name="PointLight_3">
-        <SetAttr Intensity="50" Radius="9.99891" SourceRadius="0.35" />
+        <SetAttr RendererMask="1" />
     </Modify>
     <Modify Category="Entities" ID="50" Name="PointLight_6">
-        <SetAttr Intensity="500" Radius="12.2046" SourceRadius="0.35" />
+        <SetAttr RendererMask="1" />
     </Modify>
     <Modify Category="Entities" ID="200" Name="SpotLight_1">
-        <SetAttr Intensity="50" Radius="44.4671" SourceRadius="0.12" />
+        <SetAttr RendererMask="1" />
     </Modify>
     <Modify Category="Entities" ID="221" Name="PointLight_7">
-        <SetAttr Intensity="500" Radius="12.2046" SourceRadius="0.35" />
+        <SetAttr RendererMask="1" />
     </Modify>
     <Modify Category="Entities" ID="434" Name="PointLight_5">
-        <SetAttr Intensity="20" Radius="7.20675" SourceRadius="0.35" />
+        <SetAttr RendererMask="1" />
     </Modify>
+    <Add Category="Entities">
+        <Re_PointLight Active="true" CastShadows="false" DiffuseColor="0.1 0.049 0 1" FalloffMap="F:/Amnesia/redist/lights/light_falloff_short_fade.tga" FlickerActive="false" FlickerFade="false" FlickerOffColor="0 0 0 1" FlickerOffFadeMaxLength="0" FlickerOffFadeMinLength="0" FlickerOffMaxLength="0" FlickerOffMinLength="0" FlickerOffPS="" FlickerOffIntensity="0" FlickerOffSound="" FlickerOnFadeMaxLength="0" FlickerOnFadeMinLength="0" FlickerOnMaxLength="0" FlickerOnMinLength="0" FlickerOnPS="" FlickerOnSound="" Gobo="" GoboAnimFrameTime="0" GoboAnimMode="None" Group="0" Name="PointLight_3" Intensity="50" Radius="9.99891" SourceRadius="0.35" Rotation="0 0 0" Scale="1 1 1" ShadowResolution="High" ShadowsAffectDynamic="true" ShadowsAffectStatic="true" Tag="" WorldPos="21.5 10 0.75" RendererMask="2" />
+        <Re_PointLight Active="true" CastShadows="false" DiffuseColor="0.179 0.196 0.213 1" FalloffMap="" FlickerActive="false" FlickerFade="false" FlickerOffColor="0 0 0 1" FlickerOffFadeMaxLength="0" FlickerOffFadeMinLength="0" FlickerOffMaxLength="0" FlickerOffMinLength="0" FlickerOffPS="" FlickerOffIntensity="0" FlickerOffSound="" FlickerOnFadeMaxLength="0" FlickerOnFadeMinLength="0" FlickerOnMaxLength="0" FlickerOnMinLength="0" FlickerOnPS="" FlickerOnSound="" Gobo="" GoboAnimFrameTime="0" GoboAnimMode="None" Group="0" Name="PointLight_6" Intensity="500" Radius="12.2046" SourceRadius="0.35" Rotation="0 0 0" Scale="1 1 1" ShadowResolution="High" ShadowsAffectDynamic="true" ShadowsAffectStatic="true" Tag="" WorldPos="-25.6359 9 -23.5" RendererMask="2" />
+        <Re_SpotLight Active="true" Aspect="1.1" CastShadows="true" DiffuseColor="0.416 0.449 0.482 1" FOV="1.309" FalloffMap="F:/Amnesia/redist/lights/light_falloff_short_fade.tga" FlickerActive="false" FlickerFade="false" FlickerOffColor="0 0 0 1" FlickerOffFadeMaxLength="0" FlickerOffFadeMinLength="0" FlickerOffMaxLength="0" FlickerOffMinLength="0" FlickerOffPS="" FlickerOffIntensity="0" FlickerOffSound="" FlickerOnFadeMaxLength="0" FlickerOnFadeMinLength="0" FlickerOnMaxLength="0" FlickerOnMinLength="0" FlickerOnPS="" FlickerOnSound="" Gobo="" GoboAnimFrameTime="0" GoboAnimMode="None" Group="0" Name="SpotLight_1" NearClipPlane="0.1" Intensity="50" Radius="44.4671" SourceRadius="0.12" Rotation="-0.602349 0.530814 0.077754" Scale="1 1 1" ShadowResolution="High" ShadowsAffectDynamic="true" ShadowsAffectStatic="true" SpotFalloffMap="lights/light_falloff_short_fade.tga" Tag="" WorldPos="2.44346 14.9022 29.8896" RendererMask="2" />
+        <Re_PointLight Active="true" CastShadows="false" DiffuseColor="0.179 0.196 0.213 1" FalloffMap="" FlickerActive="false" FlickerFade="false" FlickerOffColor="0 0 0 1" FlickerOffFadeMaxLength="0" FlickerOffFadeMinLength="0" FlickerOffMaxLength="0" FlickerOffMinLength="0" FlickerOffPS="" FlickerOffIntensity="0" FlickerOffSound="" FlickerOnFadeMaxLength="0" FlickerOnFadeMinLength="0" FlickerOnMaxLength="0" FlickerOnMinLength="0" FlickerOnPS="" FlickerOnSound="" Gobo="" GoboAnimFrameTime="0" GoboAnimMode="None" Group="0" Name="PointLight_7" Intensity="500" Radius="12.2046" SourceRadius="0.35" Rotation="0 0 0" Scale="1 1 1" ShadowResolution="High" ShadowsAffectDynamic="true" ShadowsAffectStatic="true" Tag="" WorldPos="-26.3815 8.16144 -32.2086" RendererMask="2" />
+        <Re_PointLight Active="true" CastShadows="false" DiffuseColor="0.048 0.083 0.118 1" FalloffMap="" FlickerActive="false" FlickerFade="false" FlickerOffColor="0 0 0 1" FlickerOffFadeMaxLength="0" FlickerOffFadeMinLength="0" FlickerOffMaxLength="0" FlickerOffMinLength="0" FlickerOffPS="" FlickerOffIntensity="0" FlickerOffSound="" FlickerOnFadeMaxLength="0" FlickerOnFadeMinLength="0" FlickerOnMaxLength="0" FlickerOnMinLength="0" FlickerOnPS="" FlickerOnSound="" Gobo="" GoboAnimFrameTime="0" GoboAnimMode="None" Group="0" Name="PointLight_5" Intensity="20" Radius="7.20675" SourceRadius="0.35" Rotation="0 0 0" Scale="1 1 1" ShadowResolution="High" ShadowsAffectDynamic="true" ShadowsAffectStatic="true" Tag="" WorldPos="-10.1253 15.8388 8.75825" RendererMask="2" />
+    </Add>
 </MapDelta>

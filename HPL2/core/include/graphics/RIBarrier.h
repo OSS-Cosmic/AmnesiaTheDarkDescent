@@ -57,6 +57,14 @@ enum RIStageBits_e {
   RI_STAGE_ALL_SHADER    = RI_STAGE_VERTEX | RI_STAGE_FRAGMENT | RI_STAGE_COMPUTE | RI_STAGE_RAY_TRACING,
 };
 
+// These are the logical-device feature bits relevant to barrier conversion.
+// Value-initialization (RIBarrierCapabilities{}) sets both bits to false;
+// RICmd also clears them through its memset-based initialization.
+struct RIBarrierCapabilities {
+  bool rayTracingPipelineEnabled;
+  bool accelerationStructureEnabled;
+};
+
 enum RIBarrierAspect_e {
   RI_BARRIER_ASPECT_COLOR = 0,
   RI_BARRIER_ASPECT_DEPTH,
@@ -207,16 +215,33 @@ static inline VkAccessFlags2 ri_vk_RIResourceStateToAccess(uint32_t state) {
   return access;
 }
 
-// Conservative stage derivation for barriers that omit a stage hint.
-static inline VkPipelineStageFlags2 ri_vk_RIStageMaskFromState(uint32_t state) {
+static inline bool ri_vk_RIBarrierStateSupported(
+    uint32_t state, const RIBarrierCapabilities &capabilities) {
+  const uint32_t accelStates = RI_RESOURCE_STATE_ACCEL_READ |
+                               RI_RESOURCE_STATE_ACCEL_WRITE;
+  return (state & accelStates) == 0 ||
+         capabilities.accelerationStructureEnabled;
+}
+
+// Conservative stage derivation for barriers that omit a stage hint. Returns
+// NONE and reports failure for a state that requires a disabled feature.
+static inline VkPipelineStageFlags2 ri_vk_RIStageMaskFromState(
+    uint32_t state, const RIBarrierCapabilities &capabilities,
+    bool *valid) {
+  if (valid)
+    *valid = ri_vk_RIBarrierStateSupported(state, capabilities);
+  if (!ri_vk_RIBarrierStateSupported(state, capabilities))
+    return VK_PIPELINE_STAGE_2_NONE;
   VkPipelineStageFlags2 flags = VK_PIPELINE_STAGE_2_NONE;
   if (state & (RI_RESOURCE_STATE_GENERAL | RI_RESOURCE_STATE_SHADER_RESOURCE |
                RI_RESOURCE_STATE_STORAGE_READ | RI_RESOURCE_STATE_STORAGE_WRITE |
-               RI_RESOURCE_STATE_CONSTANT_BUFFER))
+               RI_RESOURCE_STATE_CONSTANT_BUFFER)) {
     flags |= VK_PIPELINE_STAGE_2_VERTEX_SHADER_BIT |
              VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT |
-             VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT |
-             VK_PIPELINE_STAGE_2_RAY_TRACING_SHADER_BIT_KHR;
+             VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT;
+    if (capabilities.rayTracingPipelineEnabled)
+      flags |= VK_PIPELINE_STAGE_2_RAY_TRACING_SHADER_BIT_KHR;
+  }
   if (state & (RI_RESOURCE_STATE_RENDER_TARGET | RI_RESOURCE_STATE_RENDER_TARGET_READ))
     flags |= VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
   if (state & (RI_RESOURCE_STATE_DEPTH_WRITE | RI_RESOURCE_STATE_DEPTH_READ))
@@ -229,6 +254,9 @@ static inline VkPipelineStageFlags2 ri_vk_RIStageMaskFromState(uint32_t state) {
     flags |= VK_PIPELINE_STAGE_2_DRAW_INDIRECT_BIT;
   if (state & (RI_RESOURCE_STATE_VERTEX_BUFFER | RI_RESOURCE_STATE_INDEX_BUFFER))
     flags |= VK_PIPELINE_STAGE_2_VERTEX_INPUT_BIT;
+  // Both AS reads and writes are synchronized at the AS build stage. An AS
+  // read does not imply that a ray-tracing pipeline is enabled: AS-only
+  // devices legitimately use acceleration structures for build/compaction.
   if (state & (RI_RESOURCE_STATE_ACCEL_READ | RI_RESOURCE_STATE_ACCEL_WRITE))
     flags |= VK_PIPELINE_STAGE_2_ACCELERATION_STRUCTURE_BUILD_BIT_KHR;
   if (state & RI_RESOURCE_STATE_CLEAR_STORAGE)
@@ -238,9 +266,15 @@ static inline VkPipelineStageFlags2 ri_vk_RIStageMaskFromState(uint32_t state) {
 }
 
 static inline VkPipelineStageFlags2
-ri_vk_RIStageBitsToVK(uint32_t stageBits, uint32_t stateFallback) {
+ri_vk_RIStageBitsToVK(uint32_t stageBits, uint32_t stateFallback,
+                      const RIBarrierCapabilities &capabilities,
+                      bool *valid) {
+  if (valid)
+    *valid = ri_vk_RIBarrierStateSupported(stateFallback, capabilities);
+  if (!ri_vk_RIBarrierStateSupported(stateFallback, capabilities))
+    return VK_PIPELINE_STAGE_2_NONE;
   if (stageBits == RI_STAGE_NONE)
-    return ri_vk_RIStageMaskFromState(stateFallback);
+    return ri_vk_RIStageMaskFromState(stateFallback, capabilities, valid);
   VkPipelineStageFlags2 flags = VK_PIPELINE_STAGE_2_NONE;
   // RIStageBits_e has no attachment-output / depth-test bits, so an explicit
   // hint can never name the fixed-function stages that attachment accesses in
@@ -252,14 +286,48 @@ ri_vk_RIStageBitsToVK(uint32_t stageBits, uint32_t stateFallback) {
   if (stateFallback & (RI_RESOURCE_STATE_DEPTH_WRITE | RI_RESOURCE_STATE_DEPTH_READ))
     flags |= VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT |
              VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT;
+  const bool hasTransferHint =
+      (stageBits & (RI_STAGE_COPY | RI_STAGE_BLIT | RI_STAGE_CLEAR)) != 0;
+  if ((stateFallback & (RI_RESOURCE_STATE_COPY_SRC | RI_RESOURCE_STATE_COPY_DST)) &&
+      !hasTransferHint)
+    flags |= VK_PIPELINE_STAGE_2_COPY_BIT | VK_PIPELINE_STAGE_2_BLIT_BIT |
+             VK_PIPELINE_STAGE_2_CLEAR_BIT;
+  if (stateFallback & RI_RESOURCE_STATE_CLEAR_STORAGE)
+    flags |= VK_PIPELINE_STAGE_2_CLEAR_BIT;
+  if (stateFallback & RI_RESOURCE_STATE_INDIRECT_ARGUMENT)
+    flags |= VK_PIPELINE_STAGE_2_DRAW_INDIRECT_BIT;
+  if (stateFallback & (RI_RESOURCE_STATE_VERTEX_BUFFER | RI_RESOURCE_STATE_INDEX_BUFFER))
+    flags |= VK_PIPELINE_STAGE_2_VERTEX_INPUT_BIT;
   if (stageBits & RI_STAGE_VERTEX)
     flags |= VK_PIPELINE_STAGE_2_VERTEX_SHADER_BIT;
   if (stageBits & RI_STAGE_FRAGMENT)
     flags |= VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT;
   if (stageBits & RI_STAGE_COMPUTE)
     flags |= VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT;
-  if (stageBits & RI_STAGE_RAY_TRACING)
-    flags |= VK_PIPELINE_STAGE_2_RAY_TRACING_SHADER_BIT_KHR;
+  if (stageBits & RI_STAGE_RAY_TRACING) {
+    // A ray-tracing-only hint cannot be honored on a device without the
+    // pipeline feature. In a mixed hint, retain the legal non-RT stages;
+    // this is useful for callers sharing a broad shader hint across devices.
+    const uint32_t nonRayTracingStages = stageBits & ~RI_STAGE_RAY_TRACING;
+    const uint32_t rasterShaderStages = RI_STAGE_VERTEX | RI_STAGE_FRAGMENT |
+                                        RI_STAGE_COMPUTE;
+    const bool shaderAccess =
+        (stateFallback & (RI_RESOURCE_STATE_GENERAL |
+                          RI_RESOURCE_STATE_SHADER_RESOURCE |
+                          RI_RESOURCE_STATE_STORAGE_READ |
+                          RI_RESOURCE_STATE_STORAGE_WRITE |
+                          RI_RESOURCE_STATE_CONSTANT_BUFFER)) != 0;
+    if (!capabilities.rayTracingPipelineEnabled &&
+        (nonRayTracingStages == RI_STAGE_NONE ||
+         (((nonRayTracingStages & rasterShaderStages) == RI_STAGE_NONE) &&
+          shaderAccess))) {
+      if (valid)
+        *valid = false;
+      return VK_PIPELINE_STAGE_2_NONE;
+    }
+    if (capabilities.rayTracingPipelineEnabled)
+      flags |= VK_PIPELINE_STAGE_2_RAY_TRACING_SHADER_BIT_KHR;
+  }
   if (stageBits & RI_STAGE_DRAW_INDIRECT)
     flags |= VK_PIPELINE_STAGE_2_DRAW_INDIRECT_BIT;
   if (stageBits & RI_STAGE_COPY)
@@ -268,7 +336,15 @@ ri_vk_RIStageBitsToVK(uint32_t stageBits, uint32_t stateFallback) {
     flags |= VK_PIPELINE_STAGE_2_BLIT_BIT;
   if (stageBits & RI_STAGE_CLEAR)
     flags |= VK_PIPELINE_STAGE_2_CLEAR_BIT;
-  if (stageBits & RI_STAGE_ACCEL_BUILD)
+  if (stageBits & RI_STAGE_ACCEL_BUILD) {
+    if (!capabilities.accelerationStructureEnabled) {
+      if (valid)
+        *valid = false;
+      return VK_PIPELINE_STAGE_2_NONE;
+    }
+    flags |= VK_PIPELINE_STAGE_2_ACCELERATION_STRUCTURE_BUILD_BIT_KHR;
+  }
+  if (stateFallback & RI_RESOURCE_STATE_ACCEL_WRITE)
     flags |= VK_PIPELINE_STAGE_2_ACCELERATION_STRUCTURE_BUILD_BIT_KHR;
   return flags;
 }

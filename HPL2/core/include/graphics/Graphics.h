@@ -130,6 +130,11 @@ public:
 
   bool GetScreenIsSetUp() { return mbScreenIsSetup; }
 
+  eRendererBackend GetRendererBackend() const;
+  // True when the selected adapter can run the ray-traced Overdrive backend,
+  // whichever backend this session actually started.
+  bool IsOverdriveSupported() const { return mbOverdriveSupported; }
+
   // The window/screen size is owned by cWindow — query it via
   // Interface<cWindow>::Get()->GetSize() / GetSizeF(). The swapchain follows
   // the window; BeginActiveSet reconciles the two each frame.
@@ -388,6 +393,8 @@ private:
   cDecalCreator *mpDecalCreator = nullptr;
   DebugDraw *mpDebugDraw = nullptr;
   cResources *mpResources = nullptr;
+  eRendererBackend mRendererBackend = eRendererBackend_Overdrive;
+  bool mbOverdriveSupported = false;
 
   std::vector<iRenderer *> mvRenderers;
   std::vector<iPostEffectType *> mvPostEffectTypes;

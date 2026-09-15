@@ -5,8 +5,8 @@
 #include <algorithm>
 #include <cmath>
 
-// CPU-only policy for the asynchronous physical-light sensor. Retain the
-// environmental reading separately so the lantern bonus never feeds back.
+// Shared brightness state for CPU Legacy sensing and asynchronous physical
+// probes. Keep the environment separate so the lantern bonus never feeds back.
 class cLuxLightProbeBrightness {
 public:
     void Reset() { mfLuminance = 0.0f; mfEnvironment = 1.0f; mbLantern = false; }
@@ -23,6 +23,15 @@ public:
         }
         mfLuminance = static_cast<float>(brightest);
         mfEnvironment = static_cast<float>(std::min(brightest * gain, 1.0));
+    }
+
+    // Publish the legacy CPU environmental level without applying the GPU
+    // probe's overdrive gain or its normalized-level clamp. CPU sums can be
+    // greater than one and are not physical irradiance measurements.
+    void UpdateLegacy(float level) {
+        if (!std::isfinite(level) || level < 0.0f) return;
+        mfEnvironment = level;
+        mfLuminance = 0.0f;
     }
 
     void SetLantern(bool active) { mbLantern = active; }

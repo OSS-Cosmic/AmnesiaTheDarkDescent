@@ -26,6 +26,7 @@
 #include "EntityWrapperLight.h"
 #include "EntityWrapperLightSpot.h"
 #include "EntityWrapperLightArea.h"
+#include "EntityWrapperLightBox.h"
 
 #include "EditorAction.h"
 
@@ -38,9 +39,16 @@ cEditorWindowEntityEditBoxLight::cEditorWindowEntityEditBoxLight(cEditorEditMode
 	mpLight = apLight;
 
 	mpInpRadius = NULL;
-	mpInpCullingRadius = NULL;
+	mpInpIntensity = NULL;
 	mpInpSourceRadius = NULL;
 	mpGroupShadows = NULL;
+	mpGroupGobo = NULL;
+	mpInpGobo = NULL;
+	mpInpGoboAnimMode = NULL;
+	mpInpGoboAnimFrameTime = NULL;
+	mpGroupFalloff = NULL;
+	mpInpFalloffMap = NULL;
+	mpInpBoxBlendFunc = NULL;
 }
 
 //------------------------------------------------------------
@@ -63,29 +71,37 @@ void cEditorWindowEntityEditBoxLight::Create()
 	AddPropertyDiffuseColor(mpTabGeneral);
 
 
-	switch(mpLight->GetLightType())
+	const int lLightType = mpLight->GetLightType();
+	if(IsEditorPointLightType(lLightType))
 	{
-	case eEditorEntityLightType_Point:
 		pTab = mpTabs->AddTab(_W("Point"));
 		AddPropertySetPoint(pTab);
-		break;
-	case eEditorEntityLightType_Spot:
+	}
+	else if(IsEditorSpotLightType(lLightType))
+	{
 		pTab = mpTabs->AddTab(_W("Spot"));
 		AddPropertySetSpot(pTab);
-		break;
-	case eEditorEntityLightType_Area:
+	}
+	else if(lLightType==eEditorEntityLightType_Area)
+	{
 		pTab = mpTabs->AddTab(_W("Area"));
 		AddPropertySetArea(pTab);
-		break;
-	default:
-		break;
+	}
+	else if(lLightType==eEditorEntityLightType_Box)
+	{
+		pTab = mpTabs->AddTab(_W("Box"));
+		AddPropertySetBox(pTab);
 	}
 
 	mpTabFlicker = mpTabs->AddTab(_W("Flicker"));
 	AddPropertySetFlicker(mpTabFlicker);
 
-	AddPropertyGobo(mpTabGeneral);
-	AddPropertyFalloffMap(mpTabGeneral);
+	// Box lights have no gobo or falloff.
+	if(lLightType!=eEditorEntityLightType_Box)
+	{
+		AddPropertyGobo(mpTabGeneral);
+		AddPropertyFalloffMap(mpTabGeneral);
+	}
 
 	cVector3f vPos = cVector3f(10,10,0.1f);
 	mpInpName->SetPosition(vPos);
@@ -94,11 +110,21 @@ void cEditorWindowEntityEditBoxLight::Create()
 	vPos.y += mpInpActive->GetSize().y+5;
 	mpInpPosition->SetPosition(vPos);
 	vPos.y += mpInpPosition->GetSize().y+5;
-	mpGroupGobo->SetPosition(vPos);
-	vPos.y += mpGroupGobo->GetSize().y + 5;
-	mpGroupFalloff->SetPosition(vPos);
-	vPos.y += mpGroupFalloff->GetSize().y + 5;
+	if(mpGroupGobo)
+	{
+		mpGroupGobo->SetPosition(vPos);
+		vPos.y += mpGroupGobo->GetSize().y + 5;
+	}
+	if(mpGroupFalloff)
+	{
+		mpGroupFalloff->SetPosition(vPos);
+		vPos.y += mpGroupFalloff->GetSize().y + 5;
+	}
 	mpGroupDiffuse->SetPosition(vPos);
+	vPos.y += mpGroupDiffuse->GetSize().y + 5;
+
+	// The two halves of a split light share a name; say which set this is.
+	mpSet->CreateWidgetLabel(vPos, 0, mpLight->IsOverdrive() ? _W("Light set: Overdrive") : _W("Light set: Legacy"), mpTabGeneral);
 }
 
 //------------------------------------------------------------
@@ -113,7 +139,7 @@ void cEditorWindowEntityEditBoxLight::AddPropertyGobo(cWidgetTab *apParentTab)
 	mpInpGobo = CreateInputFile(vPos, _W("Gobo"), "", mpGroupGobo, 120);
 	mpInpGobo->SetInitialPath(mpEditor->GetMainLookUpDir(eDir_Lights));
 	mpInpGobo->SetBrowserType(eEditorResourceType_Texture);
-	if(mpLight->GetLightType()==eEditorEntityLightType_Point)
+	if(IsEditorPointLightType(mpLight->GetLightType()))
 		mpInpGobo->SetBrowserSubType(eEditorTextureResourceType_CubeMap);
 	else
 		mpInpGobo->SetBrowserSubType(eEditorTextureResourceType_2D);
@@ -147,17 +173,19 @@ void cEditorWindowEntityEditBoxLight::AddPropertyRadius(cWidgetTab* apParentTab)
 {
 	mpGroupRadius = mpSet->CreateWidgetDummy(0,apParentTab);
 
-	mpInpRadius = CreateInputNumber(cVector3f(0,0,0.1f), _W("Intensity"), "", mpGroupRadius, 50, 0.5f);
+	// The radius of a legacy light, the reach of an Overdrive one.
+	mpInpRadius = CreateInputNumber(cVector3f(0,0,0.1f), _W("Radius"), "", mpGroupRadius, 50, 0.5f);
 }
 
 //------------------------------------------------------------
 
-void cEditorWindowEntityEditBoxLight::AddPropertyCullingRadius(cWidgetTab* apParentTab)
+void cEditorWindowEntityEditBoxLight::AddPropertyIntensity(cWidgetTab* apParentTab)
 {
-	mpGroupCullingRadius = mpSet->CreateWidgetDummy(0, apParentTab);
+	mpGroupIntensity = mpSet->CreateWidgetDummy(0, apParentTab);
 
-	mpInpCullingRadius = CreateInputNumber(cVector3f(0, 0, 0.1f), _W("Radius"), "", mpGroupCullingRadius, 50, 0.5f);
+	mpInpIntensity = CreateInputNumber(cVector3f(0, 0, 0.1f), _W("Intensity"), "", mpGroupIntensity, 50, 0.5f);
 }
+
 //------------------------------------------------------------
 
 void cEditorWindowEntityEditBoxLight::AddPropertySourceRadius(cWidgetTab* apParentTab)
@@ -165,6 +193,29 @@ void cEditorWindowEntityEditBoxLight::AddPropertySourceRadius(cWidgetTab* apPare
 	mpGroupSourceRadius = mpSet->CreateWidgetDummy(0, apParentTab);
 
 	mpInpSourceRadius = CreateInputNumber(cVector3f(0, 0, 0.1f), _W("Source Radius"), "", mpGroupSourceRadius, 50, 0.5f);
+}
+
+//------------------------------------------------------------
+
+cVector3f cEditorWindowEntityEditBoxLight::AddPropertyLightValues(cWidgetTab* apParentTab, cVector3f avPos)
+{
+	AddPropertyRadius(apParentTab);
+	mpGroupRadius->SetPosition(avPos);
+	avPos.y += mpGroupRadius->GetSize().y + 5;
+
+	// Overdrive lights also carry an intensity and a source radius.
+	if(mpLight->IsOverdrive())
+	{
+		AddPropertyIntensity(apParentTab);
+		mpGroupIntensity->SetPosition(avPos);
+		avPos.y += mpGroupIntensity->GetSize().y + 5;
+
+		AddPropertySourceRadius(apParentTab);
+		mpGroupSourceRadius->SetPosition(avPos);
+		avPos.y += mpGroupSourceRadius->GetSize().y + 5;
+	}
+
+	return avPos;
 }
 
 //------------------------------------------------------------
@@ -262,7 +313,7 @@ void cEditorWindowEntityEditBoxLight::AddPropertySetFlicker(cWidgetTab* apParent
 
 	vPos.y += mpInpFlickerOffPS->GetSize().y + 10;
 
-	mpInpFlickerOffRadius = CreateInputNumber(vPos, _W("Off Radius"), "", mpGFlickerOff, 50, 0.1f);
+	mpInpFlickerOffRadius = CreateInputNumber(vPos, mpLight->IsOverdrive() ? _W("Off Intensity") : _W("Off Radius"), "", mpGFlickerOff, 50, 0.1f);
 	vPos.y += mpInpFlickerOffRadius->GetSize().y + 10;
 	mpInpFlickerOffColor = CreateInputColorFrame(vPos, _W("Off Color"), "", mpGFlickerOff);
 
@@ -307,16 +358,7 @@ void cEditorWindowEntityEditBoxLight::AddPropertySetPoint(cWidgetTab* apParentTa
 	mpGroupShadows->SetPosition(vPos);
 	vPos.y += mpGroupShadows->GetSize().y + 5;
 
-	AddPropertyRadius(apParentTab);
-	mpGroupRadius->SetPosition(vPos);
-	vPos.y += mpInpRadius->GetSize().y + 10;
-
-	AddPropertyCullingRadius(apParentTab);
-	mpGroupCullingRadius->SetPosition(vPos);
-	vPos.y += mpInpCullingRadius->GetSize().y + 10;
-
-	AddPropertySourceRadius(apParentTab);
-	mpGroupSourceRadius->SetPosition(vPos);
+	vPos = AddPropertyLightValues(apParentTab, vPos);
 }
 
 //------------------------------------------------------------
@@ -333,27 +375,18 @@ void cEditorWindowEntityEditBoxLight::AddPropertySetSpot(cWidgetTab* apParentTab
 	mpGroupShadows->SetPosition(vPos);
 	vPos.y += mpGroupShadows->GetSize().y + 5;
 
-	AddPropertyRadius(apParentTab);
-	mpGroupRadius->SetPosition(vPos);
+	vPos = AddPropertyLightValues(apParentTab, vPos);
 
-	mpInpSpotNearClipPlane = CreateInputNumber(vPos + cVector3f(mpGroupRadius->GetSize().x+20,0,0), _W("Near Clip Plane"), "", apParentTab, 50, 0.1f);
-
-	vPos.y += mpGroupRadius->GetSize().y +5;
-
-	AddPropertyCullingRadius(apParentTab);
-	mpGroupCullingRadius->SetPosition(vPos);
-	vPos.y += mpInpCullingRadius->GetSize().y + 10;
-
-	AddPropertySourceRadius(apParentTab);
-	mpGroupSourceRadius->SetPosition(vPos);
-	vPos.y += mpInpSourceRadius->GetSize().y + 10;
+	mpInpSpotNearClipPlane = CreateInputNumber(vPos, _W("Near Clip Plane"), "", apParentTab, 50, 0.1f);
+	vPos.y += mpInpSpotNearClipPlane->GetSize().y + 5;
 
 	mpInpSpotFOV = CreateInputNumber(vPos, _W("FOV"), "", apParentTab, 50, 15);
 	mpInpSpotFOV->SetDecimals(3);
+	vPos.y += mpInpSpotFOV->GetSize().y + 5;
 
-	mpInpSpotAspect = CreateInputNumber(vPos + cVector3f(mpInpSpotFOV->GetSize().x+20,0,0), _W("Aspect"), "", apParentTab, 50, 0.1f);
+	mpInpSpotAspect = CreateInputNumber(vPos, _W("Aspect"), "", apParentTab, 50, 0.1f);
 
-	vPos.y += mpInpSpotFOV->GetSize().y + 10;
+	vPos.y += mpInpSpotAspect->GetSize().y + 5;
 
 	mpInpSpotFalloffMap = CreateInputFile(vPos, _W("Spot Falloff Map"), "", apParentTab);
 	mpInpSpotFalloffMap->SetInitialPath(mpEditor->GetMainLookUpDir(eDir_Lights));
@@ -369,27 +402,38 @@ void cEditorWindowEntityEditBoxLight::AddPropertySetArea(cWidgetTab* apParentTab
 	mpInpRotation->SetPosition(vPos);
 	vPos.y += mpInpRotation->GetSize().y + 5;
 
-	AddPropertyRadius(apParentTab);
-	mpInpRadius->SetLabel(_W("Intensity"));
-	mpGroupRadius->SetPosition(vPos);
-	vPos.y += mpGroupRadius->GetSize().y + 5;
-
-	AddPropertyCullingRadius(apParentTab);
-	mpInpCullingRadius->SetLabel(_W("Attenuation Radius"));
-	mpGroupCullingRadius->SetPosition(vPos);
-	vPos.y += mpInpCullingRadius->GetSize().y + 10;
+	vPos = AddPropertyLightValues(apParentTab, vPos);
 
 	mpInpAreaWidth = CreateInputNumber(vPos, _W("Source Width"), "", apParentTab, 50, 0.1f);
-	mpInpAreaHeight = CreateInputNumber(vPos + cVector3f(mpInpAreaWidth->GetSize().x+20,0,0), _W("Source Height"), "", apParentTab, 50, 0.1f);
-	vPos.y += mpInpAreaWidth->GetSize().y + 10;
+	vPos.y += mpInpAreaWidth->GetSize().y + 5;
+	mpInpAreaHeight = CreateInputNumber(vPos, _W("Source Height"), "", apParentTab, 50, 0.1f);
+	vPos.y += mpInpAreaHeight->GetSize().y + 5;
 
 	mpInpAreaBarnDoorAngle = CreateInputNumber(vPos, _W("Barn Door Angle"), "", apParentTab, 50, 1.0f);
-	mpInpAreaBarnDoorLength = CreateInputNumber(vPos + cVector3f(mpInpAreaBarnDoorAngle->GetSize().x+20,0,0), _W("Barn Door Length"), "", apParentTab, 50, 0.1f);
-	vPos.y += mpInpAreaBarnDoorAngle->GetSize().y + 10;
+	vPos.y += mpInpAreaBarnDoorAngle->GetSize().y + 5;
+	mpInpAreaBarnDoorLength = CreateInputNumber(vPos, _W("Barn Door Length"), "", apParentTab, 50, 0.1f);
+	vPos.y += mpInpAreaBarnDoorLength->GetSize().y + 5;
 
 	mpInpAreaSourceTex = CreateInputFile(vPos, _W("Source Texture"), "", apParentTab);
 	mpInpAreaSourceTex->SetInitialPath(mpEditor->GetMainLookUpDir(eDir_Lights));
 	mpInpAreaSourceTex->SetBrowserSubType(eEditorTextureResourceType_2D);
+}
+
+//------------------------------------------------------------
+
+void cEditorWindowEntityEditBoxLight::AddPropertySetBox(cWidgetTab* apParentTab)
+{
+	cVector3f vPos = cVector3f(10,10,0.1f);
+
+	// Size follows the scale, as the retail maps author both.
+	AddPropertyScale(apParentTab);
+	mpInpScale->SetLabel(_W("Size"));
+	mpInpScale->SetPosition(vPos);
+	vPos.y += mpInpScale->GetSize().y + 5;
+
+	mpInpBoxBlendFunc = CreateInputEnum(vPos, _W("Blend Function"), "", tWStringList(), apParentTab);
+	mpInpBoxBlendFunc->AddValue(_W("Replace"));
+	mpInpBoxBlendFunc->AddValue(_W("Add"));
 }
 
 //------------------------------------------------------------
@@ -445,7 +489,7 @@ void cEditorWindowEntityEditBoxLight::OnUpdate(float afTimeStep)
 	mpInpFlickerOffSound->SetValue(cString::To16Char(mpLight->GetFlickerOffSound()), false);
 	mpInpFlickerOffPS->SetValue(cString::To16Char(mpLight->GetFlickerOffPS()), false);
 
-	mpInpFlickerOffRadius->SetValue(mpLight->GetFlickerOffRadius(), false);
+	mpInpFlickerOffRadius->SetValue(mpLight->GetFlickerOffValue(), false);
 	mpInpFlickerOffColor->SetValue(mpLight->GetFlickerOffColor(), false);
 	
 	mpInpFlickerFade->SetValue(mpLight->GetFlickerFade(), false);
@@ -455,14 +499,14 @@ void cEditorWindowEntityEditBoxLight::OnUpdate(float afTimeStep)
 	mpInpFlickerFadeOffMinLength->SetValue(mpLight->GetFlickerOffFadeMinLength(), false);
 	mpInpFlickerFadeOffMaxLength->SetValue(mpLight->GetFlickerOffFadeMaxLength(), false);
 
-	if(mpInpRadius) mpInpRadius->SetValue(mpLight->GetIntensity(), false);
-	if(mpInpCullingRadius) mpInpCullingRadius->SetValue(mpLight->GetRadius(), false);
+	if(mpInpRadius) mpInpRadius->SetValue(mpLight->GetRadius(), false);
+	if(mpInpIntensity) mpInpIntensity->SetValue(mpLight->GetIntensity(), false);
 	if(mpInpSourceRadius) mpInpSourceRadius->SetValue(mpLight->GetSourceRadius(), false);
 
 	int lightType = mpLight->GetLightType();
 	////////////
 	// Spot
-	if(lightType==eEditorEntityLightType_Spot)
+	if(IsEditorSpotLightType(lightType))
 	{
 		cEntityWrapperLightSpot* pLight = (cEntityWrapperLightSpot*)mpLight;
 		mpInpSpotFOV->SetValue(cMath::ToDeg(pLight->GetFOV()), false);
@@ -480,6 +524,12 @@ void cEditorWindowEntityEditBoxLight::OnUpdate(float afTimeStep)
 		mpInpAreaBarnDoorAngle->SetValue(cMath::ToDeg(pLight->GetBarnDoorAngle()), false);
 		mpInpAreaBarnDoorLength->SetValue(pLight->GetBarnDoorLength(), false);
 		mpInpAreaSourceTex->SetValue(cString::To16Char(pLight->GetSourceTexture()), false);
+	}
+	////////////
+	// Box
+	else if(lightType==eEditorEntityLightType_Box)
+	{
+		mpInpBoxBlendFunc->SetValue(((cEntityWrapperLightBox*)mpLight)->GetBlendFunc(), false);
 	}
 }
 
@@ -522,9 +572,9 @@ bool cEditorWindowEntityEditBoxLight::WindowSpecificInputCallback(iEditorInput* 
 	{
 		strFilename = cString::To8Char(mpInpGobo->GetValue());
 
-		eEditorTextureResourceType texType = (mpLight->GetLightType()==eEditorEntityLightType_Point)?
-											eEditorTextureResourceType_CubeMap :
-											eEditorTextureResourceType_2D;
+		eEditorTextureResourceType texType = IsEditorPointLightType(mpLight->GetLightType())?
+										eEditorTextureResourceType_CubeMap :
+										eEditorTextureResourceType_2D;
 
 		
 		if(strFilename=="" || cEditorHelper::LoadTextureResource(texType, strFilename, NULL))
@@ -585,19 +635,22 @@ bool cEditorWindowEntityEditBoxLight::WindowSpecificInputCallback(iEditorInput* 
 	{
 		pAction = mpEntity->CreateSetPropertyActionColor(eLightCol_Diffuse, mpInpDiffuse->GetValue());
 	}
-
 	/////////////////////////////////
 	// Radius
+	else if(apInput==mpInpBoxBlendFunc)
+	{
+		pAction = mpEntity->CreateSetPropertyActionInt(eLightBoxInt_BlendFunc, mpInpBoxBlendFunc->GetValue());
+	}
 	else if(apInput==mpInpRadius)
 	{
-		pAction = mpEntity->CreateSetPropertyActionFloat(eLightFloat_Intensity, mpInpRadius->GetValue());
+		pAction = mpEntity->CreateSetPropertyActionFloat(eLightFloat_Radius, mpInpRadius->GetValue());
 	}
 
 	/////////////////////////////////
-	// Culling Radius
-	else if (apInput == mpInpCullingRadius)
+	// Intensity (Overdrive lights)
+	else if (apInput == mpInpIntensity)
 	{
-		pAction = mpEntity->CreateSetPropertyActionFloat(eLightFloat_Radius, mpInpCullingRadius->GetValue());
+		pAction = mpEntity->CreateSetPropertyActionFloat(eLightFloat_Intensity, mpInpIntensity->GetValue());
 	}
 
 	/////////////////////////////////
@@ -664,10 +717,11 @@ bool cEditorWindowEntityEditBoxLight::WindowSpecificInputCallback(iEditorInput* 
 		pAction = mpEntity->CreateSetPropertyActionString(eLightStr_FlickerOffPS, cString::To8Char(mpInpFlickerOffPS->GetValue()));
 	}
 
-	// Off Radius
+	// Off Radius (legacy) / Off Intensity (Overdrive)
 	else if(apInput==mpInpFlickerOffRadius)
 	{
-		pAction = mpEntity->CreateSetPropertyActionFloat(eLightFloat_FlickerOffRadius, mpInpFlickerOffRadius->GetValue());
+		pAction = mpEntity->CreateSetPropertyActionFloat(mpLight->IsOverdrive() ? eLightFloat_FlickerOffIntensity : eLightFloat_FlickerOffRadius,
+														 mpInpFlickerOffRadius->GetValue());
 	}
 
 	// Off Color
@@ -780,4 +834,3 @@ bool cEditorWindowEntityEditBoxLight::WindowSpecificInputCallback(iEditorInput* 
 }
 
 //----------------------------------------------------------------------------
-

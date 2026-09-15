@@ -6,7 +6,10 @@
 #include <stdint.h>
 
 struct RIDeviceDesc {
-	struct RIPhysicalAdapter *physicalAdapter;
+  struct RIPhysicalAdapter *physicalAdapter;
+  // Requests only; what the device actually enabled is published on RIDevice
+  // (rayTracingEnabled, accelerationStructureEnabled, ...).
+  uint32_t requestRayTracing : 1;
 };
 
 #if DEVICE_IMPL_VULKAN
@@ -16,4 +19,3 @@ void VK_FillQueueFamilies( struct RIDevice *dev, uint32_t *queueFamilies, uint32
 #endif
 
 #endif
-

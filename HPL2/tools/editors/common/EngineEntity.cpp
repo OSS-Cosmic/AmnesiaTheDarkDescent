@@ -404,9 +404,18 @@ void cEngineEntityLoadedMeshAggregate::Update()
 	bool bLightsVisible = pWorld->GetTypeVisibility(eEditorEntityType_Light);
 	bool bPSVisible = pWorld->GetTypeVisibility(eEditorEntityType_ParticleSystem);
 
+	// Children tagged for the other renderer (the retail half of a split lamp
+	// light) stay hidden unless the world shows other-renderer objects.
+	const unsigned lEditorRendererBit = pWorld->GetWorld()->GetRendererMaskBit();
+	const bool bShowOtherRenderer = pWorld->GetShowOtherRendererObjects();
+	auto InEditorRenderer = [&](iRenderable* apChild)
+	{
+		return bShowOtherRenderer || (apChild->GetRendererMask() & lEditorRendererBit) != 0;
+	};
+
 	bool bLit = mbLightsActive && bLightsVisible && bActive && bVisible;
 	for(int i=0;i<(int)mvLights.size();++i)
-		mvLights[i]->SetVisible(bLit);
+		mvLights[i]->SetVisible(bLit && InEditorRenderer(mvLights[i]));
 
 	// Preview-only illumination toggle: when the lamp's own lights are hidden,
 	// drop the mesh's illumination maps too so the geometry shows unlit (HPL3
@@ -422,7 +431,7 @@ void cEngineEntityLoadedMeshAggregate::Update()
 	// editor; the billboards were previously left always-visible). (7dc1fc5)
 	bool bBillboardsVisible = pWorld->GetTypeVisibility(eEditorEntityType_Billboard);
 	for(int i=0;i<(int)mvBillboards.size();++i)
-		mvBillboards[i]->SetVisible(mbBillboardsActive && bBillboardsVisible && bActive && bVisible);
+		mvBillboards[i]->SetVisible(mbBillboardsActive && bBillboardsVisible && bActive && bVisible && InEditorRenderer(mvBillboards[i]));
 }
 
 //-----------------------------------------------------------------------

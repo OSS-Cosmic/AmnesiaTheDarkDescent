@@ -43,8 +43,9 @@ protected:
 	void AddPropertyGobo(cWidgetTab* apParentTab);
 	void AddPropertyFalloffMap(cWidgetTab* apParentTab);
 	void AddPropertyRadius(cWidgetTab* apParentTab);
-	void AddPropertyCullingRadius(cWidgetTab* apParentTab);
+	void AddPropertyIntensity(cWidgetTab* apParentTab);
 	void AddPropertySourceRadius(cWidgetTab* apParentTab);
+	cVector3f AddPropertyLightValues(cWidgetTab* apParentTab, cVector3f avPos);
 	void AddPropertyDiffuseColor(cWidgetTab* apParentTab);
 	void AddPropertyCastShadows(cWidgetTab* apParentTab);
 
@@ -53,6 +54,7 @@ protected:
 	void AddPropertySetPoint(cWidgetTab* apParentTab);
 	void AddPropertySetSpot(cWidgetTab* apParentTab);
 	void AddPropertySetArea(cWidgetTab* apParentTab);
+	void AddPropertySetBox(cWidgetTab* apParentTab);
 
 	
 	bool InputCallback(iWidget* apWidget, const cGuiMessageData& aData);
@@ -64,6 +66,9 @@ protected:
 	///////////////////////////////////////////////////
 	// Data
 	iEntityWrapperLight* mpLight;
+
+	// Box light specific
+	cEditorInputEnum* mpInpBoxBlendFunc;
 
 	tWString msTempTextureFilename;
 	tWStringVec mvLoadedFiles;
@@ -79,8 +84,8 @@ protected:
 
 	cWidgetDummy* mpGroupRadius;
 	cEditorInputNumber* mpInpRadius;
-	cWidgetDummy* mpGroupCullingRadius;
-	cEditorInputNumber* mpInpCullingRadius;
+	cWidgetDummy* mpGroupIntensity;
+	cEditorInputNumber* mpInpIntensity;
 	cWidgetDummy* mpGroupSourceRadius;
 	cEditorInputNumber* mpInpSourceRadius;
 

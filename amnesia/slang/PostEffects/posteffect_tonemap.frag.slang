@@ -18,14 +18,16 @@
 //   binding 0 : SamplerState inputSampler
 //   binding 1 : Texture2D<float4> sourceInput
 // Push constant: exposure (scene-linear multiply, sourced from kSceneExposure);
-// shadowLift unused (layout); gamma (user display-gamma setting, 1.0 = no-op)
-// applied as the final encode step — replaces the deprecated SDL
-// window-brightness ramp.
+// shadowLift unused (layout); gamma (user display-gamma setting, 1.0 = exact
+// identity) applied as the final encode step — replaces the base game's SDL
+// window-brightness ramp, which was identity at 1.0 too; shoulder (1 = roll
+// highlights off above kToneMapShoulder, 0 = clip at display white like the
+// base game's 8-bit buffer; the Standard backend uses 0).
 //
-// Brightness comes from `exposure`, NOT from gamma. The particle/translucent
-// path (BlendModes.slang) emits sRGBToLinear(authoredDisplayColor) on the
-// assumption that this pass emits exactly linearToSRGB(linear) — an inverse
-// pair. A display-gamma curve breaks that identity and lifts faint content
+// Brightness comes from `exposure`, NOT from gamma. The Standard particle/
+// translucent path (BlendModes.slang encodeStandardBlendSource) emits
+// sRGBToLinear(authoredDisplayColor) / kSceneExposure on the assumption that
+// this pass emits exactly linearToSRGB(linear * exposure) — an inverse pair. A display-gamma curve breaks that identity and lifts faint content
 // hardest, which reads as milky fog and blown-out halos; a linear exposure
 // multiply preserves every blend ratio.
 
@@ -71,8 +73,8 @@ struct ToneMapPC
 {
     float exposure;
     float shadowLift;
-    float gamma;     // user display-gamma (1.0 = no-op)
-    float _pad1;
+    float gamma;     // user display-gamma (1.0 = identity)
+    float shoulder;  // 1 = soft highlight shoulder, 0 = clip (Standard)
 };
 
 [vk::push_constant]
@@ -106,11 +108,15 @@ struct PSIn
 float4 psMain(PSIn pin) : SV_Target
 {
     float3 hdr = sourceInput.Sample(inputSampler, pin.v_uv).rgb * pc.exposure;
-    // display-encoded sRGB, rolled off into [0,1] instead of hard-clipped.
-    // The trailing saturate is a no-op for in-range values; it only guards
-    // NaN and negatives.
-    float3 display = saturate(softShoulder(max(linearToSRGB(hdr), 0.0f)));
+    // Display-encoded sRGB. With the shoulder it rolls off into [0,1]; without
+    // it (Standard) values clip at display white exactly like the base game,
+    // so authored display terms below 1 come back bit-exact. The saturate keeps
+    // the output bounded for the display-space effects that follow.
+    float3 display = max(linearToSRGB(hdr), 0.0f);
+    if (pc.shoulder != 0.0f)
+        display = softShoulder(display);
+    display = saturate(display);
     // User gamma adjust (final): gamma 1.0 = identity, <1 darker / >1 brighter.
-    display = pow(display, (1.0f / max(pc.gamma + .2, 1e-4f)).xxx);
+    display = pow(display, (1.0f / max(pc.gamma, 1e-4f)).xxx);
     return float4(display, 1.0f);
 }

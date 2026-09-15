@@ -32,6 +32,7 @@
 #include "resources/BinaryBuffer.h"
 #include "resources/XmlHelper.h"
 #include "resources/XmlDelta.h"
+#include "scene/LightParameters.h"
 
 #include <tinyxml2.h>
 
@@ -271,6 +272,9 @@ namespace hpl {
 		////////////////////////////////
 		// Init general vars
 		mbLoadedCache= false;
+		mbRendererMaskCache = false;
+		mvRendererMaskSkipped.clear();
+		mvRendererMaskLoaded.clear();
 		mlstStaticMeshBodies.clear();
 		mlstStaticMeshEntities.clear();
 		mlStaticMeshBodiesCreated = 0;
@@ -320,6 +324,17 @@ namespace hpl {
 		mpCurrentPhysicsWorld->SetMaxTimeStep(1.0f / 60.0f);
 
 		mpCurrentWorld->SetPhysicsWorld(mpCurrentPhysicsWorld);
+
+		//////////////////////////////////////////////
+		// Static geometry tagged for one renderer is skipped on the other, so the
+		// baked combined meshes differ per backend: such a map keeps one cache
+		// per backend. Without the load filter (tools) everything loads and the
+		// plain cache is used.
+		if(cResources::GetRendererMaskFilterEnabled() && HasRendererMaskedStaticGeometry(pXmlMapData))
+		{
+			msCacheFileExt += mpCurrentWorld->GetRendererMaskBit()==kRendererMaskStandard ? _W("_rs") : _W("_ro");
+			mbRendererMaskCache = true;
+		}
 		
 		////////////////////////////////////
 		// Try loading cache
@@ -516,6 +531,74 @@ namespace hpl {
 
 	//-----------------------------------------------------------------------
 
+	void BuildRendererMaskIDRemap(	const std::vector<cRendererMaskObjectRecord>& avSkipped,
+									const std::vector<cRendererMaskObjectRecord>& avLoaded,
+									std::set<int>& aSkippedIDs, std::map<int,int>& aRemap)
+	{
+		typedef std::multimap<tString, const cRendererMaskObjectRecord*> tLoadedByName;
+		tLoadedByName mapLoaded;
+		for(size_t i=0; i<avLoaded.size(); ++i) mapLoaded.insert(tLoadedByName::value_type(avLoaded[i].msName, &avLoaded[i]));
+
+		for(size_t i=0; i<avSkipped.size(); ++i)
+		{
+			const cRendererMaskObjectRecord& skipped = avSkipped[i];
+			aSkippedIDs.insert(skipped.mlID);
+			if(skipped.mlMask==0) continue;
+
+			int lMatchID = -1;
+			int lMatches = 0;
+			std::pair<tLoadedByName::const_iterator, tLoadedByName::const_iterator> range = mapLoaded.equal_range(skipped.msName);
+			for(tLoadedByName::const_iterator it = range.first; it != range.second; ++it)
+			{
+				const cRendererMaskObjectRecord* pLoaded = it->second;
+				if(pLoaded->msKind != skipped.msKind || (pLoaded->mlMask & skipped.mlMask) != 0) continue;
+				lMatchID = pLoaded->mlID;
+				++lMatches;
+			}
+			if(lMatches==1) aRemap[skipped.mlID] = lMatchID;
+		}
+	}
+
+	//-----------------------------------------------------------------------
+
+	void cWorldLoaderHplMap::RecordRendererMaskObject(tinyxml2::XMLElement* apElement, bool abLoaded)
+	{
+		cRendererMaskObjectRecord record;
+		record.mlID = GetAttributeInt(apElement, "ID", -1);
+		record.msName = cString::ToLowerCase(GetAttributeString(apElement, "Name", ""));
+		if(record.mlID<0 || record.msName=="") return;
+
+		const cLightElementInfo lightInfo = GetLightElementInfo(apElement->Value());
+		record.msKind = lightInfo.mbValid ? "Light" + cString::ToString(static_cast<int>(lightInfo.mShape))
+										  : tString(apElement->Value());
+		record.mlMask = cEngineFileLoading::GetElementRendererMask(apElement);
+
+		if(abLoaded)	mvRendererMaskLoaded.push_back(record);
+		else			mvRendererMaskSkipped.push_back(record);
+	}
+
+	//-----------------------------------------------------------------------
+
+	bool cWorldLoaderHplMap::HasRendererMaskedStaticGeometry(tinyxml2::XMLElement* apXmlMapData)
+	{
+		tinyxml2::XMLElement* pContents = apXmlMapData->FirstChildElement("MapContents");
+		if(pContents==NULL) return false;
+
+		static const char* vCategories[] = { "StaticObjects", "Primitives" };
+		for(size_t i=0; i<sizeof(vCategories)/sizeof(vCategories[0]); ++i)
+		{
+			tinyxml2::XMLElement* pCategory = pContents->FirstChildElement(vCategories[i]);
+			if(pCategory==NULL) continue;
+			for(tinyxml2::XMLElement* pObj = pCategory->FirstChildElement(); pObj; pObj = pObj->NextSiblingElement())
+			{
+				if(cEngineFileLoading::GetElementRendererMask(pObj) != kRendererMaskAll) return true;
+			}
+		}
+		return false;
+	}
+
+	//-----------------------------------------------------------------------
+
 	void cWorldLoaderHplMap::LoadCacheFile(const tWString& asFile)
 	{
 #if (defined(__PPC__) || defined(__ppc__))
@@ -532,7 +615,8 @@ namespace hpl {
 		// the map. That promise cannot cover a delta-patched map -- its cache is
 		// keyed on the delta set and has to be built on the player's machine --
 		// so fall back to the normal existence/date check for those.
-		if(cResources::GetForceCacheLoadingAndSkipSaving()==false || mlDeltaHash!=0)
+		// A per-backend cache is not shipped either.
+		if(cResources::GetForceCacheLoadingAndSkipSaving()==false || mlDeltaHash!=0 || mbRendererMaskCache)
 		{
 			if(cacheDate < currentDate || cPlatform::FileExists(sCacheFile)==false)
 			{
@@ -784,7 +868,7 @@ namespace hpl {
 		return;
 #endif
 		if(mbLoadedCache) return; //No need to save if cache was loaded!
-		if(cResources::GetForceCacheLoadingAndSkipSaving() && mlDeltaHash==0) return;
+		if(cResources::GetForceCacheLoadingAndSkipSaving() && mlDeltaHash==0 && mbRendererMaskCache==false) return;
 
 		Log("Saving cache file for '%s'\n", cString::To8Char(asFile).c_str());
 
@@ -1048,6 +1132,7 @@ namespace hpl {
 
 		mlCombinedMeshNameCount =0;
 		mlCombinedBodyNameCount =0;
+		msetSkippedStaticIDs.clear();
 
 		/////////////////////////////////
 		//Create and setup 
@@ -1063,6 +1148,11 @@ namespace hpl {
 			lStartTime = cPlatform::GetApplicationTime();
 			for(tinyxml2::XMLElement* pXmlEntity = pXmlStaticObjects->FirstChildElement(); pXmlEntity != NULL; pXmlEntity = pXmlEntity->NextSiblingElement())
 			{
+				if(cEngineFileLoading::IsElementEnabledForWorld(pXmlEntity, mpCurrentWorld)==false)
+				{
+					msetSkippedStaticIDs.insert(GetAttributeInt(pXmlEntity, "ID", -1));
+					continue;
+				}
 				CreateStaticObjectEntity(pXmlEntity, lstMeshEntities, pTempContainer);
 			}
 			lDeltaTime = cPlatform::GetApplicationTime() - lStartTime;
@@ -1077,6 +1167,7 @@ namespace hpl {
 			lStartTime = cPlatform::GetApplicationTime();
 			for(tinyxml2::XMLElement* pXmlEntity = pXmlPrimitives->FirstChildElement(); pXmlEntity != NULL; pXmlEntity = pXmlEntity->NextSiblingElement())
 			{
+				if(cEngineFileLoading::IsElementEnabledForWorld(pXmlEntity, mpCurrentWorld)==false) continue;
 				CreatePrimitive(pXmlEntity, lstMeshEntities, pTempContainer);
 			}
 			lDeltaTime = cPlatform::GetApplicationTime() - lStartTime;
@@ -1091,6 +1182,7 @@ namespace hpl {
 			lStartTime = cPlatform::GetApplicationTime();
 			for(tinyxml2::XMLElement* pXmlEntity = pXmlDecals->FirstChildElement(); pXmlEntity != NULL; pXmlEntity = pXmlEntity->NextSiblingElement())
 			{
+				if(cEngineFileLoading::IsElementEnabledForWorld(pXmlEntity, mpCurrentWorld)==false) continue;
 				CreateDecal(pXmlEntity, lstMeshEntities, pTempContainer);
 			}
 			lDeltaTime = cPlatform::GetApplicationTime() - lStartTime;
@@ -2131,6 +2223,7 @@ namespace hpl {
 		if(pDecal == NULL)
 			return;
 
+		pDecal->SetRendererMask(cEngineFileLoading::GetElementRendererMask(apElement));
 		pDecal->SetCurrentSubDiv(lCurrentSubDiv);
 		pDecal->SetReceiverMask(lReceiverMask);
 		pDecal->SetUniqueID(lID);
@@ -2179,7 +2272,8 @@ namespace hpl {
 			cMeshEntity *pMeshEnt = GetAndRemoveMeshEntity(alstMeshEntities, lID);
 			if(pMeshEnt==NULL)
 			{
-				Warning(" Object id %d in group %d does not exist!\n", lID, lGroupID);
+				if(msetSkippedStaticIDs.count(lID)==0)
+					Warning(" Object id %d in group %d does not exist!\n", lID, lGroupID);
 				continue;
 			}
 		
@@ -2217,6 +2311,9 @@ namespace hpl {
 		if(mlCurrentFlags & eWorldLoadFlag_FastEntityLoad)
 			mpResources->GetMeshManager()->SetUseFastloadMaterial(true);
 
+		//List that contain light and billboard connections
+		tEFL_LightBillboardConnectionList lstLightBillboardListConnections;
+
 		/////////////////////////////////////
 		//Iterate all entities in contents
 		tinyxml2::XMLElement* pXmlEntities = apXmlContents->FirstChildElement("Entities");
@@ -2224,8 +2321,34 @@ namespace hpl {
 		{
 			for(tinyxml2::XMLElement* pXmlEntity = pXmlEntities->FirstChildElement(); pXmlEntity != NULL; pXmlEntity = pXmlEntity->NextSiblingElement())
 			{
-				CreateLoadedEntity(pXmlEntity);
+				CreateLoadedEntity(pXmlEntity, &lstLightBillboardListConnections);
 			}
+		}
+
+		/////////////////////////////////////
+		//Set up light and billboard connections
+		for(tEFL_LightBillboardConnectionListIt connIt = lstLightBillboardListConnections.begin(); connIt != lstLightBillboardListConnections.end(); ++connIt)
+		{
+			cEFL_LightBillboardConnection& lightConnect = *connIt;
+
+			cBillboard *pBB = mpCurrentWorld->GetBillboardFromUniqueID(lightConnect.msBillboardID);
+			iLight *pLight = mpCurrentWorld->GetLight(lightConnect.msLightName);
+
+			// The light may be tagged for the other renderer backend and not loaded.
+			if(pLight==NULL || pBB==NULL) continue;
+
+			pLight->AttachBillboard(pBB, pBB->GetColor());
+		}
+
+		//////////////////////////////
+		// Pair skipped objects with their stand-ins for save games.
+		{
+			std::set<int> setSkippedIDs;
+			std::map<int,int> mapRemap;
+			BuildRendererMaskIDRemap(mvRendererMaskSkipped, mvRendererMaskLoaded, setSkippedIDs, mapRemap);
+			mpCurrentWorld->SetRendererMaskSkippedIDs(setSkippedIDs, mapRemap);
+			mvRendererMaskSkipped.clear();
+			mvRendererMaskLoaded.clear();
 		}
 
 		//Set fast entity load
@@ -2235,9 +2358,16 @@ namespace hpl {
 
 	//-----------------------------------------------------------------------
 
-	void cWorldLoaderHplMap::CreateLoadedEntity(tinyxml2::XMLElement* apElement)
+	void cWorldLoaderHplMap::CreateLoadedEntity(tinyxml2::XMLElement* apElement, tEFL_LightBillboardConnectionList *apLightBillboardList)
 	{
 		tString sObjectType = apElement->Value();
+
+		// Objects tagged for the other renderer backend are not created. Both
+		// outcomes are recorded so saves made on the other backend can find the
+		// same-named object that stands in for a skipped one.
+		const bool bEnabledForWorld = cEngineFileLoading::IsElementEnabledForWorld(apElement, mpCurrentWorld);
+		if(cResources::GetRendererMaskFilterEnabled()) RecordRendererMaskObject(apElement, bEnabledForWorld);
+		if(bEnabledForWorld==false) return;
 
 		//////////////////////////
 		//Entity or Area
@@ -2295,7 +2425,7 @@ namespace hpl {
 		//Billboard
 		else if(sObjectType == "Billboard")
 		{
-			cEngineFileLoading::LoadBillboard(apElement,"", mpCurrentWorld, mpResources, true);
+			cEngineFileLoading::LoadBillboard(apElement,"", mpCurrentWorld, mpResources, true, apLightBillboardList);
 		}
 		//////////////////////////
 		//Light
@@ -2350,7 +2480,8 @@ namespace hpl {
 		
         //Create in world
 		bool bSkipNonStatic = (mlCurrentFlags & eWorldLoadFlag_NoDynamicGameEntities)!=0;
-		mpCurrentWorld->CreateEntity(asName, mtxTransform, sFilename,alID, abActive, avScale, &userVars, bSkipNonStatic);
+		mpCurrentWorld->CreateEntity(asName, mtxTransform, sFilename,alID, abActive, avScale, &userVars, bSkipNonStatic,
+									 cEngineFileLoading::GetElementRendererMask(apElement));
 	}
 
 	//-----------------------------------------------------------------------

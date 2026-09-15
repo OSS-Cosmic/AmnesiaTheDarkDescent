@@ -519,7 +519,7 @@ bool iEditorWindowLowerToolbar::InputCallback(iWidget* apWidget, const cGuiMessa
 	}
 	else if(apWidget==mpBShadowFlag)
 	{
-		cHybridRenderer* pHybridRenderer = static_cast<cHybridRenderer*>(
+		cHybridRenderer* pHybridRenderer = dynamic_cast<cHybridRenderer*>(
 			mpEditor->GetEngine()->GetGraphics()->GetRenderer(eRenderer_Main));
 		if(pHybridRenderer)
 		{

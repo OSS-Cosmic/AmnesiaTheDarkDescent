@@ -1,0 +1,8 @@
+# Third-party sources - keep upstream formatting so diffs against upstream stay
+# readable. Vendored libs that ship their own .clang-format (MathLib, NRD, SDL,
+# tracy) override this from their own directory.
+#
+# SortIncludes is repeated because DisableFormat alone does not stop clang-format
+# from reordering includes.
+DisableFormat: true
+SortIncludes: Never

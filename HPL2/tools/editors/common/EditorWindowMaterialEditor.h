@@ -309,8 +309,8 @@ protected:
 	std::vector<cMeshEntity*> mvPreviewEntities;
 	bool mbRotationEnabled;
 	cMatrixf mmtxRotation;
-	cLightPoint* mpFixedLight;
-	cLightPoint* mpMovableLight;
+	iLightPoint* mpFixedLight;
+	iLightPoint* mpMovableLight;
 
 	bool mbMoveLight;
 	bool mbMoveCamera;

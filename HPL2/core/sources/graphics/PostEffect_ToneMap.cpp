@@ -33,7 +33,7 @@ struct ToneMapPushConstants {
     float exposure;
     float shadowLift;
     float gamma;
-    float _pad;
+    float shoulder;
 };
 } // namespace
 
@@ -127,6 +127,9 @@ void cPostEffect_ToneMap::RenderEffect(const PostEffectRenderCtx &ctx) {
     // (replaces the deprecated SDL window-brightness ramp). Authored by the
     // game's cLuxConfigHandler and pushed in via the tonemap params.
     pc.gamma = mParams.mfGamma;
+    // The Standard backend reproduces the base game's 8-bit buffer, which
+    // clipped highlights at white; the ray-traced backend rolls them off.
+    pc.shoulder = mpGraphics->GetRendererBackend() == eRendererBackend_Standard ? 0.0f : 1.0f;
     vkCmdPushConstants(cmd, mpToneMapType->m_program.getPipelineLayout(),
                        VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(pc), &pc);
 

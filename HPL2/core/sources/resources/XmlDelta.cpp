@@ -20,6 +20,7 @@
 #include "resources/XmlDelta.h"
 
 #include "resources/XmlHelper.h"
+#include "scene/LightParameters.h"
 #include "system/LowLevelSystem.h"
 #include "system/Platform.h"
 #include "system/String.h"
@@ -109,6 +110,18 @@ namespace hpl {
 
 	//-----------------------------------------------------------------------
 
+	// Renderers an object loads for: its RendererMask attribute, else the light
+	// element default (Overdrive lights load only on Overdrive), else all.
+	static unsigned int GetElementRendererMask(const tinyxml2::XMLElement* apElement)
+	{
+		if(apElement->Attribute("RendererMask"))
+			return SanitizeRendererMask(static_cast<unsigned int>(apElement->IntAttribute("RendererMask", 0)));
+		const cLightElementInfo info = GetLightElementInfo(apElement->Value());
+		return info.mbValid ? GetDefaultLightRendererMask(info) : kRendererMaskAll;
+	}
+
+	//-----------------------------------------------------------------------
+
 	// Lazily-built lookup over the base document, so a delta with a handful of
 	// operations does not rescan a 3 MB map for every one of them.
 	class cXmlDeltaContext
@@ -146,28 +159,100 @@ namespace hpl {
 
 		//////////////////////////////////////
 		// Keep the lazy index in step with what we mutate.
-		void OnObjectRemoved(const tString& asCategory, int alID, const tString& asName)
+		// Call before the element is deleted. Builds the name index first so the
+		// base name counts are taken before anything is removed.
+		void OnObjectRemoved(const tString& asCategory, int alID, tinyxml2::XMLElement* apElement)
 		{
 			if(mmapCategories.count(asCategory)) mmapCategories[asCategory].erase(alID);
-			if(mbNamesBuilt) msetNames.erase(cString::ToLowerCase(asName));
+			BuildNames();
+			tString sName = cString::ToLowerCase(GetAttributeString(apElement, "Name", ""));
+			if(sName=="") return;
+			tElementVec& vSame = mmapNames[sName];
+			vSame.erase(std::remove(vSame.begin(), vSame.end(), apElement), vSame.end());
+			mvAdded.erase(std::remove(mvAdded.begin(), mvAdded.end(), apElement), mvAdded.end());
 		}
 
 		void OnObjectAdded(const tString& asCategory, int alID, const tString& asName, tinyxml2::XMLElement* apElement)
 		{
 			if(mmapCategories.count(asCategory)) mmapCategories[asCategory][alID] = apElement;
 			BuildNames();
-			msetNames.insert(cString::ToLowerCase(asName));
+			if(asName!="") mmapNames[cString::ToLowerCase(asName)].push_back(apElement);
+			mvAdded.push_back(apElement);
 		}
 
 		bool IsNameInUse(const tString& asName)
 		{
 			if(asName=="") return false;
 			BuildNames();
-			return msetNames.count(cString::ToLowerCase(asName))>0;
+			std::map<tString, tElementVec>::const_iterator it = mmapNames.find(cString::ToLowerCase(asName));
+			return it!=mmapNames.end() && it->second.empty()==false;
+		}
+
+		//////////////////////////////////////
+		// True when apNew may share asName with the objects already using it: it
+		// carries an explicit RendererMask, and no renderer it loads for ends up
+		// with the name more often than the base document had it. The original
+		// kept for Standard and its replacement added for Overdrive load as one
+		// object per backend, so the name stays unambiguous at runtime; a name the
+		// base file already used twice may stay at two. Masks are read as they
+		// are when the object is added, so the <Modify> that narrows the original
+		// must come before the <Add>.
+		bool CanShareNameByRendererMask(const tString& asName, const tinyxml2::XMLElement* apNew)
+		{
+			if(apNew->Attribute("RendererMask")==NULL || GetElementRendererMask(apNew)==0) return false;
+			return FitsBaseNameCount(asName, apNew, 1);
+		}
+
+		//////////////////////////////////////
+		// A later <Modify> can widen a mask after the <Add> was accepted. Drops
+		// every added object whose name is now loaded more often than the base
+		// file had it for some renderer.
+		void DropAddedObjectsWithOverlappingMasks(cXmlDeltaStats& aStats)
+		{
+			for(size_t i=0; i<mvAdded.size();)
+			{
+				tinyxml2::XMLElement* pAdded = mvAdded[i];
+				tString sName = GetAttributeString(pAdded, "Name", "");
+				if(sName=="" || FitsBaseNameCount(sName, pAdded, 0)) { ++i; continue; }
+
+				Error("Map delta: added object '%s' shares its name with an object loaded for the same renderer. Dropping it.\n",
+						sName.c_str());
+				tinyxml2::XMLElement* pCat = pAdded->Parent()->ToElement();
+				OnObjectRemoved(pCat->Value(), GetAttributeInt(pAdded, "ID", -1), pAdded);
+				pCat->DeleteChild(pAdded);
+				--aStats.mlAdded;
+				++aStats.mlSkipped;
+			}
 		}
 
 	private:
 		typedef std::map<int, tinyxml2::XMLElement*> tIDMap;
+		typedef std::vector<tinyxml2::XMLElement*> tElementVec;
+
+		// alExtra objects about to join the name (1 for a pending <Add>, 0 when
+		// apObject is already indexed) are counted for every renderer in
+		// apObject's mask.
+		bool FitsBaseNameCount(const tString& asName, const tinyxml2::XMLElement* apObject, size_t alExtra)
+		{
+			BuildNames();
+			const tString sLowerName = cString::ToLowerCase(asName);
+			const tElementVec& vSame = mmapNames[sLowerName];
+			const size_t lAllowed = std::max<size_t>(mmapBaseNameCounts[sLowerName], 1);
+			const unsigned int lMask = GetElementRendererMask(apObject);
+
+			static const unsigned int vBits[] = { kRendererMaskStandard, kRendererMaskOverdrive };
+			for(size_t i=0; i<sizeof(vBits)/sizeof(vBits[0]); ++i)
+			{
+				if((lMask & vBits[i])==0) continue;
+				size_t lCount = alExtra;
+				for(size_t j=0; j<vSame.size(); ++j)
+				{
+					if(GetElementRendererMask(vSame[j]) & vBits[i]) ++lCount;
+				}
+				if(lCount > lAllowed) return false;
+			}
+			return true;
+		}
 
 		tIDMap& GetIDMap(const tString& asCategory)
 		{
@@ -196,8 +281,10 @@ namespace hpl {
 			{
 				for(tinyxml2::XMLElement* pObj = pCat->FirstChildElement(); pObj; pObj = pObj->NextSiblingElement())
 				{
-					tString sName = GetAttributeString(pObj, "Name", "");
-					if(sName!="") msetNames.insert(cString::ToLowerCase(sName));
+					tString sName = cString::ToLowerCase(GetAttributeString(pObj, "Name", ""));
+					if(sName=="") continue;
+					mmapNames[sName].push_back(pObj);
+					++mmapBaseNameCounts[sName];
 				}
 			}
 		}
@@ -208,7 +295,9 @@ namespace hpl {
 		std::map<tString, tIDMap> mmapCategories;
 
 		bool mbNamesBuilt;
-		std::set<tString> msetNames;
+		std::map<tString, tElementVec> mmapNames;
+		std::map<tString, size_t> mmapBaseNameCounts;
+		tElementVec mvAdded;
 	};
 
 	//-----------------------------------------------------------------------
@@ -426,12 +515,10 @@ namespace hpl {
 				tinyxml2::XMLElement* pObj = ResolveOpTarget(context, pOp, "Remove", sCategory, lID);
 				if(pObj==NULL) { ++aStats.mlSkipped; continue; }
 
-				tString sName = GetAttributeString(pObj, "Name", "");
-
 				if(sCategory=="StaticObjects") RemoveIDFromStaticObjectCombos(context, lID);
 
+				context.OnObjectRemoved(sCategory, lID, pObj);
 				context.GetCategory(sCategory, false)->DeleteChild(pObj);
-				context.OnObjectRemoved(sCategory, lID, sName);
 
 				++aStats.mlRemoved;
 			}
@@ -485,6 +572,19 @@ namespace hpl {
 
 				tinyxml2::XMLElement* pCat = context.GetCategory(sCategory, true);
 
+				// After="ID" places the added objects, in order, right behind that
+				// object instead of at the end of the category. Loaders that keep
+				// children by position (an .ent's lights) then find a replacement
+				// where the object it stands in for was.
+				tinyxml2::XMLElement* pInsertAfter = NULL;
+				if(pOp->Attribute("After"))
+				{
+					pInsertAfter = context.GetObject(sCategory, GetAttributeInt(pOp, "After", -1));
+					if(pInsertAfter==NULL)
+						Warning("Map delta: <Add After=\"%s\"> names no object in %s. Appending instead.\n",
+								GetAttributeString(pOp, "After", "").c_str(), sCategory.c_str());
+				}
+
 				for(tinyxml2::XMLElement* pNew = pOp->FirstChildElement(); pNew; pNew = pNew->NextSiblingElement())
 				{
 					// FileIndex/MaterialIndex refer to the base map's index tables,
@@ -500,7 +600,7 @@ namespace hpl {
 					}
 
 					tString sName = GetAttributeString(pNew, "Name", "");
-					if(context.IsNameInUse(sName))
+					if(context.IsNameInUse(sName) && context.CanShareNameByRendererMask(sName, pNew)==false)
 					{
 						Error("Map delta: added object name '%s' is already used in the base map. Skipping.\n", sName.c_str());
 						++aStats.mlSkipped;
@@ -513,7 +613,15 @@ namespace hpl {
 					int lNewID = alNextAddID++;
 					SetAttributeInt(pAdded, "ID", lNewID);
 
-					pCat->InsertEndChild(pAdded);
+					if(pInsertAfter)
+					{
+						pCat->InsertAfterChild(pInsertAfter, pAdded);
+						pInsertAfter = pAdded;
+					}
+					else
+					{
+						pCat->InsertEndChild(pAdded);
+					}
 					context.OnObjectAdded(sCategory, lNewID, sName, pAdded);
 
 					++aStats.mlAdded;
@@ -527,6 +635,8 @@ namespace hpl {
 				++aStats.mlSkipped;
 			}
 		}
+
+		context.DropAddedObjectsWithOverlappingMasks(aStats);
 
 		return true;
 	}

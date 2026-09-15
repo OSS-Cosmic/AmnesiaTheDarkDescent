@@ -20,6 +20,9 @@
 #ifndef HPL_WORLD_LOADER_HPL_MAP_H
 #define HPL_WORLD_LOADER_HPL_MAP_H
 
+#include <map>
+#include <set>
+#include <vector>
 #include "resources/WorldLoader.h"
 
 #include "resources/ResourcesTypes.h"
@@ -116,6 +119,26 @@ namespace hpl {
 	//----------------------------------------
 
 	
+	//-------------------------------------------------------
+
+	// A named map object as the renderer mask load gate saw it.
+	struct cRendererMaskObjectRecord
+	{
+		int mlID;
+		tString msName; // lower case
+		tString msKind; // element name; lights by shape, so a retail light matches its Overdrive element
+		unsigned mlMask;
+	};
+
+	// Pairs each skipped object with the one loaded object of the same name and
+	// kind whose mask shares no renderer with it -- the other half of a backend
+	// split. Every skipped ID is reported; ambiguous or unmatched ones get no remap.
+	void BuildRendererMaskIDRemap(	const std::vector<cRendererMaskObjectRecord>& avSkipped,
+									const std::vector<cRendererMaskObjectRecord>& avLoaded,
+									std::set<int>& aSkippedIDs, std::map<int,int>& aRemap);
+
+	//-------------------------------------------------------
+
 	class cWorldLoaderHplMap : public iWorldLoader
 	{
 	public:
@@ -128,6 +151,8 @@ namespace hpl {
 	private:
 		unsigned long long ApplyMapDeltas(const tWString& asFile, tinyxml2::XMLElement* apXmlMapData);
 
+		bool HasRendererMaskedStaticGeometry(tinyxml2::XMLElement* apXmlMapData);
+		void RecordRendererMaskObject(tinyxml2::XMLElement* apElement, bool abLoaded);
 		void LoadCacheFile(const tWString& asFile);
 		void SaveCacheFile(const tWString& asFile);
 
@@ -150,7 +175,7 @@ namespace hpl {
 		void CombineObjectsAndCreatePhysics(std::vector<cHplMapPhysicsObject> &avObjects, int alFirstIdx, int alLastIdx);
 
 		void LoadEntities(tinyxml2::XMLElement* apXmlContents);
-		void CreateLoadedEntity(tinyxml2::XMLElement* apElement);
+		void CreateLoadedEntity(tinyxml2::XMLElement* apElement, tEFL_LightBillboardConnectionList *apLightBillboardList);
 		void CreateSubMeshShapeBodies(cSubMeshEntity *apSubEnt, const cMatrixf &a_mtxTransform, const cVector3f& avScale);
 		void CreateShapeBody(cHplMapShapeBody* apShapeBody);
 
@@ -192,6 +217,13 @@ namespace hpl {
 		// the cache file and disables the "ship a prebuilt cache" shortcut, which
 		// cannot hold for a patched map.
 		unsigned long long mlDeltaHash;
+		bool mbRendererMaskCache;
+		// Static objects skipped for the other renderer backend, so static
+		// object combos referencing them stay quiet.
+		std::set<int> msetSkippedStaticIDs;
+		// Named objects the load gate skipped and loaded, paired up after loading.
+		std::vector<cRendererMaskObjectRecord> mvRendererMaskSkipped;
+		std::vector<cRendererMaskObjectRecord> mvRendererMaskLoaded;
 
 		tWorldLoadFlag mlCurrentFlags;
 		tHplMapStaticUserDataList mlstTempStaticUserData;

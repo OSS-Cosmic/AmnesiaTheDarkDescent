@@ -51,7 +51,7 @@ local function editor_includes()
 end
 
 -- Copy tools/resources/ next to the built executables. Done per editor target
--- (postbuild) rather than only in the `deploy` action, so a plain `make` -- and
+-- (postbuild) rather than only in deploy.sh, so a plain `make` -- and
 -- therefore the CI release archive, which just tars the runtime dir -- carries
 -- the editor data even when no retail install is deployed over it.
 local function tool_resources_postbuild()

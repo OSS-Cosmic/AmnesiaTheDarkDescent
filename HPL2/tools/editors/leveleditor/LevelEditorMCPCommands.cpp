@@ -603,7 +603,8 @@ static cMCPToolResult MakeOk() { JDoc d; InitOk(d); return MakeDoc(d); }
 
 // 'type' resolves against the wrapper display name first ("Light", "Entity",
 // "Static Object", ...), then against the XML element name so subtypes like
-// "SpotLight" / "AreaLight" are reachable ("Light" alone = point light).
+// "SpotLight" / "Re_PointLight" / "Re_AreaLight" are reachable ("Light" alone =
+// legacy point light). "AreaLight" still names the Redux area light.
 static iEntityWrapperType* ResolveCreateType(cLevelEditor* pEditor, iEditorWorld* pWorld, const JValue& aSpec)
 {
 	std::string sType = JStrArg(aSpec, "type");
@@ -630,7 +631,7 @@ static iEntityWrapperType* ResolveCreateType(cLevelEditor* pEditor, iEditorWorld
 	for(int i=0;i<n;++i)
 	{
 		iEntityWrapperType* t = pWorld->GetEntityType(i);
-		if(t && t->GetXmlElementName()==sType) return t;
+		if(t && (t->GetXmlElementName()==sType || (sType=="AreaLight" && t->GetXmlElementName()=="Re_AreaLight"))) return t;
 	}
 	return NULL;
 }
@@ -2662,7 +2663,7 @@ static const cMCPToolDef gvTools[] =
 
 { "create_entity",
   "Create one object; ONE undo step even with 'properties'. Lights need only 'type' ('Light'=point; "
-  "'SpotLight'/'AreaLight' via xmlName). 'Entity'/'Static Object' need 'file'; 'file' also routes to "
+  "'SpotLight'/'BoxLight'/'AreaLight' via xmlName). 'Entity'/'Static Object' need 'file'; 'file' also routes to "
   "Particle System (.ps), Sound (.snt) and Billboard (.mat). 'properties' sets typed properties at creation "
   "(names per list_properties). Type 'Plane' needs properties.Material and either corner props or 'scale' "
   "(unit quad x scale); corners left at zero default to a 1x1m floor. Undoable.",

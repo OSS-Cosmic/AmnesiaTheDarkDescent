@@ -118,7 +118,6 @@ Pass these to `premake5`:
 
 | Option | Default | Effect |
 | --- | --- | --- |
-| `--game-dir=PATH` | — | Your Amnesia install; used by the `deploy` action. |
 | `--with-tools=yes\|no` | `yes` | Build the editors and converters. |
 | `--with-tests=yes\|no` | `yes` | Build and run the headless unit tests. |
 | `--with-python-tests=yes\|no` | `yes` | Build and run the Python unit tests. |
@@ -136,12 +135,13 @@ Pass these to `premake5`:
 The engine resolves resources relative to the working directory, so the executable must run from a directory
 holding the game's `config/`, `entities/`, `maps/`, `core/`, and so on. Two ways to get there:
 
-- Stage your install's assets next to the build output:
+- Stage your install's assets and the Redux resources next to the build output:
   ```
-  premake5 deploy --game-dir="$HOME/.steam/steam/steamapps/common/Amnesia The Dark Descent"
+  ./deploy.sh --game-dir "$HOME/.steam/steam/steamapps/common/Amnesia The Dark Descent"
   ```
   This copies everything except the original binaries, DLLs, and archives into
-  `build-premake/amnesia/<Config>/`.
+  `build-premake/amnesia/<Config>/`, then adds `amnesia/resources` (`--resources copy`,
+  applied by the engine at load) or bakes its deltas in (`--resources merge`).
 - Or copy the build output into your install directory and launch it from there.
 
 On Windows the generated projects set the debugger working directory to `$(ATDD_DIR)`, so set that environment

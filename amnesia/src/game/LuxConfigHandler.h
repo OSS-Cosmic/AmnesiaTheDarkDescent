@@ -40,6 +40,8 @@ public:
 	static hpl::TemporalUpscalerProvider SuperSamplingProviderFromString(const tString& asValue);
 	static tString SuperSamplingQualityToString(hpl::TemporalUpscalerQuality aQuality);
 	static hpl::TemporalUpscalerQuality SuperSamplingQualityFromString(const tString& asValue);
+	static tString RendererBackendToString(hpl::eRendererBackend aBackend);
+	static hpl::eRendererBackend RendererBackendFromString(const tString& asValue);
 	static int GetRenderScalePresetNum();
 	static float GetRenderScalePreset(int alIdx);
 	static int GetRenderScalePresetIndex(float afScale); // index of the preset that NormalizeRenderScale(afScale) equals; never negative
@@ -72,6 +74,7 @@ public:
 	bool mbFullscreen;
 	bool mbVSync;
 	bool mbAdaptiveVSync;
+	hpl::eRendererBackend mRendererBackend;
 	int mlTextureQuality;
 	int mlTextureFilter;
 	float mfTextureAnisotropy;

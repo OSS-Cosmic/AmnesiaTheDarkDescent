@@ -1,5 +1,8 @@
 <EntDelta Version="1" Target="entities/lamp/hanging_lantern/hanging_lantern_wall.ent">
     <Modify Category="Entities" ID="15" Name="PointLight_1">
-        <SetAttr Intensity="2.5" Radius="22.3551" SourceRadius="0.04" WorldPos="-0.311615 -0.653975 -0.0479984" />
+        <SetAttr RendererMask="1" />
     </Modify>
+    <Add Category="Entities" After="15">
+        <Re_PointLight Active="true" CastShadows="true" DiffuseColor="1 0.7 0.45 0.7" FalloffMap="" FlickerActive="true" FlickerFade="true" FlickerOffColor="0.7 0.65 0.45 0.5" FlickerOffFadeMaxLength="1" FlickerOffFadeMinLength="0.5" FlickerOffMaxLength="1" FlickerOffMinLength="0" FlickerOffPS="" FlickerOffIntensity="15.84" FlickerOffSound="" FlickerOnFadeMaxLength="1" FlickerOnFadeMinLength="0.5" FlickerOnMaxLength="1" FlickerOnMinLength="0" FlickerOnPS="" FlickerOnSound="" Gobo="" GoboAnimFrameTime="0" GoboAnimMode="None" Name="PointLight_1" Intensity="18" Radius="22" SourceRadius="0.1" Rotation="0 0 0" Scale="1 1 1" ShadowResolution="High" ShadowsAffectDynamic="true" ShadowsAffectStatic="true" Tag="" WorldPos="-0.325 -0.829 0" RendererMask="2" />
+    </Add>
 </EntDelta>

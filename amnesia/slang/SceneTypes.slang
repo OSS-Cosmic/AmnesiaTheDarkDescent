@@ -375,5 +375,14 @@ SLANG_PUBLIC struct SceneConstants {
     // Per-camera visible fog areas in legacy back-to-front draw order. The
     // parameter buffer is shared by all viewports and stays in world order.
     SLANG_PUBLIC uint fogAreaIndices[kFogAreaCapacity];
+    SLANG_PUBLIC uint skyBoxTextureIndex;
+    SLANG_PUBLIC uint skyBoxEnabled;
+    SLANG_PUBLIC uint fogEnabled;
+    SLANG_PUBLIC uint orthographicCamera;
+    SLANG_PUBLIC float4 skyBoxColor;
+    // Renderer clear color, in the target's configured color space.  The
+    // Standard environment pass uses this only when skyBoxEnabled is zero;
+    // skyBoxColor remains the active sky tint/cubemap multiplier.
+    SLANG_PUBLIC float4 clearColor;
 };
 HOST_NAMESPACE_END

@@ -1,5 +1,8 @@
 <EntDelta Version="1" Target="entities/lamp/candlestick_wall/candlestick_wall.ent">
     <Modify Category="Entities" ID="8" Name="PointLight_1">
-        <SetAttr CastShadows="true" FlickerOffRadius="0.75" Intensity="0.8" Radius="10" SourceRadius="0.01" WorldPos="0.000370026 0.420551 -0.239536" />
+        <SetAttr RendererMask="1" />
     </Modify>
+    <Add Category="Entities" After="8">
+        <Re_PointLight Active="true" CastShadows="true" DiffuseColor="0.8 0.75 0.5 0.65" FalloffMap="" FlickerActive="true" FlickerFade="true" FlickerOffColor="0.75 0.65 0.45 0.5" FlickerOffFadeMaxLength="2" FlickerOffFadeMinLength="0.1" FlickerOffMaxLength="0" FlickerOffMinLength="0" FlickerOffPS="" FlickerOffIntensity="0.75" FlickerOffSound="" FlickerOnFadeMaxLength="2" FlickerOnFadeMinLength="0.1" FlickerOnMaxLength="0" FlickerOnMinLength="0" FlickerOnPS="" FlickerOnSound="" Gobo="" GoboAnimFrameTime="0" GoboAnimMode="None" Name="PointLight_1" Intensity="0.8" Radius="10" SourceRadius="0.01" Rotation="0 0 0" Scale="1 1 1" ShadowResolution="High" ShadowsAffectDynamic="true" ShadowsAffectStatic="true" Tag="" WorldPos="0.000370026 0.420551 -0.239536" RendererMask="2" />
+    </Add>
 </EntDelta>

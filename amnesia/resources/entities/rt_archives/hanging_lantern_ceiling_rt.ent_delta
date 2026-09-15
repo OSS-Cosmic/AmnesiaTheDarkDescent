@@ -1,5 +1,0 @@
-<EntDelta Version="1" Target="entities/rt_archives/hanging_lantern_ceiling_rt.ent">
-    <Modify Category="Entities" ID="12" Name="PointLight_1">
-        <SetAttr FlickerOffRadius="6" />
-    </Modify>
-</EntDelta>

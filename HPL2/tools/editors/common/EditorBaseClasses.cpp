@@ -201,6 +201,8 @@ iEditorBase::iEditorBase(const tWString& asFileCategoryName, const tWString& asF
 	mbVisibilityTypes[eEditorVisibilityType_Areas] = true;
 	mbVisibilityTypes[eEditorVisibilityType_Blockers] = true;
 	mbVisibilityTypes[eEditorVisibilityType_GlobalFog] = true;
+	mbVisibilityTypes[eEditorVisibilityType_LegacyLights] = true;
+	mbVisibilityTypes[eEditorVisibilityType_OverdriveLights] = true;
 
 	msFileCategoryName = asFileCategoryName;
 	msFileCategoryString = asFileCategoryString;
@@ -756,6 +758,9 @@ void iEditorBase::Init(cEngine* apEngine, const char* asName, const char* asBuil
 		vars.mGraphics.mvScreenSize = cVector2l(cString::ToInt(GetSetting("ScreenWidth").c_str(), 1024),
 									   cString::ToInt(GetSetting("ScreenHeight").c_str(), 768));
 		vars.mGraphics.mbFullscreen = cString::ToBool(GetSetting("FullScreen").c_str(), false);
+		// Graphics still falls back to Standard on a GPU without ray tracing.
+		vars.mGraphics.mRendererBackend = GetSetting("RendererBackend")=="overdrive" ?
+											eRendererBackend_Overdrive : eRendererBackend_Standard;
 		vars.mGraphics.msWindowCaption = msCaption;
 
 		// (Legacy GL global shadow-quality hint; the static iRenderer setter was

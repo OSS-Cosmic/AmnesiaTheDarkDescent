@@ -1,0 +1,3224 @@
+/*
+ * Copyright © 2009-2020 Frictional Games
+ *
+ * This file is part of Amnesia: The Dark Descent.
+ */
+
+#include "graphics/StandardRenderer.h"
+
+#include "graphics/DebugDraw.h"
+#include "graphics/Graphics.h"
+#include "graphics/RIRenderer.h"
+#include "graphics/RIVK.h"
+#include "graphics/GlobalManagedSets.h"
+#include "graphics/GBufferMRTPipelineDesc.h"
+#include "graphics/DecalPipelineDesc.h"
+#include "graphics/Bitmap.h"
+#include "graphics/Texture.h"
+#include "graphics/MeshCreator.h"
+#include "scene/BillBoard.h"
+#include "math/BoundingVolume.h"
+#include <unordered_map>
+#include "graphics/GraphicsTypes.h"
+#include "graphics/VertexBuffer.h"
+#include "scene/Viewport.h"
+#include "scene/World.h"
+#include "scene/Light.h"
+#include "scene/LightSpot.h"
+#include "scene/LightBox.h"
+#include "scene/RenderableSet.h"
+#include "graphics/Renderable.h"
+#include "graphics/Material.h"
+#include "graphics/GraphicUtils.h"
+#include "graphics/Image.h"
+#include "graphics/RITypes.h"
+#include "graphics/StandardEnvironmentPass.h"
+#include "graphics/StandardHaloPass.h"
+#include "graphics/StandardMeshDecalStreams.h"
+#include "graphics/StandardDecalPass.h"
+#include "graphics/StandardTranslucentPass.h"
+#include "graphics/StandardAmbientOcclusionPass.h"
+#include "graphics/TemporalCamera.h"
+#include "graphics/TemporalReactiveMask.h"
+#include "resources/Resources.h"
+#include "system/LowLevelSystem.h"
+
+#include "math/Frustum.h"
+
+#include <new>
+#include <cstring>
+#include <algorithm>
+#include <array>
+#include <cstdlib>
+#include <functional>
+#include <utility>
+#include <tuple>
+#include <vector>
+#include <cmath>
+#include <cassert>
+
+namespace hpl {
+
+namespace {
+
+DecalPipelineDesc::BlendMode MeshDecalBlend(eMaterialBlendMode mode) {
+  switch (mode) {
+  case eMaterialBlendMode_MulX2:
+    return DecalPipelineDesc::BLEND_MULX2;
+  case eMaterialBlendMode_Add:
+    return DecalPipelineDesc::BLEND_ADD;
+  default:
+    return DecalPipelineDesc::BLEND_MUL;
+  }
+}
+
+// Legacy TextureCreator::GenerateScatterDiskMap2D with sorted samples: every
+// size x size texel holds a jittered-grid disk warped to a circle, two
+// offsets (RG, BA) per texel, stacked as samples/2 tile blocks.
+SharedResourceHandle<Image> CreateStandardShadowJitter(int size, int samples) {
+  const int gridSize =
+      static_cast<int>(std::sqrt(static_cast<float>(samples)) + 0.5f);
+  const int blocks = samples / 2;
+  cBitmap bitmap;
+  bitmap.CreateData(cVector3l(size, size * blocks, 1), ePixelFormat_RGBA, 0, 0);
+  cBitmapData *data = bitmap.GetData(0, 0);
+  if (!data || !data->mpData)
+    return {};
+  std::vector<cVector2f> grid(static_cast<size_t>(gridSize * gridSize));
+  std::vector<cVector2f> offsets(static_cast<size_t>(samples));
+  auto encode = [](float v) {
+    return static_cast<unsigned char>(
+        std::clamp((v + 1.0f) * 0.5f, 0.0f, 1.0f) * 255.0f);
+  };
+  for (int texel = 0; texel < size * size; ++texel) {
+    for (int y = 0; y < gridSize; ++y)
+      for (int x = 0; x < gridSize; ++x) {
+        cVector2f pos(static_cast<float>(x) + 0.5f,
+                      static_cast<float>(y) + 0.5f);
+        pos += cMath::RandRectVector2f(cVector2f(-0.5f, -0.5f),
+                                       cVector2f(0.5f, 0.5f));
+        grid[static_cast<size_t>(y * gridSize + x)] =
+            pos * (1.0f / static_cast<float>(gridSize));
+      }
+    const float sampleAdd =
+        static_cast<float>(grid.size()) / static_cast<float>(samples);
+    float current = 0.0f;
+    for (cVector2f &offset : offsets) {
+      offset = grid[static_cast<size_t>(current)];
+      current += sampleAdd;
+    }
+    for (cVector2f &offset : offsets) {
+      const cVector2f p = offset;
+      offset.x = std::sqrt(p.y) * std::cos(k2Pif * p.x);
+      offset.y = std::sqrt(p.y) * std::sin(k2Pif * p.x);
+    }
+    std::sort(offsets.begin(), offsets.end(),
+              [](const cVector2f &a, const cVector2f &b) {
+                return a.Length() > b.Length();
+              });
+    for (int block = 0; block < blocks; ++block) {
+      unsigned char *px =
+          data->mpData + static_cast<size_t>((block * size * size + texel) * 4);
+      px[0] = encode(offsets[static_cast<size_t>(block * 2)].x);
+      px[1] = encode(offsets[static_cast<size_t>(block * 2)].y);
+      px[2] = encode(offsets[static_cast<size_t>(block * 2 + 1)].x);
+      px[3] = encode(offsets[static_cast<size_t>(block * 2 + 1)].y);
+    }
+  }
+  Image::SingleImage single = {};
+  single.image.emplace();
+  cTexture::BitmapLoadOptions opts = {};
+  opts.generate_mipmaps = false;
+  if (!single.image->LoadBitmap(RI_RESOURCE_STATE_SHADER_RESOURCE,
+                                RI_STAGE_FRAGMENT, bitmap, opts))
+    return {};
+  single.image->setDebugName("Standard.shadowJitter");
+  return AdoptStandaloneImage(hplNew(Image, (std::move(single))));
+}
+
+bool HasTargets(const cViewport::StandardViewportState &state,
+                uint32_t imageCount) {
+  if (state.width == 0 || state.height == 0 || imageCount == 0 ||
+      imageCount > RI_MAX_SWAPCHAIN_IMAGES)
+    return false;
+  for (uint32_t i = 0; i < imageCount && i < RI_MAX_SWAPCHAIN_IMAGES; ++i) {
+    if (state.aoInitialized[i])
+      return true;
+    if (state.renderTarget[i].isEmpty() ||
+        state.renderTargetView[i].isEmpty() ||
+        state.depthTextures[i].isEmpty() || state.depthView[i].isEmpty())
+      return false;
+    if (state.depthSampleView[i].isEmpty() ||
+        state.positionTexture[i].isEmpty() || state.positionView[i].isEmpty() ||
+        state.positionAttachmentView[i].isEmpty() ||
+        state.normalTexture[i].isEmpty() || state.normalView[i].isEmpty() ||
+        state.normalAttachmentView[i].isEmpty() ||
+        state.shadingNormalTexture[i].isEmpty() ||
+        state.shadingNormalView[i].isEmpty() ||
+        state.shadingNormalAttachmentView[i].isEmpty() ||
+        state.surfaceTexture[i].isEmpty() || state.surfaceView[i].isEmpty() ||
+        state.surfaceAttachmentView[i].isEmpty() ||
+        state.velocityTexture[i].isEmpty() || state.velocityView[i].isEmpty() ||
+        state.velocityAttachmentView[i].isEmpty() ||
+        state.materialColorTexture[i].isEmpty() ||
+        state.materialColorView[i].isEmpty() ||
+        state.materialColorAttachmentView[i].isEmpty() ||
+        state.decalColorTexture[i].isEmpty() ||
+        state.decalColorView[i].isEmpty() ||
+        state.decalColorAttachmentView[i].isEmpty() ||
+        state.decalMulTexture[i].isEmpty() || state.decalMulView[i].isEmpty() ||
+        state.decalMulAttachmentView[i].isEmpty() ||
+        state.decalAddTexture[i].isEmpty() || state.decalAddView[i].isEmpty() ||
+        state.decalAddAttachmentView[i].isEmpty() ||
+        state.environmentTexture[i].isEmpty() ||
+        state.environmentView[i].isEmpty() ||
+        state.environmentAttachmentView[i].isEmpty() ||
+        state.translucentSceneCopy[i].isEmpty() ||
+        state.translucentSceneCopyView[i].isEmpty())
+      return false;
+  }
+  return true;
+}
+
+// Full-resolution material reconstruction writes five MRTs: diagnostic
+// albedo, world position/validity, geometric view normal/validity, authored
+// shading normal, and stable packed UV/material/object IDs. The hit image is
+// only its input.
+struct StandardReconstructPipelineDesc {
+  VkPipelineVertexInputStateCreateInfo vi{
+      VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO};
+  VkPipelineInputAssemblyStateCreateInfo ia{
+      VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO};
+  VkPipelineRasterizationStateCreateInfo rs{
+      VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO};
+  VkDynamicState dyn[2] = {VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR};
+  VkPipelineDynamicStateCreateInfo ds{
+      VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO};
+  VkFormat formats[6];
+  VkPipelineRenderingCreateInfo rendering{
+      VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO};
+  VkPipelineViewportStateCreateInfo vp{
+      VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO};
+  VkPipelineMultisampleStateCreateInfo ms{
+      VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO};
+  VkPipelineDepthStencilStateCreateInfo depth{
+      VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO};
+  VkPipelineColorBlendAttachmentState blend[6] = {};
+  VkPipelineColorBlendStateCreateInfo cb{
+      VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO};
+  VkGraphicsPipelineCreateInfo create{
+      VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO};
+  hash_t hash = 0;
+  // writesVelocity appends cGraphics::VelocityFormat as attachment 5 for the
+  // fallback raster pass (Standard.fallback's SV_TARGET5); the reconstruct pass
+  // writes only the five material targets.
+  StandardReconstructPipelineDesc(RI_Format_e color, RI_Format_e position,
+                                  RI_Format_e normal, RI_Format_e shadingNormal,
+                                  RI_Format_e surface, RI_Format_e depthFormat,
+                                  bool rasterGeometry,
+                                  bool writesVelocity = false) {
+    const uint32_t count = writesVelocity ? 6u : 5u;
+    RI_Format_e f[6] = {color,         position, normal,
+                        shadingNormal, surface,  cGraphics::VelocityFormat};
+    for (uint32_t i = 0; i < count; ++i) {
+      formats[i] = RIFormatToVK(f[i]);
+      blend[i].colorWriteMask =
+          VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT |
+          VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
+    }
+    ia.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+    rs.polygonMode = VK_POLYGON_MODE_FILL;
+    rs.cullMode = rasterGeometry ? VK_CULL_MODE_BACK_BIT : VK_CULL_MODE_NONE;
+    rs.frontFace = VK_FRONT_FACE_CLOCKWISE;
+    rs.lineWidth = 1.0f;
+    ds.dynamicStateCount = 2;
+    ds.pDynamicStates = dyn;
+    rendering.colorAttachmentCount = count;
+    rendering.pColorAttachmentFormats = formats;
+    rendering.depthAttachmentFormat =
+        rasterGeometry ? RIFormatToVK(depthFormat) : VK_FORMAT_UNDEFINED;
+    vp.viewportCount = 1;
+    vp.scissorCount = 1;
+    ms.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
+    depth.depthTestEnable = rasterGeometry ? VK_TRUE : VK_FALSE;
+    depth.depthWriteEnable = rasterGeometry ? VK_TRUE : VK_FALSE;
+    depth.depthCompareOp = VK_COMPARE_OP_LESS_OR_EQUAL;
+    cb.attachmentCount = count;
+    cb.pAttachments = blend;
+    create.pNext = &rendering;
+    create.pVertexInputState = &vi;
+    create.pInputAssemblyState = &ia;
+    create.pRasterizationState = &rs;
+    create.pDynamicState = &ds;
+    create.pViewportState = &vp;
+    create.pMultisampleState = &ms;
+    create.pDepthStencilState = &depth;
+    create.pColorBlendState = &cb;
+    hash = hash_u32(
+        hash_u32(hash_u32(hash_u32(hash_u32(hash_u32(HASH_INITIAL_VALUE, color),
+                                            position),
+                                   normal),
+                          shadingNormal),
+                 surface),
+        rasterGeometry);
+    hash = hash_u32(hash, count);
+  }
+};
+
+struct StandardResolvePipelineDesc {
+  VkPipelineVertexInputStateCreateInfo vi{
+      VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO};
+  VkPipelineInputAssemblyStateCreateInfo ia{
+      VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO};
+  VkPipelineRasterizationStateCreateInfo rs{
+      VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO};
+  VkDynamicState dyn[2] = {VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR};
+  VkPipelineDynamicStateCreateInfo ds{
+      VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO};
+  VkPipelineRenderingCreateInfo rendering{
+      VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO};
+  VkPipelineViewportStateCreateInfo vp{
+      VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO};
+  VkPipelineMultisampleStateCreateInfo ms{
+      VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO};
+  VkPipelineDepthStencilStateCreateInfo depth{
+      VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO};
+  VkPipelineColorBlendAttachmentState blend{};
+  VkPipelineColorBlendStateCreateInfo cb{
+      VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO};
+  VkGraphicsPipelineCreateInfo create{
+      VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO};
+  VkFormat colorFormat = VK_FORMAT_UNDEFINED;
+  hash_t hash = 0;
+  explicit StandardResolvePipelineDesc(RI_Format_e format) {
+    colorFormat = RIFormatToVK(format);
+    rendering.colorAttachmentCount = 1;
+    rendering.pColorAttachmentFormats = &colorFormat;
+    ia.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+    rs.polygonMode = VK_POLYGON_MODE_FILL;
+    rs.cullMode = VK_CULL_MODE_NONE;
+    rs.frontFace = VK_FRONT_FACE_CLOCKWISE;
+    rs.lineWidth = 1.0f;
+    ds.dynamicStateCount = 2;
+    ds.pDynamicStates = dyn;
+    vp.viewportCount = 1;
+    vp.scissorCount = 1;
+    ms.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
+    blend.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT |
+                           VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
+    cb.attachmentCount = 1;
+    cb.pAttachments = &blend;
+    create.pNext = &rendering;
+    create.pVertexInputState = &vi;
+    create.pInputAssemblyState = &ia;
+    create.pRasterizationState = &rs;
+    create.pDynamicState = &ds;
+    create.pViewportState = &vp;
+    create.pMultisampleState = &ms;
+    create.pDepthStencilState = &depth;
+    create.pColorBlendState = &cb;
+    hash = hash_u32(HASH_INITIAL_VALUE, format);
+  }
+};
+
+bool CreateDepthSampleView(cGraphics *graphics, uint32_t index,
+                           cViewport::StandardViewportState &state) {
+  RITextureViewDesc desc = {};
+  desc.viewType = RI_VIEWTYPE_SHADER_RESOURCE_2D;
+  desc.format = cGraphics::DepthFormat;
+  desc.mipNum = 1;
+  desc.layerNum = 1;
+  RITextureView view = RITextureView::create(
+      &graphics->device, state.depthTextures[index].Get(), desc);
+  if (view.isEmpty())
+    return false;
+  state.depthSampleView[index] =
+      RISharedPointer<RITextureView>(&graphics->device, view);
+  return true;
+}
+
+void DeferDepthSampleViews(cGraphics *graphics,
+                           cViewport::StandardViewportState &state) {
+  for (uint32_t i = 0; i < RI_MAX_SWAPCHAIN_IMAGES; ++i)
+    graphics->graphicsDefer.push(state.depthSampleView[i]);
+}
+
+void MoveDepthSampleViews(cViewport::StandardViewportState &destination,
+                          cViewport::StandardViewportState &source) {
+  for (uint32_t i = 0; i < RI_MAX_SWAPCHAIN_IMAGES; ++i)
+    destination.depthSampleView[i] = std::move(source.depthSampleView[i]);
+}
+
+// Names an image for Vulkan validation messages and captures.
+static void NameStandardImage(cGraphics *graphics, const RITexture &texture,
+                              const char *name) {
+#if (DEVICE_IMPL_VULKAN)
+  if (!graphics || !name || vkSetDebugUtilsObjectNameEXT == nullptr ||
+      texture.vk.image == VK_NULL_HANDLE)
+    return;
+  VkDebugUtilsObjectNameInfoEXT info = {
+      VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT};
+  info.objectType = VK_OBJECT_TYPE_IMAGE;
+  info.objectHandle = reinterpret_cast<uint64_t>(texture.vk.image);
+  info.pObjectName = name;
+  vkSetDebugUtilsObjectNameEXT(graphics->device.vk.device, &info);
+#else
+  (void)graphics;
+  (void)texture;
+  (void)name;
+#endif
+}
+
+static bool ClearStandardShadowFallback(cGraphics *graphics, RICmd *cmd,
+                                        RITexture *texture) {
+  if (!graphics || !cmd || !texture)
+    return false;
+  RITextureBarrier toDepth(texture, RI_RESOURCE_STATE_UNDEFINED,
+                           RI_RESOURCE_STATE_DEPTH_WRITE, RI_STAGE_NONE,
+                           RI_STAGE_FRAGMENT, RI_BARRIER_ASPECT_DEPTH);
+  toDepth.mipCount = 1;
+  toDepth.layerCount = 1;
+  cmd->vk_d3d12_textureBarrier(toDepth);
+  RITextureViewDesc vd{};
+  vd.viewType = RI_VIEWTYPE_DEPTH_STENCIL_ATTACHMENT;
+  vd.format = cGraphics::DepthFormat;
+  vd.mipNum = 1;
+  vd.layerNum = 1;
+  RITextureView attachment =
+      RITextureView::create(&graphics->device, texture, vd);
+  if (attachment.isEmpty())
+    return false;
+  RIRenderingAttachment depth{};
+  depth.view = attachment;
+  depth.loadOp = RI_ATTACHMENT_LOAD_OP_CLEAR;
+  depth.storeOp = RI_ATTACHMENT_STORE_OP_STORE;
+  depth.clearValue.depth = 1.0f;
+  RIBeginRenderingDesc begin{};
+  begin.renderArea.width = 1;
+  begin.renderArea.height = 1;
+  begin.depthStencil = &depth;
+  cmd->vk_d3d12_beginRendering(&graphics->device, begin);
+  cmd->vk_d3d12_endRendering(&graphics->device);
+  RITextureBarrier toSample(
+      texture, RI_RESOURCE_STATE_DEPTH_WRITE, RI_RESOURCE_STATE_SHADER_RESOURCE,
+      RI_STAGE_FRAGMENT, RI_STAGE_FRAGMENT, RI_BARRIER_ASPECT_DEPTH);
+  toSample.mipCount = 1;
+  toSample.layerCount = 1;
+  cmd->vk_d3d12_textureBarrier(toSample);
+  graphics->graphicsDefer.push(
+      RISharedPointer<RITextureView>(&graphics->device, attachment));
+  return true;
+}
+
+static uint32_t StandardTextureSlot(Image *image) {
+  if (!image)
+    return kStandardInvalidTexture;
+  Interface<cGraphics>::Get()->graphicsDefer.push(PinResource(image));
+  return image->GetBindlessSlot();
+}
+
+static bool StandardFinite(float value) { return std::isfinite(value); }
+
+static uint32_t StandardShadowResolution(eShadowMapResolution quality) {
+  switch (quality) {
+  case eShadowMapResolution_Low:
+    return 256;
+  case eShadowMapResolution_Medium:
+    return 512;
+  default:
+    return 1024;
+  }
+}
+
+template <class T>
+static bool
+UploadStandardLights(cGraphics *graphics, const std::vector<T> &items,
+                     RISharedPointer<RIBuffer> &buffer, size_t &capacity) {
+  const size_t bytes = sizeof(T) * std::max<size_t>(items.size(), 1);
+  if (capacity < bytes) {
+    capacity = std::max<size_t>(bytes, capacity ? capacity * 2 : sizeof(T));
+    auto next = RISharedPointer<RIBuffer>(
+        &graphics->device,
+        RIBuffer::create(&graphics->device,
+                         {(uint64_t)capacity,
+                          RI_BUFFER_USAGE_SHADER_RESOURCE_STORAGE |
+                              RI_BUFFER_USAGE_TRANSFER_DST,
+                          RI_MEMORY_DEVICE, 0}));
+    if (next.isEmpty())
+      return false;
+    // The old allocation may still be referenced by an earlier frame.
+    graphics->graphicsDefer.push(buffer);
+    buffer = std::move(next);
+  }
+  if (buffer.isEmpty())
+    return false;
+  if (items.empty()) {
+    graphics->graphicsDefer.push(buffer);
+    return true;
+  }
+  RIResourceBufferTransaction transaction = {};
+  transaction.target = *buffer;
+  transaction.size = sizeof(T) * items.size();
+  // These per-Draw buffers are freshly allocated.  Do not claim that they
+  // already contain shader-visible data: the uploader must own the initial
+  // transition from UNDEFINED.
+  transaction.currentState = RI_RESOURCE_STATE_UNDEFINED;
+  transaction.currentStages = RI_STAGE_NONE;
+  transaction.postState = RI_RESOURCE_STATE_SHADER_RESOURCE;
+  transaction.postStages = RI_STAGE_FRAGMENT;
+  RI_ResourceBeginCopyBuffer(&graphics->device, &graphics->uploader,
+                             &transaction);
+  std::memcpy(transaction.mapped.data, items.data(), transaction.size);
+  RI_ResourceEndCopyBuffer(&graphics->device, &graphics->uploader,
+                           &transaction);
+  // Pin at the allocation/upload boundary, before any caller can take an
+  // early return (including a later light-buffer allocation failure).
+  graphics->graphicsDefer.push(buffer);
+  return true;
+}
+
+// Legacy hpl::GetShadowMapResolution: clamp the authored quality to the cap.
+static eShadowMapResolution
+StandardCapShadowQuality(eShadowMapResolution wanted,
+                         eShadowMapResolution cap) {
+  if (cap == eShadowMapResolution_High)
+    return wanted;
+  if (cap == eShadowMapResolution_Medium)
+    return wanted == eShadowMapResolution_High ? eShadowMapResolution_Medium
+                                               : wanted;
+  return eShadowMapResolution_Low;
+}
+
+// Legacy cRendererDeferred shadow distance LOD (RendererDeferred.h).
+static constexpr float kStandardShadowDistanceMedium = 10.0f;
+static constexpr float kStandardShadowDistanceLow = 20.0f;
+static constexpr float kStandardShadowDistanceNone = 40.0f;
+
+// Shadow atlas pages are kStandardShadowAtlasCapTiles cap-resolution tiles
+// wide (4096 at a High cap). Lights that would need tiles below the minimum
+// lose their shadow instead of blurring further.
+static constexpr uint32_t kStandardShadowAtlasCapTiles = 4;
+static constexpr uint32_t kStandardShadowMaxAtlases = 4;
+static constexpr uint32_t kStandardShadowMinTile = 64;
+// Cube-face frusta are widened by this many texels per side so the bilinear
+// and jitter kernel of a receiver near a face edge still reads rendered depth.
+static constexpr float kStandardShadowCubeBorderTexels = 2.0f;
+
+static float StandardPointShadowNear(float radius) {
+  return std::max(0.05f, radius * 0.01f);
+}
+
+struct StandardShadowLightTiles {
+  const iLight *light;
+  uint32_t firstTile;
+  uint32_t size;
+};
+
+static const StandardShadowLightTiles *
+FindStandardShadowTiles(const std::vector<StandardShadowLightTiles> &tiles,
+                        const iLight *light) {
+  for (const StandardShadowLightTiles &entry : tiles)
+    if (entry.light == light)
+      return &entry;
+  return nullptr;
+}
+
+// View matrix of cube face `face` (+X,-X,+Y,-Y,+Z,-Z) at `position`. HPL views
+// look down -Z of their world matrix (cCamera::GetForward), so the face
+// direction is the negated Z column. The basis stays right-handed so the
+// shadow pipeline's winding is unchanged.
+static cMatrixf StandardCubeFaceView(const cVector3f &position, uint32_t face) {
+  static const cVector3f kForward[kStandardShadowCubeFaces] = {
+      cVector3f(1, 0, 0),  cVector3f(-1, 0, 0), cVector3f(0, 1, 0),
+      cVector3f(0, -1, 0), cVector3f(0, 0, 1),  cVector3f(0, 0, -1)};
+  static const cVector3f kUp[kStandardShadowCubeFaces] = {
+      cVector3f(0, 1, 0), cVector3f(0, 1, 0), cVector3f(0, 0, -1),
+      cVector3f(0, 0, 1), cVector3f(0, 1, 0), cVector3f(0, 1, 0)};
+  const cVector3f back = kForward[face] * -1.0f;
+  const cVector3f up = kUp[face];
+  const cVector3f right = cMath::Vector3Cross(up, back);
+  cMatrixf world = cMatrixf::Identity;
+  world.m[0][0] = right.x;
+  world.m[1][0] = right.y;
+  world.m[2][0] = right.z;
+  world.m[0][1] = up.x;
+  world.m[1][1] = up.y;
+  world.m[2][1] = up.z;
+  world.m[0][2] = back.x;
+  world.m[1][2] = back.y;
+  world.m[2][2] = back.z;
+  world.SetTranslation(position);
+  return cMath::MatrixInverse(world);
+}
+
+static bool BuildStandardLights(
+    cWorld *world, cGraphics *graphics, RISharedPointer<RIBuffer> &pointBuffer,
+    RISharedPointer<RIBuffer> &spotBuffer, RISharedPointer<RIBuffer> &boxBuffer,
+    uint32_t &pointCount, uint32_t &spotCount, uint32_t &boxCount,
+    uint32_t &shadowCount, eShadowMapResolution shadowResolutionCap,
+    bool shadowsAvailable,
+    const std::vector<StandardShadowLightTiles> &shadowTiles) {
+  // Keep the resources referenced by the previous recording alive through the
+  // GPU completion point. This also makes a same-size rewrite safe when the
+  // uploader uses a deferred transfer queue.
+  std::vector<StandardPointLightData> points;
+  std::vector<StandardSpotLightData> spots;
+  std::vector<std::pair<StandardBoxLightData, cLightBoxLegacy *>>
+      boxesWithLights;
+  shadowCount = 0;
+  if (world) {
+    for (iLight *light : *world->GetLightList()) {
+      if (!light)
+        continue;
+      const float radius = light->GetRadius();
+      // Overdrive light classes never render in Standard.
+      const bool enabled = light->GetLightModel() == eLightModel_Legacy &&
+                           light->GetVisibleVar() &&
+                           light->IsLegacyRendererEnabled() &&
+                           StandardFinite(radius) && radius > 0.0f;
+      const cColor diffuse = light->GetDiffuseColor();
+      if (light->GetLightType() == eLightType_Point) {
+        StandardPointLightData data{};
+        const cVector3f p = light->GetWorldPosition();
+        data.position[0] = p.x;
+        data.position[1] = p.y;
+        data.position[2] = p.z;
+        data.radius = enabled ? radius : 0.0f;
+        data.color[0] = diffuse.r;
+        data.color[1] = diffuse.g;
+        data.color[2] = diffuse.b;
+        data.specularScale = diffuse.a;
+        // Legacy ABI name: this field carries the complete authored lightWorld
+        // matrix. The deferred reference uploads all four rows, including its
+        // translation, for the homogeneous point-gobo lookup.
+        const ml::float4x4 lightWorld =
+            cMath::ToFloatTranspose4x4(light->GetWorldMatrix());
+        std::memcpy(data.invViewRotation, lightWorld.a,
+                    sizeof(data.invViewRotation));
+        data.falloffTexture = StandardTextureSlot(light->GetFalloffImage());
+        data.goboTexture = StandardTextureSlot(light->GetGoboImage());
+        // First of the six cube-face tiles rendered for this light this Draw.
+        data.shadowIndex = kStandardInvalidShadow;
+        const StandardShadowLightTiles *pointTiles =
+            FindStandardShadowTiles(shadowTiles, light);
+        if (shadowsAvailable && enabled && light->GetCastShadows() &&
+            light->GetShadowCastersAffected() != 0 && pointTiles) {
+          data.shadowIndex = pointTiles->firstTile;
+          ++shadowCount;
+        }
+        data.config =
+            (enabled ? kStandardLightEnabled : 0u) |
+            (data.goboTexture != kStandardInvalidTexture ? kStandardLightHasGobo
+                                                         : 0u) |
+            (data.shadowIndex != kStandardInvalidShadow
+                 ? kStandardLightHasShadow
+                 : 0u);
+        points.push_back(data);
+      } else if (light->GetLightType() == eLightType_Spot) {
+        iLightSpot *spot = static_cast<iLightSpot *>(light);
+        StandardSpotLightData data{};
+        const cVector3f p = spot->GetWorldPosition();
+        const cMatrixf &worldMatrix = spot->GetWorldMatrix();
+        data.position[0] = p.x;
+        data.position[1] = p.y;
+        data.position[2] = p.z;
+        const float fov = spot->GetFOV();
+        const float aspect = spot->GetAspect();
+        const float nearClip = spot->GetNearClipPlane();
+        const bool validProjection =
+            StandardFinite(radius) && radius > nearClip &&
+            StandardFinite(fov) && fov > 0.0f &&
+            fov < 3.14159265358979323846f && StandardFinite(aspect) &&
+            aspect > 0.0f && StandardFinite(nearClip) && nearClip > 0.0f;
+        const bool spotEnabled = enabled && validProjection;
+        data.radius = spotEnabled ? radius : 0.0f;
+        data.direction[0] = worldMatrix.m[0][2];
+        data.direction[1] = worldMatrix.m[1][2];
+        data.direction[2] = worldMatrix.m[2][2];
+        data.oneMinusCosHalfFov =
+            validProjection ? 1.0f - std::cos(fov * 0.5f) : 0.0f;
+        data.color[0] = diffuse.r;
+        data.color[1] = diffuse.g;
+        data.color[2] = diffuse.b;
+        data.specularScale = diffuse.a;
+        // The Standard light contract uses the authored legacy radius.  Do
+        // not call GetViewProjMatrix here: its projection reach is selected
+        // by the light evaluation mode and can therefore disagree with the
+        // radial light volume above.
+        if (validProjection) {
+          const cMatrixf projection = cMath::MatrixPerspectiveProjection(
+              nearClip, radius, fov, aspect, false);
+          const cMatrixf viewProjection =
+              cMath::MatrixMul(projection, spot->GetViewMatrix());
+          const ml::float4x4 vp = cMath::ToFloatTranspose4x4(viewProjection);
+          std::memcpy(data.spotViewProjection, vp.a,
+                      sizeof(data.spotViewProjection));
+        }
+        data.radialFalloffTexture =
+            StandardTextureSlot(light->GetFalloffImage());
+        data.coneFalloffTexture =
+            StandardTextureSlot(spot->GetSpotFalloffImage());
+        data.goboTexture = StandardTextureSlot(light->GetGoboImage());
+        data.shadowIndex = kStandardInvalidShadow;
+        const float authoredBias = spot->GetShadowMapBiasMul();
+        data.shadowBias = (StandardFinite(authoredBias) && authoredBias >= 0.0f)
+                              ? 0.0005f * authoredBias
+                              : 0.0f;
+        const uint32_t authoredResolution =
+            StandardShadowResolution(spot->GetShadowMapResolution());
+        const uint32_t resolutionCap =
+            StandardShadowResolution(shadowResolutionCap);
+        data.shadowResolution = std::min(authoredResolution, resolutionCap);
+        // The light's atlas tile, if one was packed and rendered this Draw.
+        const StandardShadowLightTiles *spotTiles =
+            FindStandardShadowTiles(shadowTiles, spot);
+        if (shadowsAvailable && spotEnabled && spot->GetCastShadows() &&
+            spot->GetShadowCastersAffected() != 0 && spotTiles) {
+          data.shadowIndex = spotTiles->firstTile;
+          data.shadowResolution = std::min(spotTiles->size, resolutionCap);
+          ++shadowCount;
+        }
+        data.config =
+            (spotEnabled ? kStandardLightEnabled : 0u) |
+            (data.goboTexture != kStandardInvalidTexture ? kStandardLightHasGobo
+                                                         : 0u) |
+            (data.shadowIndex != kStandardInvalidShadow
+                 ? kStandardLightHasShadow
+                 : 0u);
+        spots.push_back(data);
+      } else if (light->GetLightType() == eLightType_Box) {
+        cLightBoxLegacy *box = static_cast<cLightBoxLegacy *>(light);
+        const cVector3f size = box->GetSize();
+        const bool boxEnabled =
+            light->GetLightModel() == eLightModel_Legacy &&
+            light->GetVisibleVar() && light->IsLegacyRendererEnabled() &&
+            StandardFinite(size.x) && size.x > 0.0f && StandardFinite(size.y) &&
+            size.y > 0.0f && StandardFinite(size.z) && size.z > 0.0f;
+        if (!boxEnabled)
+          continue;
+        StandardBoxLightData data{};
+        const cVector3f p = light->GetWorldPosition();
+        const cVector3f halfSize = size * 0.5f;
+        const cVector3f boxMin = p - halfSize;
+        const cVector3f boxMax = p + halfSize;
+        data.boxMin[0] = boxMin.x;
+        data.boxMin[1] = boxMin.y;
+        data.boxMin[2] = boxMin.z;
+        data.boxMax[0] = boxMax.x;
+        data.boxMax[1] = boxMax.y;
+        data.boxMax[2] = boxMax.z;
+        data.color[0] = diffuse.r;
+        data.color[1] = diffuse.g;
+        data.color[2] = diffuse.b;
+        data.blendFunc = static_cast<uint32_t>(box->GetBlendFunc());
+        data.config = kStandardLightEnabled;
+        boxesWithLights.push_back({data, box});
+      }
+    }
+  }
+  // Stable-sort box lights by priority, then by pointer for determinism. Cap at 256 lights.
+  std::stable_sort(
+      boxesWithLights.begin(), boxesWithLights.end(),
+      [](const std::pair<StandardBoxLightData, cLightBoxLegacy *> &a,
+         const std::pair<StandardBoxLightData, cLightBoxLegacy *> &b) {
+        const int aPrio = a.second->GetBoxLightPrio();
+        const int bPrio = b.second->GetBoxLightPrio();
+        if (aPrio != bPrio)
+          return aPrio < bPrio;
+        return a.second < b.second;
+      });
+  std::vector<StandardBoxLightData> boxes;
+  for (const auto &pair : boxesWithLights) {
+    if (boxes.size() >= 256)
+      break;
+    boxes.push_back(pair.first);
+  }
+  pointCount = static_cast<uint32_t>(points.size());
+  spotCount = static_cast<uint32_t>(spots.size());
+  boxCount = static_cast<uint32_t>(boxes.size());
+  size_t pointCapacity = 0, spotCapacity = 0, boxCapacity = 0;
+  const bool pointUpload =
+      UploadStandardLights(graphics, points, pointBuffer, pointCapacity);
+  const bool spotUpload =
+      UploadStandardLights(graphics, spots, spotBuffer, spotCapacity);
+  const bool boxUpload =
+      UploadStandardLights(graphics, boxes, boxBuffer, boxCapacity);
+  if (!pointUpload || !spotUpload || !boxUpload) {
+    pointCount = spotCount = boxCount = 0;
+    return false;
+  }
+  return true;
+}
+
+} // namespace
+
+cStandardRenderer::cStandardRenderer(cGraphics *apGraphics,
+                                     cResources *apResources)
+    : iRenderer("Standard", apGraphics, apResources), m_visibility(nullptr),
+      m_fallback(nullptr), m_reconstruct(nullptr), m_lighting(nullptr) {
+  m_environment =
+      std::make_unique<cStandardEnvironmentPass>(mpGraphics, apResources);
+  m_particles =
+      std::make_unique<cStandardParticlePass>(mpGraphics, apResources);
+  m_decals = std::make_unique<cStandardDecalPass>(mpGraphics, apResources);
+  m_shadow = std::make_unique<cStandardShadowPass>(mpGraphics, apResources);
+  m_halo = std::make_unique<cStandardHaloPass>(mpGraphics);
+  m_translucent =
+      std::make_unique<cStandardTranslucentPass>(mpGraphics, apResources);
+  m_water = std::make_unique<cStandardWaterPass>(mpGraphics, apResources);
+  m_ambientOcclusion =
+      std::make_unique<cStandardAmbientOcclusionPass>(mpGraphics, apResources);
+  m_forceFallback = std::getenv("HPL_STANDARD_FORCE_FALLBACK") != nullptr;
+  RISegmentAllocDesc desc = {};
+  desc.numSegments = RI_NUMBER_FRAMES_FLIGHT;
+  desc.elementStride = sizeof(VkDrawIndirectCommand);
+  desc.maxElements = kObjectSlotCapacity;
+  m_indirectSegment = RISegmentAlloc<RI_NUMBER_FRAME_SEGMENTS>(&desc);
+  m_indirectDrawBuffer = detail::CreateBindlessSlotBuffer(
+      &mpGraphics->device, kObjectSlotCapacity, sizeof(VkDrawIndirectCommand),
+      VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
+      false);
+  RISegmentAllocDesc shadowDesc = {};
+  shadowDesc.numSegments = RI_NUMBER_FRAMES_FLIGHT;
+  shadowDesc.elementStride = sizeof(VkDrawIndirectCommand);
+  shadowDesc.maxElements = kObjectSlotCapacity;
+  m_shadowIndirectSegment =
+      RISegmentAlloc<RI_NUMBER_FRAME_SEGMENTS>(&shadowDesc);
+  m_shadowIndirectBuffer = detail::CreateBindlessSlotBuffer(
+      &mpGraphics->device, kObjectSlotCapacity, sizeof(VkDrawIndirectCommand),
+      VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
+      false);
+  // Like cRendererSimple: cGraphics::Init no longer loads renderers, and Draw
+  // returns immediately until the fallback and lighting programs exist.
+  if (!LoadData())
+    Error("Standard renderer failed to load its shaders; nothing will render. "
+          "See log.\n");
+}
+
+cStandardRenderer::~cStandardRenderer() { DestroyData(); }
+
+bool cStandardRenderer::LoadData() {
+  if (!mpResources || !mpGraphics->globalset) {
+    Error(
+        "Standard renderer: resources or global managed sets are not ready\n");
+    return false;
+  }
+  auto loadPass = [](bool loaded, const char *name) {
+    if (!loaded)
+      Error("Standard renderer: %s pass failed to load\n", name);
+    return loaded;
+  };
+  if (!loadPass(m_environment && m_environment->LoadData(), "environment"))
+    return false;
+  if (!loadPass(m_particles && m_particles->LoadData(), "particle"))
+    return false;
+  if (!loadPass(m_decals && m_decals->LoadData(), "decal"))
+    return false;
+  if (!loadPass(m_translucent && m_translucent->LoadData(), "translucent"))
+    return false;
+  if (!loadPass(m_water && m_water->LoadData(), "water"))
+    return false;
+  if (!loadPass(m_shadow && m_shadow->LoadData(), "shadow"))
+    return false;
+  // AO is optional: without it the light pass reads a cleared fallback.
+  m_ambientOcclusionLoaded =
+      m_ambientOcclusion && m_ambientOcclusion->LoadData();
+  if (!m_ambientOcclusionLoaded)
+    Warning("Standard renderer: ambient occlusion pass failed to load; AO "
+            "disabled\n");
+  if (m_indirectDrawBuffer.isEmpty()) {
+    RISegmentAllocDesc desc = {};
+    desc.numSegments = RI_NUMBER_FRAMES_FLIGHT;
+    desc.elementStride = sizeof(VkDrawIndirectCommand);
+    desc.maxElements = kObjectSlotCapacity;
+    m_indirectSegment = RISegmentAlloc<RI_NUMBER_FRAME_SEGMENTS>(&desc);
+    m_indirectDrawBuffer = detail::CreateBindlessSlotBuffer(
+        &mpGraphics->device, kObjectSlotCapacity, sizeof(VkDrawIndirectCommand),
+        VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT |
+            VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
+        false);
+  }
+  if (m_shadowIndirectBuffer.isEmpty()) {
+    RISegmentAllocDesc desc = {};
+    desc.numSegments = RI_NUMBER_FRAMES_FLIGHT;
+    desc.elementStride = sizeof(VkDrawIndirectCommand);
+    desc.maxElements = kObjectSlotCapacity;
+    m_shadowIndirectSegment = RISegmentAlloc<RI_NUMBER_FRAME_SEGMENTS>(&desc);
+    m_shadowIndirectBuffer = detail::CreateBindlessSlotBuffer(
+        &mpGraphics->device, kObjectSlotCapacity, sizeof(VkDrawIndirectCommand),
+        VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT |
+            VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
+        false);
+  }
+  const VkDescriptorSetLayout external[] = {
+      mpGraphics->globalset->m_bindlessSet.vk.m_bindlessSetLayout};
+  auto load = [&](std::shared_ptr<RIProgram> &program, const char *file,
+                  const char *name) -> bool {
+    auto bin = RIProgram::loadShaderStage(mpResources->GetFileSearcher(), file);
+    if (bin.empty())
+      return false;
+    auto replacement = std::make_shared<RIProgram>();
+    std::array<RIProgram::ModuleStage, 2> stages = {
+        RIProgram::ModuleStage{RIProgram::PROGRAM_STAGE_VERTEX, bin, "vsMain"},
+        RIProgram::ModuleStage{RIProgram::PROGRAM_STAGE_FRAGMENT, bin,
+                               "psMain"}};
+    replacement->initialize(&mpGraphics->device, stages, external, name);
+    auto old = std::move(program);
+    program = std::move(replacement);
+    if (old) {
+      mpGraphics->graphicsDefer.push(std::function<void()>(
+          [old = std::move(old), device = &mpGraphics->device]() mutable {
+            old->dispose(device);
+          }));
+    }
+    // RIProgram::initialize has no result; shader presence is the established
+    // success contract for these prevalidated renderer modules.
+    return true;
+  };
+  auto retire = [&](std::shared_ptr<RIProgram> &program) {
+    auto old = std::move(program);
+    if (old)
+      mpGraphics->graphicsDefer.push(std::function<void()>(
+          [old = std::move(old), device = &mpGraphics->device]() mutable {
+            old->dispose(device);
+          }));
+  };
+  const bool usePacked = !m_forceFallback &&
+                         mpGraphics->device.fragmentShaderBarycentricEnabled &&
+                         mpGraphics->device.shaderInt16Enabled &&
+                         mpGraphics->device.shaderFloat16Enabled &&
+                         mpGraphics->device.geometryShaderEnabled;
+  if (usePacked) {
+    if (!m_visibilityLoaded)
+      m_visibilityLoaded = load(m_visibility, "Standard.visibility.3d.spv",
+                                "Standard.visibility");
+    if (!m_reconstructLoaded)
+      m_reconstructLoaded = load(m_reconstruct, "Standard.reconstruct.3d.spv",
+                                 "Standard.reconstruct");
+  } else {
+    if (m_visibility)
+      retire(m_visibility);
+    m_visibilityLoaded = false;
+    if (m_reconstruct)
+      retire(m_reconstruct);
+    m_reconstructLoaded = false;
+  }
+  if (!m_fallbackLoaded)
+    m_fallbackLoaded =
+        load(m_fallback, "Standard.fallback.3d.spv", "Standard.fallback");
+  if (!m_lightingLoaded)
+    m_lightingLoaded =
+        load(m_lighting, "Standard.light.3d.spv", "Standard.light");
+  // Type="Decal" meshes are optional: without the program the accumulators
+  // still clear to identity and the resolve is unchanged.
+  if (!m_meshDecalLoaded) {
+    auto vert = RIProgram::loadShaderStage(mpResources->GetFileSearcher(),
+                                           "Decal.vert.spv");
+    auto frag = RIProgram::loadShaderStage(mpResources->GetFileSearcher(),
+                                           "Decal.frag.spv");
+    if (!vert.empty() && !frag.empty()) {
+      auto replacement = std::make_shared<RIProgram>();
+      std::array<RIProgram::ModuleStage, 2> stages = {
+          RIProgram::ModuleStage{RIProgram::PROGRAM_STAGE_VERTEX, vert,
+                                 "vsMain"},
+          RIProgram::ModuleStage{RIProgram::PROGRAM_STAGE_FRAGMENT, frag,
+                                 "psMain"}};
+      replacement->initialize(&mpGraphics->device, stages, external,
+                              "Standard.meshDecal");
+      if (m_meshDecal)
+        retire(m_meshDecal);
+      m_meshDecal = std::move(replacement);
+      m_meshDecalLoaded = true;
+    } else if (!m_meshDecalWarned) {
+      Warning("Standard renderer: Decal.vert/frag missing; Type=\"Decal\" "
+              "meshes disabled\n");
+      m_meshDecalWarned = true;
+    }
+  }
+  m_shadowLoaded = true;
+  return m_fallback && m_fallbackLoaded && m_lighting && m_lightingLoaded &&
+         m_shadowLoaded;
+}
+
+void cStandardRenderer::DestroyData() {
+  auto visibility = std::move(m_visibility);
+  auto fallback = std::move(m_fallback);
+  auto reconstruct = std::move(m_reconstruct);
+  auto lighting = std::move(m_lighting);
+  auto environment = std::move(m_environment);
+  auto particles = std::move(m_particles);
+  auto decals = std::move(m_decals);
+  auto shadow = std::move(m_shadow);
+  auto translucent = std::move(m_translucent);
+  auto water = std::move(m_water);
+  auto meshDecal = std::move(m_meshDecal);
+  m_shadowJitter = {};
+  m_shadowJitterQuality = -1;
+  if (!m_shadowAtlas.isEmpty())
+    mpGraphics->graphicsDefer.push(m_shadowAtlas);
+  m_shadowAtlas = {};
+  m_shadowAtlasSize = 0;
+  m_shadowAtlasLayers = 0;
+  if (!m_shadowFallbackView.isEmpty())
+    mpGraphics->graphicsDefer.push(m_shadowFallbackView);
+  if (!m_shadowFallback.isEmpty())
+    mpGraphics->graphicsDefer.push(m_shadowFallback);
+  m_shadowFallbackView = {};
+  m_shadowFallback = {};
+  if (m_halo)
+    m_halo->DestroyData();
+  m_meshDecalLoaded = false;
+  if (meshDecal)
+    mpGraphics->graphicsDefer.push(
+        std::function<void()>([meshDecal = std::move(meshDecal),
+                               device = &mpGraphics->device]() mutable {
+          meshDecal->dispose(device);
+        }));
+  if (shadow)
+    shadow->DestroyData();
+  m_shadow = std::move(shadow);
+  if (visibility || fallback || reconstruct || lighting)
+    mpGraphics->graphicsDefer.push(std::function<void()>(
+        [visibility = std::move(visibility), fallback = std::move(fallback),
+         reconstruct = std::move(reconstruct), lighting = std::move(lighting),
+         device = &mpGraphics->device]() mutable {
+          if (visibility)
+            visibility->dispose(device);
+          if (fallback)
+            fallback->dispose(device);
+          if (reconstruct)
+            reconstruct->dispose(device);
+          if (lighting)
+            lighting->dispose(device);
+        }));
+  if (!m_indirectDrawBuffer.isEmpty())
+    mpGraphics->graphicsDefer.push(std::function<void()>(
+        [buffer = std::move(m_indirectDrawBuffer),
+         device = &mpGraphics->device]() mutable { buffer.dispose(device); }));
+  m_indirectDrawBuffer = {};
+  if (!m_shadowIndirectBuffer.isEmpty())
+    mpGraphics->graphicsDefer.push(std::function<void()>(
+        [buffer = std::move(m_shadowIndirectBuffer),
+         device = &mpGraphics->device]() mutable { buffer.dispose(device); }));
+  m_shadowIndirectBuffer = {};
+  m_visibilityLoaded = false;
+  m_fallbackLoaded = false;
+  m_reconstructLoaded = false;
+  m_lightingLoaded = false;
+  m_shadowLoaded = false;
+  if (environment)
+    environment->DestroyData();
+  m_environment = std::move(environment);
+  if (particles)
+    particles->DestroyData();
+  m_particles = std::move(particles);
+  if (decals)
+    decals->DestroyData();
+  m_decals = std::move(decals);
+  if (translucent)
+    translucent->DestroyData();
+  m_translucent = std::move(translucent);
+  if (water)
+    water->DestroyData();
+  m_water = std::move(water);
+}
+
+cViewport::StandardViewportState::~StandardViewportState() {
+  cGraphics *graphics = Interface<cGraphics>::Get();
+  if (!graphics)
+    return;
+  for (uint32_t i = 0; i < RI_MAX_SWAPCHAIN_IMAGES; ++i) {
+    graphics->graphicsDefer.push(renderTarget[i]);
+    graphics->graphicsDefer.push(renderTargetView[i]);
+    graphics->graphicsDefer.push(depthTextures[i]);
+    graphics->graphicsDefer.push(depthView[i]);
+    graphics->graphicsDefer.push(visibilityTexture[i]);
+    graphics->graphicsDefer.push(visibilityView[i]);
+    graphics->graphicsDefer.push(visibilityAttachmentView[i]);
+    graphics->graphicsDefer.push(positionTexture[i]);
+    graphics->graphicsDefer.push(positionView[i]);
+    graphics->graphicsDefer.push(positionAttachmentView[i]);
+    graphics->graphicsDefer.push(normalTexture[i]);
+    graphics->graphicsDefer.push(normalView[i]);
+    graphics->graphicsDefer.push(normalAttachmentView[i]);
+    graphics->graphicsDefer.push(shadingNormalTexture[i]);
+    graphics->graphicsDefer.push(shadingNormalView[i]);
+    graphics->graphicsDefer.push(shadingNormalAttachmentView[i]);
+    graphics->graphicsDefer.push(surfaceTexture[i]);
+    graphics->graphicsDefer.push(surfaceView[i]);
+    graphics->graphicsDefer.push(surfaceAttachmentView[i]);
+    graphics->graphicsDefer.push(materialColorTexture[i]);
+    graphics->graphicsDefer.push(materialColorView[i]);
+    graphics->graphicsDefer.push(materialColorAttachmentView[i]);
+    graphics->graphicsDefer.push(decalColorTexture[i]);
+    graphics->graphicsDefer.push(decalColorView[i]);
+    graphics->graphicsDefer.push(decalColorAttachmentView[i]);
+    graphics->graphicsDefer.push(decalMulTexture[i]);
+    graphics->graphicsDefer.push(decalMulView[i]);
+    graphics->graphicsDefer.push(decalMulAttachmentView[i]);
+    graphics->graphicsDefer.push(decalAddTexture[i]);
+    graphics->graphicsDefer.push(decalAddView[i]);
+    graphics->graphicsDefer.push(decalAddAttachmentView[i]);
+    graphics->graphicsDefer.push(environmentTexture[i]);
+    graphics->graphicsDefer.push(environmentView[i]);
+    graphics->graphicsDefer.push(environmentAttachmentView[i]);
+    graphics->graphicsDefer.push(translucentSceneCopy[i]);
+    graphics->graphicsDefer.push(translucentSceneCopyView[i]);
+    graphics->graphicsDefer.push(waterReflectionTexture[i]);
+    graphics->graphicsDefer.push(waterReflectionView[i]);
+    graphics->graphicsDefer.push(waterReflectionAttachmentView[i]);
+    graphics->graphicsDefer.push(waterReflectionPositionTexture[i]);
+    graphics->graphicsDefer.push(waterReflectionPositionView[i]);
+    graphics->graphicsDefer.push(waterReflectionPositionAttachmentView[i]);
+    graphics->graphicsDefer.push(waterReflectionOpaqueTexture[i]);
+    graphics->graphicsDefer.push(waterReflectionOpaqueView[i]);
+    graphics->graphicsDefer.push(waterReflectionOpaqueAttachmentView[i]);
+    graphics->graphicsDefer.push(waterReflectionDepthTexture[i]);
+    graphics->graphicsDefer.push(waterReflectionDepthView[i]);
+    graphics->graphicsDefer.push(waterReflectionDepthSampleView[i]);
+    graphics->graphicsDefer.push(waterReflectionDepthAttachmentView[i]);
+    graphics->graphicsDefer.push(waterSceneCopy[i]);
+    graphics->graphicsDefer.push(waterSceneCopyView[i]);
+    graphics->graphicsDefer.push(aoPreparedDepthTexture[i]);
+    graphics->graphicsDefer.push(aoPreparedDepthStorageView[i]);
+    graphics->graphicsDefer.push(aoQuarterTexture[i]);
+    graphics->graphicsDefer.push(aoQuarterStorageView[i]);
+    graphics->graphicsDefer.push(aoTexture[i]);
+    graphics->graphicsDefer.push(aoStorageView[i]);
+    graphics->graphicsDefer.push(aoView[i]);
+  }
+  for (uint32_t i = 0; i < RI_MAX_SWAPCHAIN_IMAGES; ++i) {
+    if (!velocityTexture[i].isEmpty())
+      graphics->graphicsDefer.push(velocityTexture[i]);
+    if (!velocityView[i].isEmpty())
+      graphics->graphicsDefer.push(velocityView[i]);
+    if (!velocityAttachmentView[i].isEmpty())
+      graphics->graphicsDefer.push(velocityAttachmentView[i]);
+  }
+  DeferDepthSampleViews(graphics, *this);
+}
+
+cViewport::StandardViewportState::StandardViewportState(
+    StandardViewportState &&rhs) noexcept
+    : width(rhs.width), height(rhs.height) {
+  for (uint32_t i = 0; i < RI_MAX_SWAPCHAIN_IMAGES; ++i) {
+    renderTarget[i] = std::move(rhs.renderTarget[i]);
+    renderTargetView[i] = std::move(rhs.renderTargetView[i]);
+    depthTextures[i] = std::move(rhs.depthTextures[i]);
+    depthView[i] = std::move(rhs.depthView[i]);
+    visibilityTexture[i] = std::move(rhs.visibilityTexture[i]);
+    visibilityView[i] = std::move(rhs.visibilityView[i]);
+    visibilityAttachmentView[i] = std::move(rhs.visibilityAttachmentView[i]);
+    positionTexture[i] = std::move(rhs.positionTexture[i]);
+    positionView[i] = std::move(rhs.positionView[i]);
+    positionAttachmentView[i] = std::move(rhs.positionAttachmentView[i]);
+    normalTexture[i] = std::move(rhs.normalTexture[i]);
+    normalView[i] = std::move(rhs.normalView[i]);
+    normalAttachmentView[i] = std::move(rhs.normalAttachmentView[i]);
+    shadingNormalTexture[i] = std::move(rhs.shadingNormalTexture[i]);
+    shadingNormalView[i] = std::move(rhs.shadingNormalView[i]);
+    shadingNormalAttachmentView[i] =
+        std::move(rhs.shadingNormalAttachmentView[i]);
+    surfaceTexture[i] = std::move(rhs.surfaceTexture[i]);
+    surfaceView[i] = std::move(rhs.surfaceView[i]);
+    surfaceAttachmentView[i] = std::move(rhs.surfaceAttachmentView[i]);
+    materialColorTexture[i] = std::move(rhs.materialColorTexture[i]);
+    materialColorView[i] = std::move(rhs.materialColorView[i]);
+    materialColorAttachmentView[i] =
+        std::move(rhs.materialColorAttachmentView[i]);
+    decalColorTexture[i] = std::move(rhs.decalColorTexture[i]);
+    decalColorView[i] = std::move(rhs.decalColorView[i]);
+    decalColorAttachmentView[i] = std::move(rhs.decalColorAttachmentView[i]);
+    decalColorInitialized[i] = rhs.decalColorInitialized[i];
+    rhs.decalColorInitialized[i] = false;
+    decalMulTexture[i] = std::move(rhs.decalMulTexture[i]);
+    decalMulView[i] = std::move(rhs.decalMulView[i]);
+    decalMulAttachmentView[i] = std::move(rhs.decalMulAttachmentView[i]);
+    decalAddTexture[i] = std::move(rhs.decalAddTexture[i]);
+    decalAddView[i] = std::move(rhs.decalAddView[i]);
+    decalAddAttachmentView[i] = std::move(rhs.decalAddAttachmentView[i]);
+    environmentTexture[i] = std::move(rhs.environmentTexture[i]);
+    environmentView[i] = std::move(rhs.environmentView[i]);
+    environmentAttachmentView[i] = std::move(rhs.environmentAttachmentView[i]);
+    translucentSceneCopy[i] = std::move(rhs.translucentSceneCopy[i]);
+    translucentSceneCopyView[i] = std::move(rhs.translucentSceneCopyView[i]);
+    translucentSceneCopyInitialized[i] = rhs.translucentSceneCopyInitialized[i];
+    rhs.translucentSceneCopyInitialized[i] = false;
+    waterReflectionTexture[i] = std::move(rhs.waterReflectionTexture[i]);
+    waterReflectionView[i] = std::move(rhs.waterReflectionView[i]);
+    waterReflectionAttachmentView[i] =
+        std::move(rhs.waterReflectionAttachmentView[i]);
+    waterReflectionPositionTexture[i] =
+        std::move(rhs.waterReflectionPositionTexture[i]);
+    waterReflectionPositionView[i] =
+        std::move(rhs.waterReflectionPositionView[i]);
+    waterReflectionPositionAttachmentView[i] =
+        std::move(rhs.waterReflectionPositionAttachmentView[i]);
+    waterReflectionOpaqueTexture[i] =
+        std::move(rhs.waterReflectionOpaqueTexture[i]);
+    waterReflectionOpaqueView[i] = std::move(rhs.waterReflectionOpaqueView[i]);
+    waterReflectionOpaqueAttachmentView[i] =
+        std::move(rhs.waterReflectionOpaqueAttachmentView[i]);
+    waterReflectionDepthTexture[i] =
+        std::move(rhs.waterReflectionDepthTexture[i]);
+    waterReflectionDepthView[i] = std::move(rhs.waterReflectionDepthView[i]);
+    waterReflectionDepthSampleView[i] =
+        std::move(rhs.waterReflectionDepthSampleView[i]);
+    waterReflectionDepthAttachmentView[i] =
+        std::move(rhs.waterReflectionDepthAttachmentView[i]);
+    waterSceneCopy[i] = std::move(rhs.waterSceneCopy[i]);
+    waterSceneCopyView[i] = std::move(rhs.waterSceneCopyView[i]);
+    waterReflectionInitialized[i] = rhs.waterReflectionInitialized[i];
+    waterSceneCopyInitialized[i] = rhs.waterSceneCopyInitialized[i];
+    rhs.waterReflectionInitialized[i] = rhs.waterSceneCopyInitialized[i] =
+        false;
+    environmentInitialized[i] = rhs.environmentInitialized[i];
+    rhs.environmentInitialized[i] = false;
+    aoPreparedDepthTexture[i] = std::move(rhs.aoPreparedDepthTexture[i]);
+    aoPreparedDepthStorageView[i] =
+        std::move(rhs.aoPreparedDepthStorageView[i]);
+    aoQuarterTexture[i] = std::move(rhs.aoQuarterTexture[i]);
+    aoQuarterStorageView[i] = std::move(rhs.aoQuarterStorageView[i]);
+    aoTexture[i] = std::move(rhs.aoTexture[i]);
+    aoStorageView[i] = std::move(rhs.aoStorageView[i]);
+    aoView[i] = std::move(rhs.aoView[i]);
+    aoInitialized[i] = rhs.aoInitialized[i];
+    rhs.aoInitialized[i] = false;
+  }
+  for (uint32_t i = 0; i < RI_MAX_SWAPCHAIN_IMAGES; ++i) {
+    velocityTexture[i] = std::move(rhs.velocityTexture[i]);
+    velocityView[i] = std::move(rhs.velocityView[i]);
+    velocityAttachmentView[i] = std::move(rhs.velocityAttachmentView[i]);
+  }
+  waterReflection = std::move(rhs.waterReflection);
+  haloQueries = std::move(rhs.haloQueries);
+  MoveDepthSampleViews(*this, rhs);
+  rhs.width = 0;
+  rhs.height = 0;
+}
+
+cViewport::StandardViewportState &cViewport::StandardViewportState::operator=(
+    StandardViewportState &&rhs) noexcept {
+  if (this == &rhs)
+    return *this;
+  this->~StandardViewportState();
+  new (this) StandardViewportState(std::move(rhs));
+  return *this;
+}
+
+void cViewport::StandardViewportState::Update(cGraphics::FrameContext *cntx,
+                                              cVector2l size) {
+  (void)cntx;
+  cGraphics *graphics = Interface<cGraphics>::Get();
+  if (!graphics)
+    return;
+
+  if (size.x <= 0 || size.y <= 0) {
+    *this = StandardViewportState{};
+    return;
+  }
+
+  const uint32_t widthValue = static_cast<uint32_t>(size.x);
+  const uint32_t heightValue = static_cast<uint32_t>(size.y);
+  const uint32_t imageCount =
+      graphics->swapchain ? graphics->swapchain->imageCount : 0;
+  if (imageCount == 0 || imageCount > RI_MAX_SWAPCHAIN_IMAGES) {
+    *this = StandardViewportState{};
+    return;
+  }
+  if (width == widthValue && height == heightValue &&
+      HasTargets(*this, imageCount))
+    return;
+
+  // Build off to the side. A failed image/view creation resets the old state
+  // as well, so stale targets at the previous extent cannot be published as
+  // the current render extent.
+  StandardViewportState replacement;
+  replacement.width = widthValue;
+  replacement.height = heightValue;
+  bool success = true;
+  for (uint32_t i = 0; i < imageCount && success; ++i) {
+    auto makeAttachmentView = [&](RISharedPointer<RITexture> &texture,
+                                  RI_Format_e format,
+                                  RISharedPointer<RITextureView> &out) {
+      RITextureViewDesc vd = {};
+      vd.viewType = RI_VIEWTYPE_COLOR_ATTACHMENT;
+      vd.format = format;
+      vd.mipNum = 1;
+      vd.layerNum = 1;
+      RITextureView av =
+          RITextureView::create(&graphics->device, texture.Get(), vd);
+      out = RISharedPointer<RITextureView>(&graphics->device, av);
+      return !av.isEmpty();
+    };
+    success = CreateViewportColorTexture(
+        &graphics->device, widthValue, heightValue, cGraphics::PogoColorFormat,
+        RI_USAGE_COLOR_ATTACHMENT | RI_USAGE_SHADER_RESOURCE |
+            RI_USAGE_TRANSFER_SRC |
+            static_cast<decltype(RI_USAGE_TRANSFER_SRC)>(0x40),
+        &replacement.renderTarget[i], &replacement.renderTargetView[i],
+        "StandardViewportState.renderTarget");
+    success =
+        success &&
+        CreateViewportAttachmentTexture(
+            &graphics->device, widthValue, heightValue, cGraphics::DepthFormat,
+            RI_USAGE_DEPTH_STENCIL_ATTACHMENT | RI_USAGE_SHADER_RESOURCE,
+            RI_VIEWTYPE_DEPTH_STENCIL_ATTACHMENT, &replacement.depthTextures[i],
+            &replacement.depthView[i], "StandardViewportState.depth");
+    if (success)
+      success = CreateDepthSampleView(graphics, i, replacement);
+    // Five full-resolution material MRT outputs. renderTarget is albedo/final
+    // HDR; the other four remain available to lighting, post effects, and
+    // diagnostics.
+    if (graphics->device.physicalAdapter.colorAttachmentMaxNum < 6 ||
+        widthValue > 32767 || heightValue > 32767)
+      success = false;
+    success =
+        success &&
+        CreateViewportColorTexture(
+            &graphics->device, widthValue, heightValue, RI_FORMAT_RGBA32_SFLOAT,
+            RI_USAGE_COLOR_ATTACHMENT | RI_USAGE_SHADER_RESOURCE,
+            &replacement.positionTexture[i], &replacement.positionView[i],
+            "StandardViewportState.position");
+    success =
+        success && makeAttachmentView(replacement.positionTexture[i],
+                                      RI_FORMAT_RGBA32_SFLOAT,
+                                      replacement.positionAttachmentView[i]);
+    success =
+        success &&
+        CreateViewportColorTexture(
+            &graphics->device, widthValue, heightValue, RI_FORMAT_RGBA32_SFLOAT,
+            RI_USAGE_COLOR_ATTACHMENT | RI_USAGE_SHADER_RESOURCE,
+            &replacement.normalTexture[i], &replacement.normalView[i],
+            "StandardViewportState.normal");
+    success =
+        success && makeAttachmentView(replacement.normalTexture[i],
+                                      RI_FORMAT_RGBA32_SFLOAT,
+                                      replacement.normalAttachmentView[i]);
+    success = success &&
+              CreateViewportColorTexture(&graphics->device, widthValue,
+                                         heightValue, RI_FORMAT_RGBA32_SFLOAT,
+                                         RI_USAGE_COLOR_ATTACHMENT |
+                                             RI_USAGE_SHADER_RESOURCE,
+                                         &replacement.shadingNormalTexture[i],
+                                         &replacement.shadingNormalView[i],
+                                         "StandardViewportState.shadingNormal");
+    success = success &&
+              makeAttachmentView(replacement.shadingNormalTexture[i],
+                                 RI_FORMAT_RGBA32_SFLOAT,
+                                 replacement.shadingNormalAttachmentView[i]);
+    success = success &&
+              CreateViewportColorTexture(
+                  &graphics->device, widthValue, heightValue,
+                  cGraphics::VisibilityFormat,
+                  RI_USAGE_COLOR_ATTACHMENT | RI_USAGE_SHADER_RESOURCE,
+                  &replacement.surfaceTexture[i], &replacement.surfaceView[i],
+                  "StandardViewportState.surface");
+    success =
+        success && makeAttachmentView(replacement.surfaceTexture[i],
+                                      cGraphics::VisibilityFormat,
+                                      replacement.surfaceAttachmentView[i]);
+    success = success &&
+              CreateViewportColorTexture(
+                  &graphics->device, widthValue, heightValue,
+                  cGraphics::VelocityFormat,
+                  RI_USAGE_COLOR_ATTACHMENT | RI_USAGE_SHADER_RESOURCE,
+                  &replacement.velocityTexture[i], &replacement.velocityView[i],
+                  "StandardViewportState.velocity");
+    success =
+        success && makeAttachmentView(replacement.velocityTexture[i],
+                                      cGraphics::VelocityFormat,
+                                      replacement.velocityAttachmentView[i]);
+
+    success =
+        success && CreateViewportColorTexture(
+                       &graphics->device, widthValue, heightValue,
+                       cGraphics::PogoColorFormat,
+                       RI_USAGE_COLOR_ATTACHMENT | RI_USAGE_SHADER_RESOURCE,
+                       &replacement.materialColorTexture[i],
+                       &replacement.materialColorView[i],
+                       "StandardViewportState.materialColor");
+    success = success &&
+              makeAttachmentView(replacement.materialColorTexture[i],
+                                 cGraphics::PogoColorFormat,
+                                 replacement.materialColorAttachmentView[i]);
+    success =
+        success &&
+        CreateViewportColorTexture(
+            &graphics->device, widthValue, heightValue,
+            cGraphics::PogoColorFormat,
+            RI_USAGE_COLOR_ATTACHMENT | RI_USAGE_SHADER_RESOURCE,
+            &replacement.decalColorTexture[i], &replacement.decalColorView[i],
+            "StandardViewportState.decalColor");
+    success =
+        success && makeAttachmentView(replacement.decalColorTexture[i],
+                                      cGraphics::PogoColorFormat,
+                                      replacement.decalColorAttachmentView[i]);
+    for (auto target : {std::make_tuple(&replacement.decalMulTexture[i],
+                                        &replacement.decalMulView[i],
+                                        &replacement.decalMulAttachmentView[i],
+                                        "StandardViewportState.decalMul"),
+                        std::make_tuple(&replacement.decalAddTexture[i],
+                                        &replacement.decalAddView[i],
+                                        &replacement.decalAddAttachmentView[i],
+                                        "StandardViewportState.decalAdd")}) {
+      success =
+          success &&
+          CreateViewportColorTexture(
+              &graphics->device, widthValue, heightValue,
+              cGraphics::PogoColorFormat,
+              RI_USAGE_COLOR_ATTACHMENT | RI_USAGE_SHADER_RESOURCE,
+              std::get<0>(target), std::get<1>(target), std::get<3>(target));
+      success = success && makeAttachmentView(*std::get<0>(target),
+                                              cGraphics::PogoColorFormat,
+                                              *std::get<2>(target));
+    }
+    replacement.aoInitialized[i] = false;
+    success =
+        success &&
+        CreateViewportColorTexture(
+            &graphics->device, widthValue, heightValue,
+            cGraphics::PogoColorFormat,
+            RI_USAGE_COLOR_ATTACHMENT | RI_USAGE_SHADER_RESOURCE |
+                RI_USAGE_TRANSFER_SRC |
+                static_cast<decltype(RI_USAGE_TRANSFER_SRC)>(0x40),
+            &replacement.environmentTexture[i], &replacement.environmentView[i],
+            "StandardViewportState.environment");
+    if (success) {
+      RITextureViewDesc vd = {};
+      vd.viewType = RI_VIEWTYPE_COLOR_ATTACHMENT;
+      vd.format = cGraphics::PogoColorFormat;
+      vd.mipNum = 1;
+      vd.layerNum = 1;
+      RITextureView av = RITextureView::create(
+          &graphics->device, replacement.environmentTexture[i].Get(), vd);
+      replacement.environmentAttachmentView[i] =
+          RISharedPointer<RITextureView>(&graphics->device, av);
+      success = !av.isEmpty();
+    }
+    success =
+        success && CreateViewportColorTexture(
+                       &graphics->device, widthValue, heightValue,
+                       cGraphics::PogoColorFormat,
+                       RI_USAGE_SHADER_RESOURCE | RI_USAGE_TRANSFER_DST |
+                           static_cast<decltype(RI_USAGE_TRANSFER_DST)>(0x40),
+                       &replacement.translucentSceneCopy[i],
+                       &replacement.translucentSceneCopyView[i],
+                       "StandardViewportState.translucentSceneCopy");
+
+    const uint32_t quarterWidth = (widthValue + 3) / 4;
+    const uint32_t quarterHeight = (heightValue + 3) / 4;
+
+    // Ambient occlusion textures are optional. Allocation failure clears only AO
+    // members without invalidating the viewport.
+    {
+      bool aoSuccess = true;
+
+      // Allocate AO resources: aoPreparedDepthTexture, aoQuarterTexture, aoTexture.
+      // The two quarter-resolution arrays hold one slice per full-resolution
+      // offset in a 4x4 block and are only ever read as storage images.
+      static constexpr uint32_t kAOSlices = 16;
+      aoSuccess = aoSuccess &&
+                  CreateViewportAttachmentTexture(
+                      &graphics->device, quarterWidth, quarterHeight,
+                      RI_FORMAT_R16_SFLOAT, RI_USAGE_SHADER_RESOURCE_STORAGE,
+                      RI_VIEWTYPE_SHADER_RESOURCE_STORAGE_2D_ARRAY,
+                      &replacement.aoPreparedDepthTexture[i],
+                      &replacement.aoPreparedDepthStorageView[i],
+                      "StandardViewportState.aoPreparedDepth", kAOSlices);
+      aoSuccess = aoSuccess &&
+                  CreateViewportAttachmentTexture(
+                      &graphics->device, quarterWidth, quarterHeight,
+                      RI_FORMAT_R16_SFLOAT, RI_USAGE_SHADER_RESOURCE_STORAGE,
+                      RI_VIEWTYPE_SHADER_RESOURCE_STORAGE_2D_ARRAY,
+                      &replacement.aoQuarterTexture[i],
+                      &replacement.aoQuarterStorageView[i],
+                      "StandardViewportState.aoQuarter", kAOSlices);
+      // Written by reinterleave, cleared to 1 first, sampled by the light pass.
+      aoSuccess =
+          aoSuccess &&
+          CreateViewportAttachmentTexture(
+              &graphics->device, widthValue, heightValue, RI_FORMAT_R16_SFLOAT,
+              RI_USAGE_SHADER_RESOURCE_STORAGE | RI_USAGE_SHADER_RESOURCE |
+                  RI_USAGE_TRANSFER_DST,
+              RI_VIEWTYPE_SHADER_RESOURCE_STORAGE_2D, &replacement.aoTexture[i],
+              &replacement.aoStorageView[i], "StandardViewportState.ao");
+      // Create additional shader resource view for aoTexture (optional, doesn't fail AO)
+      if (!replacement.aoTexture[i].isEmpty()) {
+        RITextureViewDesc aoShaderView = {};
+        aoShaderView.viewType = RI_VIEWTYPE_SHADER_RESOURCE_2D;
+        aoShaderView.format = RI_FORMAT_R16_SFLOAT;
+        aoShaderView.mipNum = 1;
+        aoShaderView.layerNum = 1;
+        RITextureView aoShaderViewObj = RITextureView::create(
+            &graphics->device, replacement.aoTexture[i].Get(), aoShaderView);
+        if (!aoShaderViewObj.isEmpty()) {
+          replacement.aoView[i] = RISharedPointer<RITextureView>(
+              &graphics->device, aoShaderViewObj);
+        }
+      }
+
+      // If any AO allocation failed, clear all AO members but keep success intact
+      if (!aoSuccess) {
+        replacement.aoPreparedDepthTexture[i] = {};
+        replacement.aoPreparedDepthStorageView[i] = {};
+        replacement.aoQuarterTexture[i] = {};
+        replacement.aoQuarterStorageView[i] = {};
+        replacement.aoTexture[i] = {};
+        replacement.aoStorageView[i] = {};
+        replacement.aoView[i] = {};
+      }
+    }
+
+    const uint32_t reflectionWidth = std::max(1u, widthValue / 2u);
+    const uint32_t reflectionHeight = std::max(1u, heightValue / 2u);
+    success =
+        success && CreateViewportColorTexture(
+                       &graphics->device, reflectionWidth, reflectionHeight,
+                       cGraphics::PogoColorFormat,
+                       RI_USAGE_COLOR_ATTACHMENT | RI_USAGE_SHADER_RESOURCE,
+                       &replacement.waterReflectionTexture[i],
+                       &replacement.waterReflectionView[i],
+                       "StandardViewportState.waterReflection");
+    success = success &&
+              makeAttachmentView(replacement.waterReflectionTexture[i],
+                                 cGraphics::PogoColorFormat,
+                                 replacement.waterReflectionAttachmentView[i]);
+    success =
+        success && CreateViewportColorTexture(
+                       &graphics->device, reflectionWidth, reflectionHeight,
+                       RI_FORMAT_RGBA32_SFLOAT,
+                       RI_USAGE_COLOR_ATTACHMENT | RI_USAGE_SHADER_RESOURCE,
+                       &replacement.waterReflectionPositionTexture[i],
+                       &replacement.waterReflectionPositionView[i],
+                       "StandardViewportState.waterReflectionPosition");
+    success =
+        success && makeAttachmentView(
+                       replacement.waterReflectionPositionTexture[i],
+                       RI_FORMAT_RGBA32_SFLOAT,
+                       replacement.waterReflectionPositionAttachmentView[i]);
+    success =
+        success && CreateViewportColorTexture(
+                       &graphics->device, reflectionWidth, reflectionHeight,
+                       cGraphics::PogoColorFormat,
+                       RI_USAGE_COLOR_ATTACHMENT | RI_USAGE_SHADER_RESOURCE,
+                       &replacement.waterReflectionOpaqueTexture[i],
+                       &replacement.waterReflectionOpaqueView[i],
+                       "StandardViewportState.waterReflectionOpaque");
+    success =
+        success &&
+        makeAttachmentView(replacement.waterReflectionOpaqueTexture[i],
+                           cGraphics::PogoColorFormat,
+                           replacement.waterReflectionOpaqueAttachmentView[i]);
+    success = success &&
+              CreateViewportAttachmentTexture(
+                  &graphics->device, reflectionWidth, reflectionHeight,
+                  cGraphics::DepthFormat,
+                  RI_USAGE_DEPTH_STENCIL_ATTACHMENT | RI_USAGE_SHADER_RESOURCE,
+                  RI_VIEWTYPE_DEPTH_STENCIL_ATTACHMENT,
+                  &replacement.waterReflectionDepthTexture[i],
+                  &replacement.waterReflectionDepthView[i],
+                  "StandardViewportState.waterReflectionDepth");
+
+    if (success) {
+      RITextureViewDesc depthSample = {};
+      depthSample.viewType = RI_VIEWTYPE_SHADER_RESOURCE_2D;
+      depthSample.format = cGraphics::DepthFormat;
+      depthSample.mipNum = depthSample.layerNum = 1;
+      RITextureView sample = RITextureView::create(
+          &graphics->device, replacement.waterReflectionDepthTexture[i].Get(),
+          depthSample);
+      replacement.waterReflectionDepthSampleView[i] =
+          RISharedPointer<RITextureView>(&graphics->device, sample);
+      success = !sample.isEmpty();
+    }
+    if (success) {
+      RITextureViewDesc depthAttachment = {};
+      depthAttachment.viewType = RI_VIEWTYPE_DEPTH_STENCIL_ATTACHMENT;
+      depthAttachment.format = cGraphics::DepthFormat;
+      depthAttachment.mipNum = depthAttachment.layerNum = 1;
+      RITextureView view = RITextureView::create(
+          &graphics->device, replacement.waterReflectionDepthTexture[i].Get(),
+          depthAttachment);
+      replacement.waterReflectionDepthAttachmentView[i] =
+          RISharedPointer<RITextureView>(&graphics->device, view);
+      success = !view.isEmpty();
+    }
+    success =
+        success &&
+        CreateViewportColorTexture(
+            &graphics->device, widthValue, heightValue,
+            cGraphics::PogoColorFormat,
+            RI_USAGE_SHADER_RESOURCE | RI_USAGE_TRANSFER_DST |
+                static_cast<decltype(RI_USAGE_TRANSFER_DST)>(0x40),
+            &replacement.waterSceneCopy[i], &replacement.waterSceneCopyView[i],
+            "StandardViewportState.waterSceneCopy");
+    // Packed visibility is an enhancement, not a prerequisite for the
+    // conventional renderer. Devices with only one color attachment, or
+    // where the integer attachment cannot be allocated, retain the color and
+    // depth targets and use the conventional material path instead.
+    if (success && graphics->device.fragmentShaderBarycentricEnabled) {
+      if (!CreateViewportAttachmentTexture(
+              &graphics->device, widthValue, heightValue,
+              cGraphics::VisibilityFormat,
+              RI_USAGE_COLOR_ATTACHMENT | RI_USAGE_SHADER_RESOURCE,
+              RI_VIEWTYPE_SHADER_RESOURCE_2D, &replacement.visibilityTexture[i],
+              &replacement.visibilityView[i],
+              "StandardViewportState.visibility")) {
+        replacement.visibilityTexture[i] = {};
+        replacement.visibilityView[i] = {};
+      } else {
+        RITextureViewDesc vd = {};
+        vd.viewType = RI_VIEWTYPE_COLOR_ATTACHMENT;
+        vd.format = cGraphics::VisibilityFormat;
+        vd.mipNum = 1;
+        vd.layerNum = 1;
+        RITextureView av = RITextureView::create(
+            &graphics->device, replacement.visibilityTexture[i].Get(), vd);
+        replacement.visibilityAttachmentView[i] =
+            RISharedPointer<RITextureView>(&graphics->device, av);
+        if (av.isEmpty())
+          success = false;
+      }
+    }
+  }
+
+  replacement.temporal.Reset();
+  if (!success) {
+    *this = StandardViewportState{};
+    return;
+  }
+  *this = std::move(replacement);
+}
+
+void cStandardRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
+                             float afFrameTime, cFrustum *apFrustum,
+                             cWorld *apWorld, cRenderSettings *apSettings,
+                             bool abSendFrameBufferToPostEffects) {
+  (void)abSendFrameBufferToPostEffects;
+  if (!m_fallback || !m_fallbackLoaded || !m_lighting || !m_lightingLoaded) {
+    static bool sLoggedNotLoaded = false;
+    if (!sLoggedNotLoaded) {
+      Error("Standard renderer: Draw skipped because its shaders are not "
+            "loaded\n");
+      sLoggedNotLoaded = true;
+    }
+    return;
+  }
+  if (!mpGraphics || !apWorld || !viewport || !apFrustum ||
+      !m_indirectDrawBuffer.mappedAddress)
+    return;
+  // Standard keeps a separate legacy ABI: enhanced-world buffers are not
+  // reusable because their radius/intensity and colour transfer functions are
+  // intentionally different. Build before any resolve recording so texture
+  // pins and the SSBO contents share this frame's lifetime.
+  RISharedPointer<RIBuffer> pointLights;
+  RISharedPointer<RIBuffer> spotLights;
+  RISharedPointer<RIBuffer> boxLights;
+  uint32_t pointLightCount = 0, spotLightCount = 0, boxLightCount = 0;
+  uint32_t shadowCount = 0;
+  const eShadowMapResolution shadowResolutionCap =
+      apSettings ? apSettings->mMaxShadowMapResolution
+                 : eShadowMapResolution_High;
+  const bool shadowsAvailable = m_shadow && m_shadowLoaded &&
+                                (!apSettings || apSettings->mbRenderShadows);
+  // Legacy RendererDeferred reported the lights it drew (MapView shows this):
+  // visible legacy lights touching the camera frustum.
+  if (apSettings) {
+    int renderedLights = 0;
+    for (iLight *light : *apWorld->GetLightList()) {
+      if (light && light->GetLightModel() == eLightModel_Legacy &&
+          light->GetVisibleVar() && light->IsLegacyRendererEnabled() &&
+          (!apFrustum || apFrustum->CollideBoundingVolume(
+                             light->GetBoundingVolume()) != eCollision_Outside))
+        ++renderedLights;
+    }
+    apSettings->mlNumberOfLightsRendered = renderedLights;
+  }
+  // Shadow candidates: legacy spot and point lights touching the camera
+  // frustum (legacy RendererDeferred selection). The tile size starts from the
+  // authored quality clamped by the cap, steps down with distance as the legacy
+  // renderer did, and is then lowered to the light's projected screen size
+  // before atlas packing. Nearest lights get budget priority.
+  struct ShadowSelection {
+    iLight *light;
+    bool point;
+    float distance;
+    uint32_t size;
+  };
+  std::vector<ShadowSelection> shadowSelection;
+  if (shadowsAvailable) {
+    const cVector2l selectionExtent = viewport->GetRenderExtent();
+    const float halfFovTan = std::tan(apFrustum->GetFOV() * 0.5f);
+    for (iLight *light : *apWorld->GetLightList()) {
+      if (!light || (light->GetLightType() != eLightType_Spot &&
+                     light->GetLightType() != eLightType_Point))
+        continue;
+      const bool point = light->GetLightType() == eLightType_Point;
+      const float radius = light->GetRadius();
+      if (light->GetLightModel() != eLightModel_Legacy ||
+          !light->GetVisibleVar() || !light->IsLegacyRendererEnabled() ||
+          !light->GetCastShadows() || light->GetShadowCastersAffected() == 0 ||
+          !StandardFinite(radius) || radius <= 0.0f)
+        continue;
+      // Malformed authored slope bias must never reach the driver.
+      if (!StandardFinite(light->GetShadowMapSlopeScaleBiasMul()))
+        continue;
+      if (apFrustum->CollideBoundingVolume(light->GetBoundingVolume()) ==
+          eCollision_Outside)
+        continue;
+      float distance = 0.0f;
+      if (point) {
+        if (radius <= StandardPointShadowNear(radius))
+          continue;
+        distance = std::max(cMath::Vector3Dist(apFrustum->GetOrigin(),
+                                               light->GetWorldPosition()) -
+                                radius,
+                            0.0f);
+      } else {
+        iLightSpot *spot = static_cast<iLightSpot *>(light);
+        const float fov = spot->GetFOV(), aspect = spot->GetAspect();
+        const float nearClip = spot->GetNearClipPlane();
+        if (radius <= nearClip || !StandardFinite(fov) || fov <= 0.0f ||
+            fov >= 3.14159265358979323846f || !StandardFinite(aspect) ||
+            aspect <= 0.0f || !StandardFinite(nearClip) || nearClip <= 0.0f)
+          continue;
+        // Distance from the camera to the light frustum.
+        if (!apFrustum->CheckFrustumNearPlaneIntersection(spot->GetFrustum())) {
+          cVector3f intersection = spot->GetFrustum()->GetOrigin();
+          spot->GetFrustum()->CheckLineIntersection(
+              apFrustum->GetOrigin(),
+              spot->GetBoundingVolume()->GetWorldCenter(), intersection);
+          distance = cMath::Vector3Dist(apFrustum->GetOrigin(), intersection);
+        }
+      }
+      if (!StandardFinite(distance) || distance > kStandardShadowDistanceNone)
+        continue;
+      eShadowMapResolution quality = StandardCapShadowQuality(
+          light->GetShadowMapResolution(), shadowResolutionCap);
+      if (distance > kStandardShadowDistanceLow) {
+        if (quality == eShadowMapResolution_Low)
+          continue;
+        quality = eShadowMapResolution_Low;
+      } else if (distance > kStandardShadowDistanceMedium) {
+        quality = quality == eShadowMapResolution_High
+                      ? eShadowMapResolution_Medium
+                      : eShadowMapResolution_Low;
+      }
+      // Projected bounding-sphere diameter in pixels. A camera inside the
+      // sphere passes 0, which keeps the legacy step.
+      cBoundingVolume *bounds = light->GetBoundingVolume();
+      const float boundsRadius = bounds->GetRadius();
+      const float centreDistance =
+          cMath::Vector3Dist(apFrustum->GetOrigin(), bounds->GetWorldCenter());
+      float projectedDiameter = 0.0f;
+      if (StandardFinite(boundsRadius) && centreDistance > boundsRadius &&
+          halfFovTan > 0.0f)
+        projectedDiameter = boundsRadius / (centreDistance * halfFovTan) *
+                            static_cast<float>(selectionExtent.y);
+      const uint32_t size =
+          StandardShadowTileSize(StandardShadowResolution(quality),
+                                 projectedDiameter, kStandardShadowMinTile);
+      if (size == 0)
+        continue;
+      shadowSelection.push_back({light, point, distance, size});
+    }
+    std::stable_sort(shadowSelection.begin(), shadowSelection.end(),
+                     [](const ShadowSelection &a, const ShadowSelection &b) {
+                       return a.distance < b.distance;
+                     });
+  }
+  m_rendererList.BeginAndReset(afFrameTime, apFrustum);
+  auto *dynamicContainer =
+      apWorld->GetRenderableSet(eWorldContainerType_Dynamic);
+  auto *staticContainer = apWorld->GetRenderableSet(eWorldContainerType_Static);
+  if (!dynamicContainer || !staticContainer)
+    return;
+  dynamicContainer->UpdateBeforeRendering();
+  staticContainer->UpdateBeforeRendering();
+  auto add = [&](iRenderable *o) {
+    if (o && rendering::IsObjectIsVisible(
+                 o, eRenderableFlag_VisibleInNonReflection, {}))
+      m_rendererList.AddObject(o);
+  };
+  rendering::WalkAndPrepareRenderList(dynamicContainer, apFrustum, add,
+                                      eRenderableFlag_VisibleInNonReflection);
+  rendering::WalkAndPrepareRenderList(staticContainer, apFrustum, add,
+                                      eRenderableFlag_VisibleInNonReflection);
+  m_rendererList.End(
+      eRenderListCompileFlag_Diffuse | eRenderListCompileFlag_FogArea |
+      eRenderListCompileFlag_Translucent | eRenderListCompileFlag_Decal);
+  auto solids = m_rendererList.GetSolidObjects();
+  for (iRenderable *o : solids) {
+    if (o && o->GetVertexBuffer())
+      static_cast<cVertexBuffer *>(o->GetVertexBuffer())
+          ->SubmitToGPU(&mpGraphics->blasSubmit.cmds[0], &mpGraphics->device,
+                        cntx);
+  }
+  const uint32_t index = mpGraphics->swapchainIndex;
+  const uint32_t imageCount =
+      mpGraphics->swapchain ? mpGraphics->swapchain->imageCount : 0;
+  if (index >= RI_MAX_SWAPCHAIN_IMAGES || index >= imageCount)
+    return;
+
+  const cVector2l extent = viewport->GetRenderExtent();
+  if (extent.x <= 0 || extent.y <= 0)
+    return;
+  cViewport::StandardViewportState *state =
+      viewport->PrepareToRender<cViewport::StandardViewportState>(cntx, extent);
+  if (!state || state->width == 0 || state->height == 0 ||
+      state->renderTarget[index].isEmpty() ||
+      state->renderTargetView[index].isEmpty() ||
+      state->depthView[index].isEmpty())
+    return;
+
+  // Publish exactly the matrices used by the raster pass.
+  const uint32_t jitterPhaseCount = viewport->GetTemporalJitterPhaseCount();
+  const hpl::TemporalJitter pendingJitter =
+      jitterPhaseCount == 0
+          ? hpl::TemporalJitter{}
+          : hpl::TemporalPendingJitter(state->temporal, jitterPhaseCount);
+
+  // GetViewMat/GetProjectionMat return by value; TemporalFrameDesc stores raw
+  // pointers, so the matrices must outlive TemporalBeginFrame (as in Hybrid).
+  const ml::float4x4 frustumViewMat = apFrustum->GetViewMat();
+  const ml::float4x4 frustumProjMat = apFrustum->GetProjectionMat();
+
+  hpl::TemporalFrameDesc temporalDesc = {};
+  temporalDesc.viewMat = frustumViewMat.a;
+  temporalDesc.unjitteredProjMat = frustumProjMat.a;
+  temporalDesc.renderWidth = state->width;
+  temporalDesc.renderHeight = state->height;
+  temporalDesc.jitterPixels[0] = pendingJitter.x;
+  temporalDesc.jitterPixels[1] = pendingJitter.y;
+  // Camera cuts / teleports request a history reset on the viewport; Hybrid
+  // consumes the same flag.
+  temporalDesc.forceHistoryReset = viewport->ConsumeTemporalHistoryReset();
+
+  const hpl::TemporalFrameSnapshot temporalFrame =
+      hpl::TemporalBeginFrame(state->temporal, temporalDesc);
+
+  viewport->PublishRasterCamera(temporalFrame.viewMat, temporalFrame.projMat);
+  viewport->PublishRasterTemporalFrame(temporalFrame, afFrameTime * 1000.0f);
+
+  uint32_t drawCount = 0;
+  RISegmentReq req = {};
+  VkDrawIndirectCommand *indirect = nullptr;
+  if (!solids.empty() &&
+      m_indirectSegment.request(mpGraphics->frameIndex, solids.size(), &req)) {
+    indirect = reinterpret_cast<VkDrawIndirectCommand *>(
+        static_cast<uint8_t *>(m_indirectDrawBuffer.mappedAddress) +
+        req.elementOffset * sizeof(VkDrawIndirectCommand));
+  }
+  // Object slots are shared by the global set. Salt each pane so a second
+  // camera cannot overwrite this pane's model/UV/material record mid-frame.
+  const uint32_t paneSalt =
+      hash_u64(HASH_INITIAL_VALUE, reinterpret_cast<uintptr_t>(viewport));
+  for (iRenderable *o : solids) {
+    if (!o || !o->GetVertexBuffer())
+      continue;
+    cVertexBuffer *vb = static_cast<cVertexBuffer *>(o->GetVertexBuffer());
+    cMaterial *mat = o->GetMaterial();
+    if (!vb || !mat || !indirect)
+      continue;
+    const uint32_t materialId =
+        mpGraphics->globalset
+            ->submitMaterial(cntx, mat,
+                             static_cast<uint32_t>(mpGraphics->frameIndex))
+            .materialId;
+    if (materialId == UINT32_MAX)
+      continue;
+    ObjectSubmitDesc object;
+    object.modelMatrix = o->GetModelMatrix(apFrustum);
+    object.uvMatrix = mat->GetUvMatrix();
+    object.materialId = materialId;
+    object.dissolveAmount = o->GetCoverageAmount();
+    object.illuminationAmount = o->GetIlluminationAmount();
+    object.renderFlags = o->GetRenderFlags();
+    if (o->IsStatic())
+      object.renderFlags |= 0x80000000u;
+    object.decalList = (static_cast<uint32_t>(o->GetDecalListOffset()) << 8) |
+                       (static_cast<uint32_t>(o->GetDecalListCount()) & 0xffu);
+    const hash_t cookie =
+        hash_u32(hash_u64(HASH_INITIAL_VALUE, o->GetUniqueCookie()), paneSalt);
+    uint32_t slot = mpGraphics->globalset->submitObject(
+        cookie, static_cast<uint32_t>(mpGraphics->frameIndex), vb, object,
+        kSubmitData | kSubmitVertex | kSubmitIndex);
+    if (slot == UINT32_MAX)
+      continue;
+    const uint32_t vertexCount =
+        vb->GetIndexNum() > 0 ? static_cast<uint32_t>(vb->GetIndexNum())
+                              : static_cast<uint32_t>(vb->GetVertexNum());
+    indirect[drawCount++] = {vertexCount, 1, 0, slot};
+  }
+  mpGraphics->globalset->flushMirrors(&mpGraphics->device);
+
+  // gPerFrame (set 1) is needed before any Standard program draws: the shadow
+  // raster's material alpha test reads it through the bindless animated-texture
+  // lookup. Building it is CPU-only, so nothing is recorded yet on failure.
+  RIProgram::DescriptorBinding frameBinding;
+  if (!m_environment ||
+      !m_environment->PrepareFrame(
+          cntx, apFrustum, state->width, state->height, GetTimeCount(), apWorld,
+          m_rendererList.GetFogAreas(),
+          apSettings ? apSettings->mClearColor : cColor(0, 0), &frameBinding,
+          &temporalFrame))
+    return;
+
+  // Pack this Draw's shadow tiles into atlas pages before the main render
+  // begins. Each tile gets its own frustum, caster list and indirect range. A
+  // light is published only when every one of its tiles was prepared and all
+  // pages rendered; tile records follow publish order, so a point light's six
+  // faces are contiguous.
+  RISharedPointer<RITexture> standardShadowTexture;
+  RISharedPointer<RITextureView> standardShadowView;
+  std::vector<StandardShadowTileData> shadowTileRecords;
+  std::vector<StandardShadowLightTiles> shadowLightTiles;
+  if (!shadowSelection.empty() && m_shadow && m_shadowLoaded &&
+      !m_shadowIndirectBuffer.isEmpty() &&
+      m_shadowIndirectBuffer.mappedAddress &&
+      (!apSettings || apSettings->mbRenderShadows)) {
+    const StandardShadowAtlasConfig atlasConfig{
+        kStandardShadowAtlasCapTiles *
+            StandardShadowResolution(shadowResolutionCap),
+        kStandardShadowMaxAtlases, kStandardShadowMinTile};
+    std::vector<StandardShadowTileRequest> requests;
+    for (uint32_t owner = 0; owner < shadowSelection.size(); ++owner) {
+      const uint32_t faces =
+          shadowSelection[owner].point ? kStandardShadowCubeFaces : 1u;
+      for (uint32_t face = 0; face < faces; ++face)
+        requests.push_back({shadowSelection[owner].size, owner, face});
+    }
+    StandardShadowFitBudget(atlasConfig, requests);
+    uint32_t atlasCount = 0;
+    const std::vector<StandardShadowTilePlacement> placements =
+        StandardShadowPackAtlases(atlasConfig, requests, atlasCount);
+    // One persistent page array instead of new depth images every Draw: each
+    // page is barriered from UNDEFINED before it is rendered, so reuse needs no
+    // layout bookkeeping. It grows when a Draw packs more pages.
+    if (atlasCount > 0 && (m_shadowAtlas.isEmpty() ||
+                           m_shadowAtlasSize != atlasConfig.atlasSize ||
+                           m_shadowAtlasLayers < atlasCount)) {
+      if (!m_shadowAtlas.isEmpty())
+        mpGraphics->graphicsDefer.push(m_shadowAtlas);
+      m_shadowAtlas = {};
+      m_shadowAtlasSize = 0;
+      m_shadowAtlasLayers = 0;
+      RITextureDesc td{};
+      td.type = RI_TEXTURE_2D;
+      td.format = cStandardShadowPass::kAtlasFormat;
+      td.width = atlasConfig.atlasSize;
+      td.height = atlasConfig.atlasSize;
+      td.depth = 1;
+      td.layerNum = atlasCount;
+      td.mipNum = 1;
+      td.sampleCount = 1;
+      td.usage = RI_USAGE_DEPTH_STENCIL_ATTACHMENT | RI_USAGE_SHADER_RESOURCE;
+      RITexture t = RITexture::create(&mpGraphics->device, td);
+      m_shadowAtlas = RISharedPointer<RITexture>(&mpGraphics->device, t);
+      if (!m_shadowAtlas.isEmpty()) {
+        NameStandardImage(mpGraphics, *m_shadowAtlas,
+                          "StandardRenderer.shadowAtlas");
+        m_shadowAtlasSize = atlasConfig.atlasSize;
+        m_shadowAtlasLayers = atlasCount;
+      }
+    }
+    if (atlasCount > 0 && !m_shadowAtlas.isEmpty()) {
+      standardShadowTexture = m_shadowAtlas;
+      struct PreparedTile {
+        uint32_t atlas;
+        cStandardShadowPass::Tile raster;
+        StandardShadowTileData record;
+      };
+      struct PreparedLight {
+        iLight *light;
+        uint32_t size;
+        std::vector<PreparedTile> tiles;
+      };
+      std::vector<PreparedLight> prepared;
+      const float globalSlope =
+          apSettings ? apSettings->mfShadowMapSlopeScaleBias : 2.0f;
+      // FitBudget keeps each light's requests contiguous and in face order.
+      size_t cursor = 0;
+      while (cursor < requests.size()) {
+        const uint32_t owner = requests[cursor].owner;
+        const size_t first = cursor;
+        while (cursor < requests.size() && requests[cursor].owner == owner)
+          ++cursor;
+        const size_t end = cursor;
+        const ShadowSelection &selected = shadowSelection[owner];
+        iLight *light = selected.light;
+        bool lightFailed =
+            end - first != (selected.point ? kStandardShadowCubeFaces : 1u);
+        for (size_t i = first; i < end && !lightFailed; ++i)
+          lightFailed =
+              !placements[i].IsValid() || requests[i].face != i - first;
+        if (lightFailed)
+          continue;
+
+        const uint32_t variabilityMask =
+            static_cast<uint32_t>(light->GetShadowCastersAffected());
+        const float slopeScaleBias =
+            StandardFinite(globalSlope)
+                ? globalSlope * light->GetShadowMapSlopeScaleBiasMul()
+                : 0.0f;
+        const float authoredBias = light->GetShadowMapBiasMul();
+        const float depthBias =
+            (StandardFinite(authoredBias) && authoredBias >= 0.0f)
+                ? 0.0005f * authoredBias
+                : 0.0f;
+        const float radius = light->GetRadius();
+        // Faces of one light share object slots: model matrices do not depend
+        // on the face.
+        const uint32_t lightSalt = hash_u32(
+            hash_u64(HASH_INITIAL_VALUE, reinterpret_cast<uintptr_t>(viewport)),
+            owner + 0x53484457u);
+        // Update both sets every Draw so moved and animated casters are fresh;
+        // light frusta also retain casters behind the camera.
+        dynamicContainer->UpdateBeforeRendering();
+        staticContainer->UpdateBeforeRendering();
+        PreparedLight entry{light, placements[first].size, {}};
+        bool anyCaster = false;
+        for (size_t i = first; i < end && !lightFailed; ++i) {
+          const StandardShadowTilePlacement &placement = placements[i];
+          float nearClip, fov, aspect;
+          cMatrixf view;
+          if (selected.point) {
+            nearClip = StandardPointShadowNear(radius);
+            const float edge =
+                static_cast<float>(placement.size) /
+                std::max(static_cast<float>(placement.size) -
+                             2.0f * kStandardShadowCubeBorderTexels,
+                         1.0f);
+            fov = 2.0f * std::atan(edge);
+            aspect = 1.0f;
+            view = StandardCubeFaceView(light->GetWorldPosition(),
+                                        static_cast<uint32_t>(i - first));
+          } else {
+            iLightSpot *spot = static_cast<iLightSpot *>(light);
+            nearClip = spot->GetNearClipPlane();
+            fov = spot->GetFOV();
+            aspect = spot->GetAspect();
+            view = spot->GetViewMatrix();
+          }
+          const cMatrixf projection = cMath::MatrixPerspectiveProjection(
+              nearClip, radius, fov, aspect, false);
+          const cMatrixf vp = cMath::MatrixMul(projection, view);
+          cFrustum tileFrustum;
+          tileFrustum.SetupPerspectiveProj(projection, view, radius, nearClip,
+                                           fov, aspect,
+                                           light->GetWorldPosition(), false);
+          PreparedTile tile{};
+          tile.atlas = placement.atlas;
+          tile.raster.x = placement.x;
+          tile.raster.y = placement.y;
+          tile.raster.size = placement.size;
+          tile.raster.variabilityMask = variabilityMask;
+          tile.raster.slopeScaleBias = slopeScaleBias;
+          const ml::float4x4 vpData = cMath::ToFloatTranspose4x4(vp);
+          std::memcpy(tile.raster.viewProjection, vpData.a,
+                      sizeof(tile.raster.viewProjection));
+          std::memcpy(tile.record.viewProjection, vpData.a,
+                      sizeof(tile.record.viewProjection));
+          tile.record.atlasLayer = placement.atlas;
+          tile.record.originX = placement.x;
+          tile.record.originY = placement.y;
+          tile.record.size = placement.size;
+          tile.record.bias = depthBias;
+          tile.record.clampToTile = selected.point ? 1u : 0u;
+
+          // A cube face whose frustum misses the camera has no visible
+          // receiver: its cleared (fully lit) tile needs no casters.
+          const bool faceVisible =
+              !selected.point ||
+              apFrustum->CollideFrustum(&tileFrustum) != eCollision_Outside;
+          std::vector<iRenderable *> casters;
+          if (faceVisible) {
+            auto addCaster = [&](iRenderable *o) {
+              cMaterial *mat = o ? o->GetMaterial() : nullptr;
+              const bool variability =
+                  o && ((o->IsStatic() &&
+                         (variabilityMask & eObjectVariabilityFlag_Static)) ||
+                        (!o->IsStatic() &&
+                         (variabilityMask & eObjectVariabilityFlag_Dynamic)));
+              if (o && o->GetVertexBuffer() && mat && variability &&
+                  !cMaterial::IsTranslucent(mat->GetMaterialID()))
+                casters.push_back(o);
+            };
+            rendering::WalkAndPrepareRenderList(dynamicContainer, &tileFrustum,
+                                                addCaster,
+                                                eRenderableFlag_ShadowCaster);
+            rendering::WalkAndPrepareRenderList(staticContainer, &tileFrustum,
+                                                addCaster,
+                                                eRenderableFlag_ShadowCaster);
+          }
+          if (casters.size() > kObjectSlotCapacity) {
+            lightFailed = true;
+            break;
+          }
+          if (!casters.empty()) {
+            RISegmentReq shadowReq = {};
+            if (!m_shadowIndirectSegment.request(mpGraphics->frameIndex,
+                                                 casters.size(), &shadowReq)) {
+              lightFailed = true;
+              break;
+            }
+            auto *shadowIndirect = reinterpret_cast<VkDrawIndirectCommand *>(
+                static_cast<uint8_t *>(m_shadowIndirectBuffer.mappedAddress) +
+                shadowReq.elementOffset * sizeof(VkDrawIndirectCommand));
+            uint32_t shadowDrawCount = 0;
+            for (iRenderable *o : casters) {
+              cVertexBuffer *vb =
+                  static_cast<cVertexBuffer *>(o->GetVertexBuffer());
+              cMaterial *mat = o->GetMaterial();
+              // The camera list does not include casters behind that camera.
+              // Upload here as well so fresh/animated shadow-only geometry exists.
+              vb->SubmitToGPU(&mpGraphics->blasSubmit.cmds[0],
+                              &mpGraphics->device, cntx);
+              const uint32_t materialId =
+                  mpGraphics->globalset
+                      ->submitMaterial(
+                          cntx, mat,
+                          static_cast<uint32_t>(mpGraphics->frameIndex))
+                      .materialId;
+              if (materialId == UINT32_MAX) {
+                lightFailed = true;
+                break;
+              }
+              ObjectSubmitDesc object;
+              object.modelMatrix = o->GetModelMatrix(&tileFrustum);
+              object.uvMatrix = mat->GetUvMatrix();
+              object.materialId = materialId;
+              object.dissolveAmount = o->GetCoverageAmount();
+              object.illuminationAmount = o->GetIlluminationAmount();
+              object.renderFlags =
+                  o->GetRenderFlags() | (o->IsStatic() ? 0x80000000u : 0u);
+              const hash_t cookie =
+                  hash_u32(hash_u64(HASH_INITIAL_VALUE, o->GetUniqueCookie()),
+                           lightSalt);
+              const uint32_t slot = mpGraphics->globalset->submitObject(
+                  cookie, static_cast<uint32_t>(mpGraphics->frameIndex), vb,
+                  object, kSubmitData | kSubmitVertex | kSubmitIndex);
+              if (slot == UINT32_MAX) {
+                lightFailed = true;
+                break;
+              }
+              const uint32_t vertexCount =
+                  vb->GetIndexNum() > 0
+                      ? static_cast<uint32_t>(vb->GetIndexNum())
+                      : static_cast<uint32_t>(vb->GetVertexNum());
+              shadowIndirect[shadowDrawCount++] = {vertexCount, 1, 0, slot};
+            }
+            // Do not publish a tile with silently omitted casters when shared
+            // material/object capacity is exhausted.
+            if (lightFailed || shadowDrawCount != casters.size()) {
+              lightFailed = true;
+              break;
+            }
+            tile.raster.indirectOffset =
+                shadowReq.elementOffset * sizeof(VkDrawIndirectCommand);
+            tile.raster.drawCount = shadowDrawCount;
+            anyCaster = true;
+          }
+          entry.tiles.push_back(tile);
+        }
+        // A light without casters in any tile is fully lit: no shadow to publish.
+        if (!lightFailed && anyCaster)
+          prepared.push_back(std::move(entry));
+      }
+      mpGraphics->globalset->flushMirrors(&mpGraphics->device);
+
+      // Rasterize every packed page, including pages whose lights all failed,
+      // so the array view only spans SHADER_RESOURCE pages.
+      bool pagesRendered = !prepared.empty();
+      std::vector<cStandardShadowPass::Tile> pageTiles;
+      for (uint32_t page = 0; page < atlasCount && pagesRendered; ++page) {
+        pageTiles.clear();
+        for (const PreparedLight &entry : prepared)
+          for (const PreparedTile &tile : entry.tiles)
+            if (tile.atlas == page)
+              pageTiles.push_back(tile.raster);
+        pagesRendered = m_shadow->RenderAtlas(
+            cntx, &mpGraphics->primary.cmds[0], mpGraphics->frameIndex,
+            standardShadowTexture.Get(), page, atlasConfig.atlasSize,
+            &m_shadowIndirectBuffer, pageTiles, frameBinding);
+      }
+      if (pagesRendered) {
+        for (const PreparedLight &entry : prepared) {
+          shadowLightTiles.push_back(
+              {entry.light, static_cast<uint32_t>(shadowTileRecords.size()),
+               entry.size});
+          for (const PreparedTile &tile : entry.tiles)
+            shadowTileRecords.push_back(tile.record);
+        }
+        RITextureViewDesc vd{};
+        vd.viewType = RI_VIEWTYPE_SHADER_RESOURCE_2D_ARRAY;
+        vd.format = cStandardShadowPass::kAtlasFormat;
+        vd.mipNum = 1;
+        vd.layerNum = atlasCount;
+        RITextureView v = RITextureView::create(
+            &mpGraphics->device, standardShadowTexture.Get(), vd);
+        standardShadowView =
+            RISharedPointer<RITextureView>(&mpGraphics->device, v);
+        if (!standardShadowView.isEmpty()) {
+          mpGraphics->graphicsDefer.push(standardShadowTexture);
+          mpGraphics->graphicsDefer.push(standardShadowView);
+        }
+      }
+    }
+  }
+  if (standardShadowTexture.isEmpty() || standardShadowView.isEmpty()) {
+    // A failed array view invalidates every index into that array.
+    shadowTileRecords.clear();
+    shadowLightTiles.clear();
+    if (!standardShadowView.isEmpty())
+      mpGraphics->graphicsDefer.push(standardShadowView);
+    if (!standardShadowTexture.isEmpty())
+      mpGraphics->graphicsDefer.push(standardShadowTexture);
+    standardShadowView = {};
+    standardShadowTexture = {};
+    // The cleared 1x1 page is created once and stays sampled across Draws.
+    bool fallbackReady =
+        !m_shadowFallback.isEmpty() && !m_shadowFallbackView.isEmpty();
+    if (!fallbackReady) {
+      if (!m_shadowFallbackView.isEmpty())
+        mpGraphics->graphicsDefer.push(m_shadowFallbackView);
+      if (!m_shadowFallback.isEmpty())
+        mpGraphics->graphicsDefer.push(m_shadowFallback);
+      m_shadowFallbackView = {};
+      m_shadowFallback = {};
+      RITextureDesc td{};
+      td.type = RI_TEXTURE_2D;
+      td.format = cGraphics::DepthFormat;
+      td.width = 1;
+      td.height = 1;
+      td.depth = 1;
+      td.layerNum = 1;
+      td.mipNum = 1;
+      td.sampleCount = 1;
+      td.usage = RI_USAGE_DEPTH_STENCIL_ATTACHMENT | RI_USAGE_SHADER_RESOURCE;
+      RITexture t = RITexture::create(&mpGraphics->device, td);
+      m_shadowFallback = RISharedPointer<RITexture>(&mpGraphics->device, t);
+      if (!m_shadowFallback.isEmpty()) {
+        NameStandardImage(mpGraphics, *m_shadowFallback,
+                          "StandardRenderer.spotShadowFallback");
+        RITextureViewDesc vd{};
+        vd.viewType = RI_VIEWTYPE_SHADER_RESOURCE_2D_ARRAY;
+        vd.format = cGraphics::DepthFormat;
+        vd.mipNum = 1;
+        vd.layerNum = 1;
+        RITextureView v = RITextureView::create(&mpGraphics->device,
+                                                m_shadowFallback.Get(), vd);
+        m_shadowFallbackView =
+            RISharedPointer<RITextureView>(&mpGraphics->device, v);
+      }
+      fallbackReady =
+          !m_shadowFallback.isEmpty() && !m_shadowFallbackView.isEmpty() &&
+          ClearStandardShadowFallback(mpGraphics, &mpGraphics->primary.cmds[0],
+                                      m_shadowFallback.Get());
+      if (!fallbackReady) {
+        // The command buffer may already reference the image after the first barrier.
+        if (!m_shadowFallbackView.isEmpty())
+          mpGraphics->graphicsDefer.push(m_shadowFallbackView);
+        if (!m_shadowFallback.isEmpty())
+          mpGraphics->graphicsDefer.push(m_shadowFallback);
+        m_shadowFallbackView = {};
+        m_shadowFallback = {};
+      }
+    }
+    standardShadowTexture = m_shadowFallback;
+    standardShadowView = m_shadowFallbackView;
+    // Defer both resources even when clearing or view creation failed: the
+    // command buffer may already reference the image after the first barrier.
+    if (!standardShadowView.isEmpty())
+      mpGraphics->graphicsDefer.push(standardShadowView);
+    if (!standardShadowTexture.isEmpty())
+      mpGraphics->graphicsDefer.push(standardShadowTexture);
+    if (!fallbackReady)
+      return;
+  }
+  if (standardShadowTexture.isEmpty() || standardShadowView.isEmpty())
+    return;
+
+  // Publish tile and light records only after their pages have been
+  // successfully recorded. This keeps shadowIndex and tile records in lockstep.
+  RISharedPointer<RIBuffer> shadowTiles;
+  size_t shadowTileCapacity = 0;
+  if (!UploadStandardLights(mpGraphics, shadowTileRecords, shadowTiles,
+                            shadowTileCapacity)) {
+    shadowTileRecords.clear();
+    shadowLightTiles.clear();
+  }
+  if (shadowTiles.isEmpty())
+    return;
+  shadowCount = 0;
+  if (!BuildStandardLights(apWorld, mpGraphics, pointLights, spotLights,
+                           boxLights, pointLightCount, spotLightCount,
+                           boxLightCount, shadowCount, shadowResolutionCap,
+                           shadowsAvailable, shadowLightTiles))
+    return;
+
+  const bool packedVisibility =
+      !m_forceFallback && mpGraphics->device.fragmentShaderBarycentricEnabled &&
+      mpGraphics->device.shaderInt16Enabled &&
+      mpGraphics->device.shaderFloat16Enabled &&
+      mpGraphics->device.geometryShaderEnabled && m_visibility &&
+      m_visibilityLoaded && m_reconstruct && m_reconstructLoaded &&
+      !state->visibilityTexture[index].isEmpty() &&
+      !state->visibilityView[index].isEmpty() &&
+      !state->visibilityAttachmentView[index].isEmpty();
+  RITextureBarrier barriers[8] = {};
+  barriers[0] =
+      RI_PogoAttachmentBarrier(state->renderTarget[index].Get(), true);
+  barriers[1].texture = state->depthTextures[index].Get();
+  barriers[1].before = RI_RESOURCE_STATE_UNDEFINED;
+  barriers[1].after = RI_RESOURCE_STATE_DEPTH_WRITE;
+  barriers[1].aspect = RI_BARRIER_ASPECT_DEPTH;
+  barriers[1].mipCount = 1;
+  barriers[1].layerCount = 1;
+  uint32_t barrierCount = 2;
+  auto appendColorBarrier = [&](RITexture *texture) {
+    RITextureBarrier b(texture, RI_RESOURCE_STATE_UNDEFINED,
+                       RI_RESOURCE_STATE_RENDER_TARGET, RI_STAGE_NONE,
+                       RI_STAGE_FRAGMENT, RI_BARRIER_ASPECT_COLOR);
+    b.mipCount = 1;
+    b.layerCount = 1;
+    assert(barrierCount < std::size(barriers));
+    barriers[barrierCount++] = b;
+  };
+  // The MRT images are newly allocated and must be made attachment
+  // images before either raster fallback or fullscreen reconstruction uses them.
+  if (!packedVisibility) {
+    appendColorBarrier(state->materialColorTexture[index].Get());
+    appendColorBarrier(state->positionTexture[index].Get());
+    appendColorBarrier(state->normalTexture[index].Get());
+    appendColorBarrier(state->shadingNormalTexture[index].Get());
+    appendColorBarrier(state->surfaceTexture[index].Get());
+  }
+  if (packedVisibility && !state->visibilityTexture[index].isEmpty()) {
+    appendColorBarrier(state->visibilityTexture[index].Get());
+    appendColorBarrier(state->materialColorTexture[index].Get());
+  }
+  appendColorBarrier(state->velocityTexture[index].Get());
+  assert(barrierCount == (packedVisibility ? 5u : 8u));
+  for (uint32_t i = 0; i < barrierCount; ++i)
+    assert(barriers[i].texture != nullptr);
+  mpGraphics->primary.cmds[0].vk_d3d12_textureBarriers<8>(barrierCount,
+                                                          barriers);
+
+  RIRenderingAttachment color = {};
+  color.view = *state->renderTargetView[index];
+  color.loadOp = RI_ATTACHMENT_LOAD_OP_CLEAR;
+  color.storeOp = RI_ATTACHMENT_STORE_OP_STORE;
+  const cColor clear = apSettings ? apSettings->mClearColor : cColor(0, 0);
+  color.clearValue.color[0] = clear.r;
+  color.clearValue.color[1] = clear.g;
+  color.clearValue.color[2] = clear.b;
+  color.clearValue.color[3] = clear.a;
+
+  RIRenderingAttachment depth = {};
+  depth.view = *state->depthView[index];
+  depth.loadOp = RI_ATTACHMENT_LOAD_OP_CLEAR;
+  depth.storeOp = RI_ATTACHMENT_STORE_OP_STORE;
+  depth.clearValue.depth = 1.0f;
+
+  RIBeginRenderingDesc begin = {};
+  begin.renderArea.width = static_cast<int16_t>(state->width);
+  begin.renderArea.height = static_cast<int16_t>(state->height);
+  RIRenderingAttachment colors[6] = {};
+  if (packedVisibility) {
+    RIRenderingAttachment visibility = {};
+    visibility.view = *state->visibilityAttachmentView[index];
+    visibility.loadOp = RI_ATTACHMENT_LOAD_OP_CLEAR;
+    visibility.storeOp = RI_ATTACHMENT_STORE_OP_STORE;
+    colors[0] = visibility;
+  } else {
+    colors[0].view = *state->materialColorAttachmentView[index];
+  }
+  if (packedVisibility) {
+    colors[1].view = *state->materialColorAttachmentView[index];
+  } else {
+    colors[1].view = *state->positionAttachmentView[index];
+    colors[2].view = *state->normalAttachmentView[index];
+    colors[3].view = *state->shadingNormalAttachmentView[index];
+    colors[4].view = *state->surfaceAttachmentView[index];
+  }
+  if (packedVisibility) {
+    colors[2].view = *state->velocityAttachmentView[index];
+  } else {
+    colors[5].view = *state->velocityAttachmentView[index];
+  }
+  for (uint32_t i = 0; i < (packedVisibility ? 2u : 5u); ++i) {
+    colors[i].loadOp = RI_ATTACHMENT_LOAD_OP_CLEAR;
+    colors[i].storeOp = RI_ATTACHMENT_STORE_OP_STORE;
+  }
+  colors[packedVisibility ? 2 : 5].loadOp = RI_ATTACHMENT_LOAD_OP_CLEAR;
+  colors[packedVisibility ? 2 : 5].storeOp = RI_ATTACHMENT_STORE_OP_STORE;
+  begin.colorCount = packedVisibility ? 3 : 6;
+  begin.colors = colors;
+  begin.depthStencil = &depth;
+  mpGraphics->primary.cmds[0].vk_d3d12_beginRendering(&mpGraphics->device,
+                                                      begin);
+
+  if (drawCount) {
+    if (packedVisibility) {
+      // Matches the packed begin above: visibility, material colour, velocity.
+      GBufferMRTPipelineDesc pd(
+          cGraphics::VisibilityFormat, cGraphics::PogoColorFormat,
+          cGraphics::VelocityFormat, cGraphics::DepthFormat);
+      m_visibility->bindPipeline(&mpGraphics->device,
+                                 &mpGraphics->primary.cmds[0], pd.hash,
+                                 "Standard.visibility", &pd.createInfo);
+      m_visibility->bindBindlessDescriptorSet(
+          &mpGraphics->primary.cmds[0], &mpGraphics->globalset->m_bindlessSet,
+          0);
+    } else {
+      StandardReconstructPipelineDesc pd(
+          cGraphics::PogoColorFormat, RI_FORMAT_RGBA32_SFLOAT,
+          RI_FORMAT_RGBA32_SFLOAT, RI_FORMAT_RGBA32_SFLOAT,
+          cGraphics::VisibilityFormat, cGraphics::DepthFormat, true,
+          /*writesVelocity=*/true);
+      m_fallback->bindPipeline(&mpGraphics->device,
+                               &mpGraphics->primary.cmds[0], pd.hash,
+                               "Standard.fallback", &pd.create);
+      m_fallback->bindBindlessDescriptorSet(
+          &mpGraphics->primary.cmds[0], &mpGraphics->globalset->m_bindlessSet,
+          0);
+    }
+    (packedVisibility ? m_visibility : m_fallback)
+        ->bindDescriptors(&mpGraphics->device, &mpGraphics->primary.cmds[0],
+                          mpGraphics->frameIndex, &frameBinding, 1);
+    RIViewport vp;
+    vp.x = 0;
+    vp.y = float(state->height);
+    vp.width = float(state->width);
+    vp.height = -float(state->height);
+    vp.depthMin = 0;
+    vp.depthMax = 1;
+    RIRect sc;
+    sc.x = 0;
+    sc.y = 0;
+    sc.width = int16_t(state->width);
+    sc.height = int16_t(state->height);
+    mpGraphics->primary.cmds[0].setViewport(&mpGraphics->device, vp);
+    mpGraphics->primary.cmds[0].setScissor(&mpGraphics->device, sc);
+    mpGraphics->primary.cmds[0].drawIndirect(
+        &mpGraphics->device, &m_indirectDrawBuffer,
+        req.elementOffset * sizeof(VkDrawIndirectCommand), drawCount,
+        sizeof(VkDrawIndirectCommand));
+  }
+
+  mpGraphics->primary.cmds[0].vk_d3d12_endRendering(&mpGraphics->device);
+  if (!packedVisibility) {
+    mpGraphics->primary.cmds[0].vk_d3d12_textureBarrier(
+        RI_PogoShaderBarrier(state->materialColorTexture[index].Get(), false));
+    mpGraphics->primary.cmds[0].vk_d3d12_textureBarrier(RITextureBarrier(
+        state->positionTexture[index].Get(), RI_RESOURCE_STATE_RENDER_TARGET,
+        RI_RESOURCE_STATE_SHADER_RESOURCE, RI_STAGE_FRAGMENT, RI_STAGE_FRAGMENT,
+        RI_BARRIER_ASPECT_COLOR));
+    mpGraphics->primary.cmds[0].vk_d3d12_textureBarrier(RITextureBarrier(
+        state->normalTexture[index].Get(), RI_RESOURCE_STATE_RENDER_TARGET,
+        RI_RESOURCE_STATE_SHADER_RESOURCE, RI_STAGE_FRAGMENT, RI_STAGE_FRAGMENT,
+        RI_BARRIER_ASPECT_COLOR));
+    mpGraphics->primary.cmds[0].vk_d3d12_textureBarrier(RITextureBarrier(
+        state->shadingNormalTexture[index].Get(),
+        RI_RESOURCE_STATE_RENDER_TARGET, RI_RESOURCE_STATE_SHADER_RESOURCE,
+        RI_STAGE_FRAGMENT, RI_STAGE_FRAGMENT, RI_BARRIER_ASPECT_COLOR));
+    mpGraphics->primary.cmds[0].vk_d3d12_textureBarrier(RITextureBarrier(
+        state->surfaceTexture[index].Get(), RI_RESOURCE_STATE_RENDER_TARGET,
+        RI_RESOURCE_STATE_SHADER_RESOURCE, RI_STAGE_FRAGMENT, RI_STAGE_FRAGMENT,
+        RI_BARRIER_ASPECT_COLOR));
+  }
+  if (packedVisibility)
+    mpGraphics->primary.cmds[0].vk_d3d12_textureBarrier(RITextureBarrier(
+        state->visibilityTexture[index].Get(), RI_RESOURCE_STATE_RENDER_TARGET,
+        RI_RESOURCE_STATE_SHADER_RESOURCE, RI_STAGE_FRAGMENT, RI_STAGE_FRAGMENT,
+        RI_BARRIER_ASPECT_COLOR));
+  mpGraphics->primary.cmds[0].vk_d3d12_textureBarrier(RITextureBarrier(
+      state->velocityTexture[index].Get(), RI_RESOURCE_STATE_RENDER_TARGET,
+      RI_RESOURCE_STATE_SHADER_RESOURCE, RI_STAGE_FRAGMENT, RI_STAGE_FRAGMENT,
+      RI_BARRIER_ASPECT_COLOR));
+
+  if (!packedVisibility)
+    mpGraphics->primary.cmds[0].vk_d3d12_textureBarrier(RITextureBarrier(
+        state->depthTextures[index].Get(), RI_RESOURCE_STATE_DEPTH_WRITE,
+        RI_RESOURCE_STATE_SHADER_RESOURCE, RI_STAGE_FRAGMENT, RI_STAGE_FRAGMENT,
+        RI_BARRIER_ASPECT_DEPTH));
+
+  // Decode the packed hit with a fullscreen graphics pass. All material
+  // G-buffer outputs are written at native extent, so downstream geometric
+  // normal consumers and lighting have real surfaces in the barycentric path.
+  if (packedVisibility && m_reconstruct && m_reconstructLoaded) {
+    RITextureBarrier reconInputs[6] = {};
+    auto makeReconOutputBarrier = [](RITexture *texture,
+                                     RIResourceState_e before,
+                                     RIStageBits_e beforeStage) {
+      return RITextureBarrier(texture, before, RI_RESOURCE_STATE_RENDER_TARGET,
+                              beforeStage, RI_STAGE_FRAGMENT,
+                              RI_BARRIER_ASPECT_COLOR);
+    };
+    reconInputs[0] = RITextureBarrier(
+        state->visibilityTexture[index].Get(),
+        RI_RESOURCE_STATE_SHADER_RESOURCE, RI_RESOURCE_STATE_SHADER_RESOURCE,
+        RI_STAGE_FRAGMENT, RI_STAGE_FRAGMENT, RI_BARRIER_ASPECT_COLOR);
+    reconInputs[1] = makeReconOutputBarrier(
+        state->materialColorTexture[index].Get(),
+        RI_RESOURCE_STATE_RENDER_TARGET, RI_STAGE_FRAGMENT);
+    reconInputs[2] =
+        makeReconOutputBarrier(state->positionTexture[index].Get(),
+                               RI_RESOURCE_STATE_UNDEFINED, RI_STAGE_NONE);
+    reconInputs[3] =
+        makeReconOutputBarrier(state->normalTexture[index].Get(),
+                               RI_RESOURCE_STATE_UNDEFINED, RI_STAGE_NONE);
+    reconInputs[4] =
+        makeReconOutputBarrier(state->shadingNormalTexture[index].Get(),
+                               RI_RESOURCE_STATE_UNDEFINED, RI_STAGE_NONE);
+    reconInputs[5] =
+        makeReconOutputBarrier(state->surfaceTexture[index].Get(),
+                               RI_RESOURCE_STATE_UNDEFINED, RI_STAGE_NONE);
+    mpGraphics->primary.cmds[0].vk_d3d12_textureBarriers<6>(6, reconInputs);
+    mpGraphics->primary.cmds[0].vk_d3d12_textureBarrier(RITextureBarrier(
+        state->depthTextures[index].Get(), RI_RESOURCE_STATE_DEPTH_WRITE,
+        RI_RESOURCE_STATE_SHADER_RESOURCE, RI_STAGE_FRAGMENT, RI_STAGE_FRAGMENT,
+        RI_BARRIER_ASPECT_DEPTH));
+    RIRenderingAttachment mrt[5] = {};
+    RISharedPointer<RITextureView> *views[5] = {
+        &state->materialColorAttachmentView[index],
+        &state->positionAttachmentView[index],
+        &state->normalAttachmentView[index],
+        &state->shadingNormalAttachmentView[index],
+        &state->surfaceAttachmentView[index]};
+    for (uint32_t i = 0; i < 5; ++i) {
+      mrt[i].view = **views[i];
+      mrt[i].loadOp = RI_ATTACHMENT_LOAD_OP_CLEAR;
+      mrt[i].storeOp = RI_ATTACHMENT_STORE_OP_STORE;
+    }
+    mrt[0].clearValue = color.clearValue;
+    RIBeginRenderingDesc reconBegin = {};
+    reconBegin.renderArea.width = static_cast<int16_t>(state->width);
+    reconBegin.renderArea.height = static_cast<int16_t>(state->height);
+    reconBegin.colorCount = 5;
+    reconBegin.colors = mrt;
+    reconBegin.depthStencil = nullptr;
+    mpGraphics->primary.cmds[0].vk_d3d12_beginRendering(&mpGraphics->device,
+                                                        reconBegin);
+    StandardReconstructPipelineDesc pd(
+        cGraphics::PogoColorFormat, RI_FORMAT_RGBA32_SFLOAT,
+        RI_FORMAT_RGBA32_SFLOAT, RI_FORMAT_RGBA32_SFLOAT,
+        cGraphics::VisibilityFormat, cGraphics::DepthFormat, false);
+    m_reconstruct->bindPipeline(&mpGraphics->device,
+                                &mpGraphics->primary.cmds[0], pd.hash,
+                                "Standard.reconstruct", &pd.create);
+    m_reconstruct->bindBindlessDescriptorSet(
+        &mpGraphics->primary.cmds[0], &mpGraphics->globalset->m_bindlessSet, 0);
+    RIProgram::DescriptorBinding inputs[2];
+    inputs[0].handle = DescriptorBindingID::Create("visibilityInput");
+    inputs[0].descriptor = RIDescriptor::sampledImage(
+        &mpGraphics->device, state->visibilityView[index].Get());
+    inputs[1].handle = DescriptorBindingID::Create("depthInput");
+    inputs[1].descriptor = RIDescriptor::sampledImage(
+        &mpGraphics->device, state->depthSampleView[index].Get());
+    RIProgram::DescriptorBinding reconBindings[3] = {frameBinding, inputs[0],
+                                                     inputs[1]};
+    m_reconstruct->bindDescriptors(&mpGraphics->device,
+                                   &mpGraphics->primary.cmds[0],
+                                   mpGraphics->frameIndex, reconBindings, 3);
+    RIViewport vp;
+    vp.x = 0;
+    vp.y = float(state->height);
+    vp.width = float(state->width);
+    vp.height = -float(state->height);
+    vp.depthMin = 0;
+    vp.depthMax = 1;
+    RIRect sc;
+    sc.x = 0;
+    sc.y = 0;
+    sc.width = int16_t(state->width);
+    sc.height = int16_t(state->height);
+    mpGraphics->primary.cmds[0].setViewport(&mpGraphics->device, vp);
+    mpGraphics->primary.cmds[0].setScissor(&mpGraphics->device, sc);
+    mpGraphics->primary.cmds[0].draw(&mpGraphics->device, 3, 1, 0, 0);
+    mpGraphics->primary.cmds[0].vk_d3d12_endRendering(&mpGraphics->device);
+    mpGraphics->primary.cmds[0].vk_d3d12_textureBarrier(
+        RI_PogoShaderBarrier(state->materialColorTexture[index].Get(), false));
+    mpGraphics->primary.cmds[0].vk_d3d12_textureBarrier(
+        RI_PogoShaderBarrier(state->positionTexture[index].Get(), false));
+    mpGraphics->primary.cmds[0].vk_d3d12_textureBarrier(
+        RI_PogoShaderBarrier(state->normalTexture[index].Get(), false));
+    mpGraphics->primary.cmds[0].vk_d3d12_textureBarrier(
+        RI_PogoShaderBarrier(state->shadingNormalTexture[index].Get(), false));
+    mpGraphics->primary.cmds[0].vk_d3d12_textureBarrier(RITextureBarrier(
+        state->surfaceTexture[index].Get(), RI_RESOURCE_STATE_RENDER_TARGET,
+        RI_RESOURCE_STATE_SHADER_RESOURCE, RI_STAGE_FRAGMENT, RI_STAGE_FRAGMENT,
+        RI_BARRIER_ASPECT_COLOR));
+  }
+
+  // Project clustered decals after reconstruction/fallback and before
+  // lighting. The pass writes an independent target, so a failed/empty pass
+  // cannot corrupt the identity material color input.
+  bool decalsRendered = false;
+  if (m_decals && m_decals->IsLoaded() && apWorld->GetDecalCount() > 0 &&
+      !state->decalColorTexture[index].isEmpty()) {
+    mpGraphics->primary.cmds[0].vk_d3d12_textureBarrier(RITextureBarrier(
+        state->decalColorTexture[index].Get(),
+        state->decalColorInitialized[index] ? RI_RESOURCE_STATE_SHADER_RESOURCE
+                                            : RI_RESOURCE_STATE_UNDEFINED,
+        RI_RESOURCE_STATE_RENDER_TARGET,
+        state->decalColorInitialized[index] ? RI_STAGE_FRAGMENT : RI_STAGE_NONE,
+        RI_STAGE_FRAGMENT, RI_BARRIER_ASPECT_COLOR));
+    decalsRendered = m_decals->Render(
+        cntx, &mpGraphics->primary.cmds[0], mpGraphics->frameIndex,
+        state->width, state->height, state->materialColorView[index].Get(),
+        state->positionView[index].Get(), state->normalView[index].Get(),
+        state->surfaceView[index].Get(),
+        state->decalColorAttachmentView[index].Get(), apWorld, &frameBinding);
+    if (decalsRendered) {
+      mpGraphics->primary.cmds[0].vk_d3d12_textureBarrier(
+          RI_PogoShaderBarrier(state->decalColorTexture[index].Get(), false));
+      // Render validates everything before recording, but keep the resource
+      // state explicit if a future implementation can fail after beginning
+      // the pass.  The attachment transition above has already happened, so
+      // the failure path must hand the image back to shader-read before the
+      // resolve samples the identity material path.
+    } else {
+      mpGraphics->primary.cmds[0].vk_d3d12_textureBarrier(RITextureBarrier(
+          state->decalColorTexture[index].Get(),
+          RI_RESOURCE_STATE_RENDER_TARGET, RI_RESOURCE_STATE_SHADER_RESOURCE,
+          RI_STAGE_FRAGMENT, RI_STAGE_FRAGMENT, RI_BARRIER_ASPECT_COLOR));
+    }
+    state->decalColorInitialized[index] = true;
+  }
+
+  // Type="Decal" meshes (dirt_floor / moist_wall / trails). The legacy
+  // deferred renderer drew them into its albedo target (RendererDeferred.cpp
+  // cmdBuildPrimaryGBuffer). Standard rasterizes them into multiply/add
+  // accumulators the light resolve folds into albedo, the same contract as the
+  // Hybrid composite. Both clear every frame so the resolve reads identity
+  // when nothing draws.
+  {
+    std::vector<iRenderable *> mulDecals, addDecals;
+    for (iRenderable *o :
+         m_rendererList.GetRenderableItems(eRenderListType_Decal)) {
+      if (!m_meshDecalLoaded || !o || !o->GetMaterial() ||
+          !o->GetVertexBuffer() || o->GetVertexBuffer()->GetIndexNum() <= 0)
+        continue;
+      switch (o->GetMaterial()->GetBlendMode()) {
+      case eMaterialBlendMode_Mul:
+      case eMaterialBlendMode_MulX2:
+        mulDecals.push_back(o);
+        break;
+      case eMaterialBlendMode_Add:
+        addDecals.push_back(o);
+        break;
+      default:
+        break; // Type="Decal" content is Mul/MulX2/Add only.
+      }
+    }
+    struct MeshDecalDraw {
+      cVertexBuffer *vb;
+      eMaterialBlendMode blend;
+      uint32_t slot;
+    };
+    auto submitDecals = [&](const std::vector<iRenderable *> &list) {
+      std::vector<MeshDecalDraw> draws;
+      for (iRenderable *o : list) {
+        cMaterial *mat = o->GetMaterial();
+        auto *vb = static_cast<cVertexBuffer *>(o->GetVertexBuffer());
+        vb->SubmitToGPU(&mpGraphics->blasSubmit.cmds[0], &mpGraphics->device,
+                        cntx);
+        const uint32_t materialId =
+            mpGraphics->globalset
+                ->submitMaterial(cntx, mat,
+                                 static_cast<uint32_t>(mpGraphics->frameIndex))
+                .materialId;
+        if (materialId == UINT32_MAX)
+          continue;
+        ObjectSubmitDesc object;
+        object.modelMatrix = o->GetModelMatrix(apFrustum);
+        object.uvMatrix = mat->GetUvMatrix();
+        object.materialId = materialId;
+        object.dissolveAmount = o->GetCoverageAmount();
+        object.renderFlags = o->GetRenderFlags();
+        const hash_t cookie = hash_u32(
+            hash_u64(HASH_INITIAL_VALUE, o->GetUniqueCookie()), paneSalt);
+        const uint32_t slot = mpGraphics->globalset->submitObject(
+            cookie, static_cast<uint32_t>(mpGraphics->frameIndex), vb, object,
+            kSubmitData | kSubmitVertex | kSubmitIndex);
+        if (slot != UINT32_MAX)
+          draws.push_back({vb, mat->GetBlendMode(), slot});
+      }
+      return draws;
+    };
+    const std::vector<MeshDecalDraw> mulDraws = submitDecals(mulDecals);
+    const std::vector<MeshDecalDraw> addDraws = submitDecals(addDecals);
+    if (!mulDraws.empty() || !addDraws.empty())
+      mpGraphics->globalset->flushMirrors(&mpGraphics->device);
+
+    RICmd *cmd = &mpGraphics->primary.cmds[0];
+    cmd->vk_d3d12_textureBarrier(RITextureBarrier(
+        state->depthTextures[index].Get(), RI_RESOURCE_STATE_SHADER_RESOURCE,
+        RI_RESOURCE_STATE_DEPTH_READ, RI_STAGE_FRAGMENT, RI_STAGE_NONE,
+        RI_BARRIER_ASPECT_DEPTH));
+    auto accumulate = [&](RITexture *texture, RITextureView *attachment,
+                          float clear,
+                          const std::vector<MeshDecalDraw> &draws) {
+      cmd->vk_d3d12_textureBarrier(RITextureBarrier(
+          texture, RI_RESOURCE_STATE_UNDEFINED, RI_RESOURCE_STATE_RENDER_TARGET,
+          RI_STAGE_NONE, RI_STAGE_NONE, RI_BARRIER_ASPECT_COLOR));
+      RIRenderingAttachment color = {};
+      color.view = *attachment;
+      color.loadOp = RI_ATTACHMENT_LOAD_OP_CLEAR;
+      color.storeOp = RI_ATTACHMENT_STORE_OP_STORE;
+      for (int c = 0; c < 4; ++c)
+        color.clearValue.color[c] = clear;
+      RIRenderingAttachment depth = {};
+      depth.view = *state->depthView[index];
+      depth.loadOp = RI_ATTACHMENT_LOAD_OP_LOAD;
+      depth.storeOp = RI_ATTACHMENT_STORE_OP_STORE;
+      depth.readOnly = true;
+      RIBeginRenderingDesc begin = {};
+      begin.renderArea.width = static_cast<int16_t>(state->width);
+      begin.renderArea.height = static_cast<int16_t>(state->height);
+      begin.colorCount = 1;
+      begin.colors = &color;
+      begin.depthStencil = &depth;
+      cmd->vk_d3d12_beginRendering(&mpGraphics->device, begin);
+      if (!draws.empty()) {
+        RIViewport vp;
+        vp.x = 0;
+        vp.y = float(state->height);
+        vp.width = float(state->width);
+        vp.height = -float(state->height);
+        vp.depthMin = 0;
+        vp.depthMax = 1;
+        RIRect sc;
+        sc.x = 0;
+        sc.y = 0;
+        sc.width = int16_t(state->width);
+        sc.height = int16_t(state->height);
+        cmd->setViewport(&mpGraphics->device, vp);
+        cmd->setScissor(&mpGraphics->device, sc);
+        m_meshDecal->bindBindlessDescriptorSet(
+            cmd, &mpGraphics->globalset->m_bindlessSet, 0);
+        m_meshDecal->bindDescriptors(&mpGraphics->device, cmd,
+                                     mpGraphics->frameIndex, &frameBinding, 1);
+        for (const MeshDecalDraw &draw : draws) {
+          uint32_t presentMask = 0;
+          if (!BindMeshDecalStreams(cmd, mpGraphics, draw.vb, &presentMask))
+            continue;
+          DecalPipelineDesc pd(cGraphics::PogoColorFormat,
+                               cGraphics::DepthFormat,
+                               MeshDecalBlend(draw.blend), presentMask);
+          m_meshDecal->bindPipeline(&mpGraphics->device, cmd, pd.hash,
+                                    "Standard.meshDecal", &pd.createInfo);
+          cmd->drawIndexed(&mpGraphics->device,
+                           static_cast<uint32_t>(draw.vb->GetIndexNum()), 1u,
+                           0u, 0, draw.slot);
+        }
+      }
+      cmd->vk_d3d12_endRendering(&mpGraphics->device);
+      cmd->vk_d3d12_textureBarrier(RI_PogoShaderBarrier(texture, false));
+    };
+    accumulate(state->decalMulTexture[index].Get(),
+               state->decalMulAttachmentView[index].Get(), 1.0f, mulDraws);
+    accumulate(state->decalAddTexture[index].Get(),
+               state->decalAddAttachmentView[index].Get(), 0.0f, addDraws);
+    cmd->vk_d3d12_textureBarrier(RITextureBarrier(
+        state->depthTextures[index].Get(), RI_RESOURCE_STATE_DEPTH_READ,
+        RI_RESOURCE_STATE_SHADER_RESOURCE, RI_STAGE_NONE, RI_STAGE_FRAGMENT,
+        RI_BARRIER_ASPECT_DEPTH));
+  }
+
+  // Legacy RendererDeferred billboard halos: occluded-texel counts of each
+  // halo's source box fade its glow (cStandardHaloPass). Resolved before the
+  // particle pass so this frame draws the newest alpha.
+  if (m_halo) {
+    if (!state->haloQueries) {
+      state->haloQueries = std::make_shared<StandardHaloQueryState>();
+      state->haloQueries->graphics = mpGraphics;
+    }
+    const std::span<iRenderable *> haloCandidates =
+        m_rendererList.GetRenderableItems(eRenderListType_Translucent);
+    m_halo->Resolve(*state->haloQueries, haloCandidates, apFrustum);
+    m_halo->Record(cntx, *state->haloQueries, haloCandidates,
+                   m_meshDecalLoaded ? m_meshDecal.get() : nullptr,
+                   state->depthTextures[index].Get(),
+                   state->depthView[index].Get(), state->width, state->height,
+                   frameBinding, paneSalt);
+  }
+
+  bool aoRendered = false;
+  if (apSettings && apSettings->mbSSAOActive && m_ambientOcclusion &&
+      m_ambientOcclusionLoaded) {
+    aoRendered = m_ambientOcclusion->Render(cntx, &mpGraphics->primary.cmds[0],
+                                            mpGraphics->frameIndex, state,
+                                            index, apFrustum, &frameBinding);
+  }
+
+  // From here on the render depth sits in SHADER_RESOURCE. Every exit must hand
+  // it back in DEPTH_ATTACHMENT_OPTIMAL, the same contract as
+  // cHybridRenderer::Draw: the viewport's post-translucence handlers
+  // (LuxEffectRenderer) load it as a writable attachment, and temporal
+  // presentation takes DEPTH_WRITE as its entry state.
+  auto handBackDepth = [&]() {
+    mpGraphics->primary.cmds[0].vk_d3d12_textureBarrier(RITextureBarrier(
+        state->depthTextures[index].Get(), RI_RESOURCE_STATE_SHADER_RESOURCE,
+        RI_RESOURCE_STATE_DEPTH_WRITE, RI_STAGE_FRAGMENT, RI_STAGE_NONE,
+        RI_BARRIER_ASPECT_DEPTH));
+  };
+
+  // The light pass multiplies surface colour by AO, so whatever it samples must
+  // read 1 where AO did not run. Record the fallback clear here, outside the
+  // resolve render pass; the shader clamps its Load to the texture size.
+  RISharedPointer<RITexture> aoFallbackTexture;
+  RISharedPointer<RITextureView> aoFallbackView;
+  const bool useAoFallback = !aoRendered || state->aoView[index].isEmpty();
+  if (useAoFallback) {
+    RITextureDesc td{};
+    td.type = RI_TEXTURE_2D;
+    td.format = RI_FORMAT_R16_SFLOAT;
+    td.width = 1;
+    td.height = 1;
+    td.depth = 1;
+    td.layerNum = 1;
+    td.mipNum = 1;
+    td.sampleCount = 1;
+    td.usage = RI_USAGE_SHADER_RESOURCE | RI_USAGE_SHADER_RESOURCE_STORAGE |
+               RI_USAGE_TRANSFER_DST;
+    RITexture t = RITexture::create(&mpGraphics->device, td);
+    aoFallbackTexture = RISharedPointer<RITexture>(&mpGraphics->device, t);
+    if (!aoFallbackTexture.isEmpty()) {
+      RITextureViewDesc vd{};
+      vd.viewType = RI_VIEWTYPE_SHADER_RESOURCE_2D;
+      vd.format = RI_FORMAT_R16_SFLOAT;
+      vd.mipNum = 1;
+      vd.layerNum = 1;
+      RITextureView v = RITextureView::create(&mpGraphics->device,
+                                              aoFallbackTexture.Get(), vd);
+      aoFallbackView = RISharedPointer<RITextureView>(&mpGraphics->device, v);
+      RICmd &cmd = mpGraphics->primary.cmds[0];
+      RITextureBarrier toClear(aoFallbackTexture.Get(),
+                               RI_RESOURCE_STATE_UNDEFINED,
+                               RI_RESOURCE_STATE_CLEAR_STORAGE);
+      cmd.vk_d3d12_resourceBarrier<0, 0, 1>(0, nullptr, 0, nullptr, 1,
+                                            &toClear);
+      const float unoccluded[4] = {1.0f, 1.0f, 1.0f, 1.0f};
+      cmd.clearStorageImage(&mpGraphics->device, aoFallbackTexture.Get(),
+                            unoccluded);
+      RITextureBarrier toRead(aoFallbackTexture.Get(),
+                              RI_RESOURCE_STATE_CLEAR_STORAGE,
+                              RI_RESOURCE_STATE_SHADER_RESOURCE);
+      cmd.vk_d3d12_resourceBarrier<0, 0, 1>(0, nullptr, 0, nullptr, 1, &toRead);
+      mpGraphics->graphicsDefer.push(aoFallbackTexture);
+      if (!aoFallbackView.isEmpty())
+        mpGraphics->graphicsDefer.push(aoFallbackView);
+    }
+  }
+
+  // Resolve the reconstructed material inputs into the final HDR target.
+  // The light buffers are immutable for this draw and are retired only after
+  // the frame completes, allowing multiple panes and in-flight frames.
+  {
+    RIRenderingAttachment output = {};
+    output.view = *state->renderTargetView[index];
+    output.loadOp = RI_ATTACHMENT_LOAD_OP_CLEAR;
+    output.storeOp = RI_ATTACHMENT_STORE_OP_STORE;
+    RIBeginRenderingDesc resolveBegin = {};
+    resolveBegin.renderArea.width = static_cast<int16_t>(state->width);
+    resolveBegin.renderArea.height = static_cast<int16_t>(state->height);
+    resolveBegin.colorCount = 1;
+    resolveBegin.colors = &output;
+    mpGraphics->primary.cmds[0].vk_d3d12_beginRendering(&mpGraphics->device,
+                                                        resolveBegin);
+    StandardResolvePipelineDesc pd(cGraphics::PogoColorFormat);
+    m_lighting->bindPipeline(&mpGraphics->device, &mpGraphics->primary.cmds[0],
+                             pd.hash, "Standard.light", &pd.create);
+    m_lighting->bindBindlessDescriptorSet(
+        &mpGraphics->primary.cmds[0], &mpGraphics->globalset->m_bindlessSet, 0);
+    RIProgram::DescriptorBinding bindings[9] = {};
+    bindings[0] = frameBinding;
+    bindings[1] = RIProgram::DescriptorBinding(
+        "standardColorInput",
+        RIDescriptor::sampledImage(
+            &mpGraphics->device,
+            (decalsRendered ? state->decalColorView[index].Get()
+                            : state->materialColorView[index].Get())));
+    bindings[2] = RIProgram::DescriptorBinding(
+        "standardPositionInput",
+        RIDescriptor::sampledImage(&mpGraphics->device,
+                                   state->positionView[index].Get()));
+    bindings[3] = RIProgram::DescriptorBinding(
+        "standardNormalInput",
+        RIDescriptor::sampledImage(&mpGraphics->device,
+                                   state->normalView[index].Get()));
+    bindings[4] = RIProgram::DescriptorBinding(
+        "standardShadingNormalInput",
+        RIDescriptor::sampledImage(&mpGraphics->device,
+                                   state->shadingNormalView[index].Get()));
+    bindings[5] = RIProgram::DescriptorBinding(
+        "standardSurfaceInput",
+        RIDescriptor::sampledImage(&mpGraphics->device,
+                                   state->surfaceView[index].Get()));
+    bindings[6] = RIProgram::DescriptorBinding(
+        "standardPointLights",
+        RIDescriptor::storageBuffer(&mpGraphics->device, pointLights.Get(), 0,
+                                    std::max<uint32_t>(pointLightCount, 1u) *
+                                        sizeof(StandardPointLightData)));
+    bindings[7] = RIProgram::DescriptorBinding(
+        "standardSpotLights",
+        RIDescriptor::storageBuffer(&mpGraphics->device, spotLights.Get(), 0,
+                                    std::max<uint32_t>(spotLightCount, 1u) *
+                                        sizeof(StandardSpotLightData)));
+    bindings[8] = RIProgram::DescriptorBinding(
+        "standardBoxLights",
+        RIDescriptor::storageBuffer(&mpGraphics->device, boxLights.Get(), 0,
+                                    std::max<uint32_t>(boxLightCount, 1u) *
+                                        sizeof(StandardBoxLightData)));
+    RIProgram::DescriptorBinding countBinding("standardLightCounts",
+                                              RIDescriptor(), 0, false);
+    // Legacy spotlight filter quality. The jitter offsets are only needed for
+    // Medium/High; a failed build falls back to the single-compare Low filter.
+    const int shadowQuality =
+        std::clamp(static_cast<int>(iRenderer::GetShadowMapQuality()),
+                   static_cast<int>(eShadowMapQuality_Low),
+                   static_cast<int>(eShadowMapQuality_High));
+    if (shadowQuality != m_shadowJitterQuality) {
+      if (m_shadowJitter.Get())
+        mpGraphics->graphicsDefer.push(
+            std::function<void()>([retired = m_shadowJitter]() {}));
+      m_shadowJitter =
+          shadowQuality == eShadowMapQuality_Low
+              ? SharedResourceHandle<Image>()
+              : CreateStandardShadowJitter(
+                    shadowQuality == eShadowMapQuality_High ? 64 : 32,
+                    shadowQuality == eShadowMapQuality_High ? 32 : 16);
+      m_shadowJitterQuality = shadowQuality;
+    }
+    cTexture *shadowJitterTexture =
+        m_shadowJitter.Get() ? m_shadowJitter->GetTexture() : nullptr;
+    const uint32_t activeShadowQuality =
+        shadowJitterTexture ? static_cast<uint32_t>(shadowQuality) : 0u;
+    if (shadowJitterTexture)
+      mpGraphics->graphicsDefer.push(
+          std::function<void()>([keep = m_shadowJitter]() {}));
+    StandardLightCounts counts{pointLightCount, spotLightCount, boxLightCount,
+                               activeShadowQuality};
+    mpGraphics->UpdateFrameUBO(&countBinding.descriptor, &counts,
+                               sizeof(counts));
+    auto rampSampler = mpGraphics->resolve_filter_descriptor(
+        eTextureWrap_ClampToEdge, eTextureWrap_ClampToEdge,
+        eTextureWrap_ClampToEdge, eTextureFilter_Bilinear);
+    auto goboSampler = mpGraphics->resolve_filter_descriptor(
+        eTextureWrap_ClampToBorder, eTextureWrap_ClampToBorder,
+        eTextureWrap_ClampToBorder, eTextureFilter_Trilinear);
+    if (!rampSampler || !goboSampler) {
+      mpGraphics->primary.cmds[0].vk_d3d12_endRendering(&mpGraphics->device);
+      mpGraphics->primary.cmds[0].vk_d3d12_textureBarrier(
+          RI_PogoShaderBarrier(state->renderTarget[index].Get(), false));
+      handBackDepth();
+      return;
+    }
+    RIProgram::DescriptorBinding samplerBindings[2] = {
+        RIProgram::DescriptorBinding("standardRampSampler", *rampSampler),
+        RIProgram::DescriptorBinding("standardGoboSampler", *goboSampler)};
+    RIProgram::DescriptorBinding shadowBinding(
+        "standardShadowMap",
+        RIDescriptor::sampledImage(&mpGraphics->device,
+                                   standardShadowView.Get()));
+
+    RITextureView *aoInput =
+        !useAoFallback ? state->aoView[index].Get() : aoFallbackView.Get();
+    if (!aoInput) {
+      // Fallback allocation failed: never substitute an unrelated image. Skip
+      // this frame's resolve rather than multiplying lighting by garbage.
+      mpGraphics->primary.cmds[0].vk_d3d12_endRendering(&mpGraphics->device);
+      mpGraphics->primary.cmds[0].vk_d3d12_textureBarrier(
+          RI_PogoShaderBarrier(state->renderTarget[index].Get(), false));
+      handBackDepth();
+      return;
+    }
+    RIProgram::DescriptorBinding aoBinding(
+        "standardAmbientOcclusionInput",
+        RIDescriptor::sampledImage(&mpGraphics->device, aoInput));
+
+    RIProgram::DescriptorBinding resolveBindings[18] = {
+        bindings[0], bindings[1],  bindings[2],        bindings[3],
+        bindings[4], bindings[5],  bindings[6],        bindings[7],
+        bindings[8], countBinding, samplerBindings[0], samplerBindings[1]};
+    resolveBindings[12] = shadowBinding;
+    resolveBindings[13] = aoBinding;
+    resolveBindings[14] = RIProgram::DescriptorBinding(
+        "standardDecalMulInput",
+        RIDescriptor::sampledImage(&mpGraphics->device,
+                                   state->decalMulView[index].Get()));
+    resolveBindings[15] = RIProgram::DescriptorBinding(
+        "standardDecalAddInput",
+        RIDescriptor::sampledImage(&mpGraphics->device,
+                                   state->decalAddView[index].Get()));
+    // Low quality never reads the offsets; any valid colour view satisfies the layout.
+    resolveBindings[16] = RIProgram::DescriptorBinding(
+        "standardShadowJitterInput",
+        shadowJitterTexture
+            ? shadowJitterTexture->descriptor()
+            : RIDescriptor::sampledImage(
+                  &mpGraphics->device, state->materialColorView[index].Get()));
+    resolveBindings[17] = RIProgram::DescriptorBinding(
+        "standardShadowTiles",
+        RIDescriptor::storageBuffer(
+            &mpGraphics->device, shadowTiles.Get(), 0,
+            std::max<size_t>(shadowTileRecords.size(), 1u) *
+                sizeof(StandardShadowTileData)));
+    m_lighting->bindDescriptors(&mpGraphics->device,
+                                &mpGraphics->primary.cmds[0],
+                                mpGraphics->frameIndex, resolveBindings, 18);
+    RIViewport vp;
+    vp.x = 0;
+    vp.y = float(state->height);
+    vp.width = float(state->width);
+    vp.height = -float(state->height);
+    vp.depthMin = 0;
+    vp.depthMax = 1;
+    RIRect sc;
+    sc.x = 0;
+    sc.y = 0;
+    sc.width = int16_t(state->width);
+    sc.height = int16_t(state->height);
+    mpGraphics->primary.cmds[0].setViewport(&mpGraphics->device, vp);
+    mpGraphics->primary.cmds[0].setScissor(&mpGraphics->device, sc);
+    mpGraphics->primary.cmds[0].draw(&mpGraphics->device, 3, 1, 0, 0);
+    mpGraphics->primary.cmds[0].vk_d3d12_endRendering(&mpGraphics->device);
+    mpGraphics->primary.cmds[0].vk_d3d12_textureBarrier(
+        RI_PogoShaderBarrier(state->renderTarget[index].Get(), false));
+  }
+
+  if (m_environment && m_environment->LoadData() &&
+      !state->environmentTexture[index].isEmpty()) {
+    mpGraphics->primary.cmds[0].vk_d3d12_textureBarrier(RITextureBarrier(
+        state->environmentTexture[index].Get(),
+        state->environmentInitialized[index] ? RI_RESOURCE_STATE_COPY_SRC
+                                             : RI_RESOURCE_STATE_UNDEFINED,
+        RI_RESOURCE_STATE_RENDER_TARGET, RI_STAGE_NONE, RI_STAGE_FRAGMENT,
+        RI_BARRIER_ASPECT_COLOR));
+    const bool environmentRendered = m_environment->Render(
+        cntx, &mpGraphics->primary.cmds[0], mpGraphics->frameIndex,
+        state->width, state->height, state->renderTarget[index].Get(),
+        state->renderTargetView[index].Get(), state->positionView[index].Get(),
+        state->environmentAttachmentView[index].Get(), apWorld, &frameBinding);
+    if (!environmentRendered) {
+      // Render returns before recording on failure; the resolved input is
+      // still shader-readable and no copy-destination transition occurred.
+      handBackDepth();
+      return;
+    }
+    mpGraphics->primary.cmds[0].vk_d3d12_textureBarrier(RITextureBarrier(
+        state->environmentTexture[index].Get(), RI_RESOURCE_STATE_RENDER_TARGET,
+        RI_RESOURCE_STATE_COPY_SRC, RI_STAGE_FRAGMENT, RI_STAGE_COPY,
+        RI_BARRIER_ASPECT_COLOR));
+    mpGraphics->primary.cmds[0].vk_d3d12_textureBarrier(RITextureBarrier(
+        state->renderTarget[index].Get(), RI_RESOURCE_STATE_SHADER_RESOURCE,
+        RI_RESOURCE_STATE_COPY_DST, RI_STAGE_FRAGMENT, RI_STAGE_COPY,
+        RI_BARRIER_ASPECT_COLOR));
+    RIImageCopyDesc copy = {};
+    copy.width = state->width;
+    copy.height = state->height;
+    copy.depth = 1;
+    mpGraphics->primary.cmds[0].copyImage(
+        &mpGraphics->device, state->environmentTexture[index].Get(),
+        state->renderTarget[index].Get(), copy);
+    mpGraphics->primary.cmds[0].vk_d3d12_textureBarrier(RITextureBarrier(
+        state->renderTarget[index].Get(), RI_RESOURCE_STATE_COPY_DST,
+        RI_RESOURCE_STATE_SHADER_RESOURCE, RI_STAGE_COPY, RI_STAGE_FRAGMENT,
+        RI_BARRIER_ASPECT_COLOR));
+    state->environmentInitialized[index] = true;
+  }
+
+  if (cTemporalReactiveMask *reactiveMask =
+          viewport->GetTemporalReactiveMask()) {
+    TemporalReactiveMaskSnapshotDesc snapshot = {};
+    snapshot.cmd = &mpGraphics->primary.cmds[0];
+    snapshot.sceneColor = state->renderTarget[index].Get();
+    snapshot.sceneColorFormat = cGraphics::PogoColorFormat;
+    snapshot.extent = {state->width, state->height};
+    snapshot.frameIndex = mpGraphics->frameIndex;
+    snapshot.viewportCookie = viewport;
+    snapshot.sceneColorEntryState = RI_RESOURCE_STATE_SHADER_RESOURCE;
+    snapshot.sceneColorExitState = RI_RESOURCE_STATE_SHADER_RESOURCE;
+    snapshot.sceneColorEntryStage = RI_STAGE_FRAGMENT;
+    snapshot.sceneColorExitStage = RI_STAGE_FRAGMENT;
+    reactiveMask->RecordOpaqueSnapshot(snapshot);
+  }
+
+  // Environment is now the completed opaque Standard scene. Walk the sorted
+  // translucent list once, in order, as the legacy deferred renderer did:
+  // contiguous mesh runs go to the translucent pass, contiguous particle /
+  // billboard / beam runs to the particle pass, and each water surface is
+  // recorded in place (preserving LargeSurface placement). A particle behind
+  // glass or water therefore stays behind it.
+  {
+    std::vector<RIProgram::DescriptorBinding> fogBindings;
+    if (m_environment)
+      m_environment->AppendFogBindings(apWorld, fogBindings);
+    const bool translucentReady = m_translucent && m_translucent->LoadData();
+    const bool particlesReady =
+        m_particles && !fogBindings.empty() && m_particles->LoadData();
+    const bool waterReady =
+        m_water && !fogBindings.empty() && m_water->LoadData();
+    if (m_water)
+      m_water->SetWorldReflectionEnabled(!apSettings ||
+                                         apSettings->mbRenderWorldReflection);
+    const uint32_t particleSalt =
+        hash_u64(HASH_INITIAL_VALUE, reinterpret_cast<uintptr_t>(viewport));
+
+    auto drawOrdinary = [&](std::span<iRenderable *> segment) {
+      if (segment.empty() || !translucentReady)
+        return;
+      m_translucent->Draw(cntx, state, index, segment, apFrustum, apWorld,
+                          &frameBinding,
+                          fogBindings.empty() ? nullptr : &fogBindings.front(),
+                          standardShadowView.Get(), &pointLights, &spotLights,
+                          pointLightCount, spotLightCount);
+    };
+    // Billboard and beam streams are copied into this frame's scratch ring,
+    // keeping every viewport independent.
+    auto drawParticles = [&](std::span<iRenderable *> segment) {
+      if (segment.empty() || !particlesReady)
+        return;
+      RICmd *cmd = &mpGraphics->primary.cmds[0];
+      // Blending reads the existing scene color while writing the particle
+      // result.  RENDER_TARGET is write-only and is not a valid dependency
+      // for that read; retain the color-attachment layout with read|write
+      // access for the rendering scope.
+      cmd->vk_d3d12_textureBarrier(RITextureBarrier(
+          state->renderTarget[index].Get(), RI_RESOURCE_STATE_SHADER_RESOURCE,
+          RI_RESOURCE_STATE_RENDER_TARGET_READ, RI_STAGE_FRAGMENT,
+          RI_STAGE_FRAGMENT, RI_BARRIER_ASPECT_COLOR));
+      cmd->vk_d3d12_textureBarrier(RITextureBarrier(
+          state->depthTextures[index].Get(), RI_RESOURCE_STATE_SHADER_RESOURCE,
+          RI_RESOURCE_STATE_DEPTH_READ | RI_RESOURCE_STATE_SHADER_RESOURCE,
+          RI_STAGE_FRAGMENT, RI_STAGE_ALL_GRAPHICS, RI_BARRIER_ASPECT_DEPTH));
+      RIRenderingAttachment color = {};
+      color.view = *state->renderTargetView[index];
+      color.loadOp = RI_ATTACHMENT_LOAD_OP_LOAD;
+      color.storeOp = RI_ATTACHMENT_STORE_OP_STORE;
+      RIRenderingAttachment depth = {};
+      depth.view = *state->depthView[index];
+      depth.loadOp = RI_ATTACHMENT_LOAD_OP_LOAD;
+      depth.storeOp = RI_ATTACHMENT_STORE_OP_STORE;
+      depth.readOnly = true;
+      RIBeginRenderingDesc begin = {};
+      begin.renderArea.width = static_cast<int16_t>(state->width);
+      begin.renderArea.height = static_cast<int16_t>(state->height);
+      begin.colorCount = 1;
+      begin.colors = &color;
+      begin.depthStencil = &depth;
+      cmd->vk_d3d12_beginRendering(&mpGraphics->device, begin);
+      RIViewport vp = {};
+      vp.width = static_cast<float>(state->width);
+      vp.height = -static_cast<float>(state->height);
+      vp.y = static_cast<float>(state->height);
+      vp.depthMax = 1.0f;
+      RIRect sc = {};
+      sc.width = static_cast<int16_t>(state->width);
+      sc.height = static_cast<int16_t>(state->height);
+      cmd->setViewport(&mpGraphics->device, vp);
+      cmd->setScissor(&mpGraphics->device, sc);
+      m_particles->Render(cntx, cmd, mpGraphics->frameIndex, state->width,
+                          state->height, state->renderTarget[index].Get(),
+                          state->renderTargetView[index].Get(),
+                          state->depthSampleView[index].Get(), apFrustum,
+                          afFrameTime, segment, apWorld, particleSalt,
+                          &frameBinding, fogBindings.front(), pointLights,
+                          spotLights, pointLightCount, spotLightCount);
+      cmd->vk_d3d12_endRendering(&mpGraphics->device);
+      cmd->vk_d3d12_textureBarrier(
+          RITextureBarrier(state->renderTarget[index].Get(),
+                           RI_RESOURCE_STATE_RENDER_TARGET_READ,
+                           RI_RESOURCE_STATE_SHADER_RESOURCE, RI_STAGE_FRAGMENT,
+                           RI_STAGE_FRAGMENT, RI_BARRIER_ASPECT_COLOR));
+      cmd->vk_d3d12_textureBarrier(RITextureBarrier(
+          state->depthTextures[index].Get(),
+          RI_RESOURCE_STATE_DEPTH_READ | RI_RESOURCE_STATE_SHADER_RESOURCE,
+          RI_RESOURCE_STATE_SHADER_RESOURCE, RI_STAGE_ALL_GRAPHICS,
+          RI_STAGE_FRAGMENT, RI_BARRIER_ASPECT_DEPTH));
+    };
+    auto isParticleRun = [](iRenderable *object) {
+      if (!object)
+        return false;
+      const eRenderableType type = object->GetRenderType();
+      return type == eRenderableType_ParticleEmitter ||
+             type == eRenderableType_Billboard || type == eRenderableType_Beam;
+    };
+    auto flush = [&](bool particleRun, std::span<iRenderable *> segment) {
+      if (particleRun)
+        drawParticles(segment);
+      else
+        drawOrdinary(segment);
+    };
+
+    auto translucent =
+        m_rendererList.GetRenderableItems(eRenderListType_Translucent);
+    size_t begin = 0;
+    bool currentParticleRun = false;
+    for (size_t i = 0; i < translucent.size(); ++i) {
+      iRenderable *object = translucent[i];
+      if (object && object->GetMaterial() &&
+          object->GetMaterial()->GetMaterialID() == MaterialID::Water) {
+        flush(currentParticleRun, translucent.subspan(begin, i - begin));
+        if (waterReady)
+          m_water->RecordSurface(
+              cntx, state, index, object, apFrustum, apWorld, &frameBinding,
+              &fogBindings.front(), &pointLights, &spotLights, pointLightCount,
+              spotLightCount, standardShadowView.Get(),
+              m_rendererList.GetFogAreas(), &boxLights, boxLightCount);
+        begin = i + 1;
+        continue;
+      }
+      const bool particleRun = isParticleRun(object);
+      if (particleRun != currentParticleRun) {
+        flush(currentParticleRun, translucent.subspan(begin, i - begin));
+        begin = i;
+        currentParticleRun = particleRun;
+      }
+    }
+    flush(currentParticleRun, translucent.subspan(begin));
+  }
+
+  // Every Standard pass above leaves the render depth in SHADER_RESOURCE.
+  handBackDepth();
+
+  // DebugDraw overlay (editor grid / gizmos / icons and in-game debug lines,
+  // queued by OnPreWorldDraw callbacks). The legacy deferred renderer flushed
+  // debug draws into its output after the solid and translucent passes; draw
+  // into the finished scene against the scene depth and leave the render
+  // target in SHADER_READ with depth in DEPTH_WRITE, as Draw's contract requires.
+  DebugDraw *debugDraw = mpGraphics->GetDebugDraw();
+  if (debugDraw && debugDraw->HasRequests()) {
+    RICmd *cmd = &mpGraphics->primary.cmds[0];
+    cmd->vk_d3d12_textureBarrier(RITextureBarrier(
+        state->renderTarget[index].Get(), RI_RESOURCE_STATE_SHADER_RESOURCE,
+        RI_RESOURCE_STATE_RENDER_TARGET_READ, RI_STAGE_FRAGMENT,
+        RI_STAGE_FRAGMENT, RI_BARRIER_ASPECT_COLOR));
+    RIRenderingAttachment color = {};
+    color.view = *state->renderTargetView[index];
+    color.loadOp = RI_ATTACHMENT_LOAD_OP_LOAD;
+    color.storeOp = RI_ATTACHMENT_STORE_OP_STORE;
+    RIRenderingAttachment depth = {};
+    depth.view = *state->depthView[index];
+    depth.loadOp = RI_ATTACHMENT_LOAD_OP_LOAD;
+    depth.storeOp = RI_ATTACHMENT_STORE_OP_STORE;
+    RIBeginRenderingDesc begin = {};
+    begin.renderArea.width = static_cast<int16_t>(state->width);
+    begin.renderArea.height = static_cast<int16_t>(state->height);
+    begin.colorCount = 1;
+    begin.colors = &color;
+    begin.depthStencil = &depth;
+    cmd->vk_d3d12_beginRendering(&mpGraphics->device, begin);
+    debugDraw->flush(cntx, cmd, apFrustum, state->width, state->height,
+                     cGraphics::PogoColorFormat);
+    cmd->vk_d3d12_endRendering(&mpGraphics->device);
+    cmd->vk_d3d12_textureBarrier(
+        RI_PogoShaderBarrier(state->renderTarget[index].Get(), false));
+  }
+}
+
+} // namespace hpl

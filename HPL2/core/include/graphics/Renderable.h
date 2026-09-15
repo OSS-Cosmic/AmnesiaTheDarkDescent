@@ -22,6 +22,7 @@
 
 #include "math/MathTypes.h"
 #include "graphics/GraphicsTypes.h"
+#include "graphics/RendererMask.h"
 #include "system/SystemTypes.h"
 #include "scene/SceneTypes.h"
 
@@ -70,6 +71,14 @@ namespace hpl {
 		virtual void SetRenderFlagBit(tRenderableFlag alFlagBit, bool abSet);
 		bool GetRenderFlagBit(tRenderableFlag alFlagBit){ return (mlRenderFlags & alFlagBit)!=0;} 
 		inline tRenderableFlag GetRenderFlags() const { return mlRenderFlags;}
+
+		// Renderer backends this object belongs to (kRendererMask*). Loaders skip
+		// objects whose mask excludes the running backend; the default is all.
+		virtual void SetRendererMask(unsigned alMask);
+		unsigned GetRendererMask() const { return mRendererMask; }
+		bool IsRendererEnabled(unsigned alBackendBit) const { return IsRendererMaskEnabled(mRendererMask, alBackendBit); }
+		bool IsLegacyRendererEnabled() const { return IsRendererEnabled(kRendererMaskStandard); }
+		bool IsOverdriveEnabled() const { return IsRendererEnabled(kRendererMaskOverdrive); }
 
 		virtual bool IsVisible(){ return mbIsVisible && mfCoverageAmount >0; }
 		void SetVisible(bool abVisible);
@@ -140,6 +149,7 @@ namespace hpl {
 		int mlLastMatrixCount;
 
 		tRenderableFlag mlRenderFlags;
+		unsigned mRendererMask = kRendererMaskAll;
 
 		bool mbIsVisible;
 

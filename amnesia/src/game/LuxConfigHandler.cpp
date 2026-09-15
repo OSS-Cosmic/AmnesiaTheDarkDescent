@@ -108,6 +108,7 @@ void cLuxConfigHandler::LoadMainConfig()
 	mbRefraction =		gpBase->mpMainConfig->GetBool("Graphics", "Refraction", true);
 	mbEdgeSmooth =		gpBase->mpMainConfig->GetBool("Graphics", "EdgeSmooth", false);
 
+	mRendererBackend = RendererBackendFromString(gpBase->mpMainConfig->GetString("Graphics", "RendererBackend", "standard"));
 	mSuperSampling.provider = SuperSamplingProviderFromString(gpBase->mpMainConfig->GetString("Graphics", "SuperSamplingProvider", "off"));
 	mSuperSampling.quality = SuperSamplingQualityFromString(gpBase->mpMainConfig->GetString("Graphics", "SuperSamplingQuality", "quality"));
 	mfRenderScale = NormalizeRenderScale(gpBase->mpMainConfig->GetFloat("Graphics", "RenderScale", 1.0f));
@@ -161,6 +162,8 @@ void cLuxConfigHandler::SaveMainConfig()
 	gpBase->mpMainConfig->SetInt("Screen","Height", mvScreenSize.y);
 	gpBase->mpMainConfig->SetBool("Screen","FullScreen", mbFullscreen);
 	gpBase->mpMainConfig->SetBool("Screen","Vsync", mbVSync);
+
+	gpBase->mpMainConfig->SetString("Graphics", "RendererBackend", RendererBackendToString(mRendererBackend));
 
 	gpBase->mpMainConfig->SetBool("MapLoad","FastPhysicsLoad", mbFastPhysicsLoad);
 	gpBase->mpMainConfig->SetBool("MapLoad","FastStaticLoad", mbFastStaticLoad);
@@ -259,6 +262,25 @@ hpl::TemporalUpscalerQuality cLuxConfigHandler::SuperSamplingQualityFromString(c
 	if(sValue=="performance") return hpl::TemporalUpscalerQuality::Performance;
 	if(sValue=="ultra_performance") return hpl::TemporalUpscalerQuality::UltraPerformance;
 	return hpl::TemporalUpscalerQuality::Quality;
+}
+
+//-----------------------------------------------------------------------
+
+tString cLuxConfigHandler::RendererBackendToString(hpl::eRendererBackend aBackend)
+{
+	switch(aBackend)
+	{
+	case hpl::eRendererBackend_Standard: return "standard";
+	case hpl::eRendererBackend_Overdrive:
+	default: return "overdrive";
+	}
+}
+
+hpl::eRendererBackend cLuxConfigHandler::RendererBackendFromString(const tString& asValue)
+{
+	tString sValue = cString::ToLowerCase(asValue);
+	if(sValue=="overdrive") return hpl::eRendererBackend_Overdrive;
+	return hpl::eRendererBackend_Standard;
 }
 
 //-----------------------------------------------------------------------

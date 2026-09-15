@@ -1300,6 +1300,15 @@ namespace hpl {
 		}
 	}
 
+	void cMeshEntity::SetRendererMask(unsigned alMask)
+	{
+		mlRendererMask = SanitizeRendererMask(alMask);
+		for(int i=0;i<(int)mvSubMeshes.size();i++)
+		{
+			mvSubMeshes[i]->SetRendererMask(mlRendererMask);
+		}
+	}
+
 	void cMeshEntity::SetIlluminationAmount(float afX)
 	{
 		if(mfIlluminationAmount == afX) return;

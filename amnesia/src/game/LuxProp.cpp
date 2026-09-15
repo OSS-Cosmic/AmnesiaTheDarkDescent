@@ -472,7 +472,7 @@ void iLuxProp::SetEffectsActive(bool abActive, bool abFadeAndPlaySounds)
 			else 
 			{
 				pLight->SetDiffuseColor(pLightData->mOnColor);
-				pLight->SetIntensity(pLightData->mfOnRadius);
+				pLight->SetAnimatedValue(pLightData->mfOnRadius);
 				pLight->SetFlickerActive(pLightData->mbFlickering);
 			}
 		}
@@ -523,7 +523,7 @@ void iLuxProp::SetEffectsActive(bool abActive, bool abFadeAndPlaySounds)
 			else
 			{	
 				pLight->SetDiffuseColor(mEffectsOffLightColor);
-				pLight->SetIntensity(fOffRadius);
+				pLight->SetAnimatedValue(fOffRadius);
 			}
 		}
 
@@ -1070,7 +1070,8 @@ void iLuxProp::SetupEffectData()
 		cLuxProp_LightData lightData;
 
 		lightData.mOnColor = pLight->GetDiffuseColor();
-		lightData.mfOnRadius = pLight->GetIntensity();
+		// Legacy radius or Overdrive intensity, whichever the light animates.
+		lightData.mfOnRadius = pLight->GetAnimatedValue();
 		lightData.mbFlickering = pLight->GetFlickerActive();
 
 		//TODO: Check all lights?
@@ -1942,7 +1943,8 @@ void iLuxProp::LoadFromSaveData(iLuxEntity_SaveData* apSaveData)
 	//Lights
 	for(size_t i=0; i<mvLights.size(); ++i)
 	{
-		pData->mvLights[i].ToLight(mvLights[i]);
+		cEngineLight_SaveData *pSaveLight = FindSavedChildLight(pData->mvLights, mvLights[i], i);
+		if(pSaveLight) pSaveLight->ToLight(mvLights[i]);
 	}
 	
 	///////////////////////
@@ -1998,7 +2000,7 @@ void iLuxProp::LoadFromSaveData(iLuxEntity_SaveData* apSaveData)
 	//Billboards
 	for(size_t i=0; i<mvBillboards.size(); ++i)
 	{
-		pData->mvBillboards[i].ToBillboard(mvBillboards[i]);
+		if(i < pData->mvBillboards.Size()) pData->mvBillboards[i].ToBillboard(mvBillboards[i]);
 	}
 }
 

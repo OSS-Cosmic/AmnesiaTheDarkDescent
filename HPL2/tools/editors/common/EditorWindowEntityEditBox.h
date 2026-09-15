@@ -62,6 +62,7 @@ protected:
 	void AddPropertyScale(cWidgetTab* apParentTab);
 	void AddPropertyRotation(cWidgetTab* apParentTab);
 	void AddPropertyActive(cWidgetTab* apParentTab);
+	void AddPropertyRendererMask(cWidgetTab* apParentTab);
 
 	void AddPropertySetAttachments(cWidgetTab* apParentTab);
 
@@ -86,6 +87,8 @@ protected:
 	cEditorInputText* mpInpName;
 	cEditorInputText* mpInpTag;
 	cEditorInputBool* mpInpActive;
+	cEditorInputBool* mpInpRendererStandard;
+	cEditorInputBool* mpInpRendererOverdrive;
 
 	cEditorInputVec3* mpInpPosition;
 	cEditorInputVec3* mpInpScale;

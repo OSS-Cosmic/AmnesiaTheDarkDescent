@@ -314,9 +314,15 @@ class cEngineLight_SaveData : public iSerializable
 {
 	kSerializableClassInit(cEngineLight_SaveData)
 public:
+	cEngineLight_SaveData();
 	void FromLight(iLight *apLight);
 	void ToLight(iLight *apLight);
 
+	// Version 1 is the historical save contract. Version 2 stored the dual
+	// legacy/Overdrive values of one light. Version 3 stores the light's model
+	// and its animated value (radius on legacy lights, intensity on Overdrive).
+	int mlVersion;
+	int mlLightModel; // 0 legacy, 1 Overdrive; -1 before version 3
 	tString msName;
 	int mlID;
 	bool mbActive;
@@ -324,7 +330,12 @@ public:
 	bool mbOnlyAffectInSector;
 
 	cColor mDiffuseColor;
-	float mfFarAttenuation;
+	float mfFarAttenuation; // Animated value (v3), Overdrive intensity (v1/v2).
+	// Version 2 preserves authored reach/source size independently of Legacy.
+	float mfRadius;
+	float mfSourceRadius;
+	float mfLegacyRadius;
+	unsigned mlRendererMask;
 
 	bool mbFlickering;
 	tString msFlickerOffSound;
@@ -336,13 +347,36 @@ public:
 	float mfFlickerOnMaxLength;
 	float mfFlickerOffMaxLength;
 	cColor mFlickerOffColor;
-	float mfFlickerOffRadius;
+	float mfFlickerOffRadius; // Flicker off animated value.
+	float mfFlickerOffIntensity;
+	float mfFlickerOffLegacyRadius;
+	float mfFlickerOnIntensity;
+	float mfFlickerOnLegacyRadius;
+	float mfFlickerOnValue; // v3
 	bool mbFlickerFade;
 	float mfFlickerOnFadeMinLength;
 	float mfFlickerOnFadeMaxLength;
 	float mfFlickerOffFadeMinLength;
 	float mfFlickerOffFadeMaxLength;
 };
+
+//---------------------------------------------------------------
+
+// Entity child lights are saved by index. A save made on the other renderer
+// backend can hold a different list (a split .ent light loads one half per
+// backend and can move in the order), so prefer the entry at the same index with
+// the same name, then any entry with that name, then the index while in range.
+template <class TSavedLightVec>
+cEngineLight_SaveData* FindSavedChildLight(TSavedLightVec &avSaved, iLight *apLight, size_t alIndex)
+{
+	const tString sName = apLight->GetName();
+	if(alIndex < avSaved.Size() && avSaved[alIndex].msName == sName) return &avSaved[alIndex];
+	for(size_t i=0; i<avSaved.Size(); ++i)
+	{
+		if(avSaved[i].msName == sName) return &avSaved[i];
+	}
+	return alIndex < avSaved.Size() ? &avSaved[alIndex] : NULL;
+}
 
 //---------------------------------------------------------------
 

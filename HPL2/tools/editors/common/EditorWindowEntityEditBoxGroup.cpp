@@ -20,6 +20,8 @@
 #include "EditorWindowEntityEditBoxGroup.h"
 
 #include "EntityWrapper.h"
+#include "EditorAction.h"
+#include "EditorInput.h"
 
 //---------------------------------------------------------------------------
 
@@ -48,6 +50,52 @@ cEditorWindowEntityEditBoxGroup::~cEditorWindowEntityEditBoxGroup()
 
 void cEditorWindowEntityEditBoxGroup::Create()
 {
+	AddPropertyRendererMask(mpTabs->AddTab(_W("Renderer")));
+}
+
+//--------------------------------------------------------------------------
+
+void cEditorWindowEntityEditBoxGroup::OnUpdate(float afTimeStep)
+{
+	if(mpInpRendererStandard==NULL) return;
+
+	// A renderer is ticked when every selected object loads for it.
+	unsigned lCommonMask = hpl::kRendererMaskAll;
+	for(tEntityWrapperListIt it = mlstEntities.begin(); it != mlstEntities.end(); ++it)
+		lCommonMask &= static_cast<unsigned>((*it)->GetRendererMask());
+
+	mpInpRendererStandard->SetValue((lCommonMask & hpl::kRendererMaskStandard) != 0, false);
+	mpInpRendererOverdrive->SetValue((lCommonMask & hpl::kRendererMaskOverdrive) != 0, false);
+}
+
+//--------------------------------------------------------------------------
+
+bool cEditorWindowEntityEditBoxGroup::WindowSpecificInputCallback(iEditorInput* apInput)
+{
+	if(apInput!=mpInpRendererStandard && apInput!=mpInpRendererOverdrive)
+		return false;
+
+	// Change only the toggled renderer on each object, as one undo step.
+	const unsigned lBit = apInput==mpInpRendererStandard ? hpl::kRendererMaskStandard : hpl::kRendererMaskOverdrive;
+	const bool bEnabled = static_cast<cEditorInputBool*>(apInput)->GetValue();
+
+	cEditorActionCompoundAction* pAction = hplNew(cEditorActionCompoundAction, ("Set Renderer"));
+	for(tEntityWrapperListIt it = mlstEntities.begin(); it != mlstEntities.end(); ++it)
+	{
+		iEntityWrapper* pEnt = *it;
+		unsigned lRendererMask = static_cast<unsigned>(pEnt->GetRendererMask());
+		lRendererMask = bEnabled ? (lRendererMask | lBit) : (lRendererMask & ~lBit);
+		pAction->AddAction(pEnt->CreateSetPropertyActionInt(eObjInt_RendererMask, static_cast<int>(lRendererMask)));
+	}
+
+	if(pAction->IsEmpty())
+	{
+		hplDelete(pAction);
+		return true;
+	}
+
+	mpEditor->AddAction(pAction);
+	return true;
 }
 
 //--------------------------------------------------------------------------

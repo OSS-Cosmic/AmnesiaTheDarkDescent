@@ -44,8 +44,10 @@ struct ParticlePipelineDesc {
     BLEND_LAST_ENUM = 5,
   };
 
+  // depthTest=false mirrors materials with DepthTest="False" (torch halos,
+  // nodepth fog sprites): the sprite ignores scene depth entirely.
   ParticlePipelineDesc(RI_Format_e swapchainFormat, RI_Format_e depthFormat,
-                       BlendMode mode);
+                       BlendMode mode, bool depthTest = true);
 
   ParticlePipelineDesc(const ParticlePipelineDesc &) = delete;
   ParticlePipelineDesc &operator=(const ParticlePipelineDesc &) = delete;

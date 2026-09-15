@@ -47,7 +47,7 @@ namespace hpl {
 
 	//-----------------------------------------------------------------------
 	
-	cLightSpot::cLightSpot(tString asName, cResources *apResources) : iLight(asName,apResources)
+	iLightSpot::iLightSpot(tString asName, cResources *apResources) : iLight(asName,apResources)
 	{
 		mbProjectionUpdated = true;
 		mbViewProjUpdated = true;
@@ -82,10 +82,23 @@ namespace hpl {
 		UpdateBoundingVolume();
 	}
 	
-	cLightSpot::~cLightSpot()
+	iLightSpot::~iLightSpot()
 	{
 		// m_spotFalloffMap (SharedResourceHandle) frees itself.
 		hplDelete(mpFrustum);
+	}
+
+	cLightSpotLegacy::cLightSpotLegacy(tString asName, cResources *apResources)
+		: iLightSpot(asName, apResources)
+	{
+	}
+
+	//-----------------------------------------------------------------------
+
+	cLightSpot::cLightSpot(tString asName, cResources *apResources)
+		: iLightSpot(asName, apResources)
+	{
+		mLightModel = eLightModel_Overdrive;
 	}
 	
 	//-----------------------------------------------------------------------
@@ -96,22 +109,19 @@ namespace hpl {
 	
 	//-----------------------------------------------------------------------
 
-	void cLightSpot::SetIntensity(float afX)
-	{
-		mfIntensity = afX;
-	}
+	
 
-	void cLightSpot::SetRadius(float afX)
+	void iLightSpot::SetRadius(float afX)
 	{
-		iLight::SetRadius(afX);
-
-		// Reach feeds the frustum far-plane, so rebuild projection + BV.
-		UpdateBoundingVolume();
-		SetTransformUpdated();
 		mbProjectionUpdated = true;
+		iLight::SetRadius(afX);
 	}
 
-	void cLightSpot::SetFOV(float afAngle)
+	
+
+	
+
+	void iLightSpot::SetFOV(float afAngle)
 	{ 
 		mfFOV = afAngle;
 		mbProjectionUpdated = true;
@@ -122,7 +132,7 @@ namespace hpl {
 	
 	//-----------------------------------------------------------------------
 	
-	const cMatrixf& cLightSpot::GetViewMatrix()
+	const cMatrixf& iLightSpot::GetViewMatrix()
 	{
 		if(mlViewMatrixCount != GetTransformUpdateCount())
 		{
@@ -136,7 +146,7 @@ namespace hpl {
 	//-----------------------------------------------------------------------
 
 
-	const cMatrixf& cLightSpot::GetProjectionMatrix()
+	const cMatrixf& iLightSpot::GetProjectionMatrix()
 	{
 		if(mbProjectionUpdated)
 		{
@@ -155,7 +165,7 @@ namespace hpl {
 
 	//-----------------------------------------------------------------------
 	
-	const cMatrixf& cLightSpot::GetViewProjMatrix()
+	const cMatrixf& iLightSpot::GetViewProjMatrix()
 	{
 		if(mlViewProjMatrixCount != GetTransformUpdateCount() || mbViewProjUpdated || mbProjectionUpdated)
 		{
@@ -171,7 +181,7 @@ namespace hpl {
 
 	//-----------------------------------------------------------------------
 
-	cFrustum* cLightSpot::GetFrustum()
+	cFrustum* iLightSpot::GetFrustum()
 	{
 		if(mlFrustumMatrixCount != GetTransformUpdateCount() || mbFrustumUpdated || mbProjectionUpdated)
 		{
@@ -188,12 +198,12 @@ namespace hpl {
 
 	//-----------------------------------------------------------------------
 
-	void cLightSpot::SetSpotFalloffMap(Image* apImage)
+	void iLightSpot::SetSpotFalloffMap(Image* apImage)
 	{
 		m_spotFalloffMap = SharedResourceHandle<Image>(mpTextureManager, apImage); // adopt transferred ref
 	}
 
-	Image* cLightSpot::GetSpotFalloffImage() const
+	Image* iLightSpot::GetSpotFalloffImage() const
 	{
 		return m_spotFalloffMap.Get();
 	}
@@ -201,7 +211,7 @@ namespace hpl {
 	//-----------------------------------------------------------------------
 
 
-	bool cLightSpot::CollidesWithBV(cBoundingVolume *apBV)
+	bool iLightSpot::CollidesWithBV(cBoundingVolume *apBV)
 	{
 		if(cMath::CheckBVIntersection(*GetBoundingVolume(), *apBV)==false) return false;
 
@@ -210,7 +220,7 @@ namespace hpl {
 	
 	//-----------------------------------------------------------------------
 
-	bool cLightSpot::CollidesWithFrustum(cFrustum *apFrustum)
+	bool iLightSpot::CollidesWithFrustum(cFrustum *apFrustum)
 	{
 		return apFrustum->CollideFrustum(GetFrustum())!=eCollision_Outside;
 	}
@@ -220,7 +230,7 @@ namespace hpl {
 	//////////////////////////////////////////////////////////////////////////
 	// PRIVATE METHODS
 	//////////////////////////////////////////////////////////////////////////
-	
+
 	//-----------------------------------------------------------------------
 
 	
@@ -233,7 +243,7 @@ namespace hpl {
 		return eTextureAnimMode_None;
 	}
 
-	void cLightSpot::ExtraXMLProperties(tinyxml2::XMLElement *apMainElem)
+	void iLightSpot::ExtraXMLProperties(tinyxml2::XMLElement *apMainElem)
 	{
 		tString sTexture = GetAttributeString(apMainElem, "ProjectionImage");
 
@@ -263,7 +273,7 @@ namespace hpl {
 
 	//-----------------------------------------------------------------------
 
-	void cLightSpot::UpdateBoundingVolume()
+	void iLightSpot::UpdateBoundingVolume()
 	{
 		mBoundingVolume = GetFrustum()->GetBoundingVolume();
 	}

@@ -368,115 +368,393 @@
     <Modify Category="StaticObjects" ID="1987" Name="wall_door_way_7">
         <SetAttr Rotation="2.53518e-06 -1.5708 2.53518e-06" />
     </Modify>
-    <Remove Category="Entities" ID="410" Name="PointLight_1" />
-    <Remove Category="Entities" ID="754" Name="PointLight_8" />
-    <Remove Category="Entities" ID="766" Name="Altar_1_LightPoint_1" />
-    <Remove Category="Entities" ID="780" Name="PointLight_17" />
-    <Remove Category="Entities" ID="1002" Name="PointLight_21" />
-    <Remove Category="Entities" ID="1013" Name="Altar_1_LightPoint_2" />
-    <Remove Category="Entities" ID="1261" Name="PointLight_30" />
-    <Remove Category="Entities" ID="1319" Name="PointLight_3" />
-    <Remove Category="Entities" ID="1324" Name="PointLight_31" />
-    <Remove Category="Entities" ID="1327" Name="PointLight_22" />
-    <Remove Category="Entities" ID="1332" Name="PointLight_32" />
-    <Remove Category="Entities" ID="1360" Name="PointLight_35" />
-    <Remove Category="Entities" ID="1363" Name="Altar_1_LightPoint_3" />
-    <Remove Category="Entities" ID="1370" Name="PointLight_25" />
-    <Remove Category="Entities" ID="1494" Name="PointLight_18" />
-    <Remove Category="Entities" ID="1495" Name="PointLight_19" />
-    <Remove Category="Entities" ID="1496" Name="PointLight_38" />
-    <Remove Category="Entities" ID="1499" Name="PointLight_36" />
-    <Remove Category="Entities" ID="1500" Name="PointLight_39" />
-    <Remove Category="Entities" ID="1501" Name="PointLight_40" />
-    <Remove Category="Entities" ID="1642" Name="PointLight_41" />
-    <Remove Category="Entities" ID="1643" Name="PointLight_42" />
-    <Remove Category="Entities" ID="1644" Name="PointLight_43" />
-    <Remove Category="Entities" ID="1645" Name="PointLight_44" />
-    <Remove Category="Entities" ID="1646" Name="PointLight_45" />
-    <Remove Category="Entities" ID="1647" Name="PointLight_46" />
-    <Remove Category="Entities" ID="1956" Name="Altar_2_WallLight" />
-    <Remove Category="Entities" ID="1960" Name="Altar_1_WallLight" />
-    <Remove Category="Entities" ID="1961" Name="Altar_1_GroundLight" />
-    <Remove Category="Entities" ID="1963" Name="Altar_1_HintLight" />
+    <Modify Category="Entities" ID="410" Name="PointLight_1">
+        <SetAttr RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="754" Name="PointLight_8">
+        <SetAttr RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="766" Name="Altar_1_LightPoint_1">
+        <SetAttr RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="780" Name="PointLight_17">
+        <SetAttr RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="1002" Name="PointLight_21">
+        <SetAttr RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="1013" Name="Altar_1_LightPoint_2">
+        <SetAttr RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="1261" Name="PointLight_30">
+        <SetAttr RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="1319" Name="PointLight_3">
+        <SetAttr RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="1324" Name="PointLight_31">
+        <SetAttr RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="1327" Name="PointLight_22">
+        <SetAttr RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="1332" Name="PointLight_32">
+        <SetAttr RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="1360" Name="PointLight_35">
+        <SetAttr RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="1363" Name="Altar_1_LightPoint_3">
+        <SetAttr RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="1370" Name="PointLight_25">
+        <SetAttr RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="1494" Name="PointLight_18">
+        <SetAttr RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="1495" Name="PointLight_19">
+        <SetAttr RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="1496" Name="PointLight_38">
+        <SetAttr RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="1499" Name="PointLight_36">
+        <SetAttr RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="1500" Name="PointLight_39">
+        <SetAttr RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="1501" Name="PointLight_40">
+        <SetAttr RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="1642" Name="PointLight_41">
+        <SetAttr RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="1643" Name="PointLight_42">
+        <SetAttr RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="1644" Name="PointLight_43">
+        <SetAttr RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="1645" Name="PointLight_44">
+        <SetAttr RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="1646" Name="PointLight_45">
+        <SetAttr RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="1647" Name="PointLight_46">
+        <SetAttr RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="1956" Name="Altar_2_WallLight">
+        <SetAttr RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="1960" Name="Altar_1_WallLight">
+        <SetAttr RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="1961" Name="Altar_1_GroundLight">
+        <SetAttr RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="1963" Name="Altar_1_HintLight">
+        <SetAttr RendererMask="1" />
+    </Modify>
     <Modify Category="Entities" ID="687" Name="PointLight_7">
-        <SetAttr Intensity="9" Radius="26.1506" SourceRadius="0" />
+        <SetAttr RendererMask="1" />
     </Modify>
     <Modify Category="Entities" ID="759" Name="Altar_2_Light_1">
-        <SetAttr Filename="entities/lamp/candle_floor/candle_floor.ent" />
+        <SetAttr RendererMask="1" />
     </Modify>
     <Modify Category="Entities" ID="760" Name="Altar_2_Light_3">
-        <SetAttr Filename="entities/lamp/candle_floor/candle_floor.ent" />
+        <SetAttr RendererMask="1" />
     </Modify>
     <Modify Category="Entities" ID="761" Name="Altar_2_Light_2">
-        <SetAttr Filename="entities/lamp/candle_floor/candle_floor.ent" />
+        <SetAttr RendererMask="1" />
     </Modify>
     <Modify Category="Entities" ID="762" Name="Altar_2_Light_6">
-        <SetAttr Filename="entities/lamp/candle_floor/candle_floor.ent" />
+        <SetAttr RendererMask="1" />
     </Modify>
     <Modify Category="Entities" ID="763" Name="Altar_2_Light_4">
-        <SetAttr Filename="entities/lamp/candle_floor/candle_floor.ent" />
+        <SetAttr RendererMask="1" />
     </Modify>
     <Modify Category="Entities" ID="764" Name="Altar_2_LightPoint_1">
-        <SetAttr Intensity="6.5" Radius="11.4182" SourceRadius="0" />
+        <SetAttr RendererMask="1" />
     </Modify>
     <Modify Category="Entities" ID="989" Name="Altar_1_Light_4">
-        <SetAttr Filename="entities/lamp/candle_floor/candle_floor.ent" />
+        <SetAttr RendererMask="1" />
     </Modify>
     <Modify Category="Entities" ID="990" Name="Altar_1_Light_6">
-        <SetAttr Filename="entities/lamp/candle_floor/candle_floor.ent" />
+        <SetAttr RendererMask="1" />
     </Modify>
     <Modify Category="Entities" ID="991" Name="Altar_1_Light_3">
-        <SetAttr Filename="entities/lamp/candle_floor/candle_floor.ent" />
+        <SetAttr RendererMask="1" />
     </Modify>
     <Modify Category="Entities" ID="992" Name="Altar_1_Light_1">
-        <SetAttr Filename="entities/lamp/candle_floor/candle_floor.ent" />
+        <SetAttr RendererMask="1" />
     </Modify>
     <Modify Category="Entities" ID="993" Name="Altar_1_Light_2">
-        <SetAttr Filename="entities/lamp/candle_floor/candle_floor.ent" />
+        <SetAttr RendererMask="1" />
     </Modify>
     <Modify Category="Entities" ID="1256" Name="slime_entry_5_4">
-        <SetAttr Intensity="3.5" Radius="12.2302" SourceRadius="0" />
+        <SetAttr RendererMask="1" />
     </Modify>
     <Modify Category="Entities" ID="1257" Name="slime_entry_4_4">
-        <SetAttr Intensity="4" Radius="15.9558" SourceRadius="0" />
+        <SetAttr RendererMask="1" />
     </Modify>
     <Modify Category="Entities" ID="1258" Name="slime_entry_3_4">
-        <SetAttr Intensity="4" Radius="15.9558" SourceRadius="0" />
+        <SetAttr RendererMask="1" />
     </Modify>
     <Modify Category="Entities" ID="1259" Name="slime_entry_2_4">
-        <SetAttr Intensity="4" Radius="15.9558" SourceRadius="0" />
+        <SetAttr RendererMask="1" />
     </Modify>
     <Modify Category="Entities" ID="1260" Name="slime_entry_1_4">
-        <SetAttr Intensity="4" Radius="15.9558" SourceRadius="0" />
+        <SetAttr RendererMask="1" />
     </Modify>
     <Modify Category="Entities" ID="1335" Name="Altar_2_LightPoint_3">
-        <SetAttr Intensity="7" Radius="11.8501" SourceRadius="0" />
+        <SetAttr RendererMask="1" />
     </Modify>
     <Modify Category="Entities" ID="1482" Name="Altar_2_LightPoint_2">
-        <SetAttr Intensity="6.5" Radius="11.4182" SourceRadius="0" />
+        <SetAttr RendererMask="1" />
     </Modify>
     <Modify Category="Entities" ID="1762" Name="PointLight_11_slime">
-        <SetAttr Intensity="9" SourceRadius="0" />
+        <SetAttr RendererMask="1" />
     </Modify>
     <Modify Category="Entities" ID="1944" Name="Altar_2_AltarLight">
-        <SetAttr Intensity="0.3" SourceRadius="0" />
+        <SetAttr RendererMask="1" />
     </Modify>
     <Modify Category="Entities" ID="1952" Name="Altar_2_GroundLight">
-        <SetAttr Intensity="1.5" SourceRadius="0" />
+        <SetAttr RendererMask="1" />
     </Modify>
     <Modify Category="Entities" ID="1962" Name="Altar_1_AltarLight">
-        <SetAttr Intensity="0.3" SourceRadius="0" />
+        <SetAttr RendererMask="1" />
     </Modify>
     <Modify Category="Entities" ID="1964" Name="Altar_2_HintLight">
-        <SetAttr Intensity="2.5" SourceRadius="0" />
+        <SetAttr RendererMask="1" />
     </Modify>
     <Add Category="Entities">
-        <PointLight Name="Altar_1_LightPoint_1" WorldPos="-20.5 -5.75 -39.75" Rotation="0 0 0" Scale="1 1 1" Tag="" Active="true" CastShadows="true" ShadowResolution="High" ShadowsAffectStatic="true" ShadowsAffectDynamic="true" Intensity="6.5" Radius="7.5" SourceRadius="0" FalloffMap="" Gobo="" GoboAnimMode="None" GoboAnimFrameTime="0" DiffuseColor="0.4 0.1 0 1" FlickerActive="false" FlickerOnMinLength="0" FlickerOnMaxLength="0" FlickerOnPS="" FlickerOnSound="" FlickerOffMinLength="0" FlickerOffMaxLength="0" FlickerOffPS="" FlickerOffSound="" FlickerOffColor="0 0 0 1" FlickerOffRadius="0" FlickerFade="false" FlickerOnFadeMinLength="0" FlickerOnFadeMaxLength="0" FlickerOffFadeMinLength="0" FlickerOffFadeMaxLength="0" />
-        <PointLight Name="Altar_1_LightPoint_2" WorldPos="-21.75 -6.25 -36.75" Rotation="0 0 0" Scale="1 1 1" Tag="" Active="true" CastShadows="true" ShadowResolution="High" ShadowsAffectStatic="true" ShadowsAffectDynamic="true" Intensity="6.5" Radius="5" SourceRadius="0" FalloffMap="" Gobo="" GoboAnimMode="None" GoboAnimFrameTime="0" DiffuseColor="0.35 0.1 0 1" FlickerActive="false" FlickerOnMinLength="0" FlickerOnMaxLength="0" FlickerOnPS="" FlickerOnSound="" FlickerOffMinLength="0" FlickerOffMaxLength="0" FlickerOffPS="" FlickerOffSound="" FlickerOffColor="0 0 0 1" FlickerOffRadius="0" FlickerFade="false" FlickerOnFadeMinLength="0" FlickerOnFadeMaxLength="0" FlickerOffFadeMinLength="0" FlickerOffFadeMaxLength="0" />
-        <PointLight Name="Altar_1_LightPoint_3" WorldPos="-20.25 -5.75 -33.5" Rotation="0 0 0" Scale="1 1 1" Tag="" Active="true" CastShadows="true" ShadowResolution="High" ShadowsAffectStatic="true" ShadowsAffectDynamic="true" Intensity="6.5" Radius="7.5" SourceRadius="0" FalloffMap="" Gobo="" GoboAnimMode="None" GoboAnimFrameTime="0" DiffuseColor="0.35 0.1 0 1" FlickerActive="false" FlickerOnMinLength="0" FlickerOnMaxLength="0" FlickerOnPS="" FlickerOnSound="" FlickerOffMinLength="0" FlickerOffMaxLength="0" FlickerOffPS="" FlickerOffSound="" FlickerOffColor="0 0 0 1" FlickerOffRadius="0" FlickerFade="false" FlickerOnFadeMinLength="0" FlickerOnFadeMaxLength="0" FlickerOffFadeMinLength="0" FlickerOffFadeMaxLength="0" />
-        <AreaLight Name="Altar_2_WallLight" WorldPos="20.2714 -5.41841 -43.2987" Rotation="1.5708 1.5708 0" Scale="1 1 1" Tag="" Active="true" CastShadows="true" ShadowResolution="High" ShadowsAffectStatic="true" ShadowsAffectDynamic="true" Intensity="10" Radius="3" SourceRadius="0" FalloffMap="" Gobo="" GoboAnimMode="None" GoboAnimFrameTime="0" DiffuseColor="0 0 0 0" FlickerActive="false" FlickerOnMinLength="0" FlickerOnMaxLength="0" FlickerOnPS="" FlickerOnSound="" FlickerOffMinLength="0" FlickerOffMaxLength="0" FlickerOffPS="" FlickerOffSound="" FlickerOffColor="0 0 0 1" FlickerOffRadius="0" FlickerFade="false" FlickerOnFadeMinLength="0" FlickerOnFadeMaxLength="0" FlickerOffFadeMinLength="0" FlickerOffFadeMaxLength="0" SourceWidth="1.34988" SourceHeight="2.2" BarnDoorAngle="0.785398" BarnDoorLength="0" SourceTexture="" />
-        <AreaLight Name="Altar_1_WallLight" WorldPos="-20.3669 -5.41841 -42.8543" Rotation="1.5708 1.5708 0" Scale="1 1 1" Tag="" Active="true" CastShadows="true" ShadowResolution="High" ShadowsAffectStatic="true" ShadowsAffectDynamic="true" Intensity="10" Radius="3" SourceRadius="0" FalloffMap="" Gobo="" GoboAnimMode="None" GoboAnimFrameTime="0" DiffuseColor="0 0 0 0" FlickerActive="false" FlickerOnMinLength="0" FlickerOnMaxLength="0" FlickerOnPS="" FlickerOnSound="" FlickerOffMinLength="0" FlickerOffMaxLength="0" FlickerOffPS="" FlickerOffSound="" FlickerOffColor="0 0 0 1" FlickerOffRadius="0" FlickerFade="false" FlickerOnFadeMinLength="0" FlickerOnFadeMaxLength="0" FlickerOffFadeMinLength="0" FlickerOffFadeMaxLength="0" SourceWidth="1.34988" SourceHeight="2.2" BarnDoorAngle="0.785398" BarnDoorLength="0" SourceTexture="" />
-        <PointLight Name="Altar_1_GroundLight" WorldPos="-20.0286 -7.64289 -32.3369" Rotation="0 0 0" Scale="1 1 1" Tag="" Active="true" CastShadows="true" ShadowResolution="High" ShadowsAffectStatic="true" ShadowsAffectDynamic="true" Intensity="1.23" Radius="1.23" SourceRadius="0" FalloffMap="" Gobo="" GoboAnimMode="None" GoboAnimFrameTime="0" DiffuseColor="0 0 0 0" FlickerActive="false" FlickerOnMinLength="0" FlickerOnMaxLength="0" FlickerOnPS="" FlickerOnSound="" FlickerOffMinLength="0" FlickerOffMaxLength="0" FlickerOffPS="" FlickerOffSound="" FlickerOffColor="0 0 0 1" FlickerOffRadius="0" FlickerFade="false" FlickerOnFadeMinLength="0" FlickerOnFadeMaxLength="0" FlickerOffFadeMinLength="0" FlickerOffFadeMaxLength="0" />
-        <PointLight Name="Altar_1_HintLight" WorldPos="-20.3242 -5.36003 -41.8882" Rotation="0 0 0" Scale="1 1 1" Tag="" Active="true" CastShadows="true" ShadowResolution="High" ShadowsAffectStatic="true" ShadowsAffectDynamic="true" Intensity="2.5" Radius="2.5" SourceRadius="0" FalloffMap="" Gobo="" GoboAnimMode="None" GoboAnimFrameTime="0" DiffuseColor="0 0 0 0" FlickerActive="false" FlickerOnMinLength="0" FlickerOnMaxLength="0" FlickerOnPS="" FlickerOnSound="" FlickerOffMinLength="0" FlickerOffMaxLength="0" FlickerOffPS="" FlickerOffSound="" FlickerOffColor="0 0 0 1" FlickerOffRadius="0" FlickerFade="false" FlickerOnFadeMinLength="0" FlickerOnFadeMaxLength="0" FlickerOffFadeMinLength="0" FlickerOffFadeMaxLength="0" />
+        <Re_PointLight Name="Altar_1_LightPoint_1" WorldPos="-20.5 -5.75 -39.75" Rotation="0 0 0" Scale="1 1 1" Tag="" Active="true" CastShadows="true" ShadowResolution="High" ShadowsAffectStatic="true" ShadowsAffectDynamic="true" Intensity="6.5" Radius="7.5" SourceRadius="0" FalloffMap="" Gobo="" GoboAnimMode="None" GoboAnimFrameTime="0" DiffuseColor="0.4 0.1 0 1" FlickerActive="false" FlickerOnMinLength="0" FlickerOnMaxLength="0" FlickerOnPS="" FlickerOnSound="" FlickerOffMinLength="0" FlickerOffMaxLength="0" FlickerOffPS="" FlickerOffSound="" FlickerOffColor="0 0 0 1" FlickerOffIntensity="0" FlickerFade="false" FlickerOnFadeMinLength="0" FlickerOnFadeMaxLength="0" FlickerOffFadeMinLength="0" FlickerOffFadeMaxLength="0" RendererMask="2" />
+        <Re_PointLight Name="Altar_1_LightPoint_2" WorldPos="-21.75 -6.25 -36.75" Rotation="0 0 0" Scale="1 1 1" Tag="" Active="true" CastShadows="true" ShadowResolution="High" ShadowsAffectStatic="true" ShadowsAffectDynamic="true" Intensity="6.5" Radius="5" SourceRadius="0" FalloffMap="" Gobo="" GoboAnimMode="None" GoboAnimFrameTime="0" DiffuseColor="0.35 0.1 0 1" FlickerActive="false" FlickerOnMinLength="0" FlickerOnMaxLength="0" FlickerOnPS="" FlickerOnSound="" FlickerOffMinLength="0" FlickerOffMaxLength="0" FlickerOffPS="" FlickerOffSound="" FlickerOffColor="0 0 0 1" FlickerOffIntensity="0" FlickerFade="false" FlickerOnFadeMinLength="0" FlickerOnFadeMaxLength="0" FlickerOffFadeMinLength="0" FlickerOffFadeMaxLength="0" RendererMask="2" />
+        <Re_PointLight Name="Altar_1_LightPoint_3" WorldPos="-20.25 -5.75 -33.5" Rotation="0 0 0" Scale="1 1 1" Tag="" Active="true" CastShadows="true" ShadowResolution="High" ShadowsAffectStatic="true" ShadowsAffectDynamic="true" Intensity="6.5" Radius="7.5" SourceRadius="0" FalloffMap="" Gobo="" GoboAnimMode="None" GoboAnimFrameTime="0" DiffuseColor="0.35 0.1 0 1" FlickerActive="false" FlickerOnMinLength="0" FlickerOnMaxLength="0" FlickerOnPS="" FlickerOnSound="" FlickerOffMinLength="0" FlickerOffMaxLength="0" FlickerOffPS="" FlickerOffSound="" FlickerOffColor="0 0 0 1" FlickerOffIntensity="0" FlickerFade="false" FlickerOnFadeMinLength="0" FlickerOnFadeMaxLength="0" FlickerOffFadeMinLength="0" FlickerOffFadeMaxLength="0" RendererMask="2" />
+        <Re_AreaLight Name="Altar_2_WallLight" WorldPos="20.2714 -5.41841 -43.2987" Rotation="1.5708 1.5708 0" Scale="1 1 1" Tag="" Active="true" CastShadows="true" ShadowResolution="High" ShadowsAffectStatic="true" ShadowsAffectDynamic="true" Intensity="10" Radius="3" SourceRadius="0" FalloffMap="" Gobo="" GoboAnimMode="None" GoboAnimFrameTime="0" DiffuseColor="0 0 0 0" FlickerActive="false" FlickerOnMinLength="0" FlickerOnMaxLength="0" FlickerOnPS="" FlickerOnSound="" FlickerOffMinLength="0" FlickerOffMaxLength="0" FlickerOffPS="" FlickerOffSound="" FlickerOffColor="0 0 0 1" FlickerOffIntensity="0" FlickerFade="false" FlickerOnFadeMinLength="0" FlickerOnFadeMaxLength="0" FlickerOffFadeMinLength="0" FlickerOffFadeMaxLength="0" SourceWidth="1.34988" SourceHeight="2.2" BarnDoorAngle="0.785398" BarnDoorLength="0" SourceTexture="" RendererMask="2" />
+        <Re_AreaLight Name="Altar_1_WallLight" WorldPos="-20.3669 -5.41841 -42.8543" Rotation="1.5708 1.5708 0" Scale="1 1 1" Tag="" Active="true" CastShadows="true" ShadowResolution="High" ShadowsAffectStatic="true" ShadowsAffectDynamic="true" Intensity="10" Radius="3" SourceRadius="0" FalloffMap="" Gobo="" GoboAnimMode="None" GoboAnimFrameTime="0" DiffuseColor="0 0 0 0" FlickerActive="false" FlickerOnMinLength="0" FlickerOnMaxLength="0" FlickerOnPS="" FlickerOnSound="" FlickerOffMinLength="0" FlickerOffMaxLength="0" FlickerOffPS="" FlickerOffSound="" FlickerOffColor="0 0 0 1" FlickerOffIntensity="0" FlickerFade="false" FlickerOnFadeMinLength="0" FlickerOnFadeMaxLength="0" FlickerOffFadeMinLength="0" FlickerOffFadeMaxLength="0" SourceWidth="1.34988" SourceHeight="2.2" BarnDoorAngle="0.785398" BarnDoorLength="0" SourceTexture="" RendererMask="2" />
+        <Re_PointLight Name="Altar_1_GroundLight" WorldPos="-20.0286 -7.64289 -32.3369" Rotation="0 0 0" Scale="1 1 1" Tag="" Active="true" CastShadows="true" ShadowResolution="High" ShadowsAffectStatic="true" ShadowsAffectDynamic="true" Intensity="1.23" SourceRadius="0" FalloffMap="" Gobo="" GoboAnimMode="None" GoboAnimFrameTime="0" DiffuseColor="0 0 0 0" FlickerActive="false" FlickerOnMinLength="0" FlickerOnMaxLength="0" FlickerOnPS="" FlickerOnSound="" FlickerOffMinLength="0" FlickerOffMaxLength="0" FlickerOffPS="" FlickerOffSound="" FlickerOffColor="0 0 0 1" FlickerOffIntensity="0" FlickerFade="false" FlickerOnFadeMinLength="0" FlickerOnFadeMaxLength="0" FlickerOffFadeMinLength="0" FlickerOffFadeMaxLength="0" RendererMask="2" />
+        <Re_PointLight Name="Altar_1_HintLight" WorldPos="-20.3242 -5.36003 -41.8882" Rotation="0 0 0" Scale="1 1 1" Tag="" Active="true" CastShadows="true" ShadowResolution="High" ShadowsAffectStatic="true" ShadowsAffectDynamic="true" Intensity="2.5" SourceRadius="0" FalloffMap="" Gobo="" GoboAnimMode="None" GoboAnimFrameTime="0" DiffuseColor="0 0 0 0" FlickerActive="false" FlickerOnMinLength="0" FlickerOnMaxLength="0" FlickerOnPS="" FlickerOnSound="" FlickerOffMinLength="0" FlickerOffMaxLength="0" FlickerOffPS="" FlickerOffSound="" FlickerOffColor="0 0 0 1" FlickerOffIntensity="0" FlickerFade="false" FlickerOnFadeMinLength="0" FlickerOnFadeMaxLength="0" FlickerOffFadeMinLength="0" FlickerOffFadeMaxLength="0" RendererMask="2" />
+    </Add>
+    <Add Category="Entities">
+        <Re_PointLight Active="true" CastShadows="false" DiffuseColor="0.65 0.3 0 1" FalloffMap="" FlickerActive="false" FlickerFade="false" FlickerOffColor="0 0 0 1" FlickerOffFadeMaxLength="0" FlickerOffFadeMinLength="0" FlickerOffMaxLength="0" FlickerOffMinLength="0" FlickerOffPS="" FlickerOffIntensity="0" FlickerOffSound="" FlickerOnFadeMaxLength="0" FlickerOnFadeMinLength="0" FlickerOnMaxLength="0" FlickerOnMinLength="0" FlickerOnPS="" FlickerOnSound="" Gobo="" GoboAnimFrameTime="0" GoboAnimMode="None" Name="PointLight_7" Intensity="9" Radius="26.1506" SourceRadius="0" Rotation="0 0 0" Scale="1 1 1" ShadowResolution="High" ShadowsAffectDynamic="true" ShadowsAffectStatic="true" Tag="" WorldPos="0 -1.25 -36" RendererMask="2" />
+        <Re_PointLight Active="true" CastShadows="false" DiffuseColor="0.35 0.1 0 1" FalloffMap="" FlickerActive="false" FlickerFade="false" FlickerOffColor="0 0 0 1" FlickerOffFadeMaxLength="0" FlickerOffFadeMinLength="0" FlickerOffMaxLength="0" FlickerOffMinLength="0" FlickerOffPS="" FlickerOffIntensity="0" FlickerOffSound="" FlickerOnFadeMaxLength="0" FlickerOnFadeMinLength="0" FlickerOnMaxLength="0" FlickerOnMinLength="0" FlickerOnPS="" FlickerOnSound="" Gobo="" GoboAnimFrameTime="0" GoboAnimMode="None" Name="Altar_2_LightPoint_1" Intensity="6.5" Radius="11.4182" SourceRadius="0" Rotation="0 0 0" Scale="1 1 1" ShadowResolution="High" ShadowsAffectDynamic="true" ShadowsAffectStatic="true" Tag="" WorldPos="20.3437 -5.75 -40.0293" RendererMask="2" />
+        <Re_PointLight Active="true" CastShadows="false" DiffuseColor="0.5 0.1 0 1" FalloffMap="" FlickerActive="false" FlickerFade="false" FlickerOffColor="0 0 0 1" FlickerOffFadeMaxLength="0" FlickerOffFadeMinLength="0" FlickerOffMaxLength="0" FlickerOffMinLength="0" FlickerOffPS="" FlickerOffIntensity="0" FlickerOffSound="" FlickerOnFadeMaxLength="0" FlickerOnFadeMinLength="0" FlickerOnMaxLength="0" FlickerOnMinLength="0" FlickerOnPS="" FlickerOnSound="" Gobo="" GoboAnimFrameTime="0" GoboAnimMode="None" Name="slime_entry_5_4" Intensity="3.5" Radius="12.2302" SourceRadius="0" Rotation="0 0 0" Scale="1 1 1" ShadowResolution="High" ShadowsAffectDynamic="true" ShadowsAffectStatic="true" Tag="" WorldPos="0 -6.25 -25.7824" RendererMask="2" />
+        <Re_PointLight Active="true" CastShadows="false" DiffuseColor="0.6 0.1 0 1" FalloffMap="" FlickerActive="false" FlickerFade="false" FlickerOffColor="0 0 0 1" FlickerOffFadeMaxLength="0" FlickerOffFadeMinLength="0" FlickerOffMaxLength="0" FlickerOffMinLength="0" FlickerOffPS="" FlickerOffIntensity="0" FlickerOffSound="" FlickerOnFadeMaxLength="0" FlickerOnFadeMinLength="0" FlickerOnMaxLength="0" FlickerOnMinLength="0" FlickerOnPS="" FlickerOnSound="" Gobo="" GoboAnimFrameTime="0" GoboAnimMode="None" Name="slime_entry_4_4" Intensity="4" Radius="15.9558" SourceRadius="0" Rotation="0 0 0" Scale="1 1 1" ShadowResolution="High" ShadowsAffectDynamic="true" ShadowsAffectStatic="true" Tag="" WorldPos="0 -3.75 -21.3335" RendererMask="2" />
+        <Re_PointLight Active="true" CastShadows="false" DiffuseColor="0.6 0.1 0 1" FalloffMap="" FlickerActive="false" FlickerFade="false" FlickerOffColor="0 0 0 1" FlickerOffFadeMaxLength="0" FlickerOffFadeMinLength="0" FlickerOffMaxLength="0" FlickerOffMinLength="0" FlickerOffPS="" FlickerOffIntensity="0" FlickerOffSound="" FlickerOnFadeMaxLength="0" FlickerOnFadeMinLength="0" FlickerOnMaxLength="0" FlickerOnMinLength="0" FlickerOnPS="" FlickerOnSound="" Gobo="" GoboAnimFrameTime="0" GoboAnimMode="None" Name="slime_entry_3_4" Intensity="4" Radius="15.9558" SourceRadius="0" Rotation="0 0 0" Scale="1 1 1" ShadowResolution="High" ShadowsAffectDynamic="true" ShadowsAffectStatic="true" Tag="" WorldPos="0 -1.75 -17.3627" RendererMask="2" />
+        <Re_PointLight Active="true" CastShadows="false" DiffuseColor="0.6 0.1 0 1" FalloffMap="" FlickerActive="false" FlickerFade="false" FlickerOffColor="0 0 0 1" FlickerOffFadeMaxLength="0" FlickerOffFadeMinLength="0" FlickerOffMaxLength="0" FlickerOffMinLength="0" FlickerOffPS="" FlickerOffIntensity="0" FlickerOffSound="" FlickerOnFadeMaxLength="0" FlickerOnFadeMinLength="0" FlickerOnMaxLength="0" FlickerOnMinLength="0" FlickerOnPS="" FlickerOnSound="" Gobo="" GoboAnimFrameTime="0" GoboAnimMode="None" Name="slime_entry_2_4" Intensity="4" Radius="15.9558" SourceRadius="0" Rotation="0 0 0" Scale="1 1 1" ShadowResolution="High" ShadowsAffectDynamic="true" ShadowsAffectStatic="true" Tag="" WorldPos="0 0.25 -13.4441" RendererMask="2" />
+        <Re_PointLight Active="true" CastShadows="false" DiffuseColor="0.6 0.1 0 1" FalloffMap="" FlickerActive="false" FlickerFade="false" FlickerOffColor="0 0 0 1" FlickerOffFadeMaxLength="0" FlickerOffFadeMinLength="0" FlickerOffMaxLength="0" FlickerOffMinLength="0" FlickerOffPS="" FlickerOffIntensity="0" FlickerOffSound="" FlickerOnFadeMaxLength="0" FlickerOnFadeMinLength="0" FlickerOnMaxLength="0" FlickerOnMinLength="0" FlickerOnPS="" FlickerOnSound="" Gobo="" GoboAnimFrameTime="0" GoboAnimMode="None" Name="slime_entry_1_4" Intensity="4" Radius="15.9558" SourceRadius="0" Rotation="0 0 0" Scale="1 1 1" ShadowResolution="High" ShadowsAffectDynamic="true" ShadowsAffectStatic="true" Tag="" WorldPos="0 2 -9.53823" RendererMask="2" />
+        <Re_PointLight Active="true" CastShadows="false" DiffuseColor="0.35 0.1 0 1" FalloffMap="" FlickerActive="false" FlickerFade="false" FlickerOffColor="0 0 0 1" FlickerOffFadeMaxLength="0" FlickerOffFadeMinLength="0" FlickerOffMaxLength="0" FlickerOffMinLength="0" FlickerOffPS="" FlickerOffIntensity="0" FlickerOffSound="" FlickerOnFadeMaxLength="0" FlickerOnFadeMinLength="0" FlickerOnMaxLength="0" FlickerOnMinLength="0" FlickerOnPS="" FlickerOnSound="" Gobo="" GoboAnimFrameTime="0" GoboAnimMode="None" Name="Altar_2_LightPoint_3" Intensity="7" Radius="11.8501" SourceRadius="0" Rotation="0 0 0" Scale="1 1 1" ShadowResolution="High" ShadowsAffectDynamic="true" ShadowsAffectStatic="true" Tag="" WorldPos="20.25 -6.25 -34.75" RendererMask="2" />
+        <Re_PointLight Active="true" CastShadows="false" DiffuseColor="0.35 0.1 0 1" FalloffMap="" FlickerActive="false" FlickerFade="false" FlickerOffColor="0 0 0 1" FlickerOffFadeMaxLength="0" FlickerOffFadeMinLength="0" FlickerOffMaxLength="0" FlickerOffMinLength="0" FlickerOffPS="" FlickerOffIntensity="0" FlickerOffSound="" FlickerOnFadeMaxLength="0" FlickerOnFadeMinLength="0" FlickerOnMaxLength="0" FlickerOnMinLength="0" FlickerOnPS="" FlickerOnSound="" Gobo="" GoboAnimFrameTime="0" GoboAnimMode="None" Name="Altar_2_LightPoint_2" Intensity="6.5" Radius="11.4182" SourceRadius="0" Rotation="0 0 0" Scale="1 1 1" ShadowResolution="High" ShadowsAffectDynamic="true" ShadowsAffectStatic="true" Tag="" WorldPos="20.25 -5.75 -37" RendererMask="2" />
+        <Re_PointLight Active="true" CastShadows="false" DiffuseColor="1 0.156 0.399 1" FalloffMap="" FlickerActive="false" FlickerFade="false" FlickerOffColor="0 0 0 1" FlickerOffFadeMaxLength="0" FlickerOffFadeMinLength="0" FlickerOffMaxLength="0" FlickerOffMinLength="0" FlickerOffPS="" FlickerOffIntensity="0" FlickerOffSound="" FlickerOnFadeMaxLength="0" FlickerOnFadeMinLength="0" FlickerOnMaxLength="0" FlickerOnMinLength="0" FlickerOnPS="" FlickerOnSound="" Gobo="" GoboAnimFrameTime="0" GoboAnimMode="None" Name="PointLight_11_slime" Intensity="9" SourceRadius="0" Rotation="0 0 0" Scale="1 1 1" ShadowResolution="High" ShadowsAffectDynamic="true" ShadowsAffectStatic="true" Tag="" WorldPos="-0.00691032 -1.25 -36" RendererMask="2" />
+        <Re_PointLight Active="true" CastShadows="false" DiffuseColor="0 0 0 0" FalloffMap="C:/SVN/amnesia/redist/lights/falloff_instant_fade.tga" FlickerActive="false" FlickerFade="false" FlickerOffColor="0 0 0 1" FlickerOffFadeMaxLength="0" FlickerOffFadeMinLength="0" FlickerOffMaxLength="0" FlickerOffMinLength="0" FlickerOffPS="" FlickerOffIntensity="0" FlickerOffSound="" FlickerOnFadeMaxLength="0" FlickerOnFadeMinLength="0" FlickerOnMaxLength="0" FlickerOnMinLength="0" FlickerOnPS="" FlickerOnSound="" Gobo="" GoboAnimFrameTime="0" GoboAnimMode="None" Name="Altar_2_AltarLight" Intensity="0.3" SourceRadius="0" Rotation="0 0 0" Scale="1 1 1" ShadowResolution="High" ShadowsAffectDynamic="true" ShadowsAffectStatic="true" Tag="" WorldPos="20.2764 -6.97578 -42.4773" RendererMask="2" />
+        <Re_PointLight Active="true" CastShadows="false" DiffuseColor="0 0 0 0" FalloffMap="C:/SVN/amnesia/redist/lights/falloff_instant_fade.tga" FlickerActive="false" FlickerFade="false" FlickerOffColor="0 0 0 1" FlickerOffFadeMaxLength="0" FlickerOffFadeMinLength="0" FlickerOffMaxLength="0" FlickerOffMinLength="0" FlickerOffPS="" FlickerOffIntensity="0" FlickerOffSound="" FlickerOnFadeMaxLength="0" FlickerOnFadeMinLength="0" FlickerOnMaxLength="0" FlickerOnMinLength="0" FlickerOnPS="" FlickerOnSound="" Gobo="" GoboAnimFrameTime="0" GoboAnimMode="None" Name="Altar_2_GroundLight" Intensity="1.5" SourceRadius="0" Rotation="0 0 0" Scale="1 1 1" ShadowResolution="High" ShadowsAffectDynamic="true" ShadowsAffectStatic="true" Tag="" WorldPos="20.276 -7.64289 -32.58" RendererMask="2" />
+        <Re_PointLight Active="true" CastShadows="false" DiffuseColor="0 0 0 0" FalloffMap="C:/SVN/amnesia/redist/lights/falloff_instant_fade.tga" FlickerActive="false" FlickerFade="false" FlickerOffColor="0 0 0 1" FlickerOffFadeMaxLength="0" FlickerOffFadeMinLength="0" FlickerOffMaxLength="0" FlickerOffMinLength="0" FlickerOffPS="" FlickerOffIntensity="0" FlickerOffSound="" FlickerOnFadeMaxLength="0" FlickerOnFadeMinLength="0" FlickerOnMaxLength="0" FlickerOnMinLength="0" FlickerOnPS="" FlickerOnSound="" Gobo="" GoboAnimFrameTime="0" GoboAnimMode="None" Name="Altar_1_AltarLight" Intensity="0.3" SourceRadius="0" Rotation="0 0 0" Scale="1 1 1" ShadowResolution="High" ShadowsAffectDynamic="true" ShadowsAffectStatic="true" Tag="" WorldPos="-20.3517 -7 -42.0394" RendererMask="2" />
+        <Re_PointLight Active="true" CastShadows="false" DiffuseColor="0 0 0 0" FalloffMap="" FlickerActive="false" FlickerFade="false" FlickerOffColor="0 0 0 1" FlickerOffFadeMaxLength="0" FlickerOffFadeMinLength="0" FlickerOffMaxLength="0" FlickerOffMinLength="0" FlickerOffPS="" FlickerOffIntensity="0" FlickerOffSound="" FlickerOnFadeMaxLength="0" FlickerOnFadeMinLength="0" FlickerOnMaxLength="0" FlickerOnMinLength="0" FlickerOnPS="" FlickerOnSound="" Gobo="" GoboAnimFrameTime="0" GoboAnimMode="None" Name="Altar_2_HintLight" Intensity="2.5" SourceRadius="0" Rotation="0 0 0" Scale="1 1 1" ShadowResolution="High" ShadowsAffectDynamic="true" ShadowsAffectStatic="true" Tag="" WorldPos="20.2277 -5.36003 -42.4045" RendererMask="2" />
+    </Add>
+    <Add Category="Entities">
+        <Entity Active="true" Name="Altar_2_Light_1" Rotation="0 0 0" Scale="0.819102 0.903668 0.943762" Tag="" WorldPos="20.7153 -7.06678 -42.7131" Filename="entities/lamp/candle_floor/candle_floor.ent" RendererMask="2">
+            <UserVariables>
+                <Var Name="CastShadows" Value="true" />
+                <Var Name="StaticPhysics" Value="false" />
+                <Var Name="IsAffectedByDecal" Value="false" />
+                <Var Name="CallbackFunc" Value="" />
+                <Var Name="ConnectedProps" Value="" />
+                <Var Name="ConnectionStateChangeCallback" Value="" />
+                <Var Name="FullGameSave" Value="false" />
+                <Var Name="PlayerLookAtCallback" Value="" />
+                <Var Name="PlayerLookAtCallbackAutoRemove" Value="false" />
+                <Var Name="PlayerInteractCallback" Value="" />
+                <Var Name="PlayerInteractCallbackAutoRemove" Value="false" />
+                <Var Name="Lit" Value="true" />
+                <Var Name="ConnectedLight" Value="Altar_2_LightPoint_1" />
+                <Var Name="ConnectionLightAmount" Value="0.1" />
+                <Var Name="ConnectionLightUseOnColor" Value="true" />
+                <Var Name="ConnectionLightUseSpec" Value="false" />
+            </UserVariables>
+        </Entity>
+        <Entity Active="true" Name="Altar_2_Light_3" Rotation="0 0 0" Scale="0.786966 0.921415 0.776414" Tag="" WorldPos="20.8688 -7.06678 -42.3108" Filename="entities/lamp/candle_floor/candle_floor.ent" RendererMask="2">
+            <UserVariables>
+                <Var Name="CastShadows" Value="true" />
+                <Var Name="StaticPhysics" Value="false" />
+                <Var Name="IsAffectedByDecal" Value="false" />
+                <Var Name="CallbackFunc" Value="" />
+                <Var Name="ConnectedProps" Value="" />
+                <Var Name="ConnectionStateChangeCallback" Value="" />
+                <Var Name="FullGameSave" Value="false" />
+                <Var Name="PlayerLookAtCallback" Value="" />
+                <Var Name="PlayerLookAtCallbackAutoRemove" Value="false" />
+                <Var Name="PlayerInteractCallback" Value="" />
+                <Var Name="PlayerInteractCallbackAutoRemove" Value="false" />
+                <Var Name="Lit" Value="true" />
+                <Var Name="ConnectedLight" Value="Altar_2_LightPoint_1" />
+                <Var Name="ConnectionLightAmount" Value="0.1" />
+                <Var Name="ConnectionLightUseOnColor" Value="true" />
+                <Var Name="ConnectionLightUseSpec" Value="false" />
+            </UserVariables>
+        </Entity>
+        <Entity Active="true" Name="Altar_2_Light_2" Rotation="0 0 0" Scale="0.996765 0.83948 0.757447" Tag="" WorldPos="20.9309 -7.06678 -42.5445" Filename="entities/lamp/candle_floor/candle_floor.ent" RendererMask="2">
+            <UserVariables>
+                <Var Name="CastShadows" Value="true" />
+                <Var Name="StaticPhysics" Value="false" />
+                <Var Name="IsAffectedByDecal" Value="false" />
+                <Var Name="CallbackFunc" Value="" />
+                <Var Name="ConnectedProps" Value="" />
+                <Var Name="ConnectionStateChangeCallback" Value="" />
+                <Var Name="FullGameSave" Value="false" />
+                <Var Name="PlayerLookAtCallback" Value="" />
+                <Var Name="PlayerLookAtCallbackAutoRemove" Value="false" />
+                <Var Name="PlayerInteractCallback" Value="" />
+                <Var Name="PlayerInteractCallbackAutoRemove" Value="false" />
+                <Var Name="Lit" Value="true" />
+                <Var Name="ConnectedLight" Value="Altar_2_LightPoint_1" />
+                <Var Name="ConnectionLightAmount" Value="0.1" />
+                <Var Name="ConnectionLightUseOnColor" Value="true" />
+                <Var Name="ConnectionLightUseSpec" Value="false" />
+            </UserVariables>
+        </Entity>
+        <Entity Active="true" Name="Altar_2_Light_6" Rotation="0 0 0" Scale="0.991432 0.886898 0.800821" Tag="" WorldPos="19.5762 -7.06678 -42.6947" Filename="entities/lamp/candle_floor/candle_floor.ent" RendererMask="2">
+            <UserVariables>
+                <Var Name="CastShadows" Value="true" />
+                <Var Name="StaticPhysics" Value="false" />
+                <Var Name="IsAffectedByDecal" Value="false" />
+                <Var Name="CallbackFunc" Value="" />
+                <Var Name="ConnectedProps" Value="" />
+                <Var Name="ConnectionStateChangeCallback" Value="" />
+                <Var Name="FullGameSave" Value="false" />
+                <Var Name="PlayerLookAtCallback" Value="" />
+                <Var Name="PlayerLookAtCallbackAutoRemove" Value="false" />
+                <Var Name="PlayerInteractCallback" Value="" />
+                <Var Name="PlayerInteractCallbackAutoRemove" Value="false" />
+                <Var Name="Lit" Value="true" />
+                <Var Name="ConnectedLight" Value="Altar_2_LightPoint_1" />
+                <Var Name="ConnectionLightAmount" Value="0.1" />
+                <Var Name="ConnectionLightUseOnColor" Value="true" />
+                <Var Name="ConnectionLightUseSpec" Value="false" />
+            </UserVariables>
+        </Entity>
+        <Entity Active="true" Name="Altar_2_Light_4" Rotation="0 0 0" Scale="0.918996 0.990837 0.843135" Tag="" WorldPos="19.6029 -7.06678 -42.4427" Filename="entities/lamp/candle_floor/candle_floor.ent" RendererMask="2">
+            <UserVariables>
+                <Var Name="CastShadows" Value="true" />
+                <Var Name="StaticPhysics" Value="false" />
+                <Var Name="IsAffectedByDecal" Value="false" />
+                <Var Name="CallbackFunc" Value="" />
+                <Var Name="ConnectedProps" Value="" />
+                <Var Name="ConnectionStateChangeCallback" Value="" />
+                <Var Name="FullGameSave" Value="false" />
+                <Var Name="PlayerLookAtCallback" Value="" />
+                <Var Name="PlayerLookAtCallbackAutoRemove" Value="false" />
+                <Var Name="PlayerInteractCallback" Value="" />
+                <Var Name="PlayerInteractCallbackAutoRemove" Value="false" />
+                <Var Name="Lit" Value="true" />
+                <Var Name="ConnectedLight" Value="Altar_2_LightPoint_1" />
+                <Var Name="ConnectionLightAmount" Value="0.1" />
+                <Var Name="ConnectionLightUseOnColor" Value="true" />
+                <Var Name="ConnectionLightUseSpec" Value="false" />
+            </UserVariables>
+        </Entity>
+        <Entity Active="true" Name="Altar_1_Light_4" Rotation="0 0 0" Scale="0.687 0.521 0.776" Tag="" WorldPos="-21.0564 -7.06568 -41.9129" Filename="entities/lamp/candle_floor/candle_floor.ent" RendererMask="2">
+            <UserVariables>
+                <Var Name="CastShadows" Value="true" />
+                <Var Name="StaticPhysics" Value="false" />
+                <Var Name="IsAffectedByDecal" Value="false" />
+                <Var Name="CallbackFunc" Value="" />
+                <Var Name="ConnectedProps" Value="" />
+                <Var Name="ConnectionStateChangeCallback" Value="" />
+                <Var Name="FullGameSave" Value="false" />
+                <Var Name="PlayerLookAtCallback" Value="" />
+                <Var Name="PlayerLookAtCallbackAutoRemove" Value="false" />
+                <Var Name="PlayerInteractCallback" Value="" />
+                <Var Name="PlayerInteractCallbackAutoRemove" Value="false" />
+                <Var Name="Lit" Value="true" />
+                <Var Name="ConnectedLight" Value="Altar_1_LightPoint_1" />
+                <Var Name="ConnectionLightAmount" Value="0.1" />
+                <Var Name="ConnectionLightUseOnColor" Value="true" />
+                <Var Name="ConnectionLightUseSpec" Value="false" />
+            </UserVariables>
+        </Entity>
+        <Entity Active="true" Name="Altar_1_Light_6" Rotation="0 0 0" Scale="0.687 0.521 0.776" Tag="" WorldPos="-21.017 -7.06568 -42.2697" Filename="entities/lamp/candle_floor/candle_floor.ent" RendererMask="2">
+            <UserVariables>
+                <Var Name="CastShadows" Value="true" />
+                <Var Name="StaticPhysics" Value="false" />
+                <Var Name="IsAffectedByDecal" Value="false" />
+                <Var Name="CallbackFunc" Value="" />
+                <Var Name="ConnectedProps" Value="" />
+                <Var Name="ConnectionStateChangeCallback" Value="" />
+                <Var Name="FullGameSave" Value="false" />
+                <Var Name="PlayerLookAtCallback" Value="" />
+                <Var Name="PlayerLookAtCallbackAutoRemove" Value="false" />
+                <Var Name="PlayerInteractCallback" Value="" />
+                <Var Name="PlayerInteractCallbackAutoRemove" Value="false" />
+                <Var Name="Lit" Value="true" />
+                <Var Name="ConnectedLight" Value="Altar_1_LightPoint_1" />
+                <Var Name="ConnectionLightAmount" Value="0.1" />
+                <Var Name="ConnectionLightUseOnColor" Value="true" />
+                <Var Name="ConnectionLightUseSpec" Value="false" />
+            </UserVariables>
+        </Entity>
+        <Entity Active="true" Name="Altar_1_Light_3" Rotation="0 0 0" Scale="0.755471 0.899602 0.819514" Tag="" WorldPos="-19.6569 -7.06568 -42.232" Filename="entities/lamp/candle_floor/candle_floor.ent" RendererMask="2">
+            <UserVariables>
+                <Var Name="CastShadows" Value="true" />
+                <Var Name="StaticPhysics" Value="false" />
+                <Var Name="IsAffectedByDecal" Value="false" />
+                <Var Name="CallbackFunc" Value="" />
+                <Var Name="ConnectedProps" Value="" />
+                <Var Name="ConnectionStateChangeCallback" Value="" />
+                <Var Name="FullGameSave" Value="false" />
+                <Var Name="PlayerLookAtCallback" Value="" />
+                <Var Name="PlayerLookAtCallbackAutoRemove" Value="false" />
+                <Var Name="PlayerInteractCallback" Value="" />
+                <Var Name="PlayerInteractCallbackAutoRemove" Value="false" />
+                <Var Name="Lit" Value="true" />
+                <Var Name="ConnectedLight" Value="Altar_1_LightPoint_1" />
+                <Var Name="ConnectionLightAmount" Value="0.1" />
+                <Var Name="ConnectionLightUseOnColor" Value="true" />
+                <Var Name="ConnectionLightUseSpec" Value="false" />
+            </UserVariables>
+        </Entity>
+        <Entity Active="true" Name="Altar_1_Light_1" Rotation="0 0 0" Scale="0.858211 0.870991 0.931898" Tag="" WorldPos="-19.8171 -7.06568 -42.1004" Filename="entities/lamp/candle_floor/candle_floor.ent" RendererMask="2">
+            <UserVariables>
+                <Var Name="CastShadows" Value="true" />
+                <Var Name="StaticPhysics" Value="false" />
+                <Var Name="IsAffectedByDecal" Value="false" />
+                <Var Name="CallbackFunc" Value="" />
+                <Var Name="ConnectedProps" Value="" />
+                <Var Name="ConnectionStateChangeCallback" Value="" />
+                <Var Name="FullGameSave" Value="false" />
+                <Var Name="PlayerLookAtCallback" Value="" />
+                <Var Name="PlayerLookAtCallbackAutoRemove" Value="false" />
+                <Var Name="PlayerInteractCallback" Value="" />
+                <Var Name="PlayerInteractCallbackAutoRemove" Value="false" />
+                <Var Name="Lit" Value="true" />
+                <Var Name="ConnectedLight" Value="Altar_1_LightPoint_1" />
+                <Var Name="ConnectionLightAmount" Value="0.1" />
+                <Var Name="ConnectionLightUseOnColor" Value="true" />
+                <Var Name="ConnectionLightUseSpec" Value="false" />
+            </UserVariables>
+        </Entity>
+        <Entity Active="true" Name="Altar_1_Light_2" Rotation="0 0 0" Scale="0.774606 0.930425 0.917745" Tag="" WorldPos="-19.6268 -7.06568 -41.9045" Filename="entities/lamp/candle_floor/candle_floor.ent" RendererMask="2">
+            <UserVariables>
+                <Var Name="CastShadows" Value="true" />
+                <Var Name="StaticPhysics" Value="false" />
+                <Var Name="IsAffectedByDecal" Value="false" />
+                <Var Name="CallbackFunc" Value="" />
+                <Var Name="ConnectedProps" Value="" />
+                <Var Name="ConnectionStateChangeCallback" Value="" />
+                <Var Name="FullGameSave" Value="false" />
+                <Var Name="PlayerLookAtCallback" Value="" />
+                <Var Name="PlayerLookAtCallbackAutoRemove" Value="false" />
+                <Var Name="PlayerInteractCallback" Value="" />
+                <Var Name="PlayerInteractCallbackAutoRemove" Value="false" />
+                <Var Name="Lit" Value="true" />
+                <Var Name="ConnectedLight" Value="Altar_1_LightPoint_1" />
+                <Var Name="ConnectionLightAmount" Value="0.1" />
+                <Var Name="ConnectionLightUseOnColor" Value="true" />
+                <Var Name="ConnectionLightUseSpec" Value="false" />
+            </UserVariables>
+        </Entity>
     </Add>
 </MapDelta>
