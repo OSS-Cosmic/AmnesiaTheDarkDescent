@@ -126,7 +126,23 @@ float4 psMain(StandardParticleVertex input) : SV_TARGET
         lightLevel = saturate(pc.lightLevel);
     lightLevel *= max(material.particleBrightnessScale, 0.0f);
 
+    float4 modulated = applyBlendModulation(pc.blendMode, source, opacity,
+                                            lightLevel);
+
+    // The legacy alpha test (translucency_particle.frag: `finalColor.a < 0.01
+    // -> discard`). Tested here because neither encodeStandardBlendSource nor
+    // encodeBlendOutputLinear touches .a, so this sees the same value the
+    // original did. It is NOT redundant with the blend state:
+    // applyBlendModulation never folds texture alpha into RGB for
+    // Add/Mul/MulX2, so for those modes the discard is the only thing that
+    // honours a cutout stored in alpha. Drop it and a texture whose shape
+    // lives in alpha (ps_glass_piece on Add, ps_glass_shards on MulX2) emits
+    // its transparent-region RGB across the whole quad and reads as a solid
+    // square. The soft-depth and lifetime fades ride in `opacity`, not in .a,
+    // so no sprite gains a contour here.
+    if (modulated.a < kParticleAlphaDiscard)
+        discard;
+
     return encodeBlendOutputLinear(pc.blendMode,
-        encodeStandardBlendSource(pc.blendMode,
-            applyBlendModulation(pc.blendMode, source, opacity, lightLevel)));
+        encodeStandardBlendSource(pc.blendMode, modulated));
 }

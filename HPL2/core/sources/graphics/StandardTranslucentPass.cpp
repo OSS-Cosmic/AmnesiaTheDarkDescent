@@ -181,12 +181,7 @@ bool cStandardTranslucentPass::Draw(
     RISharedPointer<RIBuffer> *pointLights,
     RISharedPointer<RIBuffer> *spotLights, uint32_t pointLightCount,
     uint32_t spotLightCount, const OcclusionCull *cullInput) {
-  if (!m_loaded || !m_program || !frame || !state || !frustum || !world ||
-      !frameBinding || !standardShadowView || standardShadowView->isEmpty() ||
-      imageIndex >= RI_MAX_SWAPCHAIN_IMAGES || state->width == 0 ||
-      state->height == 0 || state->width > 32767 || state->height > 32767 ||
-      pointLights == nullptr || spotLights == nullptr ||
-      pointLights->isEmpty() || spotLights->isEmpty() ||
+  if (!state || imageIndex >= RI_MAX_SWAPCHAIN_IMAGES ||
       state->renderTarget[imageIndex].isEmpty() ||
       state->renderTargetView[imageIndex].isEmpty() ||
       state->depthTextures[imageIndex].isEmpty() ||
@@ -194,6 +189,43 @@ bool cStandardTranslucentPass::Draw(
       state->depthSampleView[imageIndex].isEmpty() ||
       state->translucentSceneCopy[imageIndex].isEmpty() ||
       state->translucentSceneCopyView[imageIndex].isEmpty())
+    return false;
+  Targets targets;
+  targets.color = state->renderTarget[imageIndex].Get();
+  targets.colorAttachmentView = state->renderTargetView[imageIndex].Get();
+  targets.depth = state->depthTextures[imageIndex].Get();
+  targets.depthAttachmentView = state->depthView[imageIndex].Get();
+  targets.depthSampleView = state->depthSampleView[imageIndex].Get();
+  targets.sceneCopy = state->translucentSceneCopy[imageIndex].Get();
+  targets.sceneCopyView = state->translucentSceneCopyView[imageIndex].Get();
+  targets.sceneCopyInitialized =
+      &state->translucentSceneCopyInitialized[imageIndex];
+  targets.width = state->width;
+  targets.height = state->height;
+  targets.slotSalt =
+      hash_u64(HASH_INITIAL_VALUE, reinterpret_cast<uintptr_t>(state));
+  return Draw(frame, targets, renderables, frustum, world, frameBinding,
+              fogBinding, standardShadowView, pointLights, spotLights,
+              pointLightCount, spotLightCount, cullInput);
+}
+
+bool cStandardTranslucentPass::Draw(
+    cGraphics::FrameContext *frame, const Targets &targets,
+    std::span<iRenderable *> renderables, cFrustum *frustum, cWorld *world,
+    RIProgram::DescriptorBinding *frameBinding,
+    RIProgram::DescriptorBinding *fogBinding, RITextureView *standardShadowView,
+    RISharedPointer<RIBuffer> *pointLights,
+    RISharedPointer<RIBuffer> *spotLights, uint32_t pointLightCount,
+    uint32_t spotLightCount, const OcclusionCull *cullInput) {
+  if (!m_loaded || !m_program || !frame || !frustum || !world ||
+      !frameBinding || !standardShadowView || standardShadowView->isEmpty() ||
+      targets.width == 0 || targets.height == 0 || targets.width > 32767 ||
+      targets.height > 32767 || pointLights == nullptr ||
+      spotLights == nullptr || pointLights->isEmpty() ||
+      spotLights->isEmpty() || !targets.color ||
+      !targets.colorAttachmentView || !targets.depth ||
+      !targets.depthAttachmentView || !targets.depthSampleView ||
+      !targets.sceneCopyView || targets.slotSalt == 0)
     return false;
 
   // The renderer supplies the already sorted m_rendererList.GetRenderableItems(eRenderListType_Translucent)
@@ -219,10 +251,10 @@ bool cStandardTranslucentPass::Draw(
     return true;
 
   RICmd *cmd = &mpGraphics->primary.cmds[0];
-  RITexture *target = state->renderTarget[imageIndex].Get();
-  RITexture *copy = state->translucentSceneCopy[imageIndex].Get();
-  RITextureView *targetView = state->renderTargetView[imageIndex].Get();
-  RITextureView *copyView = state->translucentSceneCopyView[imageIndex].Get();
+  RITexture *target = targets.color;
+  RITexture *copy = targets.sceneCopy;
+  RITextureView *targetView = targets.colorAttachmentView;
+  RITextureView *copyView = targets.sceneCopyView;
 
   // Resolve every descriptor and sampler before recording any transition. A
   // failed pass must leave both attachments in the caller's readable state.
@@ -265,8 +297,7 @@ bool cStandardTranslucentPass::Draw(
   static constexpr uint32_t kNoCommand = UINT32_MAX;
   std::vector<DrawItem> items;
   items.reserve(meshes.size());
-  const hash_t paneSalt =
-      hash_u64(HASH_INITIAL_VALUE, reinterpret_cast<uintptr_t>(state));
+  const hash_t paneSalt = targets.slotSalt;
   for (iRenderable *object : meshes) {
     // Legacy RendererDeferred skips a translucent whose viewport update fails.
     if (!object->UpdateGraphicsForViewport(frustum, 0.0f))
@@ -300,8 +331,9 @@ bool cStandardTranslucentPass::Draw(
             ? StandardTranslucentLightLevel(world, object)
             : 1.0f;
     // Honour the global refraction setting, as the legacy renderer did.
-    const bool refractive =
-        iRenderer::GetRefractionEnabled() && material->HasRefraction();
+    const bool refractive = copy != nullptr &&
+                            iRenderer::GetRefractionEnabled() &&
+                            material->HasRefraction();
     items.push_back(
         {object, material, materialId, slot, refractive, lightLevel});
   }
@@ -434,8 +466,7 @@ bool cStandardTranslucentPass::Draw(
                                  RI_RESOURCE_STATE_SHADER_RESOURCE));
   RIProgram::DescriptorBinding sceneDepthBinding(
       "sceneDepthInput",
-      RIDescriptor::sampledImage(&mpGraphics->device,
-                                 state->depthSampleView[imageIndex].Get(),
+      RIDescriptor::sampledImage(&mpGraphics->device, targets.depthSampleView,
                                  RI_RESOURCE_STATE_DEPTH_READ));
   std::vector<RIProgram::DescriptorBinding> bindings;
   bindings.reserve(11);
@@ -476,15 +507,15 @@ bool cStandardTranslucentPass::Draw(
   transition(mpGraphics, target, RI_RESOURCE_STATE_SHADER_RESOURCE,
              RI_RESOURCE_STATE_RENDER_TARGET_READ, RI_STAGE_FRAGMENT,
              RI_STAGE_FRAGMENT, RI_BARRIER_ASPECT_COLOR);
-  transition(mpGraphics, state->depthTextures[imageIndex].Get(),
-             RI_RESOURCE_STATE_SHADER_RESOURCE,
+  transition(mpGraphics, targets.depth, RI_RESOURCE_STATE_SHADER_RESOURCE,
              (RI_RESOURCE_STATE_DEPTH_READ | RI_RESOURCE_STATE_SHADER_RESOURCE),
              RI_STAGE_FRAGMENT, RI_STAGE_ALL_GRAPHICS, RI_BARRIER_ASPECT_DEPTH);
-  if (!state->translucentSceneCopyInitialized[imageIndex]) {
+  if (copy && targets.sceneCopyInitialized &&
+      !*targets.sceneCopyInitialized) {
     transition(mpGraphics, copy, RI_RESOURCE_STATE_UNDEFINED,
                RI_RESOURCE_STATE_SHADER_RESOURCE, RI_STAGE_NONE,
                RI_STAGE_FRAGMENT, RI_BARRIER_ASPECT_COLOR);
-    state->translucentSceneCopyInitialized[imageIndex] = true;
+    *targets.sceneCopyInitialized = true;
   }
 
   auto begin = [&]() {
@@ -493,29 +524,33 @@ bool cStandardTranslucentPass::Draw(
     color.loadOp = RI_ATTACHMENT_LOAD_OP_LOAD;
     color.storeOp = RI_ATTACHMENT_STORE_OP_STORE;
     RIRenderingAttachment depth = {};
-    depth.view = *state->depthView[imageIndex];
+    depth.view = *targets.depthAttachmentView;
     depth.loadOp = RI_ATTACHMENT_LOAD_OP_LOAD;
     depth.storeOp = RI_ATTACHMENT_STORE_OP_STORE;
     depth.readOnly = true;
     RIBeginRenderingDesc desc = {};
-    desc.renderArea.width = static_cast<int16_t>(state->width);
-    desc.renderArea.height = static_cast<int16_t>(state->height);
+    desc.renderArea.width = static_cast<int16_t>(targets.width);
+    desc.renderArea.height = static_cast<int16_t>(targets.height);
     desc.colorCount = 1;
     desc.colors = &color;
     desc.depthStencil = &depth;
     cmd->vk_d3d12_beginRendering(&mpGraphics->device, desc);
     RIViewport viewport = {};
     viewport.x = 0.0f;
-    viewport.y = static_cast<float>(state->height);
-    viewport.width = static_cast<float>(state->width);
-    viewport.height = -static_cast<float>(state->height);
+    viewport.y = static_cast<float>(targets.height);
+    viewport.width = static_cast<float>(targets.width);
+    viewport.height = -static_cast<float>(targets.height);
     viewport.depthMin = 0.0f;
     viewport.depthMax = 1.0f;
     RIRect scissor = {};
-    scissor.x = 0;
-    scissor.y = 0;
-    scissor.width = static_cast<int16_t>(state->width);
-    scissor.height = static_cast<int16_t>(state->height);
+    if (targets.scissor.width > 0 && targets.scissor.height > 0) {
+      scissor = targets.scissor;
+    } else {
+      scissor.x = 0;
+      scissor.y = 0;
+      scissor.width = static_cast<int16_t>(targets.width);
+      scissor.height = static_cast<int16_t>(targets.height);
+    }
     cmd->setViewport(&mpGraphics->device, viewport);
     cmd->setScissor(&mpGraphics->device, scissor);
     m_program->bindBindlessDescriptorSet(
@@ -542,8 +577,8 @@ bool cStandardTranslucentPass::Draw(
                  RI_RESOURCE_STATE_COPY_DST, RI_STAGE_FRAGMENT, RI_STAGE_COPY,
                  RI_BARRIER_ASPECT_COLOR);
       RIImageCopyDesc image = {};
-      image.width = state->width;
-      image.height = state->height;
+      image.width = targets.width;
+      image.height = targets.height;
       image.depth = 1;
       cmd->copyImage(&mpGraphics->device, target, copy, image);
       transition(mpGraphics, copy, RI_RESOURCE_STATE_COPY_DST,
@@ -569,6 +604,8 @@ bool cStandardTranslucentPass::Draw(
       uint32_t refractive;
       float lightLevel;
       uint32_t reflectionOnly;
+      // Appended, never reordered: the slang Push must match field for field.
+      float clipPlane[4];
     };
     // A draw goes through the cull only when the pre-pass claimed a slot for
     // it AND bindVertexStreams agrees about indexing. The second half is a
@@ -587,9 +624,13 @@ bool cStandardTranslucentPass::Draw(
           vertexMask, material->GetDepthTest());
       m_program->bindPipeline(&mpGraphics->device, cmd, pipeline.hash,
                               "Standard.translucent", &pipeline.createInfo);
-      Push push{static_cast<uint32_t>(remapBlend(blendMode)), 1.0f,
-                refractive ? 1u : 0u, item.lightLevel,
-                reflectionOnly ? 1u : 0u};
+      Push push{static_cast<uint32_t>(remapBlend(blendMode)),
+                1.0f,
+                refractive ? 1u : 0u,
+                item.lightLevel,
+                reflectionOnly ? 1u : 0u,
+                {targets.clipPlane.a, targets.clipPlane.b, targets.clipPlane.c,
+                 targets.clipPlane.d}};
       cmd->vk_d3d12_setPushConstants(&mpGraphics->device, *m_program, 0,
                                      sizeof(push), &push);
       if (culled) {
@@ -629,7 +670,7 @@ bool cStandardTranslucentPass::Draw(
   transition(mpGraphics, target, RI_RESOURCE_STATE_RENDER_TARGET_READ,
              RI_RESOURCE_STATE_SHADER_RESOURCE, RI_STAGE_FRAGMENT,
              RI_STAGE_FRAGMENT, RI_BARRIER_ASPECT_COLOR);
-  transition(mpGraphics, state->depthTextures[imageIndex].Get(),
+  transition(mpGraphics, targets.depth,
              (RI_RESOURCE_STATE_DEPTH_READ | RI_RESOURCE_STATE_SHADER_RESOURCE),
              RI_RESOURCE_STATE_SHADER_RESOURCE, RI_STAGE_ALL_GRAPHICS,
              RI_STAGE_FRAGMENT, RI_BARRIER_ASPECT_DEPTH);

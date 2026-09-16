@@ -21,7 +21,9 @@ struct I { float3 p:POSITION; float3 n:NORMAL; float4 t:TANGENT; float4 c:COLOR;
 struct V { float3 viewPos:VIEWPOS; float2 uv:TEXCRD; float3 n:NORMAL; float3 t:TANGENT; float3 b:BITANGENT; float4 c:COLOR; nointerpolation uint objectId:OBJECTID; float4 posH:SV_POSITION; };
 // Kept in lockstep with StandardTranslucentPass.cpp.
 // reflectionOnly selects the legacy UseIlluminationTrans additive pass.
-struct Push { uint blendMode; float sceneAlpha; uint refractive; float lightLevel; uint reflectionOnly; };
+// clipPlane is the half-space the planar water reflection keeps. A zero normal
+// disables it, which is what the main viewport passes.
+struct Push { uint blendMode; float sceneAlpha; uint refractive; float lightLevel; uint reflectionOnly; float4 clipPlane; };
 [vk::push_constant] Push pc;
 
 float3 safeN(float3 x, float3 fallback)
@@ -135,6 +137,8 @@ float4 psMain(V v):SV_TARGET0
 {
     UniformObject o=gSceneObjects[v.objectId];TranslucentMaterial m=loadTranslucentMaterial(o.materialID);
     if(o.dissolveAmount<=0.0f)discard;
+    float3 worldPos=mul(gPerFrame.invViewMat,float4(v.viewPos,1)).xyz;
+    if(any(pc.clipPlane.xyz!=0.0f)&&dot(pc.clipPlane.xyz,worldPos)+pc.clipPlane.w<0.0f)discard;
     uint cfg=m.materialConfig;float4 source=float4(0,0,0,1);
     if ((cfg&kMaterialFlagEnableDiffuse)!=0u&&m.tex[0]!=kInvalidTextureIndex)
     {
@@ -156,7 +160,7 @@ float4 psMain(V v):SV_TARGET0
         if(d-(1.0f-o.dissolveAmount*source.a)*0.5f<0.5f)discard;
     }
     if(source.a<=0.0f||!isfinite(source.a))discard;
-    float3 p=mul(gPerFrame.invViewMat,float4(v.viewPos,1)).xyz;
+    float3 p=worldPos;
     float3 n=materialNormalW(v,m);
     float3 cameraToSurfaceW=gPerFrame.posW-p;
     float3 dx=ddx(p),dy=ddy(p);

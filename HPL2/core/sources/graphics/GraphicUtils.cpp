@@ -71,14 +71,14 @@ namespace hpl {
 
 		void WalkAndPrepareRenderList(cRenderableSet* apSet, cFrustum* apFrustum,
 			std::function<void(iRenderable*)> handler, tRenderableFlag renderableFlag,
-			bool abIgnoreFrustumCull) {
+			bool abIgnoreFrustumCull, std::span<cPlanef> clipPlanes) {
 
 			////////////////////////////////////////////////
 			// Whole-scene path: a null frustum (the viewport-less per-world TLAS
 			// build) or an explicit ignore emits every object in the set.
 			if (apFrustum == nullptr || abIgnoreFrustumCull) {
 				for (iRenderable* pObject : apSet->GetObjects()) {
-					if (IsObjectIsVisible(pObject, renderableFlag, {})) {
+					if (IsObjectIsVisible(pObject, renderableFlag, clipPlanes)) {
 						handler(pObject);
 					}
 				}
@@ -97,7 +97,7 @@ namespace hpl {
 			                                                     : ml::PLANES_NUM;
 
 			apSet->QueryFrustum(mlFrustum, lPlanes, [&](iRenderable* pObject) {
-				if (IsObjectIsVisible(pObject, renderableFlag, {})) {
+				if (IsObjectIsVisible(pObject, renderableFlag, clipPlanes)) {
 					handler(pObject);
 				}
 			});

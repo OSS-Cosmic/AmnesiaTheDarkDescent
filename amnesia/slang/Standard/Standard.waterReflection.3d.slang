@@ -35,7 +35,13 @@ V vsMain(I x, uint di:SV_InstanceID, uint bi:SV_StartInstanceLocation)
 ReflectionOutputs psMain(V v)
 {
     if (dot(pc.plane.xyz,v.p)+pc.plane.w < 0.0f) discard;
-    UniformObject o=gSceneObjects[v.id]; DiffuseMaterial m=loadDiffuseMaterial(o.materialID);
+    UniformObject o=gSceneObjects[v.id];
+    // Same coverage gate as every other Standard raster pass. Without it,
+    // alpha-cutout geometry -- grates, slime nets, foliage -- reflects as
+    // solid quads. No parallax here, so the raw UV is the lookup.
+    VertexData vd = {}; vd.posW = v.p; vd.normalW = v.n; vd.texC = v.uv;
+    if (materialAlphaTest(vd, o.materialID, o.dissolveAmount)) discard;
+    DiffuseMaterial m=loadDiffuseMaterial(o.materialID);
     float3 c=float3(0.18f,0.22f,0.28f);
     if (m.tex[0]!=kInvalidTextureIndex) c=sampleBindless2D(m.tex[0],v.uv).rgb;
     StandardLightSurface s; s.color=c; s.normal=v.n; s.position=v.p;

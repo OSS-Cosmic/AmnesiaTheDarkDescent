@@ -1285,6 +1285,8 @@ cViewport::StandardViewportState::~StandardViewportState() {
     graphics->graphicsDefer.push(waterReflectionDepthAttachmentView[i]);
     graphics->graphicsDefer.push(waterSceneCopy[i]);
     graphics->graphicsDefer.push(waterSceneCopyView[i]);
+    graphics->graphicsDefer.push(waterReflectionSceneCopy[i]);
+    graphics->graphicsDefer.push(waterReflectionSceneCopyView[i]);
     graphics->graphicsDefer.push(aoPreparedDepthTexture[i]);
     graphics->graphicsDefer.push(aoPreparedDepthStorageView[i]);
     graphics->graphicsDefer.push(aoQuarterTexture[i]);
@@ -1375,10 +1377,15 @@ cViewport::StandardViewportState::StandardViewportState(
         std::move(rhs.waterReflectionDepthAttachmentView[i]);
     waterSceneCopy[i] = std::move(rhs.waterSceneCopy[i]);
     waterSceneCopyView[i] = std::move(rhs.waterSceneCopyView[i]);
+    waterReflectionSceneCopy[i] = std::move(rhs.waterReflectionSceneCopy[i]);
+    waterReflectionSceneCopyView[i] =
+        std::move(rhs.waterReflectionSceneCopyView[i]);
     waterReflectionInitialized[i] = rhs.waterReflectionInitialized[i];
     waterSceneCopyInitialized[i] = rhs.waterSceneCopyInitialized[i];
+    waterReflectionSceneCopyInitialized[i] =
+        rhs.waterReflectionSceneCopyInitialized[i];
     rhs.waterReflectionInitialized[i] = rhs.waterSceneCopyInitialized[i] =
-        false;
+        rhs.waterReflectionSceneCopyInitialized[i] = false;
     environmentInitialized[i] = rhs.environmentInitialized[i];
     rhs.environmentInitialized[i] = false;
     aoPreparedDepthTexture[i] = std::move(rhs.aoPreparedDepthTexture[i]);
@@ -1685,10 +1692,21 @@ void cViewport::StandardViewportState::Update(cGraphics::FrameContext *cntx,
         success && CreateViewportColorTexture(
                        &graphics->device, reflectionWidth, reflectionHeight,
                        cGraphics::PogoColorFormat,
-                       RI_USAGE_COLOR_ATTACHMENT | RI_USAGE_SHADER_RESOURCE,
+                       RI_USAGE_COLOR_ATTACHMENT | RI_USAGE_SHADER_RESOURCE |
+                           RI_USAGE_TRANSFER_SRC,
                        &replacement.waterReflectionTexture[i],
                        &replacement.waterReflectionView[i],
                        "StandardViewportState.waterReflection");
+    // Refraction source for translucents drawn inside the capture. Failure is
+    // survivable: the capture then draws them without refraction.
+    if (success)
+      CreateViewportColorTexture(
+          &graphics->device, reflectionWidth, reflectionHeight,
+          cGraphics::PogoColorFormat,
+          RI_USAGE_SHADER_RESOURCE | RI_USAGE_TRANSFER_DST,
+          &replacement.waterReflectionSceneCopy[i],
+          &replacement.waterReflectionSceneCopyView[i],
+          "StandardViewportState.waterReflectionSceneCopy");
     success = success &&
               makeAttachmentView(replacement.waterReflectionTexture[i],
                                  cGraphics::PogoColorFormat,
@@ -3809,9 +3827,17 @@ void cStandardRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
         m_particles && !fogBindings.empty() && m_particles->LoadData();
     const bool waterReady =
         m_water && !fogBindings.empty() && m_water->LoadData();
-    if (m_water)
+    if (m_water) {
       m_water->SetWorldReflectionEnabled(!apSettings ||
                                          apSettings->mbRenderWorldReflection);
+      m_water->SetClipReflectionScreenRect(
+          !apSettings || apSettings->mbClipReflectionScreenRect);
+      // The capture draws its reflected translucents through the renderer's
+      // own pass, once it is loaded; a second instance would duplicate the
+      // program and pipeline cache.
+      m_water->SetTranslucentPass(translucentReady ? m_translucent.get()
+                                                   : nullptr);
+    }
     const uint32_t particleSalt =
         hash_u64(HASH_INITIAL_VALUE, reinterpret_cast<uintptr_t>(viewport));
 

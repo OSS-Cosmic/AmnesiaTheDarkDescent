@@ -15,6 +15,7 @@ class cWorld;
 class cFrustum;
 class cFogArea;
 class iRenderable;
+class cStandardTranslucentPass;
 
 struct StandardWaterReflectionState;
 
@@ -43,6 +44,11 @@ public:
       std::span<cFogArea *> visibleFogAreas = {},
       RISharedPointer<RIBuffer> *boxLights = nullptr,
       uint32_t boxLightCount = 0);
+  // Borrowed, never owned: a second cStandardTranslucentPass would duplicate
+  // the translucent program and its pipeline cache. Null skips the reflected
+  // translucent sub-pass entirely.
+  void SetTranslucentPass(cStandardTranslucentPass *pass);
+  void SetClipReflectionScreenRect(bool enabled);
   static constexpr uint32_t kMaxCapturesPerFrame = 2;
 
 private:

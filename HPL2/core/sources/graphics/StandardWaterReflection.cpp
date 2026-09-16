@@ -1,13 +1,19 @@
 #include "graphics/StandardWaterReflection.h"
 #include "graphics/GlobalManagedSets.h"
+#include "graphics/GraphicUtils.h"
 #include "graphics/Material.h"
+#include "graphics/StandardTranslucentPass.h"
+#include "graphics/StandardWaterReflectionClip.h"
+#include "graphics/StandardWaterReflectionSort.h"
 #include "graphics/RIVK.h"
 #include "graphics/StandardEnvironmentPass.h"
 #include "graphics/StandardLightData.h"
 #include "graphics/SubMesh.h"
 #include "graphics/VertexBuffer.h"
 #include "math/Frustum.h"
+#include "math/BoundingVolume.h"
 #include "resources/Resources.h"
+#include "scene/RenderableSet.h"
 #include "scene/SubMeshEntity.h"
 #include "scene/World.h"
 #include <algorithm>
@@ -138,6 +144,14 @@ struct cStandardWaterReflection::Impl {
   cResources *r;
   std::shared_ptr<RIProgram> program;
   std::unique_ptr<cStandardEnvironmentPass> environment;
+  // Borrowed from cStandardRenderer through cStandardWaterPass. Never owned:
+  // a second instance would duplicate the translucent program and its pipeline
+  // cache. Null means the reflection skips its translucent sub-pass.
+  cStandardTranslucentPass *translucent = nullptr;
+  bool clipScreenRect = true;
+  // A capture must never re-enter itself. The material filters below already
+  // reject water, but the flag makes recursion structurally impossible.
+  bool capturing = false;
   bool loaded = false;
   Impl(cGraphics *x, cResources *y)
       : g(x), r(y),
@@ -146,6 +160,13 @@ struct cStandardWaterReflection::Impl {
 cStandardWaterReflection::cStandardWaterReflection(cGraphics *g, cResources *r)
     : m_impl(std::make_unique<Impl>(g, r)) {}
 cStandardWaterReflection::~cStandardWaterReflection() { DestroyData(); }
+void cStandardWaterReflection::SetTranslucentPass(
+    cStandardTranslucentPass *pass) {
+  m_impl->translucent = pass;
+}
+void cStandardWaterReflection::SetClipReflectionScreenRect(bool enabled) {
+  m_impl->clipScreenRect = enabled;
+}
 bool cStandardWaterReflection::LoadData() {
   if (m_impl->loaded)
     return true;
@@ -190,6 +211,8 @@ cStandardWaterReflection::Sample cStandardWaterReflection::RecordSurface(
   if (!frame || !state || image >= RI_MAX_SWAPCHAIN_IMAGES || !target ||
       !surface || !main || !world || !frameBinding || !fogBinding ||
       !LoadData() || surface->GetRenderType() != eRenderableType_SubMesh)
+    return no;
+  if (m_impl->capturing)
     return no;
   auto *w = static_cast<cSubMeshEntity *>(surface);
   if (!w->GetSubMesh() || !w->GetSubMesh()->GetIsOneSided())
@@ -248,6 +271,36 @@ cStandardWaterReflection::Sample cStandardWaterReflection::RecordSurface(
     return no;
   uint32_t width = std::max(1u, state->width / 2),
            height = std::max(1u, state->height / 2);
+
+  ///////////////////////////
+  // Reflection bounds. The authored ReflectionFadeEnd is the same number the
+  // legacy material exposed as GetMaxReflectionDistance, so it drives the
+  // end-of-reflection plane; beyond it the surface's reflection term is zero.
+  float maxReflectionDistance = 0.0f;
+  if (auto *waterData =
+          std::get_if<MaterialWater>(&surface->GetMaterial()->Data()))
+    maxReflectionDistance = waterData->m_reflectionFadeEnd;
+  cPlanef surfacePlane;
+  surfacePlane.a = plane.normal.x;
+  surfacePlane.b = plane.normal.y;
+  surfacePlane.c = plane.normal.z;
+  surfacePlane.d = plane.distance;
+  auto clip = BuildStandardWaterReflectionClip(
+      main, &rf, *surface->GetBoundingVolume(), surfacePlane,
+      maxReflectionDistance, m_impl->clipScreenRect,
+      cVector2l(static_cast<int>(width), static_cast<int>(height)));
+  // Legacy skipped the whole capture once the surface itself was past the
+  // fade distance (RendererDeferred.cpp:3071-3085).
+  if (clip.surfaceOutOfRange)
+    return no;
+
+  // Everything past this point records GPU work for this capture.
+  m_impl->capturing = true;
+  struct CaptureGuard {
+    bool *flag;
+    ~CaptureGuard() { *flag = false; }
+  } captureGuard{&m_impl->capturing};
+
   RIProgram::DescriptorBinding reflectedFrame;
   if (!m_impl->environment->PrepareFrame(
           frame, &rf, width, height, 0, world, visibleFogAreas,
@@ -295,43 +348,88 @@ cStandardWaterReflection::Sample cStandardWaterReflection::RecordSurface(
     bool indexed;
   };
   std::vector<Item> items;
+  std::vector<iRenderable *> translucents;
+  // Object slots are salted per capture so a reflected model matrix can never
+  // land in the slot the main pass published for the same renderable.
+  const auto salt = hash_u32(
+      hash_u64(hash_u64(HASH_INITIAL_VALUE, reinterpret_cast<uintptr_t>(state)),
+               image),
+      cache.captures);
+  auto admit = [&](iRenderable *o) {
+    if (!o || o == surface || o->GetRenderType() != eRenderableType_SubMesh ||
+        !o->GetVertexBuffer() || !o->GetMaterial())
+      return;
+    const MaterialID id = o->GetMaterial()->GetMaterialID();
+    if (id == MaterialID::Unknown)
+      return;
+    // Recursion guard. Legacy rejected only water that itself had a world
+    // reflection, so cube-map water did appear inside reflections; rejecting
+    // all of it avoids a nested scene copy and a nested capture.
+    if (id == MaterialID::Water)
+      return;
+    if (cMaterial::IsTranslucent(id)) {
+      // Decals are not handled by the reflection yet; they would need the
+      // mesh-decal program and its accumulators.
+      if (id != MaterialID::Decal)
+        translucents.push_back(o);
+      return;
+    }
+    o->UpdateGraphicsForViewport(&rf, 0);
+    auto *v = static_cast<cVertexBuffer *>(o->GetVertexBuffer());
+    v->SubmitToGPU(&m_impl->g->blasSubmit.cmds[0], &m_impl->g->device, frame);
+    ObjectSubmitDesc d{};
+    d.modelMatrix = o->GetModelMatrix(&rf);
+    d.uvMatrix = o->GetMaterial()->GetUvMatrix();
+    d.materialId =
+        m_impl->g->globalset
+            ->submitMaterial(frame, o->GetMaterial(), m_impl->g->frameIndex)
+            .materialId;
+    d.renderFlags = o->GetRenderFlags();
+    d.illuminationAmount = o->GetIlluminationAmount();
+    // Without this the shader's alpha test sees a dissolving surface: the
+    // struct default is 0, while iRenderable's real default is 1.
+    d.dissolveAmount = o->GetCoverageAmount();
+    auto slot = m_impl->g->globalset->submitObject(
+        hash_u32(hash_u64(HASH_INITIAL_VALUE, o->GetUniqueCookie()), salt),
+        m_impl->g->frameIndex, v, d);
+    if (slot != UINT32_MAX)
+      items.push_back({o, v, slot, v->GetIndexRIBuffer() != nullptr});
+  };
+  // The walker supplies what the raw container scan never did: IsVisible(),
+  // the reflection render flag, the reflected-frustum cull, and the clip
+  // planes. cStandardRenderer::Draw already ran UpdateBeforeRendering on both
+  // sets this frame.
   for (int t = eWorldContainerType_Static; t <= eWorldContainerType_Dynamic;
        ++t) {
     auto *set = world->GetRenderableSet(static_cast<eWorldContainerType>(t));
     if (!set)
       continue;
-    for (auto *o : set->GetObjects()) {
-      if (!o || o == surface || o->GetRenderType() != eRenderableType_SubMesh ||
-          !o->GetVertexBuffer() || !o->GetMaterial() ||
-          o->GetMaterial()->GetMaterialID() == MaterialID::Water ||
-          !o->GetRenderFlagBit(eRenderableFlag_VisibleInReflection))
-        continue;
-      o->UpdateGraphicsForViewport(&rf, 0);
-      auto *v = static_cast<cVertexBuffer *>(o->GetVertexBuffer());
-      v->SubmitToGPU(&m_impl->g->blasSubmit.cmds[0], &m_impl->g->device, frame);
-      ObjectSubmitDesc d{};
-      d.modelMatrix = o->GetModelMatrix(&rf);
-      d.uvMatrix = o->GetMaterial()->GetUvMatrix();
-      d.materialId =
-          m_impl->g->globalset
-              ->submitMaterial(frame, o->GetMaterial(), m_impl->g->frameIndex)
-              .materialId;
-      d.renderFlags = o->GetRenderFlags();
-      d.illuminationAmount = o->GetIlluminationAmount();
-      auto salt =
-          hash_u32(hash_u64(hash_u64(HASH_INITIAL_VALUE,
-                                     reinterpret_cast<uintptr_t>(state)),
-                            image),
-                   cache.captures);
-      auto slot = m_impl->g->globalset->submitObject(
-          hash_u32(hash_u64(HASH_INITIAL_VALUE, o->GetUniqueCookie()), salt),
-          m_impl->g->frameIndex, v, d);
-      if (slot != UINT32_MAX)
-        items.push_back({o, v, slot, v->GetIndexRIBuffer() != nullptr});
-    }
+    rendering::WalkAndPrepareRenderList(set, &rf, admit,
+                                        eRenderableFlag_VisibleInReflection,
+                                        false, clip.Planes());
   }
+  // Back-to-front, the same ordering the main translucent list uses.
+  std::stable_sort(translucents.begin(), translucents.end(),
+                   [&](iRenderable *a, iRenderable *b) {
+                     return StandardReflectionTranslucentViewZ(
+                                &rf, *a->GetBoundingVolume()) <
+                            StandardReflectionTranslucentViewZ(
+                                &rf, *b->GetBoundingVolume());
+                   });
   m_impl->g->globalset->flushMirrors(&m_impl->g->device);
   RICmd *cmd = &m_impl->g->primary.cmds[0];
+  // The reflection colour is the environment resolve's attachment. Nothing
+  // else brings it into RENDER_TARGET, so do it here; after the first capture
+  // it comes back from SHADER_RESOURCE rather than UNDEFINED.
+  const bool reflectionInitialized = state->waterReflectionInitialized[image];
+  cmd->vk_d3d12_textureBarrier(RITextureBarrier(
+      target,
+      reflectionInitialized ? RI_RESOURCE_STATE_SHADER_RESOURCE
+                            : RI_RESOURCE_STATE_UNDEFINED,
+      RI_RESOURCE_STATE_RENDER_TARGET,
+      reflectionInitialized ? RI_STAGE_FRAGMENT : RI_STAGE_NONE,
+      RI_STAGE_FRAGMENT, RI_BARRIER_ASPECT_COLOR));
+  state->waterReflectionInitialized[image] = true;
   cmd->vk_d3d12_textureBarrier(
       RITextureBarrier(opaque.Get(), RI_RESOURCE_STATE_UNDEFINED,
                        RI_RESOURCE_STATE_RENDER_TARGET, RI_STAGE_NONE,
@@ -373,9 +471,18 @@ cStandardWaterReflection::Sample cStandardWaterReflection::RecordSurface(
   vp.width = width;
   vp.height = -float(height);
   vp.depthMax = 1;
+  // The viewport stays full-extent; only the scissor narrows to the water
+  // surface's screen footprint.
   RIRect sc{};
-  sc.width = width;
-  sc.height = height;
+  if (clip.hasScissor) {
+    sc.x = static_cast<int16_t>(clip.scissor.x);
+    sc.y = static_cast<int16_t>(clip.scissor.y);
+    sc.width = static_cast<int16_t>(clip.scissor.w);
+    sc.height = static_cast<int16_t>(clip.scissor.h);
+  } else {
+    sc.width = width;
+    sc.height = height;
+  }
   cmd->setViewport(&m_impl->g->device, vp);
   cmd->setScissor(&m_impl->g->device, sc);
   struct Push {
@@ -406,12 +513,51 @@ cStandardWaterReflection::Sample cStandardWaterReflection::RecordSurface(
   auto *out = state->waterReflectionView[image].Get();
   if (!m_impl->environment->Render(frame, cmd, m_impl->g->frameIndex, width,
                                    height, opaque.Get(), opaqueView.Get(),
-                                   posView.Get(), out, world, &reflectedFrame))
+                                   posView.Get(), out, world, &reflectedFrame)) {
+    // Hand the colour back in the state the flag now claims for it.
+    cmd->vk_d3d12_textureBarrier(
+        RITextureBarrier(target, RI_RESOURCE_STATE_RENDER_TARGET,
+                         RI_RESOURCE_STATE_SHADER_RESOURCE, RI_STAGE_FRAGMENT,
+                         RI_STAGE_FRAGMENT, RI_BARRIER_ASPECT_COLOR));
     return no;
+  }
   cmd->vk_d3d12_textureBarrier(
       RITextureBarrier(target, RI_RESOURCE_STATE_RENDER_TARGET,
                        RI_RESOURCE_STATE_SHADER_RESOURCE, RI_STAGE_FRAGMENT,
                        RI_STAGE_FRAGMENT, RI_BARRIER_ASPECT_COLOR));
+  ///////////////////////////
+  // Reflected translucency. The legacy reflection recursed into the whole
+  // renderer, translucent pass included, so glass and other blended meshes
+  // reflect blended rather than as opaque blobs. The pass enters and leaves
+  // both colour and depth in SHADER_RESOURCE, which is exactly the state the
+  // environment resolve and the opaque barriers above leave behind.
+  if (m_impl->translucent && !translucents.empty() &&
+      !state->waterReflectionDepthSampleView[image].isEmpty()) {
+    cStandardTranslucentPass::Targets t;
+    t.color = target;
+    t.colorAttachmentView = out;
+    t.depth = depth.Get();
+    t.depthAttachmentView = depthAttachment.Get();
+    t.depthSampleView = state->waterReflectionDepthSampleView[image].Get();
+    if (!state->waterReflectionSceneCopy[image].isEmpty() &&
+        !state->waterReflectionSceneCopyView[image].isEmpty()) {
+      t.sceneCopy = state->waterReflectionSceneCopy[image].Get();
+      t.sceneCopyView = state->waterReflectionSceneCopyView[image].Get();
+      t.sceneCopyInitialized =
+          &state->waterReflectionSceneCopyInitialized[image];
+    } else {
+      // No copy: refraction is skipped and the authored blend is used.
+      t.sceneCopyView = out;
+    }
+    t.width = width;
+    t.height = height;
+    t.scissor = sc;
+    t.clipPlane = surfacePlane;
+    t.slotSalt = salt;
+    m_impl->translucent->Draw(frame, t, translucents, &rf, world,
+                              &reflectedFrame, fogBinding, shadow, points,
+                              spots, pointCount, spotCount, nullptr);
+  }
   cache.captures++;
   cache.image = image;
   cache.plane = plane;
@@ -420,7 +566,6 @@ cStandardWaterReflection::Sample cStandardWaterReflection::RecordSurface(
       MakeStandardWaterReflectedViewProjection(main->GetProjectionMatrix(),
                                                main->GetViewMatrix(), plane),
       out != nullptr};
-  state->waterReflectionInitialized[image] = cache.sample.available;
   return cache.sample;
 }
 } // namespace hpl

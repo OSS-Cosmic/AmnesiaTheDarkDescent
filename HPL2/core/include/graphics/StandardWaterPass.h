@@ -28,6 +28,17 @@ public:
   // cRenderSettings::mbRenderWorldReflection. Off disables cube and planar
   // reflection, as the legacy renderer did.
   void SetWorldReflectionEnabled(bool enabled) { m_worldReflectionEnabled = enabled; }
+  // Borrowed from the renderer so the planar capture can draw reflected
+  // translucents through the same pass the main view uses. Never owned.
+  void SetTranslucentPass(cStandardTranslucentPass *pass) {
+    if (m_reflection)
+      m_reflection->SetTranslucentPass(pass);
+  }
+  // cRenderSettings::mbClipReflectionScreenRect.
+  void SetClipReflectionScreenRect(bool enabled) {
+    if (m_reflection)
+      m_reflection->SetClipReflectionScreenRect(enabled);
+  }
 private:
   cGraphics *mpGraphics;
   cResources *mpResources;

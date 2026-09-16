@@ -546,6 +546,11 @@ public:
     RISharedPointer<RITextureView> waterReflectionDepthAttachmentView[RI_MAX_SWAPCHAIN_IMAGES];
     RISharedPointer<RITexture> waterSceneCopy[RI_MAX_SWAPCHAIN_IMAGES];
     RISharedPointer<RITextureView> waterSceneCopyView[RI_MAX_SWAPCHAIN_IMAGES];
+    // Refraction source for translucents drawn INSIDE the planar capture.
+    // Same contract as translucentSceneCopy, at the capture's half resolution.
+    RISharedPointer<RITexture> waterReflectionSceneCopy[RI_MAX_SWAPCHAIN_IMAGES];
+    RISharedPointer<RITextureView> waterReflectionSceneCopyView[RI_MAX_SWAPCHAIN_IMAGES];
+    bool waterReflectionSceneCopyInitialized[RI_MAX_SWAPCHAIN_IMAGES] = {};
     bool waterReflectionInitialized[RI_MAX_SWAPCHAIN_IMAGES] = {};
     bool waterSceneCopyInitialized[RI_MAX_SWAPCHAIN_IMAGES] = {};
     std::shared_ptr<StandardWaterReflectionState> waterReflection;

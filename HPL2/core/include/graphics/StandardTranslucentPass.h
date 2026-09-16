@@ -58,6 +58,34 @@ public:
     }
   };
 
+  // Everything the pass used to read straight off StandardViewportState.
+  // The main viewport builds one of these through the compatibility overload
+  // below; the planar water reflection builds one pointing at its own
+  // half-resolution targets.
+  struct Targets {
+    RITexture *color = nullptr;                    // enters/leaves SHADER_RESOURCE
+    RITextureView *colorAttachmentView = nullptr;
+    RITexture *depth = nullptr;                    // enters/leaves SHADER_RESOURCE
+    RITextureView *depthAttachmentView = nullptr;  // bound read-only
+    RITextureView *depthSampleView = nullptr;      // sceneDepthInput
+    // Refraction source. Null disables refraction for this Draw: materials
+    // fall back to their authored blend instead of the shader-side compose.
+    RITexture *sceneCopy = nullptr;
+    RITextureView *sceneCopyView = nullptr;
+    bool *sceneCopyInitialized = nullptr;
+    uint32_t width = 0;
+    uint32_t height = 0;
+    // Degenerate (zero width or height) means the full target.
+    RIRect scissor{};
+    // Half-space the fragment shader keeps, dot(n,p) + d >= 0. A zero normal
+    // disables the test, which is what the main viewport passes.
+    cPlanef clipPlane{};
+    // Folded into the object-slot cookie, and it MUST differ per view context:
+    // the same renderable submitted from two views carries two different model
+    // matrices and would otherwise share a slot.
+    hash_t slotSalt = 0;
+  };
+
   cStandardTranslucentPass(cGraphics *, cResources *);
   ~cStandardTranslucentPass();
   bool LoadData();
@@ -65,6 +93,15 @@ public:
   // Inputs are already sorted by the caller. On success, target and depth
   // leave this pass shader-readable; on validation/submission failure no
   // attachment transitions are recorded.
+  bool Draw(cGraphics::FrameContext *, const Targets &,
+            std::span<iRenderable *>, cFrustum *, cWorld *,
+            RIProgram::DescriptorBinding *frameBinding,
+            RIProgram::DescriptorBinding *fogBinding,
+            RITextureView *standardShadowView,
+            RISharedPointer<RIBuffer> *pointLights,
+            RISharedPointer<RIBuffer> *spotLights, uint32_t pointLightCount,
+            uint32_t spotLightCount, const OcclusionCull *cull = nullptr);
+  // Main-viewport call shape, unchanged for existing callers.
   bool Draw(cGraphics::FrameContext *, cViewport::StandardViewportState *,
             uint32_t imageIndex, std::span<iRenderable *>, cFrustum *, cWorld *,
             RIProgram::DescriptorBinding *, RIProgram::DescriptorBinding *,

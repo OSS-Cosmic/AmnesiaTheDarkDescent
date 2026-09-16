@@ -235,6 +235,17 @@ SHARED_CONST uint kMaterialFlagLitDiffuse               = 1u << 20;
 // Amnesia is meter-scale.
 SHARED_CONST float kSoftParticleFadeDistance = 0.35f;
 
+// Particle alpha rejection, ported from the original engine's
+// translucency_particle.frag (`if(finalColor.a < 0.01) { discard; }`).
+// NOT redundant with the blend state: applyBlendModulation scales .rgb only
+// and leaves .a untouched for Add/Mul/MulX2, so for those three modes this
+// test is the ONLY consumer of texture alpha. Without it, a texture whose
+// cutout lives in alpha (retail ps_glass_piece on Add, ps_glass_shards on
+// MulX2) emits its transparent-region RGB across the whole quad and reads as
+// a solid square. 0.01 rather than 0: DXT5 alpha interpolates to small
+// nonzero values in the empty region, which a `<= 0` test would let through.
+SHARED_CONST float kParticleAlphaDiscard = 0.01f;
+
 // Blend-mode value families (see BlendModes.slang for the shared math).
 // Two DIFFERENT encodings of the same modes — do not mix them up:
 //   1. kBlendMode*: the push-constant / pipeline scheme. Mirrors the
