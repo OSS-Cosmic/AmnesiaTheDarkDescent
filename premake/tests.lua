@@ -76,7 +76,16 @@ project "TemporalCameraTests"
     add_test_postbuild()
     -- gmake2 drops postbuildcommands on kind "Utility" projects, so the python
     -- suite rides on the first test project instead of getting its own.
+    --
+    -- That suite reads COMPILED shaders out of <runtime>/compiled_shaders, which
+    -- only the Amnesia project produces (slang_prebuild() in premake/amnesia.lua).
+    -- Without an explicit order dependency a parallel make can link this project
+    -- and fire the postbuild while Amnesia is still compiling, and the shader
+    -- tests then find nothing. They fail loudly rather than pass vacuously
+    -- ("build first, or this test proves nothing"), so the symptom is a red CI
+    -- run on a cold tree and a green one on a warm tree -- the worst kind.
     if _OPTIONS["with-python-tests"] ~= "no" then
+        dependson { "Amnesia" }
         add_python_test_postbuild()
     end
 
