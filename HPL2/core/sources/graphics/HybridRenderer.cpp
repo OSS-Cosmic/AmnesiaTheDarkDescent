@@ -759,8 +759,6 @@ cViewport::HybridViewportState::~HybridViewportState() {
     pGraphics->graphicsDefer.push(renderTargetView[i]);
     pGraphics->graphicsDefer.push(depthView[i]);
     pGraphics->graphicsDefer.push(depthSampleView[i]);
-    pGraphics->graphicsDefer.push(particleWaterDepthView[i]);
-    pGraphics->graphicsDefer.push(particleWaterDepth[i]);
     pGraphics->graphicsDefer.push(visibilityView[i]);
     pGraphics->graphicsDefer.push(packedHitInfoView[i]);
     pGraphics->graphicsDefer.push(velocityView[i]);
@@ -2789,7 +2787,6 @@ void cHybridRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
   // supplies the shaders (Water.vert/frag).
   // Pogo-read-half barriers as the other translucent sub-passes.
   // --------------------------------------------------------------------
-  bool hasParticleWaterDepth = false;
   {
     RIGpuScope _gsWater(&mpGraphics->profiler, &mpGraphics->primary.cmds[0], "Water");
     std::vector<iRenderable *> waters;
@@ -2818,14 +2815,6 @@ void cHybridRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
       flipDepthToReadOnly();
 
       const uint32_t imageIndex = mpGraphics->swapchainIndex;
-      if (state.particleWaterDepth[imageIndex].isEmpty()) {
-        CreateViewportColorTexture(
-            &mpGraphics->device, renderWidth, renderHeight, RI_FORMAT_R32_SFLOAT,
-            RI_USAGE_COLOR_ATTACHMENT | RI_USAGE_SHADER_RESOURCE,
-            &state.particleWaterDepth[imageIndex],
-            &state.particleWaterDepthView[imageIndex],
-            "HybridViewportState.particleWaterDepth");
-      }
 
       if (!state.waterReflection)
         state.waterReflection = std::make_unique<WaterReflectionViewportState>();
@@ -3148,51 +3137,9 @@ void cHybridRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
               &mpGraphics->device);
           waterSurfaceComposited = true;
 
-          // Keep nearest water depth separate from opaque visibility/depth.
-          // Full resolution and the same viewport/depth test align the water
-          // silhouette with the subsequent particle fragments. Clear on the
-          // first successful surface each frame; MIN handles overlapping water.
-          const uint32_t maskState = RI_RESOURCE_STATE_RENDER_TARGET |
-                                     RI_RESOURCE_STATE_RENDER_TARGET_READ;
-          mpGraphics->primary.cmds[0].vk_d3d12_textureBarrier(
-              RITextureBarrier(state.particleWaterDepth[imageIndex].Get(),
-                  hasParticleWaterDepth ? maskState : RI_RESOURCE_STATE_UNDEFINED,
-                  maskState));
-          RIRenderingAttachment waterDepthColor = {};
-          waterDepthColor.view = *state.particleWaterDepthView[imageIndex];
-          waterDepthColor.loadOp = hasParticleWaterDepth
-              ? RI_ATTACHMENT_LOAD_OP_LOAD : RI_ATTACHMENT_LOAD_OP_CLEAR;
-          waterDepthColor.storeOp = RI_ATTACHMENT_STORE_OP_STORE;
-          waterDepthColor.clearValue.color[0] = perFrame.zFar;
-          RIBeginRenderingDesc waterDepthBegin = beginDesc;
-          waterDepthBegin.colors = &waterDepthColor;
-          mpGraphics->primary.cmds[0].vk_d3d12_beginRendering(
-              &mpGraphics->device, waterDepthBegin);
-          TranslucentMeshPipelineDesc waterDepthPipeline(
-              RI_FORMAT_R32_SFLOAT, cGraphics::DepthFormat,
-              TranslucentMeshPipelineDesc::BLEND_ADD, vtxMask);
-          waterDepthPipeline.blendAttachment.colorBlendOp = VK_BLEND_OP_MIN;
-          waterDepthPipeline.blendAttachment.colorWriteMask = VK_COLOR_COMPONENT_R_BIT;
-          m_water.bindPipeline(&mpGraphics->device, &mpGraphics->primary.cmds[0],
-              hash_u32(waterDepthPipeline.hash, 0x57504450u /*'WPDP'*/),
-              "Water.ParticleDepth", &waterDepthPipeline.createInfo);
-          WaterPush depthPush = {2u, 0u, 0u, 0u};
-          mpGraphics->primary.cmds[0].vk_d3d12_setPushConstants(
-              &mpGraphics->device, m_water, 0, sizeof(depthPush), &depthPush);
-          mpGraphics->primary.cmds[0].drawIndexed(
-              &mpGraphics->device, static_cast<uint32_t>(indexCount), 1u,
-              0u, 0, slot);
-          mpGraphics->primary.cmds[0].vk_d3d12_endRendering(&mpGraphics->device);
-          hasParticleWaterDepth = true;
         }
       }
 
-      if (hasParticleWaterDepth) {
-        mpGraphics->primary.cmds[0].vk_d3d12_textureBarrier(
-            RITextureBarrier(state.particleWaterDepth[imageIndex].Get(),
-                RI_RESOURCE_STATE_RENDER_TARGET | RI_RESOURCE_STATE_RENDER_TARGET_READ,
-                RI_RESOURCE_STATE_SHADER_RESOURCE, RI_STAGE_NONE, RI_STAGE_FRAGMENT));
-      }
       m_waterReflection.EndFrame(*state.waterReflection);
       mpGraphics->primary.cmds[0].vk_d3d12_textureBarrier(
           RI_PogoShaderBarrier(
@@ -3416,13 +3363,6 @@ void cHybridRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
           RIDescriptor::sampledImage(
               &mpGraphics->device, state.depthSampleView[mpGraphics->swapchainIndex].Get(),
               RI_RESOURCE_STATE_DEPTH_READ));
-      particleBindings.emplace_back("gParticleWaterDepth",
-          RIDescriptor::sampledImage(&mpGraphics->device,
-              hasParticleWaterDepth
-                  ? state.particleWaterDepthView[mpGraphics->swapchainIndex].Get()
-                  : state.depthSampleView[mpGraphics->swapchainIndex].Get(),
-              hasParticleWaterDepth ? RI_RESOURCE_STATE_SHADER_RESOURCE
-                                    : RI_RESOURCE_STATE_DEPTH_READ));
       appendWorldLightFog(particleBindings, apWorld);
       m_particle.bindDescriptors(&mpGraphics->device, &mpGraphics->primary.cmds[0], mpGraphics->frameIndex,
                                  particleBindings.data(),
@@ -3450,7 +3390,6 @@ void cHybridRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
       struct PushBlock {
         uint32_t blendMode;
         float sceneAlpha;
-        uint32_t hasWaterDepth;
       };
 
       for (const ParticleDraw &draw : particleDraws) {
@@ -3473,7 +3412,7 @@ void cHybridRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
         // scalar (1.0 by default) — kept in the push block for parity with the
         // mesh path and any future per-object alpha gates.
         const float sceneAlpha = 1.0f;
-        PushBlock push = {(uint32_t)mode, sceneAlpha, hasParticleWaterDepth ? 1u : 0u};
+        PushBlock push = {(uint32_t)mode, sceneAlpha};
         mpGraphics->primary.cmds[0].vk_d3d12_setPushConstants(&mpGraphics->device, m_particle, 0,
                                                      sizeof(push), &push);
 

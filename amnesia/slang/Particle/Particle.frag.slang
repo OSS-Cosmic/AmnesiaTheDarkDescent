@@ -19,17 +19,14 @@ import Material;             // load*Material / materialAlphaTest / traceShadowR
 import Fog;          // computeFog — shared world + fog-area visibility
 import BlendModes;   // linear source preparation and opacity modulation
 
-[vk::binding(0, 2)] Texture2D<float> gParticleWaterDepth;
-
 // Mirrors the `PushBlock` written from cHybridRenderer::Draw at the per-
-// particle-draw site (uint blendMode, float sceneAlpha, uint hasWaterDepth). Fragment-only push
+// particle-draw site (uint blendMode, float sceneAlpha). Fragment-only push
 // range — matches VK_SHADER_STAGE_FRAGMENT_BIT on the vkCmdPushConstants
 // call.
 struct ParticlePushConstants
 {
     uint  blendMode;
     float sceneAlpha;
-    uint hasWaterDepth;
 };
 
 [vk::push_constant]
@@ -91,11 +88,20 @@ float4 psMain(ParticleVSOut psIn) : SV_TARGET
         gPerFrame.zNear * gPerFrame.zFar /
         (gPerFrame.zFar - sceneZdev * (gPerFrame.zFar - gPerFrame.zNear));
     float  particleLinear = -psIn.viewPos.z;   // view forward = -Z
-    // Water is composed before particles but deliberately leaves opaque depth
-    // untouched. Its separate layer prevents submerged smoke drawing over it.
-    if (pc.hasWaterDepth != 0u)
-        sceneLinear = min(sceneLinear,
-            gParticleWaterDepth.Load(int3(int2(psIn.posH.xy), 0)));
+    // Soft-faded against OPAQUE depth only.
+    //
+    // Water used to fold into this through a separate nearest-water-depth
+    // layer, so that submerged smoke could not draw over a water surface. It
+    // also erased every splash: splashes spawn at or just under the waterline
+    // (ps_water_dump_splash spawns at the emitter origin, waterlurker_*_splash
+    // a little below it), the fade band is kSoftParticleFadeDistance = 0.35 m,
+    // and these materials are BlendMode="Alpha", so a faded fragment does not
+    // dim -- it trips the alpha-discard below and vanishes outright.
+    //
+    // Fading a splash against the very surface it is splashing off is the
+    // wrong trade, so the water term is gone. Submerged particles now draw over
+    // water; if that needs solving again it wants a test that can tell "behind
+    // the surface" from "touching it", not a shared 0.35 m ramp.
     float  soft = saturate((sceneLinear - particleLinear) / kSoftParticleFadeDistance);
     finalAlpha *= soft;
 

@@ -282,8 +282,6 @@ public:
     // depth: nothing writes depth again before the translucent families.
     HiZPyramid hiZ;
     // Lazy full-resolution nearest water view-depth, used only by particles.
-    RISharedPointer<RITexture> particleWaterDepth[RI_MAX_SWAPCHAIN_IMAGES];
-    RISharedPointer<RITextureView> particleWaterDepthView[RI_MAX_SWAPCHAIN_IMAGES];
 
     RISharedPointer<RITexture> visibilityTexture[RI_MAX_SWAPCHAIN_IMAGES];
     RISharedPointer<RITextureView> visibilityView[RI_MAX_SWAPCHAIN_IMAGES];
