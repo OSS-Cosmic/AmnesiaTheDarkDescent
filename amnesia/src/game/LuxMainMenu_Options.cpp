@@ -554,14 +554,31 @@ void cLuxMainMenu_Options::AddBasicGfxOptions(cWidgetDummy* apDummy)
 	float fBorderSize = 0;
 	cVector3f vPos(fBorderSize, 6 + fBorderSize, 0.1f);
 
+	// Scrollable, for the same reason the advanced pane is: the renderer
+	// selector and everything added after it push the pane past the tab, and a
+	// fixed dummy just clips whatever does not fit. Sized and shaped exactly
+	// like AddAdvancedGfxOptions' frame so toggling between the two panes does
+	// not visibly resize the content.
+	//
+	// Fit the scroll frame to the tab area above the Basic/Advanced toggle
+	// button (placed 50 units above the tab's bottom edge). A taller fixed
+	// frame hangs below the visible tab, and its scroll range counts that
+	// hidden strip as already on screen, so the last options could never be
+	// scrolled into view.
+	const float fFrameHeight = apDummy->GetParent()->GetSize().y - apDummy->GetLocalPosition().y - 55;
+	cWidgetFrame* pMainFrame = mpGuiSet->CreateWidgetFrame(cVector3f(0,0,1), cVector2f(550,fFrameHeight), false, apDummy, false, true);
+	pMainFrame->SetDrawBackground(false);
+
 	cWidgetLabel* pLabel = NULL;
 
 	/////////////////////////////////
 	// Screen group
-	cWidgetGroup *pGroup = mpGuiSet->CreateWidgetGroup(vPos,0, kTranslate("OptionsMenu", "Screen"), apDummy);
+	cWidgetGroup *pGroup = mpGuiSet->CreateWidgetGroup(vPos,0, kTranslate("OptionsMenu", "Screen"), pMainFrame);
 	{
 		float fBorderSize = 15;
-		pGroup->SetSize(cVector2f(apDummy->GetParent()->GetSize().x-fBorderSize-fBorderSize,70));
+		// Width off the scroll frame, not the tab: the vertical scrollbar eats
+		// the difference, and a group sized to the tab would sit under it.
+		pGroup->SetSize(cVector2f(pMainFrame->GetSize().x-fBorderSize-fBorderSize,70));
 		cVector3f vPosInGroup = cVector3f(fBorderSize, fBorderSize, 0.1f);
 
 		/////////////////////////////////
@@ -590,8 +607,8 @@ void cLuxMainMenu_Options::AddBasicGfxOptions(cWidgetDummy* apDummy)
 
 	/////////////////////////////////
 	// Renderer
-	pLabel = mpGuiSet->CreateWidgetLabel(vPos, -1, TranslateOrDefault("OptionsMenu", "Renderer", _W("Renderer")), apDummy);
-	mpCBRendererBackend = mpGuiSet->CreateWidgetComboBox(pLabel->GetLocalPosition() + cVector3f(0,pLabel->GetSize().y+5,0), cVector2f(220, 25), _W(""), apDummy);
+	pLabel = mpGuiSet->CreateWidgetLabel(vPos, -1, TranslateOrDefault("OptionsMenu", "Renderer", _W("Renderer")), pMainFrame);
+	mpCBRendererBackend = mpGuiSet->CreateWidgetComboBox(pLabel->GetLocalPosition() + cVector3f(0,pLabel->GetSize().y+5,0), cVector2f(220, 25), _W(""), pMainFrame);
 	SetUpInput(pLabel, mpCBRendererBackend, true, RendererBackendTip(true));
 	{
 		cWidgetItem* pItem = mpCBRendererBackend->AddItem(TranslateOrDefault("OptionsMenu", "RendererStandard", _W("Standard (original)")));
@@ -602,15 +619,15 @@ void cLuxMainMenu_Options::AddBasicGfxOptions(cWidgetDummy* apDummy)
 
 	// Shown by RefreshRendererBackendControl when the GPU cannot ray trace.
 	mpLRendererBackendHelp = mpGuiSet->CreateWidgetLabel(mpCBRendererBackend->GetLocalPosition() + cVector3f(mpCBRendererBackend->GetSize().x + 10, 4, 0), -1,
-		TranslateOrDefault("OptionsMenu", "RendererRayTracingUnsupported", _W("Ray tracing is not supported on this GPU.")), apDummy);
+		TranslateOrDefault("OptionsMenu", "RendererRayTracingUnsupported", _W("Ray tracing is not supported on this GPU.")), pMainFrame);
 	mpLRendererBackendHelp->SetVisible(false);
 
 	vPos.y += pLabel->GetSize().y + 5 + mpCBRendererBackend->GetSize().y + 15;
 
 	/////////////////////////////////
 	// Texture Quality
-	pLabel = mpGuiSet->CreateWidgetLabel(vPos, -1, kTranslate("OptionsMenu","TexQuality"), apDummy);
-	mpCBTextureSizeLevel = mpGuiSet->CreateWidgetComboBox(pLabel->GetLocalPosition() + cVector3f(0,pLabel->GetSize().y +5,0), cVector2f(100,25), _W(""), apDummy);
+	pLabel = mpGuiSet->CreateWidgetLabel(vPos, -1, kTranslate("OptionsMenu","TexQuality"), pMainFrame);
+	mpCBTextureSizeLevel = mpGuiSet->CreateWidgetComboBox(pLabel->GetLocalPosition() + cVector3f(0,pLabel->GetSize().y +5,0), cVector2f(100,25), _W(""), pMainFrame);
 	SetUpInput(pLabel, mpCBTextureSizeLevel, true, kTranslate("OptionsMenu","TexQualityTip"));
 
 	cMaterialManager* pMatMgr = gpBase->mpEngine->GetResources()->GetMaterialManager();
@@ -627,7 +644,7 @@ void cLuxMainMenu_Options::AddBasicGfxOptions(cWidgetDummy* apDummy)
 	// Gamma
 	vPos.x += 140;
 
-	pLabel = mpGuiSet->CreateWidgetLabel(vPos, -1, kTranslate("OptionsMenu","Gamma"), apDummy);
+	pLabel = mpGuiSet->CreateWidgetLabel(vPos, -1, kTranslate("OptionsMenu","Gamma"), pMainFrame);
 	{
 		cVector3f vLabelPos(0, pLabel->GetSize().y+5, 0);
 
@@ -645,6 +662,16 @@ void cLuxMainMenu_Options::AddBasicGfxOptions(cWidgetDummy* apDummy)
 		//mpLGamma->SetTextAlign(eFontAlign_Center);
 
 		vLabelPos.y += mpSGamma->GetSize().y + 4.0f;
+
+		// Grow the label to the box its children actually occupy.
+		//
+		// cWidgetFrame::OnUpdate measures the scroll range from its DIRECT
+		// children only -- it walks mlstChildren taking localPos + size, and
+		// never descends. This label's own size is just the word "Gamma", so
+		// the frame would think the pane ended there: no scrollbar, and the
+		// image and slider hanging below it silently clipped.
+		pLabel->SetSize(cVector2f(cMath::Max(pLabel->GetSize().x, pImg->GetSize().x),
+								  vLabelPos.y));
 
 		//cWidgetLabel *pLInstr = mpGuiSet->CreateWidgetLabel(vLabelPos, cVector2f(pImg->GetSize().x,27), kTranslate("OptionsMenu","GammaInstructions"), pLabel);
 		//pLInstr->SetDrawBackGround(true);

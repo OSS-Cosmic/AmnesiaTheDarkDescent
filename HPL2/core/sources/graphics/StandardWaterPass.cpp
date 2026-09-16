@@ -213,8 +213,15 @@ bool cStandardWaterPass::RecordSurface(
               ? RI_RESOURCE_STATE_SHADER_RESOURCE
               : RI_RESOURCE_STATE_UNDEFINED,
           RI_RESOURCE_STATE_COPY_DST, RI_STAGE_FRAGMENT, RI_STAGE_COPY);
-  cmd->copyImage(&mpGraphics->device, target, copy,
-                 {state->width, state->height, 1});
+  // Named fields, not a braced list: RIImageCopyDesc starts with the source
+  // mip / array / offset members, so {width, height, 1} lands in srcMipLevel,
+  // srcArrayLayer and srcX and leaves the extent at zero -- a copy with
+  // extent.depth == 0, which is invalid for a 2D image.
+  RIImageCopyDesc sceneCopy = {};
+  sceneCopy.width = state->width;
+  sceneCopy.height = state->height;
+  sceneCopy.depth = 1;
+  cmd->copyImage(&mpGraphics->device, target, copy, sceneCopy);
   barrier(cmd, copy, RI_RESOURCE_STATE_COPY_DST,
           RI_RESOURCE_STATE_SHADER_RESOURCE, RI_STAGE_COPY, RI_STAGE_FRAGMENT);
   barrier(cmd, target, RI_RESOURCE_STATE_COPY_SRC,

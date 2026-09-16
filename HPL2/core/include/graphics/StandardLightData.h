@@ -60,6 +60,15 @@ struct StandardShadowTileData {
   uint32_t size;
   float bias;
   uint32_t clampToTile;         // 1: taps outside clamp to the edge (cube faces)
+  // PCSS inputs. The stored depths are standard-Z NDC, so the penumbra estimate
+  // has to linearize them first; that needs this tile's own frustum rather than
+  // the camera's. tanHalfFov converts a world-space penumbra into shadow-map
+  // UV, and lightSize is the emitter's world radius -- 0 disables softening and
+  // falls back to the one-texel bilinear compare.
+  float nearPlane;
+  float farPlane;
+  float tanHalfFov;
+  float lightSize;
   uint32_t reserved0;
   uint32_t reserved1;
 };
@@ -92,7 +101,7 @@ static_assert(sizeof(StandardSpotLightData) == 140,
               "Standard spot-light ABI changed");
 static_assert(sizeof(StandardBoxLightData) == 48,
               "Standard box-light ABI changed");
-static_assert(sizeof(StandardShadowTileData) == 96,
+static_assert(sizeof(StandardShadowTileData) == 112,
               "Standard shadow-tile ABI changed");
 static_assert(sizeof(StandardLightCounts) == 16, "Standard light counts ABI changed");
 

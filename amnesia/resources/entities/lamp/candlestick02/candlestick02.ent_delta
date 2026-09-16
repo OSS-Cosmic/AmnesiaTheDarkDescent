@@ -34,7 +34,7 @@
         <RemoveAttr Name="Type" />
     </Modify>
     <Modify Category="Entities" ID="8" Name="PointLight_1">
-        <SetAttr RendererMask="1" />
+        <SetAttr CastShadows="true" RendererMask="1" ShadowResolution="High" ShadowsAffectDynamic="true" ShadowsAffectStatic="true" WorldPos="0 0.49 0" />
     </Modify>
     <Modify Category="Entities" ID="9" Name="Billboard_1">
         <RemoveAttr Name="Axis" />

@@ -3,6 +3,7 @@
 // represents a 4x4 region of the full-resolution image, packed into 16 slices.
 
 #include "../HostDefinitions.h"
+#include "../StandardAo.h"
 import StandardAmbientOcclusion;
 import PerFrame.resource;
 
@@ -33,9 +34,8 @@ void csMain(uint3 dtid : SV_DispatchThreadID)
     // Process each of the 16 slices in the 4x4 block
     for (uint s = 0u; s < 16u; ++s)
     {
-        // Map slice index to 4x4 offset: s%4 is column, s/4 is row
-        uint2 offset = uint2(s % 4u, s / 4u);
-        uint2 fullResPix = dtid.xy * 4u + offset;
+        // One shared mapping for all three passes; see StandardAo.h.
+        uint2 fullResPix = standardAoSlicePixel(dtid.xy, s);
 
         // Load position from texture
         float4 pos = positionTexture.Load(int3(fullResPix, 0));

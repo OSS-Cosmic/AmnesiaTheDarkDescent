@@ -3150,6 +3150,33 @@ void RICmd::drawIndirect(struct RIDevice *device, struct RIBuffer *buffer,
   assert(false && "unhandled backend");
 }
 
+void RICmd::drawIndirectCount(struct RIDevice *device, struct RIBuffer *buffer,
+                             RIDeviceSize offset, struct RIBuffer *countBuffer,
+                             RIDeviceSize countOffset, uint32_t maxDrawCount,
+                             uint32_t stride) {
+#if (DEVICE_IMPL_VULKAN)
+  if (RIIsTargetSelected(RI_DEVICE_API_VK)) {
+    assert(device->physicalAdapter.isDrawIndirectCountSupported &&
+           "drawIndirectCount used on a device that does not support it");
+    vkCmdDrawIndirectCount(vk.cmd, buffer->vk.buffer, offset,
+                           countBuffer->vk.buffer, countOffset, maxDrawCount,
+                           stride);
+    return;
+  }
+#endif
+  // Deliberately no Metal path: a GPU-sourced draw count needs an indirect
+  // command buffer there, which this layer does not model. The capability bit
+  // is only ever set on the Vulkan path, so a caller that honours it never
+  // reaches here.
+  (void)buffer;
+  (void)offset;
+  (void)countBuffer;
+  (void)countOffset;
+  (void)maxDrawCount;
+  (void)stride;
+  assert(false && "drawIndirectCount unsupported on this backend");
+}
+
 void RICmd::drawIndexedIndirect(struct RIDevice *device,
                                 struct RIBuffer *buffer, RIDeviceSize offset,
                                 uint32_t drawCount, uint32_t stride) {

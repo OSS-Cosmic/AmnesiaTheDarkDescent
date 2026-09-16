@@ -329,7 +329,7 @@
         <RemoveAttr Name="Type" />
     </Modify>
     <Modify Category="Entities" ID="63" Name="PointLight_1">
-        <SetAttr RendererMask="1" />
+        <SetAttr CastShadows="true" RendererMask="1" ShadowResolution="High" ShadowsAffectDynamic="true" ShadowsAffectStatic="true" WorldPos="-0.001561 -5.23838 -0.004638" />
     </Modify>
     <Add Category="Entities">
         <Re_PointLight Name="PointLight_2" WorldPos="0.00530386 -5.49423 -2.46741" Rotation="0 0 0" Scale="1 1 1" Tag="" Active="true" CastShadows="true" ShadowResolution="High" ShadowsAffectStatic="true" ShadowsAffectDynamic="true" Intensity="0.8" Radius="10" SourceRadius="0.035" FalloffMap="" Gobo="" GoboAnimMode="None" GoboAnimFrameTime="0" DiffuseColor="0.45 0.25 0 1" FlickerActive="false" FlickerOnMinLength="0" FlickerOnMaxLength="1" FlickerOnPS="" FlickerOnSound="" FlickerOffMinLength="0" FlickerOffMaxLength="0" FlickerOffPS="" FlickerOffSound="" FlickerOffColor="0.4 0.2 0 1" FlickerOffIntensity="0.75" FlickerFade="false" FlickerOnFadeMinLength="0.5" FlickerOnFadeMaxLength="1" FlickerOffFadeMinLength="0.5" FlickerOffFadeMaxLength="1" RendererMask="2" />

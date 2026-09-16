@@ -99,7 +99,7 @@ bool ValidTile(const cStandardShadowPass::Tile &tile, uint32_t atlasSize,
                RIBuffer *indirect) {
   if (tile.size == 0 || uint64_t(tile.x) + tile.size > atlasSize ||
       uint64_t(tile.y) + tile.size > atlasSize ||
-      !std::isfinite(tile.slopeScaleBias) || (tile.drawCount && !indirect))
+      !std::isfinite(tile.slopeScaleBias) || (tile.maxDrawCount && !indirect))
     return false;
   for (float value : tile.viewProjection)
     if (!std::isfinite(value))
@@ -111,10 +111,16 @@ bool ValidTile(const cStandardShadowPass::Tile &tile, uint32_t atlasSize,
 bool cStandardShadowPass::RenderAtlas(
     cGraphics::FrameContext *, RICmd *cmd, uint32_t frameIndex,
     RITexture *atlas, uint32_t layer, uint32_t atlasSize, RIBuffer *indirect,
-    std::span<const Tile> tiles, RIProgram::DescriptorBinding frameBinding) {
+    RIBuffer *drawCounts, std::span<const Tile> tiles,
+    RIProgram::DescriptorBinding frameBinding) {
   if (!m_loaded || !m_program || !cmd || !atlas || atlasSize == 0 ||
       atlasSize > kMaxAtlasSize || layer > 0xffffu)
     return false;
+  // A counts buffer is only usable if the device can source a draw count from
+  // one; otherwise fall back to issuing every reserved command.
+  const bool useDrawIndirectCount =
+      drawCounts != nullptr &&
+      mpGraphics->device.physicalAdapter.isDrawIndirectCountSupported != 0;
   for (const Tile &tile : tiles)
     if (!ValidTile(tile, atlasSize, indirect))
       return false;
@@ -187,9 +193,19 @@ bool cStandardShadowPass::RenderAtlas(
     sc.width = static_cast<int16_t>(tile.size);
     sc.height = static_cast<int16_t>(tile.size);
     cmd->setScissor(&mpGraphics->device, sc);
-    if (tile.drawCount)
-      cmd->drawIndirect(&mpGraphics->device, indirect, tile.indirectOffset,
-                        tile.drawCount, sizeof(VkDrawIndirectCommand));
+    if (tile.maxDrawCount) {
+      if (useDrawIndirectCount) {
+        cmd->drawIndirectCount(&mpGraphics->device, indirect,
+                               tile.indirectOffset, drawCounts,
+                               tile.drawCountOffset, tile.maxDrawCount,
+                               sizeof(VkDrawIndirectCommand));
+      } else {
+        // No GPU-sourced count on this device: every candidate is a command
+        // and the cull kernel zeroed the instance count of the culled ones.
+        cmd->drawIndirect(&mpGraphics->device, indirect, tile.indirectOffset,
+                          tile.maxDrawCount, sizeof(VkDrawIndirectCommand));
+      }
+    }
   }
   cmd->vk_d3d12_endRendering(&mpGraphics->device);
   RITextureBarrier readBarrier(

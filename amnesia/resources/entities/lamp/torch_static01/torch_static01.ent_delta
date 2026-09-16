@@ -4,7 +4,7 @@
         <SetAttr Rotation="-6.35733e-08 0.000491857 1.19755e-09" />
     </Modify>
     <Modify Category="Entities" ID="4" Name="PointLight_1">
-        <SetAttr RendererMask="1" />
+        <SetAttr CastShadows="true" RendererMask="1" ShadowResolution="High" ShadowsAffectDynamic="true" ShadowsAffectStatic="true" WorldPos="-0.005528 0.935486 0.44989" />
     </Modify>
     <Add Category="Entities" After="4">
         <Re_PointLight Active="true" CastShadows="true" DiffuseColor="1 0.7 0.45 0.7" FalloffMap="" FlickerActive="true" FlickerFade="true" FlickerOffColor="0.9 0.55 0.3 0.5" FlickerOffFadeMaxLength="2" FlickerOffFadeMinLength="0.1" FlickerOffMaxLength="0" FlickerOffMinLength="0" FlickerOffPS="" FlickerOffIntensity="1" FlickerOffSound="" FlickerOnFadeMaxLength="2" FlickerOnFadeMinLength="0.1" FlickerOnMaxLength="0.7" FlickerOnMinLength="0" FlickerOnPS="" FlickerOnSound="" Gobo="" GoboAnimFrameTime="0" GoboAnimMode="None" Name="PointLight_1" Intensity="3.5" Radius="26.4528" SourceRadius="0.08" Rotation="0 0 0" Scale="1 1 1" ShadowResolution="High" ShadowsAffectDynamic="true" ShadowsAffectStatic="true" Tag="" WorldPos="-0.00552845 0.935486 0.44989" RendererMask="2" />

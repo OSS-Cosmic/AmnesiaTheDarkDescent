@@ -17,7 +17,12 @@ struct O { uint4 hit:SV_TARGET0; float4 diagnostic:SV_TARGET1; float2 velocity:S
     float4 worldPosition = mul(obj.modelMat, float4(vertex.position, 1.0f));
     V v;
     v.posH = mul(mul(gPerFrame.projMat, gPerFrame.viewMat), worldPosition);
-    v.curClip = mul(mul(gPerFrame.projMat, gPerFrame.viewMat), worldPosition);
+    // curClip must be UNJITTERED: the velocity target is the unjittered
+    // curUV - prevUV that FSR/NRD expect, and prevClip already uses the
+    // unjittered prevProjMat. Using the jittered projMat here folds this
+    // frame's Halton offset into the motion vector, which reads as
+    // per-frame pixel jitter after upscaling.
+    v.curClip = mul(mul(gPerFrame.unjitteredProjMat, gPerFrame.viewMat), worldPosition);
     v.prevClip = mul(mul(gPerFrame.prevProjMat, gPerFrame.prevViewMat), mul(obj.prevModelMat, float4(vertex.position, 1.0f)));
     v.uv = standardTransformUV(obj, vertex.uv);
     v.objectID = id;

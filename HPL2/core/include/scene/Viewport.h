@@ -24,6 +24,7 @@
 
 #include "graphics/DisplayDepthPolicy.h"
 #include "graphics/GraphicsTypes.h"
+#include "graphics/HiZPyramid.h"
 #include "graphics/NrdIntegration.h"
 #include "graphics/TemporalCamera.h"
 #include "graphics/TemporalUpscaler.h"
@@ -276,6 +277,10 @@ public:
     // depthView above can't be sampled (Vulkan forbids sampling a DEPTH|STENCIL
     // view). Bound by the particle pass for soft-particle scene-depth reads.
     RISharedPointer<RITextureView> depthSampleView[RI_MAX_SWAPCHAIN_IMAGES];
+    // Depth pyramid for the GPU occlusion cull the translucent passes run. See
+    // HiZPyramid.h. Built from the G-buffer's depth, which is final opaque
+    // depth: nothing writes depth again before the translucent families.
+    HiZPyramid hiZ;
     // Lazy full-resolution nearest water view-depth, used only by particles.
     RISharedPointer<RITexture> particleWaterDepth[RI_MAX_SWAPCHAIN_IMAGES];
     RISharedPointer<RITextureView> particleWaterDepthView[RI_MAX_SWAPCHAIN_IMAGES];
@@ -474,6 +479,8 @@ public:
     RISharedPointer<RITextureView> renderTargetView[RI_MAX_SWAPCHAIN_IMAGES];
     RISharedPointer<RITextureView> depthView[RI_MAX_SWAPCHAIN_IMAGES];
     RISharedPointer<RITextureView> depthSampleView[RI_MAX_SWAPCHAIN_IMAGES];
+    // Depth pyramid for the camera occlusion cull. See HiZPyramid.h.
+    HiZPyramid hiZ;
     RISharedPointer<RITexture> visibilityTexture[RI_MAX_SWAPCHAIN_IMAGES];
     RISharedPointer<RITextureView> visibilityView[RI_MAX_SWAPCHAIN_IMAGES];
     RISharedPointer<RITextureView> visibilityAttachmentView[RI_MAX_SWAPCHAIN_IMAGES];

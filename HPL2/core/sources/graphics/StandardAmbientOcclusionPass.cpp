@@ -254,6 +254,12 @@ bool cStandardAmbientOcclusionPass::Render(
 
     bindings.clear();
     bindings.push_back(*frameBinding);
+    // The resolve needs the depth guide as well as the AO itself.
+    bindings.push_back(RIProgram::DescriptorBinding(
+        "aoPreparedDepthTexture",
+        RIDescriptor::storageImage(
+            &mpGraphics->device,
+            state->aoPreparedDepthStorageView[image].Get())));
     bindings.push_back(RIProgram::DescriptorBinding(
         "aoQuarterTexture",
         RIDescriptor::storageImage(&mpGraphics->device,

@@ -39,6 +39,12 @@ remapBlend(eMaterialBlendMode mode) {
   }
 }
 
+// Every translucent indirect command occupies a VkDrawIndexedIndirectCommand
+// sized slot, indexed or not, so one uniform stride covers both layouts. Each
+// draw is its own drawCount-1 indirect call, so Vulkan reads only the offset.
+static constexpr uint64_t kStandardTranslucentCommandStride =
+    sizeof(VkDrawIndexedIndirectCommand);
+
 static bool bindVertexStreams(cGraphics *graphics, RICmd *cmd,
                               cVertexBuffer *vb, uint32_t *mask,
                               bool *indexed) {
@@ -174,7 +180,7 @@ bool cStandardTranslucentPass::Draw(
     RIProgram::DescriptorBinding *fogBinding, RITextureView *standardShadowView,
     RISharedPointer<RIBuffer> *pointLights,
     RISharedPointer<RIBuffer> *spotLights, uint32_t pointLightCount,
-    uint32_t spotLightCount) {
+    uint32_t spotLightCount, const OcclusionCull *cullInput) {
   if (!m_loaded || !m_program || !frame || !state || !frustum || !world ||
       !frameBinding || !standardShadowView || standardShadowView->isEmpty() ||
       imageIndex >= RI_MAX_SWAPCHAIN_IMAGES || state->width == 0 ||
@@ -251,7 +257,12 @@ bool cStandardTranslucentPass::Draw(
     uint32_t slot;
     bool refractive;
     float lightLevel;
+    // Filled by the cull pre-pass below. kNoCommand means "draw directly",
+    // which is what every item gets when there is no cull this frame.
+    uint32_t commandSlot = UINT32_MAX;
+    bool indexed = false;
   };
+  static constexpr uint32_t kNoCommand = UINT32_MAX;
   std::vector<DrawItem> items;
   items.reserve(meshes.size());
   const hash_t paneSalt =
@@ -299,6 +310,123 @@ bool cStandardTranslucentPass::Draw(
   // submitObject writes staged global records; publish them before any draw
   // scope begins so the translucent pass never submits descriptors mid-render.
   mpGraphics->globalset->flushMirrors(&mpGraphics->device);
+
+  // ---------------------------------------------------------------------
+  // GPU occlusion cull.
+  //
+  // One 5-word command slot per draw this pass is about to record, written
+  // here with instanceCount = 1; the kernel rewrites that one word to 0 for
+  // anything it can prove is hidden behind the depth pyramid. The slots are
+  // visited below in the caller's back-to-front order and every per-item bind
+  // still happens on the CPU, so nothing about ordering or per-item state
+  // changes -- a culled draw simply rasterizes nothing.
+  //
+  // All or nothing: if the reservation cannot hold every draw, the whole pass
+  // falls back to direct draws rather than culling part of the list.
+  // ---------------------------------------------------------------------
+  uint32_t commandCount = 0;
+  bool cullDispatched = false;
+  const OcclusionCull emptyCull{};
+  const OcclusionCull &cull = cullInput ? *cullInput : emptyCull;
+  if (cull.IsUsable()) {
+    bool fits = true;
+    for (DrawItem &item : items) {
+      auto *vb = static_cast<cVertexBuffer *>(item.object->GetVertexBuffer());
+      // Exactly what bindVertexStreams decides below, from the same source.
+      item.indexed = vb->GetIndexRIBuffer() != nullptr;
+      const uint32_t elementCount =
+          item.indexed ? static_cast<uint32_t>(vb->GetIndexNum())
+                       : static_cast<uint32_t>(vb->GetVertexNum());
+      // The cube-map reflection variant is a second draw of the same mesh.
+      const uint32_t draws =
+          (!item.refractive && item.material->GetImage(eMaterialTexture_CubeMap))
+              ? 2u
+              : 1u;
+      if (commandCount + draws > cull.capacity) {
+        fits = false;
+        break;
+      }
+      cBoundingVolume *bounds = item.object->GetBoundingVolume();
+      if (!bounds) {
+        fits = false;
+        break;
+      }
+      const cVector3f boundsMin = bounds->GetMin();
+      const cVector3f boundsMax = bounds->GetMax();
+
+      item.commandSlot = commandCount;
+      for (uint32_t draw = 0; draw < draws; ++draw) {
+        const uint32_t slot = commandCount + draw;
+        const size_t wordBase = static_cast<size_t>(cull.commandBase + slot) * 5u;
+        uint32_t *words = cull.commandWords + wordBase;
+        if (item.indexed) {
+          // VkDrawIndexedIndirectCommand
+          words[0] = elementCount;
+          words[1] = 1u;
+          words[2] = 0u;
+          words[3] = 0u;
+          words[4] = item.slot;
+        } else {
+          // VkDrawIndirectCommand, in the first four words of the slot.
+          words[0] = elementCount;
+          words[1] = 1u;
+          words[2] = 0u;
+          words[3] = item.slot;
+          words[4] = 0u;
+        }
+
+        // One candidate per DRAW, not per item: a candidate owns exactly one
+        // instanceCount word, and the reflection variant has its own.
+        StandardCullCandidate &candidate = cull.candidateSlots[slot];
+        candidate = StandardCullCandidate{};
+        candidate.aabbMinX = boundsMin.x;
+        candidate.aabbMinY = boundsMin.y;
+        candidate.aabbMinZ = boundsMin.z;
+        candidate.aabbMaxX = boundsMax.x;
+        candidate.aabbMaxY = boundsMax.y;
+        candidate.aabbMaxZ = boundsMax.z;
+        candidate.objectSlot = item.slot;
+        candidate.vertexCount = elementCount;
+        // The shared predicate gates on the shadow-caster bit and the
+        // static/dynamic variability mask before it ever reaches the frustum
+        // or occlusion test. Neither gate means anything for a camera tile, so
+        // the host sets the bits that let every candidate through and the tile
+        // (filled by the caller) accepts both variabilities.
+        candidate.renderFlags =
+            kStandardCullShadowCasterBit |
+            (item.object->IsStatic() ? kStandardCullStaticBit : 0u);
+        // A refractive draw ends the render scope and copies the whole target
+        // whether or not it draws, so culling it saves the cheap half and
+        // keeps the expensive half. Leave it visible until that copy can be
+        // skipped too.
+        candidate.cullFlags =
+            item.refractive ? kStandardCullFlagNeverOcclude : 0u;
+        candidate.commandWordOffset =
+            static_cast<uint32_t>(wordBase) + 1u;  // instanceCount
+      }
+      commandCount += draws;
+    }
+
+    const uint32_t groupCount =
+        (commandCount + kStandardCullGroupSize - 1u) / kStandardCullGroupSize;
+    if (fits && commandCount > 0 && groupCount <= cull.groupCapacity) {
+      // The caller filled the tile's planes, camera and masks; only the
+      // candidate range depends on what this pass produced.
+      cull.tileSlot->candidateBase = cull.candidateBase;
+      cull.tileSlot->candidateCount = commandCount;
+      for (uint32_t group = 0; group < groupCount; ++group) {
+        cull.groupSlots[group].tileIndex = cull.tileBase;
+        cull.groupSlots[group].candidateOffset = group * kStandardCullGroupSize;
+      }
+      cullDispatched = cull.pass->Dispatch(
+          cmd, mpGraphics->frameIndex, cull.buffers, cull.tileBase, 1,
+          cull.groupBase, groupCount, kStandardCullModeInstanceMask);
+    }
+    if (!cullDispatched) {
+      for (DrawItem &item : items)
+        item.commandSlot = kNoCommand;
+    }
+  }
 
   RIProgram::DescriptorBinding sceneBinding(
       "sceneColorInput",
@@ -397,6 +525,7 @@ bool cStandardTranslucentPass::Draw(
   };
   begin();
 
+  uint32_t recordedDraw = 0;
   for (const DrawItem &item : items) {
     iRenderable *object = item.object;
     cMaterial *material = item.material;
@@ -426,6 +555,7 @@ bool cStandardTranslucentPass::Draw(
       begin();
     }
 
+    recordedDraw = 0;
     uint32_t vertexMask = 0;
     bool indexed = false;
     if (!bindVertexStreams(
@@ -440,6 +570,12 @@ bool cStandardTranslucentPass::Draw(
       float lightLevel;
       uint32_t reflectionOnly;
     };
+    // A draw goes through the cull only when the pre-pass claimed a slot for
+    // it AND bindVertexStreams agrees about indexing. The second half is a
+    // guard, not an expectation: the command's layout is chosen from `indexed`
+    // and a disagreement would submit the wrong five words.
+    const bool culled =
+        cullDispatched && item.commandSlot != kNoCommand && item.indexed == indexed;
     auto drawWith = [&](eMaterialBlendMode blendMode, bool reflectionOnly) {
       // Refractive surfaces blend in the shader against the scene copy, as
       // the legacy renderer's eMaterialBlendMode_None refraction draw did.
@@ -456,16 +592,31 @@ bool cStandardTranslucentPass::Draw(
                 reflectionOnly ? 1u : 0u};
       cmd->vk_d3d12_setPushConstants(&mpGraphics->device, *m_program, 0,
                                      sizeof(push), &push);
-      if (indexed)
+      if (culled) {
+        // drawCount is 1, so Vulkan never reads the stride and the uniform
+        // 5-word slot serves both command layouts.
+        const uint64_t offset =
+            static_cast<uint64_t>(cull.commandBase + item.commandSlot +
+                                  recordedDraw) *
+            kStandardTranslucentCommandStride;
+        if (indexed)
+          cmd->drawIndexedIndirect(&mpGraphics->device, cull.buffers.indirect,
+                                   offset, 1, kStandardTranslucentCommandStride);
+        else
+          cmd->drawIndirect(&mpGraphics->device, cull.buffers.indirect, offset,
+                            1, kStandardTranslucentCommandStride);
+      } else if (indexed) {
         cmd->drawIndexed(
             &mpGraphics->device,
             static_cast<uint32_t>(object->GetVertexBuffer()->GetIndexNum()), 1,
             0, 0, item.slot);
-      else
+      } else {
         cmd->draw(
             &mpGraphics->device,
             static_cast<uint32_t>(object->GetVertexBuffer()->GetVertexNum()), 1,
             0, item.slot);
+      }
+      ++recordedDraw;
     };
     drawWith(material->GetBlendMode(), false);
     // Legacy RendererDeferred repeats a non-refractive cube-mapped translucent

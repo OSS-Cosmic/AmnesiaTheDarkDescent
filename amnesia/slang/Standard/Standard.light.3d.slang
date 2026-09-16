@@ -8,6 +8,10 @@ import MaterialRaster;
 import bindless;
 import Utils.Color.ColorHelpers; // linearToSRGB / sRGBToLinear for the decal fold
 
+// PCSS arithmetic, shared verbatim with the headless tests in
+// tests/graphics/standard_shadow_filter.cpp.
+#include "../StandardShadowFilter.h"
+
 // Set 2 binds the five reconstructed surfaces, two legacy light-record buffers,
 // counts and samplers. The HDR output is a separate render attachment.
 [vk::binding(0,2)] Texture2D<float4> standardColorInput;
@@ -59,6 +63,22 @@ float standardShadowCompare(StandardShadowTile tile, float2 uv, float depth)
     return lerp(lerp(lit[0], lit[1], f.x), lerp(lit[2], lit[3], f.x), f.y);
 }
 
+// Nearest-texel depth fetch, for the blocker search. Deliberately NOT the
+// bilinear compare above: the search wants the depths that are actually stored,
+// not a filtered visibility. Outside a spot tile reads as fully unoccluded,
+// matching standardShadowCompare's border rule.
+float standardShadowLoadDepth(StandardShadowTile tile, float2 uv)
+{
+    int extent = (int)tile.size;
+    int2 t = (int2)floor(uv * (float)tile.size);
+    if (tile.clampToTile != 0u)
+        t = clamp(t, int2(0, 0), int2(extent - 1, extent - 1));
+    else if (t.x < 0 || t.y < 0 || t.x >= extent || t.y >= extent)
+        return 1.0f;
+    int2 origin = int2((int)tile.originX, (int)tile.originY);
+    return standardShadowMap.Load(int4(origin + t, (int)tile.atlasLayer, 0));
+}
+
 // Fetches a published tile. Out-of-range indices and malformed tiles are
 // treated as "no shadow" rather than reading past the buffer.
 bool standardShadowTileAt(uint index, out StandardShadowTile tile)
@@ -103,36 +123,77 @@ float standardShadowFilter(StandardShadowTile tile, float2 shadowUV, float biase
                            uint2 pixel)
 {
     uint quality = standardLightCounts.shadowQuality;
-    if (quality == 0u)
+    float texelSize = 1.0f / (float)tile.size;
+    // Low quality, or a tile with no emitter size, keeps the plain one-texel
+    // bilinear compare this pass has always done.
+    if (quality == 0u || !(tile.lightSize > 0.0f))
         return standardShadowCompare(tile, shadowUV, biasedDepth);
+
     uint jitterSize = quality >= 2u ? 64u : 32u;
     uint jitterSamples = quality >= 2u ? 32u : 16u;
-    float texelSize = 1.0f / (float)tile.size;
     uint2 jitterTile = pixel % jitterSize;
+
+    // ---- blocker search ----
+    // How far in front of the receiver an occluder could be and still shadow
+    // it. The jitter offsets are sorted outermost-first, so the first rows
+    // already span the search region.
+    float receiverLinear =
+        standardShadowLinearDepth(biasedDepth, tile.nearPlane, tile.farPlane);
+    float searchUV = max(
+        standardShadowSearchUV(receiverLinear, tile.nearPlane, tile.lightSize,
+                               tile.tanHalfFov),
+        texelSize);
+
+    float blockerSum = 0.0f;
+    float blockerCount = 0.0f;
+    for (uint s = 0u; s < 4u; ++s)
+    {
+        float4 o = standardShadowJitterInput.Load(
+            int3((int)jitterTile.x, (int)(jitterTile.y + s * jitterSize), 0)) * 2.0f - 1.0f;
+        float2 taps[2] = { o.xy, o.zw };
+        for (uint t = 0u; t < 2u; ++t)
+        {
+            float depth = standardShadowLoadDepth(tile, shadowUV + taps[t] * searchUV);
+            if (depth < biasedDepth)
+            {
+                blockerSum += standardShadowLinearDepth(depth, tile.nearPlane,
+                                                        tile.farPlane);
+                blockerCount += 1.0f;
+            }
+        }
+    }
+
+    // No blocker found does NOT mean lit: the search radius can be smaller than
+    // the occluder's offset. Falling back to the plain compare keeps this from
+    // ever being brighter than the filter it replaced, which is the failure
+    // mode that shows up as light leaking through walls.
+    if (blockerCount < 0.5f)
+        return standardShadowCompare(tile, shadowUV, biasedDepth);
+
+    // ---- penumbra ----
+    float blockerLinear = blockerSum / blockerCount;
+    float penumbraUV = standardShadowPenumbraUV(receiverLinear, blockerLinear,
+                                                tile.lightSize, tile.tanHalfFov);
+    float radiusUV = standardShadowFilterRadiusUV(penumbraUV, texelSize,
+                                                  kStandardShadowMaxFilterTexels);
+
+    // Contact-hard: the penumbra collapsed to the one-texel floor, so the wide
+    // kernel would only resample what the bilinear compare already answers.
+    // This is what keeps hard-edged regions as cheap as they were before PCSS,
+    // where the old code leaned on its (sum-1)*sum penumbra test.
+    if (!(radiusUV > texelSize))
+        return standardShadowCompare(tile, shadowUV, biasedDepth);
+
+    // ---- PCF at that radius ----
     float sum = 0.0f;
-    for (uint k = 0u; k < 2u; ++k)
+    for (uint k = 0u; k < jitterSamples / 2u; ++k)
     {
         float4 o = standardShadowJitterInput.Load(
             int3((int)jitterTile.x, (int)(jitterTile.y + k * jitterSize), 0)) * 2.0f - 1.0f;
-        sum += standardShadowCompare(tile, shadowUV + o.xy * texelSize, biasedDepth) * 0.25f;
-        sum += standardShadowCompare(tile, shadowUV + o.zw * texelSize, biasedDepth) * 0.25f;
+        sum += standardShadowCompare(tile, shadowUV + o.xy * radiusUV, biasedDepth);
+        sum += standardShadowCompare(tile, shadowUV + o.zw * radiusUV, biasedDepth);
     }
-    // Penumbra test. The legacy test also multiplies by N.L, which only skips
-    // refinement for texels the light cannot reach.
-    if ((sum - 1.0f) * sum != 0.0f)
-    {
-        sum *= 4.0f / (float)jitterSamples;
-        for (uint k = 2u; k < jitterSamples / 2u; ++k)
-        {
-            float4 o = standardShadowJitterInput.Load(
-                int3((int)jitterTile.x, (int)(jitterTile.y + k * jitterSize), 0)) * 2.0f - 1.0f;
-            sum += standardShadowCompare(tile, shadowUV + o.xy * texelSize, biasedDepth) /
-                   (float)jitterSamples;
-            sum += standardShadowCompare(tile, shadowUV + o.zw * texelSize, biasedDepth) /
-                   (float)jitterSamples;
-        }
-    }
-    return sum;
+    return sum / (float)jitterSamples;
 }
 
 float standardSpotShadowVisibility(StandardSpotLight light, float3 position, uint2 pixel)

@@ -12,6 +12,7 @@
 #include "graphics/RIVK.h"
 #include "graphics/GlobalManagedSets.h"
 #include "graphics/GBufferMRTPipelineDesc.h"
+#include "graphics/StandardShadowCull.h"
 #include "graphics/DecalPipelineDesc.h"
 #include "graphics/Bitmap.h"
 #include "graphics/Texture.h"
@@ -337,6 +338,7 @@ bool CreateDepthSampleView(cGraphics *graphics, uint32_t index,
   return true;
 }
 
+
 void DeferDepthSampleViews(cGraphics *graphics,
                            cViewport::StandardViewportState &state) {
   for (uint32_t i = 0; i < RI_MAX_SWAPCHAIN_IMAGES; ++i)
@@ -489,6 +491,37 @@ StandardCapShadowQuality(eShadowMapResolution wanted,
   return eShadowMapResolution_Low;
 }
 
+// Build the per-object record the global set stores.
+//
+// Shared by the camera pass and the shadow gather so both produce a byte-
+// identical payload for the same renderable: submitObject skips its upload when
+// the record matches what the slot already holds, so the second caller costs
+// only the slot lookup, and a caster visible to both occupies ONE slot rather
+// than one per light.
+//
+// apFrustum must never be null. cRopeEntity inverts the usual convention --
+// GetModelMatrix(nullptr) returns the world matrix while any non-null frustum
+// returns NULL (rope vertices are already world space) -- so passing nullptr
+// here would double-transform every rope.
+static ObjectSubmitDesc BuildStandardObjectDesc(iRenderable *apObject,
+                                                cMaterial *apMaterial,
+                                                cFrustum *apFrustum,
+                                                uint32_t alMaterialId) {
+  ObjectSubmitDesc object;
+  object.modelMatrix = apObject->GetModelMatrix(apFrustum);
+  object.uvMatrix = apMaterial->GetUvMatrix();
+  object.materialId = alMaterialId;
+  object.dissolveAmount = apObject->GetCoverageAmount();
+  object.illuminationAmount = apObject->GetIlluminationAmount();
+  object.renderFlags = apObject->GetRenderFlags();
+  if (apObject->IsStatic())
+    object.renderFlags |= kStandardCullStaticBit;
+  object.decalList =
+      (static_cast<uint32_t>(apObject->GetDecalListOffset()) << 8) |
+      (static_cast<uint32_t>(apObject->GetDecalListCount()) & 0xffu);
+  return object;
+}
+
 // Legacy cRendererDeferred shadow distance LOD (RendererDeferred.h).
 static constexpr float kStandardShadowDistanceMedium = 10.0f;
 static constexpr float kStandardShadowDistanceLow = 20.0f;
@@ -503,6 +536,58 @@ static constexpr uint32_t kStandardShadowMinTile = 64;
 // Cube-face frusta are widened by this many texels per side so the bilinear
 // and jitter kernel of a receiver near a face edge still reads rendered depth.
 static constexpr float kStandardShadowCubeBorderTexels = 2.0f;
+
+// Emitter radius, in world units, used by the PCSS penumbra estimate.
+//
+// Amnesia authors no emitter size -- a light has a reach radius, which is a
+// different thing entirely and would make a room light absurdly soft. This is a
+// single tunable standing in for "about the size of a lamp flame or bulb".
+// Larger means softer everywhere; 0 restores the old one-texel hard edge.
+static constexpr float kStandardShadowLightSize = 0.12f;
+
+
+// GPU shadow cull limits.
+//
+// kStandardShadowMaxCandidatesPerLight replaces the old
+// `casters.size() > kObjectSlotCapacity` guard, which never fired in practice:
+// kObjectSlotCapacity is 32768, so it was a slot-pool assertion rather than a
+// per-light bound. This one is a real bound, and it is also the worst-case
+// indirect reservation a single light can take out.
+static constexpr uint32_t kStandardShadowMaxTiles = 1024;
+static constexpr uint32_t kStandardShadowMaxCandidatesPerLight = 2048;
+// Total candidate records across every light in one Draw. A caster near K
+// lights appears K times; K is 1-2 in practice.
+static constexpr uint32_t kStandardShadowMaxCandidates = 16384;
+// StandardCull.h has to mirror these by value: it is included from Slang,
+// which cannot see the C++-only headers that define them. Assert the mirrors
+// here, where both are visible, so a renumber cannot silently desync the
+// kernel's flag tests from the engine's.
+static_assert(kStandardCullShadowCasterBit == eRenderableFlag_ShadowCaster,
+              "StandardCull.h shadow-caster mirror is stale");
+static_assert(kStandardCullVariabilityStatic == eObjectVariabilityFlag_Static,
+              "StandardCull.h static-variability mirror is stale");
+static_assert(kStandardCullVariabilityDynamic == eObjectVariabilityFlag_Dynamic,
+              "StandardCull.h dynamic-variability mirror is stale");
+
+// Camera records live one per occlusion-testing tile per frame; only the camera
+// pass allocates them, so a small ring is plenty.
+static constexpr uint32_t kStandardCullMaxCameras = 64;
+
+// Draws the translucent occlusion cull can cover in one frame. Each one costs a
+// 20-byte command slot and a 48-byte candidate; past this the pass falls back
+// to direct draws rather than culling part of a sorted list.
+static constexpr uint32_t kStandardTranslucentMaxDraws = 4096;
+
+// Opaque draws the camera cull can cover in one frame.
+static constexpr uint32_t kStandardCameraMaxDraws = 16384;
+// Persistent visibility slots. A renderable maps to one by hashing its cookie,
+// so two can collide: the loser is either drawn in phase 1 while hidden (depth
+// rejects it) or skipped there and picked up by phase 2. Costs efficiency,
+// never correctness, which is what lets this be a plain lossy table.
+static constexpr uint32_t kStandardCullVisibilityKeys = 65536;
+
+static constexpr uint32_t kStandardShadowMaxCullGroups =
+    kStandardShadowMaxCandidates / kStandardCullGroupSize + kStandardShadowMaxTiles;
 
 static float StandardPointShadowNear(float radius) {
   return std::max(0.05f, radius * 0.01f);
@@ -762,6 +847,9 @@ cStandardRenderer::cStandardRenderer(cGraphics *apGraphics,
       std::make_unique<cStandardParticlePass>(mpGraphics, apResources);
   m_decals = std::make_unique<cStandardDecalPass>(mpGraphics, apResources);
   m_shadow = std::make_unique<cStandardShadowPass>(mpGraphics, apResources);
+  m_shadowCull =
+      std::make_unique<cStandardShadowCullPass>(mpGraphics, apResources);
+  m_hiZ = std::make_unique<cStandardHiZPass>(mpGraphics, apResources);
   m_halo = std::make_unique<cStandardHaloPass>(mpGraphics);
   m_translucent =
       std::make_unique<cStandardTranslucentPass>(mpGraphics, apResources);
@@ -788,11 +876,114 @@ cStandardRenderer::cStandardRenderer(cGraphics *apGraphics,
       &mpGraphics->device, kObjectSlotCapacity, sizeof(VkDrawIndirectCommand),
       VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
       false);
+
+  CreateCullBuffers();
   // Like cRendererSimple: cGraphics::Init no longer loads renderers, and Draw
   // returns immediately until the fallback and lighting programs exist.
   if (!LoadData())
     Error("Standard renderer failed to load its shaders; nothing will render. "
           "See log.\n");
+}
+
+// GPU cull buffers. Created here rather than in LoadData's body so both the
+// constructor and a shader hot-reload land on the same code, and idempotent so
+// LoadData can call it after DestroyData has handed the old ones back.
+//
+// The inputs stay host-mapped: the host writes each one linearly once per Draw
+// and the GPU only reads them, so a staged device-local copy would add an
+// upload for no benefit.
+void cStandardRenderer::CreateCullBuffers() {
+  const auto makeCullBuffer = [&](RISegmentAlloc<RI_NUMBER_FRAME_SEGMENTS> *segment,
+                                  struct RIBuffer *buffer, uint32_t elements,
+                                  uint32_t stride, VkBufferUsageFlags usage,
+                                  bool deviceLocal, const char *debugName) {
+    if (!buffer->isEmpty())
+      return;
+    RISegmentAllocDesc segmentDesc = {};
+    segmentDesc.numSegments = RI_NUMBER_FRAMES_FLIGHT;
+    segmentDesc.elementStride = stride;
+    segmentDesc.maxElements = elements;
+    *segment = RISegmentAlloc<RI_NUMBER_FRAME_SEGMENTS>(&segmentDesc);
+    *buffer = detail::CreateBindlessSlotBuffer(
+        &mpGraphics->device, elements, stride, usage, deviceLocal, debugName);
+  };
+  makeCullBuffer(&m_shadowCandidateSegment, &m_shadowCandidateBuffer,
+                 kStandardShadowMaxCandidates, sizeof(StandardCullCandidate),
+                 VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, false,
+                 "StandardRenderer.shadowCullCandidates");
+  makeCullBuffer(&m_shadowCullTileSegment, &m_shadowCullTileBuffer,
+                 kStandardShadowMaxTiles, sizeof(StandardCullTile),
+                 VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, false,
+                 "StandardRenderer.shadowCullTiles");
+  makeCullBuffer(&m_shadowCullGroupSegment, &m_shadowCullGroupBuffer,
+                 kStandardShadowMaxCullGroups, sizeof(StandardCullGroup),
+                 VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, false,
+                 "StandardRenderer.shadowCullGroups");
+  makeCullBuffer(&m_cullCameraSegment, &m_cullCameraBuffer,
+                 kStandardCullMaxCameras, sizeof(StandardCullCamera),
+                 VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, false,
+                 "StandardRenderer.cullCameras");
+  makeCullBuffer(&m_translucentCommandSegment, &m_translucentCommandBuffer,
+                 kStandardTranslucentMaxDraws,
+                 sizeof(VkDrawIndexedIndirectCommand),
+                 VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT |
+                     VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
+                 false,
+                 "StandardRenderer.translucentCommands");
+  makeCullBuffer(&m_translucentCandidateSegment, &m_translucentCandidateBuffer,
+                 kStandardTranslucentMaxDraws, sizeof(StandardCullCandidate),
+                 VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, false,
+                 "StandardRenderer.translucentCandidates");
+  makeCullBuffer(&m_cameraCandidateSegment, &m_cameraCandidateBuffer,
+                 kStandardCameraMaxDraws, sizeof(StandardCullCandidate),
+                 VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, false,
+                 "StandardRenderer.cameraCullCandidates");
+  // Device-local: the counts are written by compute and consumed by
+  // vkCmdDrawIndirectCount without ever being read back on the host.
+  makeCullBuffer(&m_shadowDrawCountSegment, &m_shadowDrawCountBuffer,
+                 kStandardShadowMaxTiles, sizeof(uint32_t),
+                 VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT |
+                     VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
+                 true,
+                 "StandardRenderer.shadowDrawCounts");
+  // Persistent across frames, so no segment allocator. Host-mapped purely so it
+  // can be zeroed: every entry must start "not visible", which makes the first
+  // frame after a (re)create draw everything in phase 2 and nothing in phase 1.
+  if (m_cullVisibilityBuffer.isEmpty()) {
+    m_cullVisibilityBuffer = detail::CreateBindlessSlotBuffer(
+        &mpGraphics->device, kStandardCullVisibilityKeys, sizeof(uint32_t),
+        VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, false,
+        "StandardRenderer.cullVisibility");
+    if (m_cullVisibilityBuffer.mappedAddress)
+      std::memset(m_cullVisibilityBuffer.mappedAddress, 0,
+                  static_cast<size_t>(kStandardCullVisibilityKeys) *
+                      sizeof(uint32_t));
+  }
+}
+
+// Hands every cull buffer back through the deferral queue. Without this they
+// outlive the device: DestroyData used to free only the two indirect-draw
+// buffers, so the rest showed up as live VMA allocations at teardown.
+void cStandardRenderer::DisposeCullBuffers() {
+  if (!mpGraphics)
+    return;
+  const auto retire = [&](struct RIBuffer *buffer) {
+    if (buffer->isEmpty())
+      return;
+    mpGraphics->graphicsDefer.push(std::function<void()>(
+        [owned = std::move(*buffer),
+         device = &mpGraphics->device]() mutable { owned.dispose(device); }));
+    *buffer = {};
+  };
+  retire(&m_shadowCandidateBuffer);
+  retire(&m_shadowCullTileBuffer);
+  retire(&m_shadowCullGroupBuffer);
+  retire(&m_shadowDrawCountBuffer);
+  retire(&m_cullCameraBuffer);
+  retire(&m_translucentCommandBuffer);
+  retire(&m_translucentCandidateBuffer);
+  retire(&m_cameraCandidateBuffer);
+  retire(&m_cullVisibilityBuffer);
 }
 
 cStandardRenderer::~cStandardRenderer() { DestroyData(); }
@@ -819,6 +1010,14 @@ bool cStandardRenderer::LoadData() {
   if (!loadPass(m_water && m_water->LoadData(), "water"))
     return false;
   if (!loadPass(m_shadow && m_shadow->LoadData(), "shadow"))
+    return false;
+  // The cull kernel is not optional: without it the shadow indirect range is
+  // never written, so shadows are dropped rather than drawn from stale data.
+  m_hiZLoaded = m_hiZ && m_hiZ->LoadData();
+  if (!m_hiZLoaded)
+    Error("Standard renderer: HiZ pass failed to load; camera occlusion "
+          "culling is off this run\n");
+  if (!loadPass(m_shadowCull && m_shadowCull->LoadData(), "shadow cull"))
     return false;
   // AO is optional: without it the light pass reads a cleared fallback.
   m_ambientOcclusionLoaded =
@@ -850,6 +1049,9 @@ bool cStandardRenderer::LoadData() {
             VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
         false);
   }
+  // DestroyData hands these back, so a hot-reload has to rebuild them before
+  // any pass binds them again.
+  CreateCullBuffers();
   const VkDescriptorSetLayout external[] = {
       mpGraphics->globalset->m_bindlessSet.vk.m_bindlessSetLayout};
   auto load = [&](std::shared_ptr<RIProgram> &program, const char *file,
@@ -941,6 +1143,9 @@ bool cStandardRenderer::LoadData() {
 }
 
 void cStandardRenderer::DestroyData() {
+  if (m_hiZ)
+    m_hiZ->DestroyData();
+  m_hiZLoaded = false;
   auto visibility = std::move(m_visibility);
   auto fallback = std::move(m_fallback);
   auto reconstruct = std::move(m_reconstruct);
@@ -1001,6 +1206,7 @@ void cStandardRenderer::DestroyData() {
         [buffer = std::move(m_shadowIndirectBuffer),
          device = &mpGraphics->device]() mutable { buffer.dispose(device); }));
   m_shadowIndirectBuffer = {};
+  DisposeCullBuffers();
   m_visibilityLoaded = false;
   m_fallbackLoaded = false;
   m_reconstructLoaded = false;
@@ -1096,11 +1302,12 @@ cViewport::StandardViewportState::~StandardViewportState() {
       graphics->graphicsDefer.push(velocityAttachmentView[i]);
   }
   DeferDepthSampleViews(graphics, *this);
+  hiZ.Defer(graphics);
 }
 
 cViewport::StandardViewportState::StandardViewportState(
     StandardViewportState &&rhs) noexcept
-    : width(rhs.width), height(rhs.height) {
+    : width(rhs.width), height(rhs.height), hiZ(std::move(rhs.hiZ)) {
   for (uint32_t i = 0; i < RI_MAX_SWAPCHAIN_IMAGES; ++i) {
     renderTarget[i] = std::move(rhs.renderTarget[i]);
     renderTargetView[i] = std::move(rhs.renderTargetView[i]);
@@ -1267,6 +1474,8 @@ void cViewport::StandardViewportState::Update(cGraphics::FrameContext *cntx,
             &replacement.depthView[i], "StandardViewportState.depth");
     if (success)
       success = CreateDepthSampleView(graphics, i, replacement);
+    if (success)
+      success = replacement.hiZ.Create(graphics, i, widthValue, heightValue);
     // Five full-resolution material MRT outputs. renderTarget is albedo/final
     // HDR; the other four remain available to lighting, post effects, and
     // diagnostics.
@@ -1810,10 +2019,42 @@ void cStandardRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
         static_cast<uint8_t *>(m_indirectDrawBuffer.mappedAddress) +
         req.elementOffset * sizeof(VkDrawIndirectCommand));
   }
+
+  // Two-phase camera cull. Phase 1 replays what was visible last frame so the
+  // pyramid has something to be built from; phase 2 tests everything against
+  // that pyramid and draws whatever phase 1 missed. Both phases draw the SAME
+  // command list geometry, from two ranges whose instanceCount the kernel
+  // owns, so the host fills both identically here and never has to know the
+  // answer.
+  RISegmentReq phaseTwoReq = {};
+  RISegmentReq cameraCandidateReq = {};
+  VkDrawIndirectCommand *phaseTwoIndirect = nullptr;
+  StandardCullCandidate *cameraCandidates = nullptr;
+  const bool cameraCullReady =
+      indirect != nullptr && m_hiZ && m_hiZLoaded &&
+      m_shadowCull && m_shadowCull->IsLoaded() && state->hiZ.IsUsable(index) &&
+      solids.size() <= kStandardCameraMaxDraws &&
+      m_indirectSegment.request(mpGraphics->frameIndex, solids.size(),
+                                &phaseTwoReq) &&
+      m_cameraCandidateSegment.request(mpGraphics->frameIndex, solids.size(),
+                                       &cameraCandidateReq);
+  if (cameraCullReady) {
+    phaseTwoIndirect = reinterpret_cast<VkDrawIndirectCommand *>(
+        static_cast<uint8_t *>(m_indirectDrawBuffer.mappedAddress) +
+        phaseTwoReq.elementOffset * sizeof(VkDrawIndirectCommand));
+    cameraCandidates = reinterpret_cast<StandardCullCandidate *>(
+        static_cast<uint8_t *>(m_cameraCandidateBuffer.mappedAddress) +
+        cameraCandidateReq.elementOffset * sizeof(StandardCullCandidate));
+  }
   // Object slots are shared by the global set. Salt each pane so a second
   // camera cannot overwrite this pane's model/UV/material record mid-frame.
   const uint32_t paneSalt =
       hash_u64(HASH_INITIAL_VALUE, reinterpret_cast<uintptr_t>(viewport));
+  // Slots claimed by the camera pass. The shadow gather reuses them instead of
+  // re-submitting: a caster the camera can see needs no second upload, and its
+  // record is identical because both callers build it the same way.
+  std::unordered_map<iRenderable *, uint32_t> submittedSlots;
+  submittedSlots.reserve(solids.size());
   for (iRenderable *o : solids) {
     if (!o || !o->GetVertexBuffer())
       continue;
@@ -1828,17 +2069,8 @@ void cStandardRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
             .materialId;
     if (materialId == UINT32_MAX)
       continue;
-    ObjectSubmitDesc object;
-    object.modelMatrix = o->GetModelMatrix(apFrustum);
-    object.uvMatrix = mat->GetUvMatrix();
-    object.materialId = materialId;
-    object.dissolveAmount = o->GetCoverageAmount();
-    object.illuminationAmount = o->GetIlluminationAmount();
-    object.renderFlags = o->GetRenderFlags();
-    if (o->IsStatic())
-      object.renderFlags |= 0x80000000u;
-    object.decalList = (static_cast<uint32_t>(o->GetDecalListOffset()) << 8) |
-                       (static_cast<uint32_t>(o->GetDecalListCount()) & 0xffu);
+    ObjectSubmitDesc object =
+        BuildStandardObjectDesc(o, mat, apFrustum, materialId);
     const hash_t cookie =
         hash_u32(hash_u64(HASH_INITIAL_VALUE, o->GetUniqueCookie()), paneSalt);
     uint32_t slot = mpGraphics->globalset->submitObject(
@@ -1846,9 +2078,72 @@ void cStandardRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
         kSubmitData | kSubmitVertex | kSubmitIndex);
     if (slot == UINT32_MAX)
       continue;
+    submittedSlots.emplace(o, slot);
     const uint32_t vertexCount =
         vb->GetIndexNum() > 0 ? static_cast<uint32_t>(vb->GetIndexNum())
                               : static_cast<uint32_t>(vb->GetVertexNum());
+    if (cameraCullReady) {
+      cBoundingVolume *bounds = o->GetBoundingVolume();
+      if (bounds) {
+        const cVector3f boundsMin = bounds->GetMin();
+        const cVector3f boundsMax = bounds->GetMax();
+        StandardCullCandidate candidate{};
+        candidate.aabbMinX = boundsMin.x;
+        candidate.aabbMinY = boundsMin.y;
+        candidate.aabbMinZ = boundsMin.z;
+        candidate.aabbMaxX = boundsMax.x;
+        candidate.aabbMaxY = boundsMax.y;
+        candidate.aabbMaxZ = boundsMax.z;
+        candidate.objectSlot = slot;
+        candidate.vertexCount = vertexCount;
+        // The shared predicate gates on the caster bit and the variability
+        // mask before the frustum test; neither means anything for a camera
+        // tile, so the host sets the bits that let every candidate through.
+        candidate.renderFlags = kStandardCullShadowCasterBit |
+                                (o->IsStatic() ? kStandardCullStaticBit : 0u);
+        // NOT salted by pane: the table is persistent and shared, so a
+        // renderable should land on the same slot every frame from every
+        // camera. Collisions are benign by construction.
+        candidate.visibilityKey =
+            static_cast<uint32_t>(
+                hash_u64(HASH_INITIAL_VALUE, o->GetUniqueCookie())) %
+            kStandardCullVisibilityKeys;
+        candidate.commandWordOffset =
+            static_cast<uint32_t>(
+                (req.elementOffset + drawCount) *
+                (sizeof(VkDrawIndirectCommand) / sizeof(uint32_t))) +
+            1u;  // instanceCount
+        cameraCandidates[drawCount] = candidate;
+        // Identical geometry in both ranges; only instanceCount differs, and
+        // the kernel owns that.
+        phaseTwoIndirect[drawCount] = {vertexCount, 1, 0, slot};
+      } else {
+        // No bounds means nothing to test against. Give it a box that swallows
+        // any frustum and exempt it from occlusion, so the frustum test keeps
+        // it and one of the two phases always draws it. A zeroed candidate
+        // would fail the caster gate and be dropped by BOTH phases.
+        StandardCullCandidate candidate{};
+        const float huge = 3.0e38f;
+        candidate.aabbMinX = candidate.aabbMinY = candidate.aabbMinZ = -huge;
+        candidate.aabbMaxX = candidate.aabbMaxY = candidate.aabbMaxZ = huge;
+        candidate.objectSlot = slot;
+        candidate.vertexCount = vertexCount;
+        candidate.renderFlags = kStandardCullShadowCasterBit |
+                                (o->IsStatic() ? kStandardCullStaticBit : 0u);
+        candidate.cullFlags = kStandardCullFlagNeverOcclude;
+        candidate.visibilityKey =
+            static_cast<uint32_t>(
+                hash_u64(HASH_INITIAL_VALUE, o->GetUniqueCookie())) %
+            kStandardCullVisibilityKeys;
+        candidate.commandWordOffset =
+            static_cast<uint32_t>(
+                (req.elementOffset + drawCount) *
+                (sizeof(VkDrawIndirectCommand) / sizeof(uint32_t))) +
+            1u;
+        cameraCandidates[drawCount] = candidate;
+        phaseTwoIndirect[drawCount] = {vertexCount, 1, 0, slot};
+      }
+    }
     indirect[drawCount++] = {vertexCount, 1, 0, slot};
   }
   mpGraphics->globalset->flushMirrors(&mpGraphics->device);
@@ -1856,13 +2151,29 @@ void cStandardRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
   // gPerFrame (set 1) is needed before any Standard program draws: the shadow
   // raster's material alpha test reads it through the bindless animated-texture
   // lookup. Building it is CPU-only, so nothing is recorded yet on failure.
+  // Presented extent; equal to the render extent unless a temporal provider is
+  // upscaling. Only the material mip bias consumes it, and only a prepared
+  // provider earns it: DevRenderScale is a plain stretch with no jittered
+  // subpixel accumulation to pay for the vendor formula's -1.0, so it reports
+  // no display extent and biases nothing (same rule as Hybrid).
+  const cVector2l displayExtent = viewport->GetDisplayExtent();
+  const bool temporalProviderPrepared = viewport->IsTemporalProviderPrepared();
+  const uint32_t biasDisplayExtentX =
+      temporalProviderPrepared && displayExtent.x > 0
+          ? static_cast<uint32_t>(displayExtent.x)
+          : 0u;
+  const uint32_t biasDisplayExtentY =
+      temporalProviderPrepared && displayExtent.y > 0
+          ? static_cast<uint32_t>(displayExtent.y)
+          : 0u;
+
   RIProgram::DescriptorBinding frameBinding;
   if (!m_environment ||
       !m_environment->PrepareFrame(
           cntx, apFrustum, state->width, state->height, GetTimeCount(), apWorld,
           m_rendererList.GetFogAreas(),
           apSettings ? apSettings->mClearColor : cColor(0, 0), &frameBinding,
-          &temporalFrame))
+          &temporalFrame, biasDisplayExtentX, biasDisplayExtentY))
     return;
 
   // Pack this Draw's shadow tiles into atlas pages before the main render
@@ -1936,8 +2247,156 @@ void cStandardRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
         std::vector<PreparedTile> tiles;
       };
       std::vector<PreparedLight> prepared;
+      // Live prefix lengths of the cull ring buffers for this Draw, and the
+      // reusable per-light candidate index list.
+      // Ring-segment ranges claimed this Draw. Tiles and groups are each
+      // handed out contiguously, so a base plus a count describes them; the
+      // kernel must not iterate from zero, which would touch entries still in
+      // use by frames in flight.
+      // Tiles and groups are staged on the host and published as ONE ring
+      // request each after the light loop. The cull dispatch addresses them as
+      // [base, count) ranges, and RISegmentAlloc::request restarts at offset 0
+      // when a request does not fit the tail of the ring -- so requesting them
+      // one at a time could split a single frame's entries across the wrap,
+      // which a base+count range cannot express. One request per frame makes
+      // contiguity an invariant instead of an assumption. Groups carry a
+      // staging-relative tileIndex until they land.
+      std::vector<StandardCullTile> cullTiles;
+      std::vector<StandardCullGroup> cullGroups;
+      std::vector<size_t> lightCandidates;
       const float globalSlope =
           apSettings ? apSettings->mfShadowMapSlopeScaleBias : 2.0f;
+
+      // ---------------------------------------------------------------
+      // Frame-global shadow caster gather.
+      //
+      // Replaces the two WalkAndPrepareRenderList calls this loop used to
+      // make PER TILE. Every caster is found once, submitted once, and then
+      // referenced by whichever tiles need it; the per-tile frustum test moves
+      // to the GPU. GetModelMatrix does not vary per tile for anything that can
+      // pass the caster filter, which is what makes the shared submit sound --
+      // see the renderable-type filter below for the exceptions.
+      // ---------------------------------------------------------------
+      struct ShadowCaster {
+        iRenderable *object;
+        uint32_t slot;
+        uint32_t vertexCount;
+        uint32_t renderFlags;
+        cVector3f boundsMin;
+        cVector3f boundsMax;
+      };
+      std::vector<ShadowCaster> shadowCasters;
+      // Bounds of casters that could not be submitted. A light overlapping any
+      // of these fails wholesale rather than rendering a tile with a silently
+      // missing shadow -- the same guarantee the old per-tile code gave by
+      // failing the light when a submit failed inside its caster list.
+      std::vector<std::pair<cVector3f, cVector3f>> failedCasterBounds;
+      bool shadowGatherOverflow = false;
+      {
+        // Union of every surviving light's reach. Requests are already limited
+        // to the lights that fit the atlas budget.
+        bool haveBounds = false;
+        cVector3f gatherMin(0.0f), gatherMax(0.0f);
+        for (const StandardShadowTileRequest &request : requests) {
+          iLight *light = shadowSelection[request.owner].light;
+          if (!light)
+            continue;
+          const cVector3f position = light->GetWorldPosition();
+          const float reach = light->GetRadius();
+          const cVector3f lightMin = position - cVector3f(reach);
+          const cVector3f lightMax = position + cVector3f(reach);
+          if (!haveBounds) {
+            gatherMin = lightMin;
+            gatherMax = lightMax;
+            haveBounds = true;
+          } else {
+            gatherMin = cMath::Vector3Min(gatherMin, lightMin);
+            gatherMax = cMath::Vector3Max(gatherMax, lightMax);
+          }
+        }
+
+        if (haveBounds) {
+          const auto gatherCaster = [&](iRenderable *o) {
+            if (shadowGatherOverflow)
+              return;
+            if (!o || !rendering::IsObjectIsVisible(
+                          o, eRenderableFlag_ShadowCaster, {}))
+              return;
+            cMaterial *mat = o->GetMaterial();
+            if (!o->GetVertexBuffer() || !mat ||
+                cMaterial::IsTranslucent(mat->GetMaterialID()))
+              return;
+            // Billboards, beams and particle emitters orient themselves to the
+            // frustum they are given, so they cannot share one object slot
+            // across tiles. They are already excluded in practice by the
+            // translucency test above; rejecting them by type makes that
+            // structural rather than incidental. A non-translucent one would
+            // previously have cast a light-oriented shadow and now casts none.
+            const eRenderableType type = o->GetRenderType();
+            if (type == eRenderableType_Billboard ||
+                type == eRenderableType_Beam ||
+                type == eRenderableType_ParticleEmitter)
+              return;
+
+            cBoundingVolume *bv = o->GetBoundingVolume();
+            if (!bv)
+              return;
+
+            cVertexBuffer *vb = static_cast<cVertexBuffer *>(o->GetVertexBuffer());
+            uint32_t slot = UINT32_MAX;
+            const auto existing = submittedSlots.find(o);
+            if (existing != submittedSlots.end()) {
+              // Already uploaded for the camera this frame.
+              slot = existing->second;
+            } else {
+              // Shadow-only caster (typically behind the camera): the camera
+              // list never saw it, so its geometry may not be resident.
+              vb->SubmitToGPU(&mpGraphics->blasSubmit.cmds[0],
+                              &mpGraphics->device, cntx);
+              const uint32_t materialId =
+                  mpGraphics->globalset
+                      ->submitMaterial(
+                          cntx, mat,
+                          static_cast<uint32_t>(mpGraphics->frameIndex))
+                      .materialId;
+              if (materialId != UINT32_MAX) {
+                const ObjectSubmitDesc object =
+                    BuildStandardObjectDesc(o, mat, apFrustum, materialId);
+                const hash_t cookie = hash_u32(
+                    hash_u64(HASH_INITIAL_VALUE, o->GetUniqueCookie()), paneSalt);
+                slot = mpGraphics->globalset->submitObject(
+                    cookie, static_cast<uint32_t>(mpGraphics->frameIndex), vb,
+                    object, kSubmitData | kSubmitVertex | kSubmitIndex);
+              }
+              if (slot == UINT32_MAX) {
+                failedCasterBounds.emplace_back(bv->GetMin(), bv->GetMax());
+                return;
+              }
+              submittedSlots.emplace(o, slot);
+            }
+
+            if (shadowCasters.size() >= kStandardShadowMaxCandidates) {
+              shadowGatherOverflow = true;
+              return;
+            }
+            ShadowCaster caster{};
+            caster.object = o;
+            caster.slot = slot;
+            caster.vertexCount =
+                vb->GetIndexNum() > 0 ? static_cast<uint32_t>(vb->GetIndexNum())
+                                      : static_cast<uint32_t>(vb->GetVertexNum());
+            caster.renderFlags =
+                o->GetRenderFlags() |
+                (o->IsStatic() ? kStandardCullStaticBit : 0u);
+            caster.boundsMin = bv->GetMin();
+            caster.boundsMax = bv->GetMax();
+            shadowCasters.push_back(caster);
+          };
+          dynamicContainer->QueryAabb(gatherMin, gatherMax, gatherCaster);
+          staticContainer->QueryAabb(gatherMin, gatherMax, gatherCaster);
+        }
+        mpGraphics->globalset->flushMirrors(&mpGraphics->device);
+      }
       // FitBudget keeps each light's requests contiguous and in face order.
       size_t cursor = 0;
       while (cursor < requests.size()) {
@@ -1968,15 +2427,75 @@ void cStandardRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
                 ? 0.0005f * authoredBias
                 : 0.0f;
         const float radius = light->GetRadius();
-        // Faces of one light share object slots: model matrices do not depend
-        // on the face.
-        const uint32_t lightSalt = hash_u32(
-            hash_u64(HASH_INITIAL_VALUE, reinterpret_cast<uintptr_t>(viewport)),
-            owner + 0x53484457u);
-        // Update both sets every Draw so moved and animated casters are fresh;
-        // light frusta also retain casters behind the camera.
-        dynamicContainer->UpdateBeforeRendering();
-        staticContainer->UpdateBeforeRendering();
+        // Object slots are now shared across every light AND with the camera
+        // pass, so the per-light salt is gone: one caster means one slot per
+        // frame. Both sets were already refreshed once before the camera walk,
+        // so the per-light UpdateBeforeRendering pair is gone too.
+
+        // This light's slice of the frame-global caster set. The GPU does the
+        // per-tile frustum test; this only narrows to what the light can reach
+        // at all, which is a sphere test rather than a container walk.
+        lightCandidates.clear();
+        const cVector3f lightPosition = light->GetWorldPosition();
+        for (size_t c = 0; c < shadowCasters.size(); ++c) {
+          const ShadowCaster &caster = shadowCasters[c];
+          if (StandardSphereOverlapsAabb(
+                  lightPosition.x, lightPosition.y, lightPosition.z, radius,
+                  caster.boundsMin.x, caster.boundsMin.y, caster.boundsMin.z,
+                  caster.boundsMax.x, caster.boundsMax.y, caster.boundsMax.z)) {
+            lightCandidates.push_back(c);
+          }
+        }
+        if (lightCandidates.size() > kStandardShadowMaxCandidatesPerLight)
+          continue;
+        // A caster that failed to submit is missing from the candidate set. If
+        // it could have lit this light's tiles, the light must not publish a
+        // shadow that silently omits it.
+        bool overlapsFailedCaster = false;
+        for (const auto &bounds : failedCasterBounds) {
+          if (StandardSphereOverlapsAabb(
+                  lightPosition.x, lightPosition.y, lightPosition.z, radius,
+                  bounds.first.x, bounds.first.y, bounds.first.z,
+                  bounds.second.x, bounds.second.y, bounds.second.z)) {
+            overlapsFailedCaster = true;
+            break;
+          }
+        }
+        if (overlapsFailedCaster || shadowGatherOverflow)
+          continue;
+
+        // One candidate range per LIGHT, not per tile. Every tile of a light
+        // tests the same caster list -- the six faces of a point light differ
+        // only in their frustum -- and StandardCullTile carries its own
+        // candidateBase, so the faces share one range. Allocating per face took
+        // six times the candidate ring for a point light, which is what made
+        // lights fail to publish a shadow once the ring ran dry.
+        RISegmentReq candidateReq = {};
+        const uint32_t candidateCount =
+            static_cast<uint32_t>(lightCandidates.size());
+        if (candidateCount > 0) {
+          if (!m_shadowCandidateSegment.request(mpGraphics->frameIndex,
+                                                candidateCount, &candidateReq))
+            continue;
+          auto *candidateSlots = reinterpret_cast<StandardCullCandidate *>(
+              static_cast<uint8_t *>(m_shadowCandidateBuffer.mappedAddress) +
+              candidateReq.elementOffset * sizeof(StandardCullCandidate));
+          for (uint32_t c = 0; c < candidateCount; ++c) {
+            const ShadowCaster &caster = shadowCasters[lightCandidates[c]];
+            StandardCullCandidate record{};
+            record.aabbMinX = caster.boundsMin.x;
+            record.aabbMinY = caster.boundsMin.y;
+            record.aabbMinZ = caster.boundsMin.z;
+            record.aabbMaxX = caster.boundsMax.x;
+            record.aabbMaxY = caster.boundsMax.y;
+            record.aabbMaxZ = caster.boundsMax.z;
+            record.objectSlot = caster.slot;
+            record.vertexCount = caster.vertexCount;
+            record.renderFlags = caster.renderFlags;
+            candidateSlots[c] = record;
+          }
+        }
+
         PreparedLight entry{light, placements[first].size, {}};
         bool anyCaster = false;
         for (size_t i = first; i < end && !lightFailed; ++i) {
@@ -2026,98 +2545,84 @@ void cStandardRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
           tile.record.size = placement.size;
           tile.record.bias = depthBias;
           tile.record.clampToTile = selected.point ? 1u : 0u;
+          // PCSS: this tile's own frustum, so the filter can linearize the
+          // depths it reads, plus the emitter size that sets how fast the
+          // penumbra opens. Both light types get the same treatment -- a spot
+          // and a point at the same distance from the same occluder should
+          // soften identically.
+          tile.record.nearPlane = nearClip;
+          tile.record.farPlane = radius;
+          tile.record.tanHalfFov = std::tan(fov * 0.5f);
+          tile.record.lightSize = kStandardShadowLightSize;
 
           // A cube face whose frustum misses the camera has no visible
-          // receiver: its cleared (fully lit) tile needs no casters.
+          // receiver: its cleared (fully lit) tile needs no casters. Six cheap
+          // frustum-frustum tests per point light, so this stays on the host.
           const bool faceVisible =
               !selected.point ||
               apFrustum->CollideFrustum(&tileFrustum) != eCollision_Outside;
-          std::vector<iRenderable *> casters;
-          if (faceVisible) {
-            auto addCaster = [&](iRenderable *o) {
-              cMaterial *mat = o ? o->GetMaterial() : nullptr;
-              const bool variability =
-                  o && ((o->IsStatic() &&
-                         (variabilityMask & eObjectVariabilityFlag_Static)) ||
-                        (!o->IsStatic() &&
-                         (variabilityMask & eObjectVariabilityFlag_Dynamic)));
-              if (o && o->GetVertexBuffer() && mat && variability &&
-                  !cMaterial::IsTranslucent(mat->GetMaterialID()))
-                casters.push_back(o);
-            };
-            rendering::WalkAndPrepareRenderList(dynamicContainer, &tileFrustum,
-                                                addCaster,
-                                                eRenderableFlag_ShadowCaster);
-            rendering::WalkAndPrepareRenderList(staticContainer, &tileFrustum,
-                                                addCaster,
-                                                eRenderableFlag_ShadowCaster);
-          }
-          if (casters.size() > kObjectSlotCapacity) {
-            lightFailed = true;
-            break;
-          }
-          if (!casters.empty()) {
-            RISegmentReq shadowReq = {};
-            if (!m_shadowIndirectSegment.request(mpGraphics->frameIndex,
-                                                 casters.size(), &shadowReq)) {
+
+          if (faceVisible && candidateCount > 0) {
+            // Reserve the worst case: every candidate this light can see. The
+            // survivor count is only known on the GPU, so the reservation has
+            // to be an upper bound -- which also makes overrunning it
+            // impossible, replacing the old post-hoc caster-count check with an
+            // invariant.
+            RISegmentReq indirectReq = {};
+            RISegmentReq countReq = {};
+            const uint32_t groupCount =
+                (candidateCount + kStandardCullGroupSize - 1u) /
+                kStandardCullGroupSize;
+            // Tiles and groups are only staged here, so the capacity they will
+            // be published into has to be checked by hand; the indirect and
+            // count ranges are per tile and absolute, so those may wrap freely.
+            if (cullTiles.size() + 1u > kStandardShadowMaxTiles ||
+                cullGroups.size() + groupCount > kStandardShadowMaxCullGroups ||
+                !m_shadowIndirectSegment.request(mpGraphics->frameIndex,
+                                                 candidateCount, &indirectReq) ||
+                !m_shadowDrawCountSegment.request(mpGraphics->frameIndex, 1,
+                                                  &countReq)) {
               lightFailed = true;
               break;
             }
-            auto *shadowIndirect = reinterpret_cast<VkDrawIndirectCommand *>(
-                static_cast<uint8_t *>(m_shadowIndirectBuffer.mappedAddress) +
-                shadowReq.elementOffset * sizeof(VkDrawIndirectCommand));
-            uint32_t shadowDrawCount = 0;
-            for (iRenderable *o : casters) {
-              cVertexBuffer *vb =
-                  static_cast<cVertexBuffer *>(o->GetVertexBuffer());
-              cMaterial *mat = o->GetMaterial();
-              // The camera list does not include casters behind that camera.
-              // Upload here as well so fresh/animated shadow-only geometry exists.
-              vb->SubmitToGPU(&mpGraphics->blasSubmit.cmds[0],
-                              &mpGraphics->device, cntx);
-              const uint32_t materialId =
-                  mpGraphics->globalset
-                      ->submitMaterial(
-                          cntx, mat,
-                          static_cast<uint32_t>(mpGraphics->frameIndex))
-                      .materialId;
-              if (materialId == UINT32_MAX) {
-                lightFailed = true;
-                break;
-              }
-              ObjectSubmitDesc object;
-              object.modelMatrix = o->GetModelMatrix(&tileFrustum);
-              object.uvMatrix = mat->GetUvMatrix();
-              object.materialId = materialId;
-              object.dissolveAmount = o->GetCoverageAmount();
-              object.illuminationAmount = o->GetIlluminationAmount();
-              object.renderFlags =
-                  o->GetRenderFlags() | (o->IsStatic() ? 0x80000000u : 0u);
-              const hash_t cookie =
-                  hash_u32(hash_u64(HASH_INITIAL_VALUE, o->GetUniqueCookie()),
-                           lightSalt);
-              const uint32_t slot = mpGraphics->globalset->submitObject(
-                  cookie, static_cast<uint32_t>(mpGraphics->frameIndex), vb,
-                  object, kSubmitData | kSubmitVertex | kSubmitIndex);
-              if (slot == UINT32_MAX) {
-                lightFailed = true;
-                break;
-              }
-              const uint32_t vertexCount =
-                  vb->GetIndexNum() > 0
-                      ? static_cast<uint32_t>(vb->GetIndexNum())
-                      : static_cast<uint32_t>(vb->GetVertexNum());
-              shadowIndirect[shadowDrawCount++] = {vertexCount, 1, 0, slot};
+
+            StandardCullTile cullTile{};
+            // Extract from the row-major cMatrixf, NOT from
+            // tile.raster.viewProjection: that field holds the transposed dump
+            // the raster push-constants want, and feeding it here would produce
+            // plausible-looking but wrong planes. cMatrixf::v aliases m[row][col],
+            // which is the layout StandardExtractFrustumPlanes expects and the
+            // one its MathLib equivalence test is written against.
+            //
+            // The cube-face widening is already baked into vp, so the extracted
+            // planes inherit it with no special case.
+            StandardExtractFrustumPlanes(vp.v, cullTile.planes);
+            cullTile.planeCount = 6u;
+            cullTile.candidateBase =
+                static_cast<uint32_t>(candidateReq.elementOffset);
+            cullTile.candidateCount = candidateCount;
+            cullTile.indirectBase =
+                static_cast<uint32_t>(indirectReq.elementOffset);
+            cullTile.countIndex = static_cast<uint32_t>(countReq.elementOffset);
+            cullTile.variabilityMask = variabilityMask;
+            // Shadow tiles frustum-test only. Leaving this zero would aim the
+            // occlusion test at camera record 0.
+            cullTile.cameraIndex = kStandardCullNoCamera;
+
+            const uint32_t stagedTile = static_cast<uint32_t>(cullTiles.size());
+            cullTiles.push_back(cullTile);
+            for (uint32_t g = 0; g < groupCount; ++g) {
+              StandardCullGroup group{};
+              group.tileIndex = stagedTile; // patched to absolute on publish
+              group.candidateOffset = g * kStandardCullGroupSize;
+              cullGroups.push_back(group);
             }
-            // Do not publish a tile with silently omitted casters when shared
-            // material/object capacity is exhausted.
-            if (lightFailed || shadowDrawCount != casters.size()) {
-              lightFailed = true;
-              break;
-            }
+
             tile.raster.indirectOffset =
-                shadowReq.elementOffset * sizeof(VkDrawIndirectCommand);
-            tile.raster.drawCount = shadowDrawCount;
+                indirectReq.elementOffset * sizeof(VkDrawIndirectCommand);
+            tile.raster.drawCountOffset =
+                countReq.elementOffset * sizeof(uint32_t);
+            tile.raster.maxDrawCount = candidateCount;
             anyCaster = true;
           }
           entry.tiles.push_back(tile);
@@ -2127,6 +2632,69 @@ void cStandardRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
           prepared.push_back(std::move(entry));
       }
       mpGraphics->globalset->flushMirrors(&mpGraphics->device);
+
+      // Publish the staged tiles and groups as one contiguous range each, and
+      // patch every group's staging-relative tileIndex into the absolute
+      // element index the kernel indexes gShadowCullTiles with.
+      uint32_t cullTileBase = 0;
+      uint32_t cullGroupBase = 0;
+      bool cullRangesValid = cullTiles.empty();
+      if (!cullTiles.empty()) {
+        RISegmentReq tileReq = {};
+        RISegmentReq groupReq = {};
+        if (m_shadowCullTileSegment.request(mpGraphics->frameIndex,
+                                            cullTiles.size(), &tileReq) &&
+            m_shadowCullGroupSegment.request(mpGraphics->frameIndex,
+                                             cullGroups.size(), &groupReq)) {
+          cullTileBase = static_cast<uint32_t>(tileReq.elementOffset);
+          cullGroupBase = static_cast<uint32_t>(groupReq.elementOffset);
+          auto *tileSlots = reinterpret_cast<StandardCullTile *>(
+              static_cast<uint8_t *>(m_shadowCullTileBuffer.mappedAddress) +
+              tileReq.elementOffset * sizeof(StandardCullTile));
+          std::memcpy(tileSlots, cullTiles.data(),
+                      cullTiles.size() * sizeof(StandardCullTile));
+          auto *groupSlots = reinterpret_cast<StandardCullGroup *>(
+              static_cast<uint8_t *>(m_shadowCullGroupBuffer.mappedAddress) +
+              groupReq.elementOffset * sizeof(StandardCullGroup));
+          for (size_t g = 0; g < cullGroups.size(); ++g) {
+            StandardCullGroup group = cullGroups[g];
+            group.tileIndex += cullTileBase;
+            groupSlots[g] = group;
+          }
+          cullRangesValid = true;
+        }
+      }
+
+      // Cull every tile of every light in two dispatches, then hand the
+      // compacted commands and their counts to the raster below. Must be
+      // recorded on the same command buffer RenderAtlas draws from.
+      bool cullRecorded = false;
+      if (!prepared.empty() && cullRangesValid && m_shadowCull &&
+          m_shadowCull->IsLoaded()) {
+        cStandardShadowCullPass::Buffers cullBuffers{};
+        cullBuffers.candidates = &m_shadowCandidateBuffer;
+        cullBuffers.tiles = &m_shadowCullTileBuffer;
+        cullBuffers.groups = &m_shadowCullGroupBuffer;
+        cullBuffers.indirect = &m_shadowIndirectBuffer;
+        cullBuffers.drawCounts = &m_shadowDrawCountBuffer;
+        cullBuffers.candidateCapacity = kStandardShadowMaxCandidates;
+        cullBuffers.indirectCapacity = kObjectSlotCapacity;
+        cullBuffers.tileCapacity = kStandardShadowMaxTiles;
+        cullBuffers.groupCapacity = kStandardShadowMaxCullGroups;
+        cullBuffers.drawCountCapacity = kStandardShadowMaxTiles;
+        cullBuffers.cameras = &m_cullCameraBuffer;
+        cullBuffers.cameraCapacity = kStandardCullMaxCameras;
+        cullBuffers.visibility = &m_cullVisibilityBuffer;
+        cullBuffers.visibilityCapacity = kStandardCullVisibilityKeys;
+        cullRecorded = m_shadowCull->Dispatch(
+            &mpGraphics->primary.cmds[0], mpGraphics->frameIndex, cullBuffers,
+            cullTileBase, static_cast<uint32_t>(cullTiles.size()),
+            cullGroupBase, static_cast<uint32_t>(cullGroups.size()));
+      }
+      // Without a cull dispatch the indirect range holds stale commands, so
+      // publishing the tiles would draw last frame's casters.
+      if (!cullRecorded)
+        prepared.clear();
 
       // Rasterize every packed page, including pages whose lights all failed,
       // so the array view only spans SHADER_RESOURCE pages.
@@ -2141,7 +2709,10 @@ void cStandardRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
         pagesRendered = m_shadow->RenderAtlas(
             cntx, &mpGraphics->primary.cmds[0], mpGraphics->frameIndex,
             standardShadowTexture.Get(), page, atlasConfig.atlasSize,
-            &m_shadowIndirectBuffer, pageTiles, frameBinding);
+            &m_shadowIndirectBuffer,
+            m_shadowCull->UsesDrawIndirectCount() ? &m_shadowDrawCountBuffer
+                                                  : nullptr,
+            pageTiles, frameBinding);
       }
       if (pagesRendered) {
         for (const PreparedLight &entry : prepared) {
@@ -2357,6 +2928,92 @@ void cStandardRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
   begin.colorCount = packedVisibility ? 3 : 6;
   begin.colors = colors;
   begin.depthStencil = &depth;
+  // Phase 1 of the camera cull: mark the commands that were visible last frame.
+  // Recorded before the scope opens -- a dispatch cannot run inside one.
+  bool cameraCullDispatched = false;
+  uint32_t cameraCommandWordDelta = 0;
+  RISegmentReq cameraTileReq = {};
+  RISegmentReq cameraReq = {};
+  RISegmentReq cameraGroupReq = {};
+  cStandardShadowCullPass::Buffers cameraCullBuffers{};
+  if (cameraCullReady && drawCount > 0) {
+    const uint32_t groupCount =
+        (drawCount + kStandardCullGroupSize - 1u) / kStandardCullGroupSize;
+    if (m_shadowCullTileSegment.request(mpGraphics->frameIndex, 1,
+                                        &cameraTileReq) &&
+        m_cullCameraSegment.request(mpGraphics->frameIndex, 1, &cameraReq) &&
+        m_shadowCullGroupSegment.request(mpGraphics->frameIndex, groupCount,
+                                         &cameraGroupReq)) {
+      // Row-major, as StandardExtractFrustumPlanes and standardCullProjectAabb
+      // both read it -- not the transposed dump the shaders take.
+      const cMatrixf viewProjection = cMath::MatrixMul(
+          apFrustum->GetProjectionMatrix(), apFrustum->GetViewMatrix());
+
+      auto *cameraSlot = reinterpret_cast<StandardCullCamera *>(
+          static_cast<uint8_t *>(m_cullCameraBuffer.mappedAddress) +
+          cameraReq.elementOffset * sizeof(StandardCullCamera));
+      StandardCullCamera camera{};
+      std::memcpy(camera.viewProjection, viewProjection.v,
+                  sizeof(camera.viewProjection));
+      camera.hiZWidth = state->hiZ.width;
+      camera.hiZHeight = state->hiZ.height;
+      camera.hiZMipCount = state->hiZ.mipCount;
+      *cameraSlot = camera;
+
+      auto *tileSlot = reinterpret_cast<StandardCullTile *>(
+          static_cast<uint8_t *>(m_shadowCullTileBuffer.mappedAddress) +
+          cameraTileReq.elementOffset * sizeof(StandardCullTile));
+      StandardCullTile tile{};
+      StandardExtractFrustumPlanes(viewProjection.v, tile.planes);
+      tile.planeCount = 6u;
+      tile.variabilityMask =
+          kStandardCullVariabilityStatic | kStandardCullVariabilityDynamic;
+      tile.candidateBase =
+          static_cast<uint32_t>(cameraCandidateReq.elementOffset);
+      tile.candidateCount = drawCount;
+      tile.cameraIndex = static_cast<uint32_t>(cameraReq.elementOffset);
+      *tileSlot = tile;
+
+      auto *groupSlots = reinterpret_cast<StandardCullGroup *>(
+          static_cast<uint8_t *>(m_shadowCullGroupBuffer.mappedAddress) +
+          cameraGroupReq.elementOffset * sizeof(StandardCullGroup));
+      for (uint32_t group = 0; group < groupCount; ++group) {
+        groupSlots[group].tileIndex =
+            static_cast<uint32_t>(cameraTileReq.elementOffset);
+        groupSlots[group].candidateOffset = group * kStandardCullGroupSize;
+      }
+
+      cameraCullBuffers.candidates = &m_cameraCandidateBuffer;
+      cameraCullBuffers.tiles = &m_shadowCullTileBuffer;
+      cameraCullBuffers.groups = &m_shadowCullGroupBuffer;
+      cameraCullBuffers.indirect = &m_indirectDrawBuffer;
+      cameraCullBuffers.drawCounts = &m_shadowDrawCountBuffer;
+      cameraCullBuffers.cameras = &m_cullCameraBuffer;
+      cameraCullBuffers.visibility = &m_cullVisibilityBuffer;
+      cameraCullBuffers.hiZ = state->hiZ.sampleView[index].Get();
+      cameraCullBuffers.candidateCapacity = kStandardCameraMaxDraws;
+      cameraCullBuffers.indirectCapacity = kObjectSlotCapacity;
+      cameraCullBuffers.indirectWordCapacity =
+          kObjectSlotCapacity * (sizeof(VkDrawIndirectCommand) / sizeof(uint32_t));
+      cameraCullBuffers.tileCapacity = kStandardShadowMaxTiles;
+      cameraCullBuffers.groupCapacity = kStandardShadowMaxCullGroups;
+      cameraCullBuffers.drawCountCapacity = kStandardShadowMaxTiles;
+      cameraCullBuffers.cameraCapacity = kStandardCullMaxCameras;
+      cameraCullBuffers.visibilityCapacity = kStandardCullVisibilityKeys;
+      // Words from a candidate's phase-1 command to its phase-2 one. Both
+      // ranges live in the same ring, so this is just their element distance.
+      cameraCommandWordDelta = static_cast<uint32_t>(
+          (phaseTwoReq.elementOffset - req.elementOffset) *
+          (sizeof(VkDrawIndirectCommand) / sizeof(uint32_t)));
+
+      cameraCullDispatched = m_shadowCull->Dispatch(
+          &mpGraphics->primary.cmds[0], mpGraphics->frameIndex,
+          cameraCullBuffers, static_cast<uint32_t>(cameraTileReq.elementOffset),
+          1, static_cast<uint32_t>(cameraGroupReq.elementOffset), groupCount,
+          kStandardCullModeVisibilityReplay);
+    }
+  }
+
   mpGraphics->primary.cmds[0].vk_d3d12_beginRendering(&mpGraphics->device,
                                                       begin);
 
@@ -2409,6 +3066,95 @@ void cStandardRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
   }
 
   mpGraphics->primary.cmds[0].vk_d3d12_endRendering(&mpGraphics->device);
+
+  // ---------------------------------------------------------------------
+  // Phase 2 of the camera cull.
+  //
+  // What phase 1 just drew is a superset of last frame's visible set, which is
+  // enough to build a pyramid from. Test every candidate against it, draw the
+  // ones that are visible now but were not drawn above, and record the answer
+  // for next frame's phase 1.
+  //
+  // The scope has to close and reopen around this: the pyramid build and the
+  // cull are compute dispatches, and neither can run inside a render pass. The
+  // second scope loads every attachment instead of clearing, so phase 1's
+  // output survives.
+  // ---------------------------------------------------------------------
+  if (cameraCullDispatched) {
+    RICmd *cameraCmd = &mpGraphics->primary.cmds[0];
+    cameraCmd->vk_d3d12_textureBarrier(RITextureBarrier(
+        state->depthTextures[index].Get(), RI_RESOURCE_STATE_DEPTH_WRITE,
+        RI_RESOURCE_STATE_SHADER_RESOURCE, RI_STAGE_FRAGMENT, RI_STAGE_COMPUTE,
+        RI_BARRIER_ASPECT_DEPTH));
+    const bool built =
+        m_hiZ->Build(cameraCmd, mpGraphics->frameIndex, state->hiZ, index,
+                     state->width, state->height,
+                     state->depthSampleView[index].Get());
+    cameraCmd->vk_d3d12_textureBarrier(RITextureBarrier(
+        state->depthTextures[index].Get(), RI_RESOURCE_STATE_SHADER_RESOURCE,
+        RI_RESOURCE_STATE_DEPTH_WRITE, RI_STAGE_COMPUTE, RI_STAGE_FRAGMENT,
+        RI_BARRIER_ASPECT_DEPTH));
+
+    const uint32_t groupCount =
+        (drawCount + kStandardCullGroupSize - 1u) / kStandardCullGroupSize;
+    const bool culled =
+        built &&
+        m_shadowCull->Dispatch(
+            cameraCmd, mpGraphics->frameIndex, cameraCullBuffers,
+            static_cast<uint32_t>(cameraTileReq.elementOffset), 1,
+            static_cast<uint32_t>(cameraGroupReq.elementOffset), groupCount,
+            kStandardCullModeVisibilityUpdate, cameraCommandWordDelta);
+
+    if (culled) {
+      for (uint32_t i = 0; i < begin.colorCount; ++i) {
+        colors[i].loadOp = RI_ATTACHMENT_LOAD_OP_LOAD;
+        colors[i].storeOp = RI_ATTACHMENT_STORE_OP_STORE;
+      }
+      depth.loadOp = RI_ATTACHMENT_LOAD_OP_LOAD;
+      cameraCmd->vk_d3d12_beginRendering(&mpGraphics->device, begin);
+      if (packedVisibility) {
+        GBufferMRTPipelineDesc pd(
+            cGraphics::VisibilityFormat, cGraphics::PogoColorFormat,
+            cGraphics::VelocityFormat, cGraphics::DepthFormat);
+        m_visibility->bindPipeline(&mpGraphics->device, cameraCmd, pd.hash,
+                                   "Standard.visibility", &pd.createInfo);
+        m_visibility->bindBindlessDescriptorSet(
+            cameraCmd, &mpGraphics->globalset->m_bindlessSet, 0);
+      } else {
+        StandardReconstructPipelineDesc pd(
+            cGraphics::PogoColorFormat, RI_FORMAT_RGBA32_SFLOAT,
+            RI_FORMAT_RGBA32_SFLOAT, RI_FORMAT_RGBA32_SFLOAT,
+            cGraphics::VisibilityFormat, cGraphics::DepthFormat, true,
+            /*writesVelocity=*/true);
+        m_fallback->bindPipeline(&mpGraphics->device, cameraCmd, pd.hash,
+                                 "Standard.fallback", &pd.create);
+        m_fallback->bindBindlessDescriptorSet(
+            cameraCmd, &mpGraphics->globalset->m_bindlessSet, 0);
+      }
+      (packedVisibility ? m_visibility : m_fallback)
+          ->bindDescriptors(&mpGraphics->device, cameraCmd,
+                            mpGraphics->frameIndex, &frameBinding, 1);
+      RIViewport vp;
+      vp.x = 0;
+      vp.y = float(state->height);
+      vp.width = float(state->width);
+      vp.height = -float(state->height);
+      vp.depthMin = 0;
+      vp.depthMax = 1;
+      RIRect sc;
+      sc.x = 0;
+      sc.y = 0;
+      sc.width = int16_t(state->width);
+      sc.height = int16_t(state->height);
+      cameraCmd->setViewport(&mpGraphics->device, vp);
+      cameraCmd->setScissor(&mpGraphics->device, sc);
+      cameraCmd->drawIndirect(
+          &mpGraphics->device, &m_indirectDrawBuffer,
+          phaseTwoReq.elementOffset * sizeof(VkDrawIndirectCommand), drawCount,
+          sizeof(VkDrawIndirectCommand));
+      cameraCmd->vk_d3d12_endRendering(&mpGraphics->device);
+    }
+  }
   if (!packedVisibility) {
     mpGraphics->primary.cmds[0].vk_d3d12_textureBarrier(
         RI_PogoShaderBarrier(state->materialColorTexture[index].Get(), false));
@@ -3072,11 +3818,110 @@ void cStandardRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
     auto drawOrdinary = [&](std::span<iRenderable *> segment) {
       if (segment.empty() || !translucentReady)
         return;
+
+      // Reserve the worst case for this run: two commands per renderable, the
+      // base draw plus the cube-map reflection draw. Only the pass knows how
+      // many each item really needs, and it is the pass that fills the slots.
+      // One request per ring, never one per item: RISegmentAlloc restarts at 0
+      // when a request does not fit the tail, so per-item requests could split
+      // a run across the wrap and the tile's candidateBase could not describe
+      // it.
+      cStandardTranslucentPass::OcclusionCull cull{};
+      const uint32_t worstCase = static_cast<uint32_t>(segment.size()) * 2u;
+      const uint32_t worstCaseGroups =
+          (worstCase + kStandardCullGroupSize - 1u) / kStandardCullGroupSize;
+      RISegmentReq candidateReq = {};
+      RISegmentReq commandReq = {};
+      RISegmentReq tileReq = {};
+      RISegmentReq cameraReq = {};
+      RISegmentReq groupReq = {};
+      const bool reserved =
+          m_hiZ && m_hiZLoaded && m_shadowCull && m_shadowCull->IsLoaded() &&
+          state->hiZ.IsUsable(index) &&
+          worstCase > 0 && worstCase <= kStandardTranslucentMaxDraws &&
+          m_translucentCandidateSegment.request(mpGraphics->frameIndex,
+                                                worstCase, &candidateReq) &&
+          m_translucentCommandSegment.request(mpGraphics->frameIndex, worstCase,
+                                              &commandReq) &&
+          m_shadowCullTileSegment.request(mpGraphics->frameIndex, 1, &tileReq) &&
+          m_cullCameraSegment.request(mpGraphics->frameIndex, 1, &cameraReq) &&
+          m_shadowCullGroupSegment.request(mpGraphics->frameIndex,
+                                           worstCaseGroups, &groupReq);
+      if (reserved) {
+        // Row-major, the order StandardExtractFrustumPlanes and
+        // standardCullProjectAabb both read. NOT the transposed dump
+        // cFrustum::GetViewProjectionMat returns for the shaders.
+        const cMatrixf viewProjection = cMath::MatrixMul(
+            apFrustum->GetProjectionMatrix(), apFrustum->GetViewMatrix());
+
+        auto *cameraSlot = reinterpret_cast<StandardCullCamera *>(
+            static_cast<uint8_t *>(m_cullCameraBuffer.mappedAddress) +
+            cameraReq.elementOffset * sizeof(StandardCullCamera));
+        StandardCullCamera camera{};
+        std::memcpy(camera.viewProjection, viewProjection.v,
+                    sizeof(camera.viewProjection));
+        camera.hiZWidth = state->hiZ.width;
+        camera.hiZHeight = state->hiZ.height;
+        camera.hiZMipCount = state->hiZ.mipCount;
+        *cameraSlot = camera;
+
+        auto *tileSlot = reinterpret_cast<StandardCullTile *>(
+            static_cast<uint8_t *>(m_shadowCullTileBuffer.mappedAddress) +
+            tileReq.elementOffset * sizeof(StandardCullTile));
+        StandardCullTile tile{};
+        StandardExtractFrustumPlanes(viewProjection.v, tile.planes);
+        tile.planeCount = 6u;
+        // A camera tile keeps everything the frustum keeps; the variability
+        // gate exists for lights, which choose which casters they accept.
+        tile.variabilityMask =
+            kStandardCullVariabilityStatic | kStandardCullVariabilityDynamic;
+        tile.cameraIndex = static_cast<uint32_t>(cameraReq.elementOffset);
+        *tileSlot = tile;
+
+        cull.pass = m_shadowCull.get();
+        cull.buffers.candidates = &m_translucentCandidateBuffer;
+        cull.buffers.tiles = &m_shadowCullTileBuffer;
+        cull.buffers.groups = &m_shadowCullGroupBuffer;
+        cull.buffers.indirect = &m_translucentCommandBuffer;
+        cull.buffers.drawCounts = &m_shadowDrawCountBuffer;
+        cull.buffers.cameras = &m_cullCameraBuffer;
+        cull.buffers.hiZ = state->hiZ.sampleView[index].Get();
+        cull.buffers.candidateCapacity = kStandardTranslucentMaxDraws;
+        cull.buffers.indirectCapacity = kStandardTranslucentMaxDraws;
+        cull.buffers.indirectWordCapacity =
+            kStandardTranslucentMaxDraws *
+            (sizeof(VkDrawIndexedIndirectCommand) / sizeof(uint32_t));
+        cull.buffers.tileCapacity = kStandardShadowMaxTiles;
+        cull.buffers.groupCapacity = kStandardShadowMaxCullGroups;
+        cull.buffers.drawCountCapacity = kStandardShadowMaxTiles;
+        cull.buffers.cameraCapacity = kStandardCullMaxCameras;
+        cull.buffers.visibility = &m_cullVisibilityBuffer;
+        cull.buffers.visibilityCapacity = kStandardCullVisibilityKeys;
+        cull.candidateBase = static_cast<uint32_t>(candidateReq.elementOffset);
+        cull.commandBase = static_cast<uint32_t>(commandReq.elementOffset);
+        cull.capacity = worstCase;
+        cull.tileBase = static_cast<uint32_t>(tileReq.elementOffset);
+        cull.groupBase = static_cast<uint32_t>(groupReq.elementOffset);
+        cull.groupCapacity = worstCaseGroups;
+        cull.candidateSlots =
+            reinterpret_cast<StandardCullCandidate *>(
+                static_cast<uint8_t *>(
+                    m_translucentCandidateBuffer.mappedAddress) +
+                candidateReq.elementOffset * sizeof(StandardCullCandidate));
+        cull.commandWords = reinterpret_cast<uint32_t *>(
+            m_translucentCommandBuffer.mappedAddress);
+        cull.tileSlot = tileSlot;
+        cull.groupSlots = reinterpret_cast<StandardCullGroup *>(
+            static_cast<uint8_t *>(m_shadowCullGroupBuffer.mappedAddress) +
+            groupReq.elementOffset * sizeof(StandardCullGroup));
+      }
+
       m_translucent->Draw(cntx, state, index, segment, apFrustum, apWorld,
                           &frameBinding,
                           fogBindings.empty() ? nullptr : &fogBindings.front(),
                           standardShadowView.Get(), &pointLights, &spotLights,
-                          pointLightCount, spotLightCount);
+                          pointLightCount, spotLightCount,
+                          reserved ? &cull : nullptr);
     };
     // Billboard and beam streams are copied into this frame's scratch ring,
     // keeping every viewport independent.
@@ -3154,6 +3999,20 @@ void cStandardRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
       else
         drawOrdinary(segment);
     };
+
+    // Depth pyramid for the camera occlusion cull. Built here, after the
+    // opaque pass has finished writing depth and before anything translucent
+    // is recorded, so the pyramid the cull tests against is THIS frame's final
+    // opaque depth -- exact, with none of the temporal error a two-phase
+    // opaque cull has to carry.
+    //
+    // Depth is in SHADER_RESOURCE at this point (the barrier above leaves it
+    // there), which is what the build reads it as.
+    if (m_hiZ && m_hiZLoaded && !state->depthSampleView[index].isEmpty()) {
+      m_hiZ->Build(&mpGraphics->primary.cmds[0], mpGraphics->frameIndex,
+                   state->hiZ, index, state->width, state->height,
+                   state->depthSampleView[index].Get());
+    }
 
     auto translucent =
         m_rendererList.GetRenderableItems(eRenderListType_Translucent);

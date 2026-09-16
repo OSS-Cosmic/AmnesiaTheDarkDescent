@@ -141,5 +141,7 @@ exec "$RUNTIME" run --rm "${TTY_ARGS[@]}" "${USER_ARGS[@]}" \
         # Premake postbuild only runs when the target relinks, so a Python-only
         # edit would otherwise leave these tests untested. They need no game
         # install, GPU, or display.
+        echo "==> Running python tests"
+        python3 scripts/run_python_tests.py
         echo "==> Build complete: build-premake/amnesia/"
     ' premake-build "${EXTRA_ARGS[@]}"

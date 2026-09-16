@@ -63,6 +63,26 @@ namespace hpl {
 		inline std::span<iRenderable* const> GetObjects() const { return mvObjects; }
 		inline std::span<const cAabb> GetAabbs() const { return mvAabbs; }
 
+		/**
+		 * Linear scan for objects whose world AABB overlaps a box.
+		 *
+		 * Used by the shadow cull to gather, once per frame, every caster that
+		 * could reach any shadow-casting light -- replacing the per-tile
+		 * QueryFrustum walks the renderer used to run (two per tile, so ~100
+		 * full scans a frame for a dozen lights).
+		 */
+		template<typename F>
+		void QueryAabb(const cVector3f &avMin, const cVector3f &avMax, F &&handler) const {
+			for(size_t i=0, n=mvAabbs.size(); i<n; ++i)
+			{
+				const cAabb &aabb = mvAabbs[i];
+				if(aabb.mvMin.x > avMax.x || aabb.mvMax.x < avMin.x) continue;
+				if(aabb.mvMin.y > avMax.y || aabb.mvMax.y < avMin.y) continue;
+				if(aabb.mvMin.z > avMax.z || aabb.mvMax.z < avMin.z) continue;
+				handler(mvObjects[i]);
+			}
+		}
+
 		template<typename F>
 		void QueryFrustum(const ml::cFrustum &aFrustum, uint32_t alPlanes, F &&handler) const {
 			for(size_t i=0, n=mvAabbs.size(); i<n; ++i)

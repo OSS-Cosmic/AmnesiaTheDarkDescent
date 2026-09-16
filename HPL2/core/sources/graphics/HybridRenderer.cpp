@@ -45,6 +45,36 @@
 
 namespace hpl {
 
+// Ring capacities for the translucent occlusion cull. A family that needs more
+// draws than kHybridCullMaxDraws falls back to direct draws for that family
+// rather than culling part of its list.
+static constexpr uint32_t kHybridCullMaxDraws = 4096;
+// Opaque two-phase camera cull. Its candidates get their own ring: the
+// translucent families cap at kHybridCullMaxDraws, but the opaque set is
+// whatever the frustum keeps and is addressed through the much larger
+// m_indirectDrawBuffer, so it must not inherit the translucent ceiling.
+static constexpr uint32_t kHybridCameraMaxDraws = 16384;
+// Persistent visibility slots, hashed from the renderable cookie. A collision
+// makes phase 1 draw something hidden (depth rejects it) or skip something
+// visible (phase 2 draws it): efficiency, never correctness.
+static constexpr uint32_t kHybridCullVisibilityKeys = 65536;
+// One tile per family per frame (water, particles, meshes), times the frames
+// the rings keep in flight, with slack.
+static constexpr uint32_t kHybridCullMaxTiles = 64;
+static constexpr uint32_t kHybridCullMaxCameras = 16;
+// Groups are shared by the translucent families AND the opaque two-phase cull,
+// whose candidate set is the much larger kHybridCameraMaxDraws. Sizing this for
+// the translucent families alone would make the opaque group request fail in
+// any scene past ~8k draws, silently turning the cull off rather than breaking
+// anything -- the kind of limit that never shows up as a bug report.
+static constexpr uint32_t kHybridCullMaxGroups =
+    (kHybridCullMaxDraws + kHybridCameraMaxDraws) / kStandardCullGroupSize +
+    kHybridCullMaxTiles;
+// The command ring is addressed by the kernel as a flat uint[] through
+// gCullIndirectWords, and a slot is five words.
+static constexpr uint32_t kHybridCullCommandWords =
+    static_cast<uint32_t>(sizeof(VkDrawIndexedIndirectCommand) / sizeof(uint32_t));
+
 namespace detail {
 
 static inline bool BindVertexStreams(struct RICmd *cmd, cVertexBuffer *pVB,
@@ -235,7 +265,249 @@ cHybridRenderer::cHybridRenderer(cGraphics *apGraphics, cResources *apResources)
     m_indirectDrawBuffer = detail::CreateBindlessSlotBuffer(
         &mpGraphics->device, indirectDesc.maxElements, sizeof(VkDrawIndirectCommand),
         VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT);
+
+    // --- GPU occlusion cull for the translucent families -----------------
+    //
+    // Host-mapped, not device-local: the host writes each of these linearly
+    // once per Draw and the GPU only reads them, so a staged copy would buy
+    // nothing.
+    const auto makeCullBuffer =
+        [&](RISegmentAlloc<RI_NUMBER_FRAME_SEGMENTS> *segment, uint32_t elements,
+            uint32_t stride, VkBufferUsageFlags usage, const char *debugName) {
+          RISegmentAllocDesc desc = {};
+          desc.numSegments = RI_NUMBER_FRAMES_FLIGHT;
+          desc.elementStride = static_cast<uint16_t>(stride);
+          desc.maxElements = elements;
+          *segment = RISegmentAlloc<RI_NUMBER_FRAME_SEGMENTS>(&desc);
+          return detail::CreateBindlessSlotBuffer(&mpGraphics->device, elements,
+                                                  stride, usage, false,
+                                                  debugName);
+        };
+    m_cullCandidateBuffer =
+        makeCullBuffer(&m_cullCandidateSegment, kHybridCullMaxDraws,
+                       sizeof(StandardCullCandidate),
+                       VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, "HybridRenderer.cullCandidates");
+    // A uniform 5-word slot (the indexed command's size) for indexed and
+    // non-indexed draws alike: every draw is its own drawIndirect with
+    // drawCount 1, so Vulkan never reads the stride and a uniform one keeps
+    // the kernel's word arithmetic trivial.
+    m_cullCommandBuffer = makeCullBuffer(
+        &m_cullCommandSegment, kHybridCullMaxDraws,
+        sizeof(VkDrawIndexedIndirectCommand),
+        VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, "HybridRenderer.cullCommands");
+    m_cullTileBuffer =
+        makeCullBuffer(&m_cullTileSegment, kHybridCullMaxTiles,
+                       sizeof(StandardCullTile), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, "HybridRenderer.cullTiles");
+    m_cullGroupBuffer =
+        makeCullBuffer(&m_cullGroupSegment, kHybridCullMaxGroups,
+                       sizeof(StandardCullGroup), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, "HybridRenderer.cullGroups");
+    m_cullCameraBuffer =
+        makeCullBuffer(&m_cullCameraSegment, kHybridCullMaxCameras,
+                       sizeof(StandardCullCamera), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, "HybridRenderer.cullCameras");
+    m_cullDrawCountBuffer = makeCullBuffer(
+        &m_cullDrawCountSegment, kHybridCullMaxTiles, sizeof(uint32_t),
+        VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, "HybridRenderer.cullDrawCounts");
+    // Persistent across frames -- phase 1 reads what the previous frame's phase
+    // 2 wrote -- so it gets no segment allocator. Host-mapped only so it can be
+    // zeroed: every entry must start "not visible", which makes the first frame
+    // draw everything in phase 2 and nothing in phase 1.
+    m_cullVisibilityBuffer = detail::CreateBindlessSlotBuffer(
+        &mpGraphics->device, kHybridCullVisibilityKeys, sizeof(uint32_t),
+        VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, false,
+        "HybridRenderer.cullVisibility");
+    if (m_cullVisibilityBuffer.mappedAddress)
+      std::memset(m_cullVisibilityBuffer.mappedAddress, 0,
+                  static_cast<size_t>(kHybridCullVisibilityKeys) *
+                      sizeof(uint32_t));
+    m_cameraCandidateBuffer = makeCullBuffer(
+        &m_cameraCandidateSegment, kHybridCameraMaxDraws,
+        sizeof(StandardCullCandidate), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, "HybridRenderer.cameraCullCandidates");
+
+    m_hiZ = std::make_unique<cStandardHiZPass>(mpGraphics, apResources);
+    m_cull = std::make_unique<cStandardShadowCullPass>(mpGraphics, apResources);
+    // Non-fatal: without these the translucent families draw exactly as they
+    // did before, just without occlusion culling.
+    m_cullLoaded = m_hiZ->LoadData() && m_cull->LoadData();
+    if (!m_cullLoaded)
+      Error("Hybrid renderer: HiZ/cull passes failed to load; translucent "
+            "occlusion culling is off this run\n");
   }
+}
+
+bool cHybridRenderer::ReserveCull(uint32_t worstCase,
+                                  const cMatrixf &viewProjection,
+                                  uint32_t cameraIndex, TranslucentCull &out) {
+  out = TranslucentCull{};
+  if (!m_cullLoaded || !m_cull || worstCase == 0 ||
+      worstCase > kHybridCullMaxDraws)
+    return false;
+  // No camera means no pyramid was built this frame, so the only test left
+  // would be the frustum -- and WalkAndPrepareRenderList already frustum-culled
+  // this list on the CPU. Occlusion is the only new information the kernel has,
+  // so without it there is nothing to win and a whole dispatch to lose.
+  if (cameraIndex == kStandardCullNoCamera)
+    return false;
+
+  const uint32_t groupCount =
+      (worstCase + kStandardCullGroupSize - 1u) / kStandardCullGroupSize;
+
+  // One request per ring, never one per draw: RISegmentAlloc restarts at 0 when
+  // a request does not fit the tail, so per-draw requests could split a family
+  // across the wrap and the tile's candidateBase could not describe it.
+  RISegmentReq candidateReq = {};
+  RISegmentReq commandReq = {};
+  RISegmentReq tileReq = {};
+  RISegmentReq groupReq = {};
+  const uint32_t frame = mpGraphics->frameIndex;
+  if (!m_cullCandidateSegment.request(frame, worstCase, &candidateReq) ||
+      !m_cullCommandSegment.request(frame, worstCase, &commandReq) ||
+      !m_cullTileSegment.request(frame, 1, &tileReq) ||
+      !m_cullGroupSegment.request(frame, groupCount, &groupReq))
+    return false;
+  if (!m_cullCandidateBuffer.mappedAddress || !m_cullCommandBuffer.mappedAddress ||
+      !m_cullTileBuffer.mappedAddress || !m_cullGroupBuffer.mappedAddress)
+    return false;
+
+  out.candidateBase = candidateReq.elementOffset;
+  out.commandBase = commandReq.elementOffset;
+  out.tileBase = tileReq.elementOffset;
+  out.groupBase = groupReq.elementOffset;
+  out.capacity = worstCase;
+  out.groupCapacity = groupCount;
+  out.candidates =
+      reinterpret_cast<StandardCullCandidate *>(
+          static_cast<uint8_t *>(m_cullCandidateBuffer.mappedAddress) +
+          static_cast<size_t>(candidateReq.elementOffset) *
+              sizeof(StandardCullCandidate));
+  out.commandWords =
+      reinterpret_cast<uint32_t *>(
+          static_cast<uint8_t *>(m_cullCommandBuffer.mappedAddress) +
+          static_cast<size_t>(commandReq.elementOffset) *
+              sizeof(VkDrawIndexedIndirectCommand));
+  out.tile = reinterpret_cast<StandardCullTile *>(
+      static_cast<uint8_t *>(m_cullTileBuffer.mappedAddress) +
+      static_cast<size_t>(tileReq.elementOffset) * sizeof(StandardCullTile));
+  out.groups = reinterpret_cast<StandardCullGroup *>(
+      static_cast<uint8_t *>(m_cullGroupBuffer.mappedAddress) +
+      static_cast<size_t>(groupReq.elementOffset) * sizeof(StandardCullGroup));
+
+  StandardCullTile tile{};
+  StandardExtractFrustumPlanes(viewProjection.v, tile.planes);
+  tile.planeCount = 6u;
+  // A camera tile keeps everything the frustum keeps; the variability gate
+  // exists for lights, which choose which casters they accept.
+  tile.variabilityMask =
+      kStandardCullVariabilityStatic | kStandardCullVariabilityDynamic;
+  tile.cameraIndex = cameraIndex;
+  // candidateBase/Count are finished in DispatchCull, once the family knows how
+  // many draws it actually produced.
+  *out.tile = tile;
+
+  out.usable = true;
+  return true;
+}
+
+void cHybridRenderer::WriteCullDraw(TranslucentCull &cull, uint32_t slot,
+                                    bool indexed, uint32_t elementCount,
+                                    uint32_t objectSlot,
+                                    const cVector3f &boundsMin,
+                                    const cVector3f &boundsMax, bool isStatic,
+                                    bool neverOcclude) {
+  if (!cull.usable || slot >= cull.capacity)
+    return;
+
+  uint32_t *words = cull.commandWords +
+                    static_cast<size_t>(slot) * kHybridCullCommandWords;
+  if (indexed) {
+    // VkDrawIndexedIndirectCommand
+    words[0] = elementCount;   // indexCount
+    words[1] = 1u;             // instanceCount -- the word the kernel rewrites
+    words[2] = 0u;             // firstIndex
+    words[3] = 0u;             // vertexOffset
+    words[4] = objectSlot;     // firstInstance
+  } else {
+    // VkDrawIndirectCommand, in the first four words of the same 5-word slot.
+    words[0] = elementCount;   // vertexCount
+    words[1] = 1u;             // instanceCount
+    words[2] = 0u;             // firstVertex
+    words[3] = objectSlot;     // firstInstance
+    words[4] = 0u;
+  }
+
+  StandardCullCandidate &candidate = cull.candidates[slot];
+  candidate = StandardCullCandidate{};
+  candidate.aabbMinX = boundsMin.x;
+  candidate.aabbMinY = boundsMin.y;
+  candidate.aabbMinZ = boundsMin.z;
+  candidate.aabbMaxX = boundsMax.x;
+  candidate.aabbMaxY = boundsMax.y;
+  candidate.aabbMaxZ = boundsMax.z;
+  candidate.objectSlot = objectSlot;
+  candidate.vertexCount = elementCount;
+  // The shared predicate gates on the shadow-caster bit and the
+  // static/dynamic variability mask before it reaches the frustum or occlusion
+  // test. Neither gate means anything for a camera tile, so set the bits that
+  // let every candidate through.
+  candidate.renderFlags =
+      kStandardCullShadowCasterBit | (isStatic ? kStandardCullStaticBit : 0u);
+  candidate.cullFlags = neverOcclude ? kStandardCullFlagNeverOcclude : 0u;
+  candidate.commandWordOffset =
+      static_cast<uint32_t>(
+          (static_cast<size_t>(cull.commandBase) + slot) * kHybridCullCommandWords) +
+      1u;  // instanceCount
+
+  if (slot + 1u > cull.commandCount)
+    cull.commandCount = slot + 1u;
+}
+
+bool cHybridRenderer::DispatchCull(RICmd *cmd, TranslucentCull &cull,
+                                   RITextureView *hiZ) {
+  if (!cull.usable || cull.commandCount == 0 || !m_cullLoaded || !m_cull)
+    return false;
+
+  const uint32_t groupCount =
+      (cull.commandCount + kStandardCullGroupSize - 1u) / kStandardCullGroupSize;
+  if (groupCount > cull.groupCapacity)
+    return false;
+
+  cull.tile->candidateBase = cull.candidateBase;
+  cull.tile->candidateCount = cull.commandCount;
+  for (uint32_t group = 0; group < groupCount; ++group) {
+    cull.groups[group].tileIndex = cull.tileBase;
+    cull.groups[group].candidateOffset = group * kStandardCullGroupSize;
+  }
+
+  cStandardShadowCullPass::Buffers buffers{};
+  buffers.candidates = &m_cullCandidateBuffer;
+  buffers.tiles = &m_cullTileBuffer;
+  buffers.groups = &m_cullGroupBuffer;
+  buffers.indirect = &m_cullCommandBuffer;
+  buffers.drawCounts = &m_cullDrawCountBuffer;
+  buffers.cameras = &m_cullCameraBuffer;
+  buffers.visibility = &m_cullVisibilityBuffer;
+  buffers.hiZ = hiZ;
+  buffers.candidateCapacity = kHybridCullMaxDraws;
+  buffers.indirectCapacity = kHybridCullMaxDraws;
+  buffers.indirectWordCapacity = kHybridCullMaxDraws * kHybridCullCommandWords;
+  buffers.tileCapacity = kHybridCullMaxTiles;
+  buffers.groupCapacity = kHybridCullMaxGroups;
+  buffers.drawCountCapacity = kHybridCullMaxTiles;
+  buffers.cameraCapacity = kHybridCullMaxCameras;
+  buffers.visibilityCapacity = kHybridCullVisibilityKeys;
+
+  // Instance-mask: the host already wrote the whole command and only its
+  // instanceCount is the kernel's. Slot order stays the host's back-to-front
+  // sort, which is the whole point for translucency.
+  //
+  // The three families dispatch separately, so a later family's compute writes
+  // land while an earlier family's indirect draws may still be reading the same
+  // buffer. That is safe without an extra barrier only because each family
+  // holds a DISJOINT ring range: RISegmentAlloc hands out non-overlapping
+  // slices, so there is no write-after-read on any word. Dispatch's own closing
+  // barrier covers the write-then-read this family needs.
+  return m_cull->Dispatch(cmd, mpGraphics->frameIndex, buffers, cull.tileBase,
+                          1u, cull.groupBase, groupCount,
+                          kStandardCullModeInstanceMask);
 }
 
 void cViewport::HybridViewportState::Update(cGraphics::FrameContext *cntx,
@@ -301,6 +573,11 @@ void cViewport::HybridViewportState::Update(cGraphics::FrameContext *cntx,
           RITextureView::create(&pGraphics->device, depthTextures[i].Get(), dsv);
       depthSampleView[i] = RISharedPointer<RITextureView>(&pGraphics->device, v);
     }
+
+    // Depth pyramid the translucent occlusion cull tests against. Failure is
+    // not fatal: hiZ.IsUsable() then reports false and the translucent
+    // families draw without culling.
+    hiZ.Create(pGraphics, i, renderW, renderH);
 
     CreateViewportAttachmentTexture(
         &pGraphics->device, renderW, renderH, cGraphics::VisibilityFormat,
@@ -534,6 +811,7 @@ cViewport::HybridViewportState::~HybridViewportState() {
   pGraphics->graphicsDefer.push(nrdMotionVectorsView);
   pGraphics->graphicsDefer.push(reservoirTemporalTexture);
   pGraphics->graphicsDefer.push(reservoirTemporalView);
+  hiZ.Defer(pGraphics);
 }
 
 // Defer our current resources (~HybridViewportState defers each shared handle
@@ -913,6 +1191,36 @@ void cHybridRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
   }
   perFrame.decalCount = apWorld->GetDecalCount();
 
+  // Opaque two-phase cull. Phase 1 replays what was visible last frame so the
+  // pyramid has something to be built from; phase 2 tests everything against
+  // that pyramid and draws whatever phase 1 missed. Both phases draw the SAME
+  // geometry from two ranges of m_indirectDrawBuffer whose instanceCount the
+  // kernel owns, so the host fills both identically and never needs the answer.
+  RISegmentReq opaquePhaseTwoReq = {};
+  RISegmentReq opaqueCandidateReq = {};
+  VkDrawIndirectCommand *opaquePhaseTwoDst = nullptr;
+  StandardCullCandidate *opaqueCandidates = nullptr;
+  const bool opaqueCullReady =
+      indirectOk && indirectDst != nullptr &&
+      m_cullLoaded && m_cull && m_hiZ &&
+      state.hiZ.IsUsable(mpGraphics->swapchainIndex) &&
+      solids.size() <= kHybridCameraMaxDraws &&
+      m_indirectSegment.request(mpGraphics->frameIndex, solids.size(),
+                                &opaquePhaseTwoReq) &&
+      m_cameraCandidateSegment.request(mpGraphics->frameIndex, solids.size(),
+                                       &opaqueCandidateReq) &&
+      m_cameraCandidateBuffer.mappedAddress != nullptr;
+  if (opaqueCullReady) {
+    opaquePhaseTwoDst = reinterpret_cast<VkDrawIndirectCommand *>(
+        static_cast<uint8_t *>(m_indirectDrawBuffer.mappedAddress) +
+        static_cast<size_t>(opaquePhaseTwoReq.elementOffset) *
+            sizeof(VkDrawIndirectCommand));
+    opaqueCandidates = reinterpret_cast<StandardCullCandidate *>(
+        static_cast<uint8_t *>(m_cameraCandidateBuffer.mappedAddress) +
+        static_cast<size_t>(opaqueCandidateReq.elementOffset) *
+            sizeof(StandardCullCandidate));
+  }
+
   for (iRenderable *pObject : solids) {
     cVertexBuffer *pVB = pObject->GetVertexBuffer();
     if (!pVB)
@@ -928,12 +1236,67 @@ void cHybridRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
       continue;
 
     if (writtenDraws < indirectReq.numElements) {
-      indirectDst[writtenDraws++] = VkDrawIndirectCommand{
+      const VkDrawIndirectCommand command{
           /*vertexCount   =*/(uint32_t)pVB->GetIndexNum(),
           /*instanceCount =*/1u,
           /*firstVertex   =*/0u,
           /*firstInstance =*/slot,
       };
+      if (opaqueCullReady) {
+        cBoundingVolume *bounds = pObject->GetBoundingVolume();
+        StandardCullCandidate candidate{};
+        if (bounds) {
+          const cVector3f boundsMin = bounds->GetMin();
+          const cVector3f boundsMax = bounds->GetMax();
+          candidate.aabbMinX = boundsMin.x;
+          candidate.aabbMinY = boundsMin.y;
+          candidate.aabbMinZ = boundsMin.z;
+          candidate.aabbMaxX = boundsMax.x;
+          candidate.aabbMaxY = boundsMax.y;
+          candidate.aabbMaxZ = boundsMax.z;
+        } else {
+          // No bounds means nothing to test against: a box that swallows any
+          // frustum, exempt from occlusion, so exactly one phase draws it. A
+          // zeroed candidate would fail the caster gate and be dropped by both.
+          const float huge = 3.0e38f;
+          candidate.aabbMinX = candidate.aabbMinY = candidate.aabbMinZ = -huge;
+          candidate.aabbMaxX = candidate.aabbMaxY = candidate.aabbMaxZ = huge;
+          candidate.cullFlags = kStandardCullFlagNeverOcclude;
+        }
+        candidate.objectSlot = slot;
+        candidate.vertexCount = command.vertexCount;
+        // The shared predicate gates on the caster bit and the variability mask
+        // before the frustum test; neither means anything for a camera tile, so
+        // the host sets the bits that let every candidate through.
+        candidate.renderFlags =
+            kStandardCullShadowCasterBit |
+            (pObject->IsStatic() ? kStandardCullStaticBit : 0u);
+        // NOT salted per viewport: the table is persistent and shared, so a
+        // renderable should hash to the same slot every frame from every camera.
+        candidate.visibilityKey =
+            static_cast<uint32_t>(
+                hash_u64(HASH_INITIAL_VALUE, pObject->GetUniqueCookie())) %
+            kHybridCullVisibilityKeys;
+        candidate.commandWordOffset =
+            static_cast<uint32_t>(
+                (indirectReq.elementOffset + writtenDraws) *
+                (sizeof(VkDrawIndirectCommand) / sizeof(uint32_t))) +
+            1u;  // instanceCount
+        opaqueCandidates[writtenDraws] = candidate;
+        opaquePhaseTwoDst[writtenDraws] = command;
+      }
+      indirectDst[writtenDraws++] = command;
+    } else {
+      // The ring is sized kObjectSlotCapacity, so this is a far-off cliff --
+      // but when it is hit the object simply never draws, and without a word
+      // here that reads as geometry randomly missing.
+      static bool warnedIndirectFull = false;
+      if (!warnedIndirectFull) {
+        warnedIndirectFull = true;
+        Warning("Hybrid renderer: indirect draw ring full at %u draws; "
+                "geometry beyond this is not drawn\n",
+                writtenDraws);
+      }
     }
   }
 
@@ -1126,6 +1489,108 @@ void cHybridRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
     }
   }
 
+  // Computed unconditionally, and BEFORE any guard: both the opaque cull below
+  // and ReserveCull later extract this frame's frustum planes from it, and an
+  // identity matrix there would hand the kernel six plausible-looking planes
+  // describing the wrong volume. Row-major, the order
+  // StandardExtractFrustumPlanes and standardCullProjectAabb both read -- NOT
+  // the transposed dump the shaders are handed.
+  const cMatrixf cullViewProjection = cMath::MatrixMul(
+      apFrustum->GetProjectionMatrix(), apFrustum->GetViewMatrix());
+
+  // Phase 1 of the opaque cull: mark the commands that were visible last frame.
+  // Recorded before the scope opens -- a dispatch cannot run inside one.
+  bool opaqueCullDispatched = false;
+  uint32_t opaqueCommandWordDelta = 0;
+  RISegmentReq opaqueTileReq = {};
+  RISegmentReq opaqueCameraReq = {};
+  RISegmentReq opaqueGroupReq = {};
+  cStandardShadowCullPass::Buffers opaqueCullBuffers{};
+  if (opaqueCullReady && writtenDraws > 0) {
+    const uint32_t groupCount =
+        (writtenDraws + kStandardCullGroupSize - 1u) / kStandardCullGroupSize;
+    const uint32_t frame = mpGraphics->frameIndex;
+    if (m_cullTileSegment.request(frame, 1, &opaqueTileReq) &&
+        m_cullCameraSegment.request(frame, 1, &opaqueCameraReq) &&
+        m_cullGroupSegment.request(frame, groupCount, &opaqueGroupReq) &&
+        m_cullTileBuffer.mappedAddress && m_cullCameraBuffer.mappedAddress &&
+        m_cullGroupBuffer.mappedAddress) {
+      auto *cameraSlot = reinterpret_cast<StandardCullCamera *>(
+          static_cast<uint8_t *>(m_cullCameraBuffer.mappedAddress) +
+          static_cast<size_t>(opaqueCameraReq.elementOffset) *
+              sizeof(StandardCullCamera));
+      StandardCullCamera camera{};
+      std::memcpy(camera.viewProjection, cullViewProjection.v,
+                  sizeof(camera.viewProjection));
+      camera.hiZWidth = state.hiZ.width;
+      camera.hiZHeight = state.hiZ.height;
+      camera.hiZMipCount = state.hiZ.mipCount;
+      *cameraSlot = camera;
+
+      auto *tileSlot = reinterpret_cast<StandardCullTile *>(
+          static_cast<uint8_t *>(m_cullTileBuffer.mappedAddress) +
+          static_cast<size_t>(opaqueTileReq.elementOffset) *
+              sizeof(StandardCullTile));
+      StandardCullTile tile{};
+      StandardExtractFrustumPlanes(cullViewProjection.v, tile.planes);
+      tile.planeCount = 6u;
+      // A camera tile keeps whatever the frustum keeps; the variability gate
+      // exists for lights, which choose which casters they accept.
+      tile.variabilityMask =
+          kStandardCullVariabilityStatic | kStandardCullVariabilityDynamic;
+      tile.candidateBase =
+          static_cast<uint32_t>(opaqueCandidateReq.elementOffset);
+      tile.candidateCount = writtenDraws;
+      // Set for both dispatches. Phase 1 runs no occlusion test regardless --
+      // the kernel skips it in replay mode -- so this only matters to phase 2.
+      tile.cameraIndex = static_cast<uint32_t>(opaqueCameraReq.elementOffset);
+      *tileSlot = tile;
+
+      auto *groupSlots = reinterpret_cast<StandardCullGroup *>(
+          static_cast<uint8_t *>(m_cullGroupBuffer.mappedAddress) +
+          static_cast<size_t>(opaqueGroupReq.elementOffset) *
+              sizeof(StandardCullGroup));
+      for (uint32_t group = 0; group < groupCount; ++group) {
+        groupSlots[group].tileIndex =
+            static_cast<uint32_t>(opaqueTileReq.elementOffset);
+        groupSlots[group].candidateOffset = group * kStandardCullGroupSize;
+      }
+
+      // The opaque commands live in m_indirectDrawBuffer, not the translucent
+      // families' 5-word ring, so the word capacity follows that buffer.
+      opaqueCullBuffers.candidates = &m_cameraCandidateBuffer;
+      opaqueCullBuffers.tiles = &m_cullTileBuffer;
+      opaqueCullBuffers.groups = &m_cullGroupBuffer;
+      opaqueCullBuffers.indirect = &m_indirectDrawBuffer;
+      opaqueCullBuffers.drawCounts = &m_cullDrawCountBuffer;
+      opaqueCullBuffers.cameras = &m_cullCameraBuffer;
+      opaqueCullBuffers.visibility = &m_cullVisibilityBuffer;
+      opaqueCullBuffers.hiZ = state.hiZ.sampleView[mpGraphics->swapchainIndex].Get();
+      opaqueCullBuffers.candidateCapacity = kHybridCameraMaxDraws;
+      opaqueCullBuffers.indirectCapacity = kObjectSlotCapacity;
+      opaqueCullBuffers.indirectWordCapacity =
+          kObjectSlotCapacity *
+          (sizeof(VkDrawIndirectCommand) / sizeof(uint32_t));
+      opaqueCullBuffers.tileCapacity = kHybridCullMaxTiles;
+      opaqueCullBuffers.groupCapacity = kHybridCullMaxGroups;
+      opaqueCullBuffers.drawCountCapacity = kHybridCullMaxTiles;
+      opaqueCullBuffers.cameraCapacity = kHybridCullMaxCameras;
+      opaqueCullBuffers.visibilityCapacity = kHybridCullVisibilityKeys;
+      // Words from a candidate's phase-1 command to its phase-2 one. Both
+      // ranges live in the same ring, so this is their element distance.
+      opaqueCommandWordDelta = static_cast<uint32_t>(
+          (opaquePhaseTwoReq.elementOffset - indirectReq.elementOffset) *
+          (sizeof(VkDrawIndirectCommand) / sizeof(uint32_t)));
+
+      opaqueCullDispatched = m_cull->Dispatch(
+          &mpGraphics->primary.cmds[0], mpGraphics->frameIndex,
+          opaqueCullBuffers,
+          static_cast<uint32_t>(opaqueTileReq.elementOffset), 1u,
+          static_cast<uint32_t>(opaqueGroupReq.elementOffset), groupCount,
+          kStandardCullModeVisibilityReplay);
+    }
+  }
+
   RIBeginRenderingDesc gbufferBeginDesc = {};
   gbufferBeginDesc.renderArea.width = (int16_t)renderWidth;
   gbufferBeginDesc.renderArea.height = (int16_t)renderHeight;
@@ -1169,6 +1634,86 @@ void cHybridRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
     mpGraphics->primary.cmds[0].vk_d3d12_endRendering(&mpGraphics->device);
   }
 
+  // ---------------------------------------------------------------------
+  // Phase 2 of the opaque cull.
+  //
+  // What phase 1 drew is last frame's visible set, which is enough depth to
+  // build a pyramid from. Test every candidate against it, draw the ones
+  // visible now that phase 1 did not draw, and record the answer for next
+  // frame.
+  //
+  // The scope had to close and reopen around this: the pyramid build and the
+  // cull are compute dispatches and neither can run inside a render pass. The
+  // second scope LOADS every attachment so phase 1's output survives.
+  //
+  // The TLAS is untouched by any of this -- it is whole-scene and built in
+  // cWorld::PrepareFrame -- so RT shadows, GI and reflections still see the
+  // geometry this pass skips.
+  // ---------------------------------------------------------------------
+  if (opaqueCullDispatched) {
+    RICmd *opaqueCmd = &mpGraphics->primary.cmds[0];
+    RIGpuScope _gsPhaseTwo(&mpGraphics->profiler, opaqueCmd, "GBuffer.phase2");
+    opaqueCmd->vk_d3d12_textureBarrier(RITextureBarrier(
+        state.depthTextures[mpGraphics->swapchainIndex].Get(),
+        RI_RESOURCE_STATE_DEPTH_WRITE, RI_RESOURCE_STATE_SHADER_RESOURCE,
+        RI_STAGE_NONE, RI_STAGE_COMPUTE, RI_BARRIER_ASPECT_DEPTH));
+    const bool built =
+        !state.depthSampleView[mpGraphics->swapchainIndex].isEmpty() &&
+        m_hiZ->Build(opaqueCmd, mpGraphics->frameIndex, state.hiZ,
+                     mpGraphics->swapchainIndex, state.width, state.height,
+                     state.depthSampleView[mpGraphics->swapchainIndex].Get());
+    opaqueCmd->vk_d3d12_textureBarrier(RITextureBarrier(
+        state.depthTextures[mpGraphics->swapchainIndex].Get(),
+        RI_RESOURCE_STATE_SHADER_RESOURCE, RI_RESOURCE_STATE_DEPTH_WRITE,
+        RI_STAGE_COMPUTE, RI_STAGE_NONE, RI_BARRIER_ASPECT_DEPTH));
+
+    const uint32_t groupCount =
+        (writtenDraws + kStandardCullGroupSize - 1u) / kStandardCullGroupSize;
+    const bool culled =
+        built && m_cull->Dispatch(
+                     opaqueCmd, mpGraphics->frameIndex, opaqueCullBuffers,
+                     static_cast<uint32_t>(opaqueTileReq.elementOffset), 1u,
+                     static_cast<uint32_t>(opaqueGroupReq.elementOffset),
+                     groupCount, kStandardCullModeVisibilityUpdate,
+                     opaqueCommandWordDelta);
+
+    if (culled) {
+      gbufferColorAttachments[0].loadOp = RI_ATTACHMENT_LOAD_OP_LOAD;
+      gbufferColorAttachments[1].loadOp = RI_ATTACHMENT_LOAD_OP_LOAD;
+      depthAttachment.loadOp = RI_ATTACHMENT_LOAD_OP_LOAD;
+      opaqueCmd->vk_d3d12_beginRendering(&mpGraphics->device, gbufferBeginDesc);
+      RIViewport phaseTwoViewport = {};
+      phaseTwoViewport.x = 0.0f;
+      phaseTwoViewport.y = (float)renderHeight;
+      phaseTwoViewport.width = (float)renderWidth;
+      phaseTwoViewport.height = -(float)renderHeight;
+      phaseTwoViewport.depthMin = 0.0f;
+      phaseTwoViewport.depthMax = 1.0f;
+      RIRect phaseTwoScissor = {};
+      phaseTwoScissor.width = (int16_t)renderWidth;
+      phaseTwoScissor.height = (int16_t)renderHeight;
+      opaqueCmd->setViewport(&mpGraphics->device, phaseTwoViewport);
+      opaqueCmd->setScissor(&mpGraphics->device, phaseTwoScissor);
+
+      GBufferMRTPipelineDesc pipelineDesc(cGraphics::VisibilityFormat,
+                                          cGraphics::VelocityFormat,
+                                          cGraphics::DepthFormat);
+      m_gbuffer.bindPipeline(&mpGraphics->device, opaqueCmd, pipelineDesc.hash,
+                             "VBufferRaster.3d", &pipelineDesc.createInfo);
+      m_gbuffer.bindBindlessDescriptorSet(
+          opaqueCmd, &mpGraphics->globalset->m_bindlessSet, 0);
+      m_gbuffer.bindDescriptors(&mpGraphics->device, opaqueCmd,
+                                mpGraphics->frameIndex, bindings.data(),
+                                bindings.size());
+      opaqueCmd->drawIndirect(&mpGraphics->device, &m_indirectDrawBuffer,
+                              (VkDeviceSize)opaquePhaseTwoReq.elementOffset *
+                                  sizeof(VkDrawIndirectCommand),
+                              writtenDraws,
+                              (uint32_t)sizeof(VkDrawIndirectCommand));
+      opaqueCmd->vk_d3d12_endRendering(&mpGraphics->device);
+    }
+  }
+
   // Gbuffer output -> SHADER_READ_ONLY for the downstream compute
   // passes (and any later fragment consumer). Includes depth, which the
   // gbuffer left in DEPTH_STENCIL_ATTACHMENT_OPTIMAL.
@@ -1204,6 +1749,47 @@ void cHybridRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
                  RI_STAGE_NONE, RI_STAGE_COMPUTE};
 
     mpGraphics->primary.cmds[0].vk_d3d12_textureBarriers<4>(4, toRead);
+  }
+
+  // ----------------------------------------------------------------------
+  // Depth pyramid for the translucent occlusion cull.
+  //
+  // Built here, right after the G-buffer, because this is the cheapest point
+  // at which the depth it needs is final: the G-buffer is the only pass that
+  // writes depth, the barrier above has just put it in SHADER_RESOURCE for
+  // COMPUTE, and every later pass reads depth rather than writing it. Building
+  // it later, next to the translucent passes, would mean undoing
+  // flipDepthToReadOnly() first for no gain.
+  //
+  // Also publishes this frame's camera record: one for all three translucent
+  // families, since they share the camera and the pyramid.
+  // ----------------------------------------------------------------------
+  uint32_t cullCameraIndex = kStandardCullNoCamera;
+  // cullViewProjection is hoisted above the G-buffer, where the opaque cull's
+  // phase 1 needs it too.
+  if (m_cullLoaded && m_hiZ &&
+      state.hiZ.IsUsable(mpGraphics->swapchainIndex) &&
+      !state.depthSampleView[mpGraphics->swapchainIndex].isEmpty()) {
+    m_hiZ->Build(&mpGraphics->primary.cmds[0], mpGraphics->frameIndex, state.hiZ,
+                 mpGraphics->swapchainIndex, state.width, state.height,
+                 state.depthSampleView[mpGraphics->swapchainIndex].Get());
+
+    RISegmentReq cameraReq = {};
+    if (m_cullCameraSegment.request(mpGraphics->frameIndex, 1, &cameraReq) &&
+        m_cullCameraBuffer.mappedAddress) {
+      auto *cameraSlot = reinterpret_cast<StandardCullCamera *>(
+          static_cast<uint8_t *>(m_cullCameraBuffer.mappedAddress) +
+          static_cast<size_t>(cameraReq.elementOffset) *
+              sizeof(StandardCullCamera));
+      StandardCullCamera camera{};
+      std::memcpy(camera.viewProjection, cullViewProjection.v,
+                  sizeof(camera.viewProjection));
+      camera.hiZWidth = state.hiZ.width;
+      camera.hiZHeight = state.hiZ.height;
+      camera.hiZMipCount = state.hiZ.mipCount;
+      *cameraSlot = camera;
+      cullCameraIndex = cameraReq.elementOffset;
+    }
   }
 
   // ----------------------------------------------------------------------
@@ -2356,18 +2942,37 @@ void cHybridRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
       // COLOR_ATTACHMENT_OUTPUT write -> read|write dependency.
       bool waterSurfaceComposited = false;
 
+      // Resolve slots and describe the draws before the first rendering scope
+      // opens, so the cull dispatch has somewhere legal to sit.
+      //
+      // What this buys for water is smaller than for the other two families:
+      // it hides the MUL/ADD composite draws of an occluded surface, but NOT
+      // the WaterReflectionPass::RecordSurface work below, which is the
+      // expensive half and is recorded unconditionally. Skipping that needs a
+      // CPU-visible cull result, i.e. a readback a frame later.
+      struct WaterDraw {
+        iRenderable *object = nullptr;
+        uint32_t slot = 0;
+        uint32_t materialId = 0;
+        uint32_t indexCount = 0;
+        uint32_t commandSlot = 0;   // first of the MUL/ADD pair
+      };
+      std::vector<WaterDraw> waterDraws;
+      waterDraws.reserve(waters.size());
+      TranslucentCull waterCull{};
+      // Two draws per surface: the MUL pass and the ADD pass.
+      const bool waterCullReserved =
+          ReserveCull(static_cast<uint32_t>(waters.size()) * 2u,
+                      cullViewProjection, cullCameraIndex, waterCull);
       for (iRenderable *pObj : waters) {
         cVertexBuffer *pVB = pObj->GetVertexBuffer();
         cMaterial *pMat = pObj->GetMaterial();
-        const int indexCount = pVB->GetIndexNum();
-
-        auto mat = mpGraphics->globalset->submitMaterial(
+        const auto mat = mpGraphics->globalset->submitMaterial(
             cntx, pMat, (uint32_t)mpGraphics->frameIndex);
         if (mat.materialId == UINT32_MAX) {
           Warning("Material Slot exhausted (water)");
           continue;
         }
-
         ObjectSubmitDesc d;
         d.modelMatrix = pObj->GetModelMatrix(apFrustum);
         d.uvMatrix = pMat->GetUvMatrix();
@@ -2375,7 +2980,6 @@ void cHybridRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
             mat.materialId; // water ids fall in the water range of materialID
         d.dissolveAmount = pObj->GetCoverageAmount();
         d.renderFlags = pObj->GetRenderFlags();
-
         const uint32_t slot = mpGraphics->globalset->submitObject(
             pObj->GetUniqueCookie(), (uint32_t)mpGraphics->frameIndex,
             static_cast<cVertexBuffer *>(pVB), d);
@@ -2383,6 +2987,39 @@ void cHybridRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
           Warning("bindless pool exhausted (water)");
           continue;
         }
+
+        WaterDraw draw{};
+        draw.object = pObj;
+        draw.slot = slot;
+        draw.materialId = mat.materialId;
+        draw.indexCount = static_cast<uint32_t>(pVB->GetIndexNum());
+        draw.commandSlot = waterCull.commandCount;
+        if (waterCull.usable) {
+          cBoundingVolume *bounds = pObj->GetBoundingVolume();
+          if (!bounds) {
+            waterCull.usable = false;
+          } else {
+            for (uint32_t pass = 0; pass < 2u; ++pass)
+              WriteCullDraw(waterCull, draw.commandSlot + pass,
+                            /*indexed=*/true, draw.indexCount, slot,
+                            bounds->GetMin(), bounds->GetMax(),
+                            pObj->IsStatic(), /*neverOcclude=*/false);
+          }
+        }
+        waterDraws.push_back(draw);
+      }
+
+      const bool waterCulled =
+          waterCullReserved && waterCull.usable &&
+          DispatchCull(&mpGraphics->primary.cmds[0], waterCull,
+                       state.hiZ.sampleView[mpGraphics->swapchainIndex].Get());
+
+      for (const WaterDraw &draw : waterDraws) {
+        iRenderable *pObj = draw.object;
+        cVertexBuffer *pVB = pObj->GetVertexBuffer();
+        cMaterial *pMat = pObj->GetMaterial();
+        const int indexCount = static_cast<int>(draw.indexCount);
+        const uint32_t slot = draw.slot;
 
         uint32_t vtxMask = 0;
         if (!detail::BindVertexStreams(&mpGraphics->primary.cmds[0], pVB,
@@ -2490,9 +3127,22 @@ void cHybridRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
             WaterPush push = {pass, result.available ? 1u : 0u, 0u, 0u};
             mpGraphics->primary.cmds[0].vk_d3d12_setPushConstants(
                 &mpGraphics->device, m_water, 0, sizeof(push), &push);
-            mpGraphics->primary.cmds[0].drawIndexed(
-                &mpGraphics->device, static_cast<uint32_t>(indexCount), 1u,
-                0u, 0, slot);
+            // The MUL and ADD passes own consecutive command slots. Both carry
+            // the same bounds, so the cull either keeps or hides the pair
+            // together and the bg*M0*M1 + A0*M1 + A1 algebra stays consistent.
+            if (waterCulled) {
+              const uint64_t offset =
+                  static_cast<uint64_t>(waterCull.commandBase +
+                                        draw.commandSlot + pass) *
+                  sizeof(VkDrawIndexedIndirectCommand);
+              mpGraphics->primary.cmds[0].drawIndexedIndirect(
+                  &mpGraphics->device, &m_cullCommandBuffer, offset, 1,
+                  sizeof(VkDrawIndexedIndirectCommand));
+            } else {
+              mpGraphics->primary.cmds[0].drawIndexed(
+                  &mpGraphics->device, static_cast<uint32_t>(indexCount), 1u,
+                  0u, 0, slot);
+            }
           }
           mpGraphics->primary.cmds[0].vk_d3d12_endRendering(
               &mpGraphics->device);
@@ -2588,7 +3238,109 @@ void cHybridRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
       emitters.push_back(static_cast<iParticleEmitter *>(pObj));
     }
 
-    if (!emitters.empty()) {
+    // Build every emitter's scratch geometry and resolve its object slot here,
+    // before the render scope opens, so the occlusion cull can describe the
+    // draws and record its dispatch -- which cannot happen inside dynamic
+    // rendering. The emitters keep their relative order, so the scratch
+    // segments are filled exactly as they were when this ran inside the loop.
+    //
+    // Note the cull only saves rasterization for particles: the scratch
+    // geometry is still built for an emitter the GPU later hides, because the
+    // cull result lives on the GPU and is never read back.
+    struct ParticleDraw {
+      iParticleEmitter *emitter = nullptr;
+      cMaterial *material = nullptr;
+      uint32_t slot = 0;
+      uint32_t indexCount = 0;
+      uint32_t commandSlot = 0;
+    };
+    std::vector<ParticleDraw> particleDraws;
+    particleDraws.reserve(emitters.size());
+    TranslucentCull particleCull{};
+    const bool particleCullReserved =
+        ReserveCull(static_cast<uint32_t>(emitters.size()), cullViewProjection,
+                    cullCameraIndex, particleCull);
+    for (iParticleEmitter *pEmitter : emitters) {
+      cMaterial *pMat = pEmitter->GetMaterial();
+      if (!pMat)
+        continue;
+      // Per-frame scratch geometry (no persistent emitter VB): build this
+      // frame's camera-facing quads into the shared translucentVtx/Idx
+      // segments -- the same single producer as the wireframe/simple panes.
+      auto geom = pEmitter->BuildScratchGeometry(apFrustum, afFrameTime,
+                                                 /*withUv=*/true);
+      if (!geom.valid)
+        continue;
+
+      const uint32_t materialId =
+          mpGraphics->globalset
+              ->submitMaterial(cntx, pMat, (uint32_t)mpGraphics->frameIndex)
+              .materialId;
+      if (materialId == UINT32_MAX) {
+        Warning("Material Slot exhausted (particle)");
+        continue;
+      }
+
+      ObjectSubmitDesc d; // particle: identity uv, no dissolve/illum
+      d.modelMatrix = pEmitter->GetModelMatrix(apFrustum);
+      d.materialId = materialId;
+      // The particle VS pulls pos/uv0/color/index via BDA from the slot's
+      // UniformObject handles. Point them at the per-viewport translucent
+      // scratch segments (base address + byte offset); normal/tangent are
+      // never read for a particle slot, so 0. submitObject folds these into
+      // the payload -- refreshed every frame since the scratch offsets change.
+      {
+        const uint64_t vtxBase =
+            mpGraphics->translucentVtxBuffer->GetDeviceHandle(&mpGraphics->device);
+        d.streamHandles.pos = vtxBase + geom.posByteOffset;
+        d.streamHandles.color = vtxBase + geom.colByteOffset;
+        d.streamHandles.uv0 = vtxBase + geom.uvByteOffset;
+        d.streamHandles.index =
+            mpGraphics->translucentIdxBuffer->GetDeviceHandle(&mpGraphics->device) +
+            geom.idxByteOffset;
+        d.streamHandles.set = true;
+      }
+
+      // Particles share the object-slot pool with opaque solids; the payload
+      // submit also bumps the slot generation when the slot is (re)assigned --
+      // so a consumer still anchored to the slot's previous opaque occupant
+      // self-invalidates before it dereferences this slot's smaller streams.
+      const uint32_t slot = mpGraphics->globalset->submitObject(
+          pEmitter->GetUniqueCookie(), (uint32_t)mpGraphics->frameIndex, nullptr,
+          d, kSubmitData);
+      if (slot == UINT32_MAX) {
+        Warning("bindless pool exhausted (particle)");
+        continue;
+      }
+
+      ParticleDraw draw{};
+      draw.emitter = pEmitter;
+      draw.material = pMat;
+      draw.slot = slot;
+      draw.indexCount = static_cast<uint32_t>(geom.indexCount);
+      draw.commandSlot = particleCull.commandCount;
+      if (particleCull.usable) {
+        cBoundingVolume *bounds = pEmitter->GetBoundingVolume();
+        if (!bounds) {
+          particleCull.usable = false;
+        } else {
+          // Non-indexed: the particle VS pulls indices via BDA, so the draw is
+          // a vertex-count draw and the command is the 4-word layout.
+          WriteCullDraw(particleCull, draw.commandSlot, /*indexed=*/false,
+                        draw.indexCount, slot, bounds->GetMin(),
+                        bounds->GetMax(), pEmitter->IsStatic(),
+                        /*neverOcclude=*/false);
+        }
+      }
+      particleDraws.push_back(draw);
+    }
+
+    const bool particleCulled =
+        particleCullReserved && particleCull.usable &&
+        DispatchCull(&mpGraphics->primary.cmds[0], particleCull,
+                     state.hiZ.sampleView[mpGraphics->swapchainIndex].Get());
+
+    if (!particleDraws.empty()) {
       // Per-emitter UpdateGraphicsForFrame / UpdateGraphicsForViewport +
       // SubmitToGPU already happened in the consolidated translucent prepare
       // loop near the top of Draw(); the particle VBs are uploaded and
@@ -2701,59 +3453,12 @@ void cHybridRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
         uint32_t hasWaterDepth;
       };
 
-      for (iParticleEmitter *pEmitter : emitters) {
-        cMaterial *pMat = pEmitter->GetMaterial();
-        if (!pMat)
-          continue;
-        // Per-frame scratch geometry (no persistent emitter VB): build this
-        // frame's camera-facing quads into the shared Interface<cGraphics>::Get()->translucentVtx/Idx
-        // segments — same single producer as the wireframe/simple panes.
-        auto geom = pEmitter->BuildScratchGeometry(apFrustum, afFrameTime,
-                                                   /*withUv=*/true);
-        if (!geom.valid)
-          continue;
-        const int indexCount = (int)geom.indexCount;
-
-        uint32_t materialId =
-            mpGraphics->globalset->submitMaterial(cntx, pMat, (uint32_t)mpGraphics->frameIndex)
-                .materialId;
-        if (materialId == UINT32_MAX) {
-          Warning("Material Slot exhausted (particle)");
-          continue;
-        }
-
-        ObjectSubmitDesc d; // particle: identity uv, no dissolve/illum
-        d.modelMatrix = pEmitter->GetModelMatrix(apFrustum);
-        d.materialId = materialId;
-
-        // The particle VS pulls pos/uv0/color/index via BDA from the slot's
-        // UniformObject handles. Point them at the per-viewport translucent
-        // scratch segments (base address + byte offset); normal/tangent are
-        // never read for a particle slot, so 0. submitObject folds these into
-        // the payload — refreshed every frame since the scratch offsets change.
-        {
-          const uint64_t vtxBase =
-              mpGraphics->translucentVtxBuffer->GetDeviceHandle(&mpGraphics->device);
-          d.streamHandles.pos = vtxBase + geom.posByteOffset;
-          d.streamHandles.color = vtxBase + geom.colByteOffset;
-          d.streamHandles.uv0 = vtxBase + geom.uvByteOffset;
-          d.streamHandles.index =
-              mpGraphics->translucentIdxBuffer->GetDeviceHandle(&mpGraphics->device) +
-              geom.idxByteOffset;
-          d.streamHandles.set = true;
-        }
-
-        // Particles share the object-slot pool with opaque solids; the payload
-        // submit also bumps the slot generation when the slot is (re)assigned —
-        // so a consumer still anchored to the slot's previous opaque occupant
-        // self-invalidates before it dereferences this slot's smaller streams.
-        const uint32_t slot = mpGraphics->globalset->submitObject(
-            pEmitter->GetUniqueCookie(), (uint32_t)mpGraphics->frameIndex, nullptr, d,
-            kSubmitData);
-        if (slot == UINT32_MAX) {
-          Warning("bindless pool exhausted (particle)");
-          continue;
-        }
+      for (const ParticleDraw &draw : particleDraws) {
+        cMaterial *pMat = draw.material;
+        // Scratch geometry, material slot and object slot were all resolved
+        // before the render scope opened, so the cull could describe this draw.
+        const int indexCount = (int)draw.indexCount;
+        const uint32_t slot = draw.slot;
 
         const ParticlePipelineDesc::BlendMode mode =
             remapBlend(pMat->GetBlendMode());
@@ -2772,7 +3477,18 @@ void cHybridRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
         mpGraphics->primary.cmds[0].vk_d3d12_setPushConstants(&mpGraphics->device, m_particle, 0,
                                                      sizeof(push), &push);
 
-        mpGraphics->primary.cmds[0].draw(&mpGraphics->device, (uint32_t)indexCount, 1u, 0u, slot);
+        if (particleCulled) {
+          // drawCount is 1, so Vulkan never reads the stride and the uniform
+          // 5-word slot serves the 4-word non-indexed command fine.
+          const uint64_t offset =
+              static_cast<uint64_t>(particleCull.commandBase + draw.commandSlot) *
+              sizeof(VkDrawIndexedIndirectCommand);
+          mpGraphics->primary.cmds[0].drawIndirect(
+              &mpGraphics->device, &m_cullCommandBuffer, offset, 1,
+              sizeof(VkDrawIndexedIndirectCommand));
+        } else {
+          mpGraphics->primary.cmds[0].draw(&mpGraphics->device, (uint32_t)indexCount, 1u, 0u, slot);
+        }
       }
 
       mpGraphics->primary.cmds[0].vk_d3d12_endRendering(&mpGraphics->device);
@@ -2833,7 +3549,87 @@ void cHybridRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
       meshes.push_back(pObj);
     }
 
-    if (!meshes.empty()) {
+    // Resolve every mesh's material and object slot BEFORE the render scope
+    // opens: the occlusion cull needs each draw's command written and its
+    // dispatch recorded, and a dispatch cannot be recorded inside dynamic
+    // rendering. The draw loop below reuses what this pass resolved instead of
+    // submitting again.
+    struct MeshDraw {
+      iRenderable *object = nullptr;
+      uint32_t slot = 0;
+      uint32_t materialId = 0;
+      uint32_t indexCount = 0;
+      bool cubeMap = false;
+      uint32_t commandSlot = 0;   // first of 1 or 2 consecutive slots
+    };
+    std::vector<MeshDraw> meshDraws;
+    meshDraws.reserve(meshes.size());
+    TranslucentCull meshCull{};
+    // Worst case is two draws per mesh: the base draw plus the cube-map one.
+    const bool meshCullReserved =
+        ReserveCull(static_cast<uint32_t>(meshes.size()) * 2u,
+                    cullViewProjection, cullCameraIndex, meshCull);
+    for (iRenderable *pObj : meshes) {
+      cVertexBuffer *pVB = pObj->GetVertexBuffer();
+      cMaterial *pMat = pObj->GetMaterial();
+      const uint32_t materialId =
+          mpGraphics->globalset
+              ->submitMaterial(cntx, pMat, (uint32_t)mpGraphics->frameIndex)
+              .materialId;
+      if (materialId == UINT32_MAX) {
+        Warning("Material Slot exhausted (translucent mesh)");
+        continue;
+      }
+      ObjectSubmitDesc d;
+      d.modelMatrix = pObj->GetModelMatrix(apFrustum);
+      d.uvMatrix = pMat->GetUvMatrix();
+      d.materialId = materialId;
+      d.dissolveAmount = pObj->GetCoverageAmount();
+      d.renderFlags = pObj->GetRenderFlags();
+      const uint32_t slot = mpGraphics->globalset->submitObject(
+          pObj->GetUniqueCookie(), (uint32_t)mpGraphics->frameIndex,
+          static_cast<cVertexBuffer *>(pVB), d);
+      if (slot == UINT32_MAX) {
+        Warning("bindless pool exhausted (translucent mesh)");
+        continue;
+      }
+
+      MeshDraw draw{};
+      draw.object = pObj;
+      draw.slot = slot;
+      draw.materialId = materialId;
+      draw.indexCount = static_cast<uint32_t>(pVB->GetIndexNum());
+      draw.cubeMap = pMat->GetImage(eMaterialTexture_CubeMap) != nullptr;
+      draw.commandSlot = meshCull.commandCount;
+      const uint32_t draws = draw.cubeMap ? 2u : 1u;
+      if (meshCull.usable) {
+        // A renderable with no bounds cannot be occlusion-tested, and leaving
+        // its command unwritten would draw garbage -- so the whole family
+        // falls back rather than culling part of it.
+        cBoundingVolume *bounds = pObj->GetBoundingVolume();
+        if (!bounds) {
+          meshCull.usable = false;
+        } else {
+          // One candidate per DRAW, not per mesh: a candidate owns exactly one
+          // instanceCount word and the cube-map variant has its own.
+          for (uint32_t i = 0; i < draws; ++i)
+            WriteCullDraw(meshCull, draw.commandSlot + i, /*indexed=*/true,
+                          draw.indexCount, slot, bounds->GetMin(),
+                          bounds->GetMax(), pObj->IsStatic(),
+                          /*neverOcclude=*/false);
+        }
+      }
+      meshDraws.push_back(draw);
+    }
+
+    // All or nothing: the family either culls every one of its draws or none
+    // of them, so a short reservation never silently drops geometry.
+    const bool meshCulled =
+        meshCullReserved && meshCull.usable &&
+        DispatchCull(&mpGraphics->primary.cmds[0], meshCull,
+                     state.hiZ.sampleView[mpGraphics->swapchainIndex].Get());
+
+    if (!meshDraws.empty()) {
       // Per-mesh UpdateGraphicsForFrame / UpdateGraphicsForViewport +
       // SubmitToGPU already happened in the consolidated translucent prepare
       // loop near the top of Draw(); billboards / beams / glass / water all
@@ -2944,45 +3740,19 @@ void cHybridRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
       constexpr uint32_t kTransOptHasTlas = 1u << 1;
       const uint32_t lightingOptions = apWorld->GetTlas() ? kTransOptHasTlas : 0u;
 
-      for (iRenderable *pObj : meshes) {
+      for (const MeshDraw &draw : meshDraws) {
+        iRenderable *pObj = draw.object;
         cVertexBuffer *pVB = pObj->GetVertexBuffer();
         cMaterial *pMat = pObj->GetMaterial();
         // Filter above already rejected null pVB / pMat and 0-index VBs.
-        const int indexCount = pVB->GetIndexNum();
-
-        uint32_t materialId =
-            mpGraphics->globalset->submitMaterial(cntx, pMat, (uint32_t)mpGraphics->frameIndex)
-                .materialId;
-        if (materialId == UINT32_MAX) {
-          Warning("Material Slot exhausted (translucent mesh)");
-          continue;
-        }
-
-        cMatrixf *pMtx = pObj->GetModelMatrix(apFrustum);
-
-        // AffectedByLightLevel dimming is evaluated per-vertex on the GPU
-        // (Translucent.vert.slang → gScene.lightLevelAt, gated on
-        // kMaterialFlagAffectedByLightLevel in the material config) — the
-        // legacy per-object CPU light loop that used to live here is gone.
-
-        ObjectSubmitDesc d;
-        d.modelMatrix = pMtx;
-        d.uvMatrix = pMat->GetUvMatrix();
-        d.materialId = materialId;
-        d.dissolveAmount = pObj->GetCoverageAmount();
-        d.renderFlags = pObj->GetRenderFlags();
-
-        // Stable slot keyed on the renderable's unique cookie. submitObject
-        // bumps the slot generation on (re)assignment so a consumer anchored to a
-        // previous opaque occupant self-invalidates before dereferencing the
-        // wrong VB/IB.
-        const uint32_t slot = mpGraphics->globalset->submitObject(
-            pObj->GetUniqueCookie(), (uint32_t)mpGraphics->frameIndex,
-            static_cast<cVertexBuffer *>(pVB), d);
-        if (slot == UINT32_MAX) {
-          Warning("bindless pool exhausted (translucent mesh)");
-          continue;
-        }
+        const int indexCount = static_cast<int>(draw.indexCount);
+        // The material and object slots were resolved before the render scope
+        // opened, so the cull could describe this draw. AffectedByLightLevel
+        // dimming is evaluated per-vertex on the GPU (Translucent.vert.slang →
+        // gScene.lightLevelAt, gated on kMaterialFlagAffectedByLightLevel in
+        // the material config) — the legacy per-object CPU light loop that
+        // used to live here is gone.
+        const uint32_t slot = draw.slot;
 
         // Per-vertex streams use fixed-function vertex fetch (the pipeline
         // declares them as VkVertexInputBindingDescriptions — see
@@ -3012,8 +3782,21 @@ void cHybridRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
         mpGraphics->primary.cmds[0].vk_d3d12_setPushConstants(
             &mpGraphics->device, m_translucentMesh, 0, sizeof(push), &push);
 
-        mpGraphics->primary.cmds[0].drawIndexed(&mpGraphics->device, (uint32_t)indexCount, 1u, 0u,
-                                       0, slot);
+        // Culled draws go through the command the cull kernel just vetted: it
+        // rewrote instanceCount to 0 for anything provably hidden, so a culled
+        // mesh rasterizes nothing while every per-item bind above still ran.
+        // drawCount is 1, so Vulkan never reads the stride.
+        if (meshCulled) {
+          const uint64_t offset =
+              static_cast<uint64_t>(meshCull.commandBase + draw.commandSlot) *
+              sizeof(VkDrawIndexedIndirectCommand);
+          mpGraphics->primary.cmds[0].drawIndexedIndirect(
+              &mpGraphics->device, &m_cullCommandBuffer, offset, 1,
+              sizeof(VkDrawIndexedIndirectCommand));
+        } else {
+          mpGraphics->primary.cmds[0].drawIndexed(&mpGraphics->device, (uint32_t)indexCount, 1u, 0u,
+                                         0, slot);
+        }
 
         // Second draw for the cube-map Fresnel + rim contribution.
         // Reference gates this on `cubeMap && !isRefraction`
@@ -3022,7 +3805,7 @@ void cHybridRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
         // here refracts (no refraction pass exists), so there is no such
         // conflict and the cube-map second draw stays gated only on whether
         // the material carries a cube map.
-        if (pMat->GetImage(eMaterialTexture_CubeMap)) {
+        if (draw.cubeMap) {
           TranslucentMeshPipelineDesc addDesc(
               meshTargetFormat, cGraphics::DepthFormat,
               TranslucentMeshPipelineDesc::BLEND_ADD, vtxMask,
@@ -3037,8 +3820,20 @@ void cHybridRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
               &mpGraphics->device, m_translucentMesh, 0, sizeof(pushIllum), &pushIllum);
           // Vertex / index buffers stay bound from the main draw above —
           // same renderable, just a second pipeline + push-constant set.
-          mpGraphics->primary.cmds[0].drawIndexed(&mpGraphics->device, (uint32_t)indexCount, 1u,
-                                         0u, 0, slot);
+          // It owns the NEXT command slot: its own candidate, so the cull can
+          // hide the reflection pass independently of the base draw.
+          if (meshCulled) {
+            const uint64_t offset =
+                static_cast<uint64_t>(meshCull.commandBase + draw.commandSlot +
+                                      1u) *
+                sizeof(VkDrawIndexedIndirectCommand);
+            mpGraphics->primary.cmds[0].drawIndexedIndirect(
+                &mpGraphics->device, &m_cullCommandBuffer, offset, 1,
+                sizeof(VkDrawIndexedIndirectCommand));
+          } else {
+            mpGraphics->primary.cmds[0].drawIndexed(&mpGraphics->device, (uint32_t)indexCount, 1u,
+                                           0u, 0, slot);
+          }
         }
       }
 
@@ -3144,9 +3939,32 @@ cHybridRenderer::~cHybridRenderer() {
   for (RIProgram *p : programs)
     p->dispose(&mpGraphics->device);
 
+  // The borrowed Standard passes own only their programs; destroying them here
+  // rather than leaving it to the unique_ptr keeps the disposal ordered with
+  // the programs above, while the device is still alive.
+  if (m_hiZ)
+    m_hiZ->DestroyData();
+  m_hiZ.reset();
+  if (m_cull)
+    m_cull->DestroyData();
+  m_cull.reset();
+  m_cullLoaded = false;
+
   // Per-frame indirect-draw args buffer (INDIRECT | TRANSFER_DST).
   m_indirectDrawBuffer.dispose(&mpGraphics->device);
   m_indirectDrawBuffer = {};
+
+  // The cull rings: the translucent families' plus the opaque two-phase
+  // candidate ring and its persistent visibility table. Anything created in the
+  // constructor has to appear here or it outlives the device.
+  RIBuffer *cullBuffers[] = {
+      &m_cullCandidateBuffer,  &m_cullCommandBuffer,   &m_cullTileBuffer,
+      &m_cullGroupBuffer,      &m_cullCameraBuffer,    &m_cullDrawCountBuffer,
+      &m_cullVisibilityBuffer, &m_cameraCandidateBuffer};
+  for (RIBuffer *b : cullBuffers) {
+    b->dispose(&mpGraphics->device);
+    *b = {};
+  }
 }
 
 } // namespace hpl

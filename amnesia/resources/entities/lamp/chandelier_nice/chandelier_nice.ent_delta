@@ -70,7 +70,7 @@
         <RemoveAttr Name="Type" />
     </Modify>
     <Modify Category="Entities" ID="29" Name="PointLight_1">
-        <SetAttr RendererMask="1" />
+        <SetAttr CastShadows="true" RendererMask="1" ShadowResolution="High" ShadowsAffectDynamic="true" ShadowsAffectStatic="true" WorldPos="0.000507 -2.28367 -0.00631" />
     </Modify>
     <Modify Category="Entities" ID="31" Name="ParticleSystem_1">
         <RemoveAttr Name="GroupID" />

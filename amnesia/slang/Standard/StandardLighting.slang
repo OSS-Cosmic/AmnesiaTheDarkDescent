@@ -79,6 +79,11 @@ public struct StandardShadowTile
     public uint size;
     public float bias;
     public uint clampToTile;
+    // PCSS inputs; see StandardShadowTileData. lightSize 0 disables softening.
+    public float nearPlane;
+    public float farPlane;
+    public float tanHalfFov;
+    public float lightSize;
     public uint reserved0;
     public uint reserved1;
 };

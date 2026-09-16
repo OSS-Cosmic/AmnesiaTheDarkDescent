@@ -139,6 +139,27 @@ SHARED_CONST uint kFogAreaCapacity           = 32u;
 SHARED_CONST uint kMaxDecals                  = 4096u;  // gDecals[] capacity (clustered OOB decals)
 SHARED_CONST uint kInvalidTextureIndex       = 0xffffffffu;
 
+// -----------------------------------------------------------------------------
+// GPU-driven particles.
+//   kGpuParticleCapacity: slots in the single persistent GpuParticle pool
+//                         (gParticleState). Every live emitter owns a fixed
+//                         contiguous slice of it sized by its authored
+//                         MaxParticleNum. The shipped game's worst case is the
+//                         sum of every .ps MaxParticleNum == 14,056, so this is
+//                         ~4x oversized for custom stories.
+//   kGpuEmitterCapacity:  live emitter INSTANCES in a frame (gParticleEmitters).
+//   kGpuEmitterParamCapacity: distinct authored emitter DATAS
+//                         (gParticleEmitterParams), one per <ParticleEmitter>
+//                         element across every loaded .ps.
+//   kGpuParticleGroupSize: sim/expand workgroup width. One thread per particle
+//                         SLOT (not per live particle) so a thread can spawn
+//                         into its own dead slot without an allocator.
+// -----------------------------------------------------------------------------
+SHARED_CONST uint kGpuParticleCapacity       = 65536u;  // 64 B each = 4 MB
+SHARED_CONST uint kGpuEmitterCapacity        = 1024u;
+SHARED_CONST uint kGpuEmitterParamCapacity   = 1024u;
+SHARED_CONST uint kGpuParticleGroupSize      = 64u;
+
 // Animated textures: each animated Image is one Texture2DArray (N frames = N
 // layers) at a single bindless slot in gTextures2DArray[] (kBindingTextures2DArray).
 // The slot id is stored in a material/gobo texture index with kAnimatedTextureBit

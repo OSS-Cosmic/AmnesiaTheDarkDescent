@@ -5,6 +5,7 @@
 // did.xy * 4 + (s % 4, s / 4), matching the prepare and reinterleave passes.
 
 #include "../HostDefinitions.h"
+#include "../StandardAo.h"
 
 import StandardAmbientOcclusion;
 
@@ -32,9 +33,17 @@ void AccumulateAO(inout float ao, inout float rayPixels, uint sliceIndex,
     const AOConstants c = gAOConstants;
     int2 samplePos = int2(round(rayPixels * direction)) + int2(fullResPos);
     uint2 clampedPos = uint2(clamp(samplePos, int2(0, 0), int2(c.viewportDim) - int2(1, 1)));
-    float2 uv = (float2(clampedPos) + 0.5f) * c.viewportTexel;
 
-    float viewDepth = aoPreparedDepthTexture[uint3(clampedPos / 4u, sliceIndex)];
+    // The depth can only come from THIS slice, which stores one phase per 4x4
+    // block, so snap the sample to that phase and build the uv from the same
+    // pixel. Using the raw clampedPos for the uv pairs an exact xy with a depth
+    // up to three pixels away, and the size of that error is a function of the
+    // slice index -- which reinterleaves into a 4x4 grid.
+    uint2 blockPos = standardAoPixelQuarter(clampedPos);
+    uint2 phasedPos = standardAoSlicePixel(blockPos, sliceIndex);
+    float2 uv = (float2(phasedPos) + 0.5f) * c.viewportTexel;
+
+    float viewDepth = aoPreparedDepthTexture[uint3(blockPos, sliceIndex)];
     float3 viewPos = ComputeViewspacePosition(c, uv, viewDepth);
     rayPixels += stepSizePixels;
     ao += ComputeAO(viewPosKernelCenter, viewNormalKernelCenter, viewPos, negInvR2);
@@ -49,7 +58,7 @@ void csMain(uint3 did : SV_DispatchThreadID)
         return;
 
     const uint sliceIndex = did.z;
-    const uint2 fullResPos = did.xy * 4u + uint2(sliceIndex % 4u, sliceIndex / 4u);
+    const uint2 fullResPos = standardAoSlicePixel(did.xy, sliceIndex);
     if (fullResPos.x >= c.viewportDim.x || fullResPos.y >= c.viewportDim.y)
         return;
 
@@ -78,7 +87,9 @@ void csMain(uint3 did : SV_DispatchThreadID)
 
     const float stepSizePixels = (radiusPixels / 4.0f) / float(NUM_STEPS + 1);
     const float alpha = (2.0f * 3.14159265359f) / float(NUM_DIRECTIONS);
-    const float3 jitter = JITTER[uint(frac(sin(dot(float2(did.xy), float2(12.9898f, 78.233f))) * 43758.5453f) * 32.0f) % 32u];
+    // Per SLICE first. Hashing did.xy alone handed all 16 pixels of a 4x4 block
+    // the same rotation, so the noise changed only between blocks -- the grid.
+    const float3 jitter = JITTER[standardAoJitterIndex(did.xy, sliceIndex)];
 
     float smallScaleAO = 0.0f;
     float largeScaleAO = 0.0f;

@@ -49,7 +49,7 @@
         <RemoveAttr Name="Type" />
     </Modify>
     <Modify Category="Entities" ID="11" Name="PointLight_1">
-        <SetAttr RendererMask="1" />
+        <SetAttr CastShadows="true" RendererMask="1" ShadowResolution="High" ShadowsAffectDynamic="true" ShadowsAffectStatic="true" WorldPos="0.028483 0.561034 -0.001537" />
     </Modify>
     <Modify Category="Entities" ID="12" Name="Sound_1">
         <RemoveAttr Name="GroupID" />

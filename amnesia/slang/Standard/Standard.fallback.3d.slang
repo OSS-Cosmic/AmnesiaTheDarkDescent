@@ -18,7 +18,12 @@ V vsMain(uint vertexID : SV_VertexID, uint drawInst : SV_InstanceID,
     float4 worldPosition = mul(obj.modelMat, float4(vertex.position, 1.0f));
     V v;
     v.posH = mul(mul(gPerFrame.projMat, gPerFrame.viewMat), worldPosition);
-    v.curClip = mul(mul(gPerFrame.projMat, gPerFrame.viewMat), worldPosition);
+    // curClip must be UNJITTERED: the velocity target is the unjittered
+    // curUV - prevUV that FSR/NRD expect, and prevClip already uses the
+    // unjittered prevProjMat. Using the jittered projMat here folds this
+    // frame's Halton offset into the motion vector, which reads as
+    // per-frame pixel jitter after upscaling.
+    v.curClip = mul(mul(gPerFrame.unjitteredProjMat, gPerFrame.viewMat), worldPosition);
     v.prevClip = mul(mul(gPerFrame.prevProjMat, gPerFrame.prevViewMat), mul(obj.prevModelMat, float4(vertex.position, 1.0f)));
     v.posW = worldPosition.xyz;
     // Preserve the reference geometric-normal contract: this is the raw

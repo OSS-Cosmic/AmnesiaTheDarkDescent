@@ -77,7 +77,8 @@ bool cStandardEnvironmentPass::PrepareFrame(
     uint32_t height, float time, cWorld *world,
     std::span<cFogArea *> visibleFogAreas, const cColor &clearColor,
     RIProgram::DescriptorBinding *frameBinding,
-    const hpl::TemporalFrameSnapshot *temporalSnapshot) {
+    const hpl::TemporalFrameSnapshot *temporalSnapshot,
+    uint32_t displayWidth, uint32_t displayHeight) {
   if (!mpGraphics || !frustum || !world || !frameBinding)
     return false;
   SceneConstants frame = {};
@@ -108,8 +109,14 @@ bool cStandardEnvironmentPass::PrepareFrame(
     frame.jitterY = temporalSnapshot->jitterUV[1];
     frame.prevJitterX = temporalSnapshot->prevJitterUV[0];
     frame.prevJitterY = temporalSnapshot->prevJitterUV[1];
-    frame.materialMipBias =
-        hpl::TemporalMaterialMipBias({width, height}, {width, height}, true);
+    // Hardcoding display == render pinned this at 0, so an upscaled frame kept
+    // sampling display-resolution mips at a reduced shaded extent: undersampled
+    // texture detail that reads as shimmer once FSR accumulates it. Fall back to
+    // the render extent only when the caller did not supply a display extent.
+    const uint32_t biasDisplayWidth = displayWidth ? displayWidth : width;
+    const uint32_t biasDisplayHeight = displayHeight ? displayHeight : height;
+    frame.materialMipBias = hpl::TemporalMaterialMipBias(
+        {width, height}, {biasDisplayWidth, biasDisplayHeight}, true);
   } else {
     std::memcpy(frame.unjitteredProjMat, proj.a,
                 sizeof(frame.unjitteredProjMat));

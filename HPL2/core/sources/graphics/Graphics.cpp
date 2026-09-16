@@ -32,6 +32,7 @@
 #include "graphics/DecalCreator.h"
 #include "graphics/HybridRenderer.h"
 #include "graphics/StandardRenderer.h"
+#include "graphics/GpuParticles.h"
 #include "graphics/LightProbeQuery.h"
 #include "graphics/MaterialType.h"
 #include "graphics/MeshCreator.h"
@@ -144,6 +145,14 @@ void cGraphics::DestroyRenderObjects() {
     lightProbe = nullptr;
   }
 
+  // Same reasoning as the probe above: the pool's buffers are referenced by the
+  // compute passes recorded into the frame command buffers being retired here,
+  // so it must go after the waitIdle and before the managed set.
+  if (gpuParticles) {
+    hplDelete(gpuParticles);
+    gpuParticles = nullptr;
+  }
+
   // Destroy the global managed set after the renderers (which only borrow
   // its layout). Idempotent.
   ShutdownGlobalManagedSets(&device);
@@ -216,13 +225,18 @@ void cGraphics::Init(const cEngineInitVars::cGraphicsVars &aVars,
     struct RIBackendInit backendInit = {};
     backendInit.api = RI_DEVICE_API_VK;
     backendInit.applicationName = "HPL2";
-    // Default ON; HPL_VK_VALIDATION=0 disables. Needed to run driver-debug
-    // modes (RADV_DEBUG=hang etc.) without the validation chassis stacked on
-    // top — the two both intercept submits and their combination is the
-    // least-tested path (and perturbs hang repros).
+    // OFF unless the user opts in with HPL_VK_VALIDATION=1, in any build.
+    // Nobody should pay for the layer without asking for it, and leaving it on
+    // by default also stacks it under driver-debug modes (RADV_DEBUG=hang
+    // etc.) -- both intercept submits, and the combination is the least-tested
+    // path as well as one that perturbs hang repros.
+    //
+    // Turn it on while working on the renderer: it is what catches unbound
+    // descriptor sets, malformed copies and bad barriers at the call that
+    // causes them rather than as corruption several frames later.
     const char *pValidationEnv = getenv("HPL_VK_VALIDATION");
     backendInit.vk.enableValidationLayer =
-        (pValidationEnv == NULL || atoi(pValidationEnv) != 0);
+        pValidationEnv != NULL && atoi(pValidationEnv) != 0;
 
     if (InitRIRenderer(&backendInit) != RI_SUCCESS) {
       FatalError(
@@ -544,6 +558,17 @@ void cGraphics::Init(const cEngineInitVars::cGraphicsVars &aVars,
   // the first sensor reading of every map a fallback.
   lightProbe = hplNew(cLightProbeQuery, ());
   lightProbe->Init(&device);
+
+  // GPU particle pool. Allocated unconditionally so the buffers exist for the
+  // whole device lifetime, but AcquireSlice is only ever called when
+  // cGpuParticleSystem::Enabled() is true, so an unset HPL_GPU_PARTICLES costs
+  // one allocation and nothing else.
+  gpuParticles = hplNew(cGpuParticleSystem, (this));
+  if (!gpuParticles->IsReady())
+    Log("GPU particles: pool unavailable; emitters use the CPU path\n");
+  else
+    Log("GPU particles: pool ready (%s)\n",
+        cGpuParticleSystem::Enabled() ? "enabled" : "gated off");
 
   ////////////////////////////////////////////////
   // Create systems

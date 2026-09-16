@@ -76,6 +76,7 @@ struct cTexture;
 // GlobalManagedSets.h -> Graphics.h header cycle).
 class GlobalManagedSets;
 class cLightProbeQuery;
+class cGpuParticleSystem;
 
 typedef std::list<cPostEffectComposite *> tPostEffectCompositeList;
 typedef tPostEffectCompositeList::iterator tPostEffectCompositeListIt;
@@ -345,6 +346,13 @@ public:
   // null-checks — see cLightProbeQuery for why "no answer yet" is a state
   // consumers must handle anyway.
   cLightProbeQuery *lightProbe = nullptr;
+
+  // Engine-lifetime GPU particle pool: the persistent per-particle state
+  // buffer, the authored-parameter table, and the slice allocator that gives
+  // each live emitter a fixed range of the pool. Null until Init (and on a
+  // build with no device), and inert unless HPL_GPU_PARTICLES is set, so every
+  // caller null-checks and falls back to the legacy CPU particle path.
+  cGpuParticleSystem *gpuParticles = nullptr;
 
   void IncrementFrame();
   std::optional<RIDescriptor> resolve_filter_descriptor(eTextureWrap wrapS,

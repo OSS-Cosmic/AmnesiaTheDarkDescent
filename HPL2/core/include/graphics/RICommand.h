@@ -113,14 +113,18 @@ struct RIBufferTextureCopyDesc {
   uint32_t width, height, depth;
 };
 
+// NOTE the field order: the source subresource comes FIRST and the extent
+// LAST. A positional `{width, height, 1}` therefore fills srcMipLevel,
+// srcArrayLayer and srcX instead, leaving the extent zeroed -- set the fields
+// by name. depth defaults to 1 so a 2D copy built with `= {}` is valid.
 struct RIImageCopyDesc {
-  uint32_t srcMipLevel;
-  uint32_t srcArrayLayer;
-  int32_t srcX, srcY, srcZ;
-  uint32_t dstMipLevel;
-  uint32_t dstArrayLayer;
-  int32_t dstX, dstY, dstZ;
-  uint32_t width, height, depth;
+  uint32_t srcMipLevel = 0;
+  uint32_t srcArrayLayer = 0;
+  int32_t srcX = 0, srcY = 0, srcZ = 0;
+  uint32_t dstMipLevel = 0;
+  uint32_t dstArrayLayer = 0;
+  int32_t dstX = 0, dstY = 0, dstZ = 0;
+  uint32_t width = 0, height = 0, depth = 1;
 };
 
 struct RIPool {
@@ -176,6 +180,23 @@ struct RICmd {
   void drawIndexedIndirect(struct RIDevice *device, struct RIBuffer *buffer,
                            RIDeviceSize offset, uint32_t drawCount,
                            uint32_t stride);
+  // [vk] vkCmdDrawIndirectCount. The draw count is read from countBuffer at
+  // countOffset (a 4-byte-aligned uint32) instead of coming from the host, and
+  // the device clamps it to maxDrawCount. This is what lets a compute pass
+  // decide how many draws happen without a readback.
+  //
+  // Requires device->physicalAdapter.isDrawIndirectCountSupported. countBuffer
+  // must carry RI_BUFFER_USAGE_INDIRECT and be transitioned to
+  // RI_RESOURCE_STATE_INDIRECT_ARGUMENT for RI_STAGE_DRAW_INDIRECT, exactly
+  // like the argument buffer. Core in Vulkan 1.2, so no extension loading.
+  //
+  // Metal has no GPU-sourced draw count outside indirect command buffers, so
+  // isDrawIndirectCountSupported stays 0 there and callers must keep a
+  // host-count fallback (see the cull kernel's in-place mode).
+  void drawIndirectCount(struct RIDevice *device, struct RIBuffer *buffer,
+                         RIDeviceSize offset, struct RIBuffer *countBuffer,
+                         RIDeviceSize countOffset, uint32_t maxDrawCount,
+                         uint32_t stride);
 
   // [vk/mtl] Buffer-to-buffer copy. Vulkan records vkCmdCopyBuffer; Metal opens
   // a blit encoder and calls copyFromBuffer.

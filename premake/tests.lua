@@ -65,8 +65,13 @@ project "TemporalCameraTests"
         ROOT .. "/HPL2/core/sources/graphics/CubeMipGen.cpp",
         ROOT .. "/HPL2/core/sources/graphics/BlockCompressionDecode.cpp",
         ROOT .. "/HPL2/core/sources/graphics/RIFormat.c",
+        ROOT .. "/HPL2/core/sources/graphics/StandardShadowCull.cpp",
     }
-    includedirs { ROOT .. "/HPL2/core/include" }
+    -- StandardShadowCull.cpp shares its predicates with the cull compute shader
+    -- through amnesia/slang/StandardCull.h, and the frustum test compares itself
+    -- against MathLib's MvpToPlanes, so both include paths are required here.
+    includedirs { ROOT .. "/HPL2/core/include", ROOT .. "/amnesia/slang" }
+    mathlib_use()
     add_utest()
     add_test_postbuild()
     -- gmake2 drops postbuildcommands on kind "Utility" projects, so the python
@@ -74,6 +79,22 @@ project "TemporalCameraTests"
     if _OPTIONS["with-python-tests"] ~= "no" then
         add_python_test_postbuild()
     end
+
+project "ParticleScheduleTests"
+    kind "ConsoleApp"
+    language "C++"
+    objdir (BUILD_OUT .. "/obj/%{prj.name}/%{cfg.buildcfg}")
+    targetdir (BUILD_OUT .. "/tests/%{cfg.buildcfg}")
+    -- Its own project rather than a TU in TemporalCameraTests: cParticleSchedule
+    -- links nothing (no engine, no GPU), so keeping it isolated makes the
+    -- lifetime-parity suite runnable on its own.
+    files {
+        ROOT .. "/tests/graphics/particles/*.cpp",
+        ROOT .. "/HPL2/core/sources/graphics/ParticleSchedule.cpp",
+    }
+    includedirs { ROOT .. "/HPL2/core/include" }
+    add_utest()
+    add_test_postbuild()
 
 project "FsrUpscalerParamsTests"
     kind "ConsoleApp"
@@ -101,71 +122,6 @@ project "BindlessPoolTests"
         ROOT .. "/tests/graphics/bindless/*.cpp",
         ROOT .. "/HPL2/core/sources/graphics/BindlessPool.cpp",
         ROOT .. "/HPL2/core/sources/graphics/IndexPool.cpp",
-    }
-    includedirs { ROOT .. "/HPL2/core/include" }
-    add_utest()
-    add_test_postbuild()
-
--- The Standard shadow-atlas packer is pure CPU (no RI/Vulkan), so it tests
--- without the engine. Own directory for the same main() reason as above.
-project "StandardShadowAtlasTests"
-    kind "ConsoleApp"
-    language "C++"
-    cppdialect "C++20"
-    objdir (BUILD_OUT .. "/obj/%{prj.name}/%{cfg.buildcfg}")
-    targetdir (BUILD_OUT .. "/tests/%{cfg.buildcfg}")
-    files {
-        ROOT .. "/tests/graphics/shadow_atlas/*.cpp",
-        ROOT .. "/HPL2/core/sources/graphics/StandardShadowAtlas.cpp",
-    }
-    includedirs { ROOT .. "/HPL2/core/include" }
-    add_utest()
-    add_test_postbuild()
-
-project "BarrierTests"
-    kind "ConsoleApp"
-    language "C++"
-    cppdialect "C++17"
-    objdir (BUILD_OUT .. "/obj/%{prj.name}/%{cfg.buildcfg}")
-    targetdir (BUILD_OUT .. "/tests/%{cfg.buildcfg}")
-    files { ROOT .. "/tests/graphics/barrier/barrier.cpp" }
-    includedirs {
-        ROOT .. "/HPL2/core/include",
-        ROOT .. "/HPL2/extern/volk",
-        ROOT .. "/HPL2/extern/Vulkan-Headers/include",
-        ROOT .. "/HPL2/extern/VulkanMemoryAllocator/include",
-    }
-    add_utest()
-    add_test_postbuild()
-
--- The renderer capability policy is a pure CPU decision seam. Keep its
--- matrix in a separate executable so this suite owns its own UTEST_MAIN().
-project "RendererCapabilityPolicyTests"
-    kind "ConsoleApp"
-    language "C++"
-    cppdialect "C++17"
-    objdir (BUILD_OUT .. "/obj/%{prj.name}/%{cfg.buildcfg}")
-    targetdir (BUILD_OUT .. "/tests/%{cfg.buildcfg}")
-    files {
-        ROOT .. "/tests/graphics/backend_policy/*.cpp",
-        ROOT .. "/HPL2/core/sources/graphics/RendererCapabilityPolicy.cpp",
-    }
-    includedirs { ROOT .. "/HPL2/core/include" }
-    add_utest()
-    add_test_postbuild()
-
--- The light schema resolver is XML-free and links as a small standalone CPU
--- test. Keep it separate so its UTEST_MAIN() does not collide with graphics
--- test globs.
-project "LightParametersTests"
-    kind "ConsoleApp"
-    language "C++"
-    cppdialect "C++17"
-    objdir (BUILD_OUT .. "/obj/%{prj.name}/%{cfg.buildcfg}")
-    targetdir (BUILD_OUT .. "/tests/%{cfg.buildcfg}")
-    files {
-        ROOT .. "/tests/lights/*.cpp",
-        ROOT .. "/HPL2/core/sources/scene/LightParameters.cpp",
     }
     includedirs { ROOT .. "/HPL2/core/include" }
     add_utest()

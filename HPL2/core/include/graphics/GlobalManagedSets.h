@@ -91,7 +91,8 @@ namespace detail {
 static inline struct RIBuffer
 CreateBindlessSlotBuffer(RIDevice *device, uint32_t slotCount,
                          size_t elementStride, VkBufferUsageFlags usage,
-                         bool deviceLocalOnly = false) {
+                         bool deviceLocalOnly = false,
+                         const char *debugName = nullptr) {
   uint32_t queueFamilies[RI_QUEUE_LEN] = {0};
   VkBufferCreateInfo bufferCreateInfo = {VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO};
   VK_ConfigureBufferQueueFamilies(&bufferCreateInfo, device->queues,
@@ -116,6 +117,17 @@ CreateBindlessSlotBuffer(RIDevice *device, uint32_t slotCount,
                                 &allocInfo, &out.vk.buffer, &out.vk.allocation,
                                 &allocationInfo));
   out.mappedAddress = deviceLocalOnly ? nullptr : allocationInfo.pMappedData;
+  // Stamp the identity cookie, exactly as RIBuffer::create does. Without it the
+  // buffer reads as empty (cookie == 0) to RIDescriptor, and every descriptor
+  // built from it is silently skipped by RIProgram::bindDescriptors -- which
+  // drops the whole descriptor set, so the shader dispatches with set 2 never
+  // bound. Only shows up once one of these buffers is bound by name rather than
+  // used as an indirect-argument or set-0 bindless buffer.
+  out.cookie = hash_random();
+  // Names the VkBuffer and the VMA allocation, so a leak at device teardown
+  // says which buffer it was.
+  if (debugName && out.vk.buffer)
+    out.setDebugObjectName(device, debugName);
   return out;
 }
 
