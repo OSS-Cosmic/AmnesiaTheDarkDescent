@@ -290,13 +290,13 @@ void cModelEditorWindowPhysicsTest::SetUpRender()
 	cScene* pScene = mpEngine->GetScene();
 	cPhysics* pPhysics = mpEngine->GetPhysics();
 	
-	mpMainLight = mpTestWorld->CreateLightPoint("", "", false);
+	mpMainLight = mpTestWorld->CreateLightPointLegacy("", "", false);
 	mpMainLight->SetPosition(cVector3f(0,2, 3));
 	mpMainLight->SetRadius(20);
 	mpMainLight->SetDiffuseColor(cColor(1));
 	mpMainLight->SetVisible(true);
 
-	mpBackLight = mpTestWorld->CreateLightPoint("", "", false);
+	mpBackLight = mpTestWorld->CreateLightPointLegacy("", "", false);
 	mpBackLight->SetPosition(cVector3f(0,1, -3));
 	mpBackLight->SetRadius(20);
 	mpBackLight->SetDiffuseColor(cColor(1));

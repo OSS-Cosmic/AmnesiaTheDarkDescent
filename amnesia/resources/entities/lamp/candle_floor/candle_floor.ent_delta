@@ -1,6 +1,9 @@
 <EntDelta Version="1" Target="entities/lamp/candle_floor/candle_floor.ent">
     <SetVar Name="ShowHints" Value="true" />
     <Modify Category="Entities" ID="9" Name="PointLight_1">
-        <SetAttr CastShadows="true" Intensity="5" Radius="10" SourceRadius="0.04" WorldPos="7.62939e-05 0.406383 0.00866699" />
+        <SetAttr CastShadows="true" RendererMask="1" ShadowResolution="High" ShadowsAffectDynamic="true" ShadowsAffectStatic="true" WorldPos="0.000076 0.406383 0.008667" />
     </Modify>
+    <Add Category="Entities" After="9">
+        <Re_PointLight Active="true" CastShadows="true" DiffuseColor="0.69 0.569 0.31 1" FalloffMap="" FlickerActive="false" FlickerFade="false" FlickerOffColor="0 0 0 1" FlickerOffFadeMaxLength="0" FlickerOffFadeMinLength="0" FlickerOffMaxLength="0" FlickerOffMinLength="0" FlickerOffPS="" FlickerOffIntensity="0" FlickerOffSound="" FlickerOnFadeMaxLength="0" FlickerOnFadeMinLength="0" FlickerOnMaxLength="0" FlickerOnMinLength="0" FlickerOnPS="" FlickerOnSound="" Gobo="" GoboAnimFrameTime="0" GoboAnimMode="None" Name="PointLight_1" Intensity="5" Radius="10" SourceRadius="0.04" Rotation="0 0 0" Scale="1 1 1" ShadowResolution="High" ShadowsAffectDynamic="true" ShadowsAffectStatic="true" Tag="" WorldPos="7.62939e-05 0.406383 0.00866699" RendererMask="2" />
+    </Add>
 </EntDelta>

@@ -89,7 +89,8 @@ void cEntityIcon::DrawIcon(cEditorWindowViewport* apViewport,
 						   bool abIsSelected,
 						   const cVector3f& avPos,
 						   bool abIsActive,
-						   const cColor& aDisabledCol)
+						   const cColor& aDisabledCol,
+						   const cColor& aActiveCol)
 {
 	if(cEditorHelper::GetVisibilityTypeState(eEditorVisibilityType_Icons) == false)
 		return;
@@ -99,7 +100,7 @@ void cEntityIcon::DrawIcon(cEditorWindowViewport* apViewport,
 
 	if(mvIconGfx[abIsSelected])
 	{
-		cColor bbColor = abIsSelected ? cColor(1,1) : (abIsActive ? cColor(0.5f,1) : aDisabledCol);
+		cColor bbColor = abIsSelected ? cColor(1,1) : (abIsActive ? aActiveCol : aDisabledCol);
 
 		// RI path: enqueue a camera-facing billboard into the DebugDraw
 		// batcher (flushed into the pane's offscreen target). The legacy

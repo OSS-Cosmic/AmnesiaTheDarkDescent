@@ -31,11 +31,11 @@ namespace hpl {
 
 	//------------------------------------------
 
-	class cLightSpot : public iLight
+	class iLightSpot : public iLight
 	{
 	public:
-		cLightSpot(tString asName, cResources *apResources);
-		~cLightSpot();
+		iLightSpot(tString asName, cResources *apResources);
+		~iLightSpot();
 
 		const cMatrixf& GetViewMatrix();
 		const cMatrixf& GetProjectionMatrix();
@@ -53,12 +53,10 @@ namespace hpl {
 		void SetNearClipPlane(float afX) { mfNearClipPlane = afX; mbProjectionUpdated = true;}
 		float GetNearClipPlane() { return mfNearClipPlane;}
 
-		void SetIntensity(float afX) override;
 		void SetRadius(float afX) override;
 
-		// Frustum far-plane / cull reach = the authored radius (mfRadius);
-		// fall back to intensity only if a map authored no radius at all.
-		float GetReach() const { return mfRadius > 0.f ? mfRadius : mfIntensity; }
+		// Far plane of the projection: the light radius for both light models.
+		float GetReach() const { return mfRadius; }
 
 		cFrustum* GetFrustum();
 
@@ -98,6 +96,22 @@ namespace hpl {
 		int mlViewProjMatrixCount;
 		int mlViewMatrixCount;
 		int mlFrustumMatrixCount;
+	};
+
+	// Retail spot light (<SpotLight>), rendered by the Standard renderer.
+	class cLightSpotLegacy : public iLightSpot
+	{
+	public:
+		cLightSpotLegacy(tString asName, cResources *apResources);
+	};
+
+	// Redux spot light (<Re_SpotLight>): Intensity, Radius (reach) and
+	// SourceRadius feed the ray-traced light grid; the cone shape is shared with
+	// the legacy spot light through iLightSpot.
+	class cLightSpot : public iLightSpot
+	{
+	public:
+		cLightSpot(tString asName, cResources *apResources);
 	};
 
 };

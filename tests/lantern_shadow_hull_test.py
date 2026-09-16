@@ -32,7 +32,12 @@ class LanternShadowHullTest(unittest.TestCase):
         indices = list(map(int, faces.find('c:p', NS).text.split()))[::3]
         cls.triangles = [tuple(vertices[j] for j in indices[i:i+3]) for i in range(0, len(indices), 3)]
         delta = ET.parse(ASSETS / 'hand_lantern.ent_delta')
-        light = delta.find('./Modify[@ID="3"]/SetAttr')
+        # The emitter moved out of <Modify ID="3"> when the standard renderer
+        # split the lantern light per RendererMask: the Modify now only carries
+        # the mask, and the authored position/radius live on the added light.
+        light = delta.find('./Add/Re_PointLight[@Name="PointLight_1"]')
+        if light is None or light.get('WorldPos') is None:
+            raise AssertionError('hand_lantern.ent_delta has no emitter light')
         cls.emitter = tuple(map(float, light.get('WorldPos').split()))
         cls.source_radius = float(light.get('SourceRadius'))
 

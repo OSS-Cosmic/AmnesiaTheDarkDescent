@@ -375,5 +375,221 @@ SLANG_PUBLIC struct SceneConstants {
     // Per-camera visible fog areas in legacy back-to-front draw order. The
     // parameter buffer is shared by all viewports and stays in world order.
     SLANG_PUBLIC uint fogAreaIndices[kFogAreaCapacity];
+    SLANG_PUBLIC uint skyBoxTextureIndex;
+    SLANG_PUBLIC uint skyBoxEnabled;
+    SLANG_PUBLIC uint fogEnabled;
+    SLANG_PUBLIC uint orthographicCamera;
+    SLANG_PUBLIC float4 skyBoxColor;
+    // Renderer clear color, in the target's configured color space.  The
+    // Standard environment pass uses this only when skyBoxEnabled is zero;
+    // skyBoxColor remains the active sky tint/cubemap multiplier.
+    SLANG_PUBLIC float4 clearColor;
+};
+
+// =============================================================================
+// GPU-driven particles
+//
+// The CPU keeps only emitter-level bookkeeping (spawn accounting, transform,
+// material frame, lifetime). Per-particle spawn / integration lives in
+// Standard.particleSim.cs.slang and per-viewport billboarding in
+// Standard.particleExpand.cs.slang. Capacities are in Constants.h
+// (kGpuParticleCapacity / kGpuEmitterCapacity / kGpuEmitterParamCapacity).
+//
+// Enum values below mirror the host enums 1:1 (ParticleEmitter.h /
+// ParticleEmitter_UserData.h); the .ps loader writes them verbatim.
+// =============================================================================
+
+// eParticleEmitterType (ParticleEmitter.h:49) — how a particle becomes a quad.
+SHARED_CONST uint kGpuDrawTypeFixedPoint     = 0u;  // constant emitter draw size
+SHARED_CONST uint kGpuDrawTypeDynamicPoint   = 1u;  // per-particle size (+ spin)
+SHARED_CONST uint kGpuDrawTypeLine           = 2u;  // stretched pos -> lastPos
+SHARED_CONST uint kGpuDrawTypeAxis           = 3u;  // world-space, emitter axes
+
+// ePEStartPosType (ParticleEmitter_UserData.h:30) — start pos AND start vel.
+SHARED_CONST uint kGpuStartTypeBox           = 0u;
+SHARED_CONST uint kGpuStartTypeSphere        = 1u;
+
+// ePEGravityType (ParticleEmitter_UserData.h:44).
+SHARED_CONST uint kGpuGravityNone            = 0u;
+SHARED_CONST uint kGpuGravityVector          = 1u;
+SHARED_CONST uint kGpuGravityCenter          = 2u;
+
+// ePESubDivType (ParticleEmitter_UserData.h:52).
+SHARED_CONST uint kGpuSubDivRandom           = 0u;
+SHARED_CONST uint kGpuSubDivAnimation        = 1u;
+
+// ePEPartSpinType (ParticleEmitter_UserData.h:59).
+SHARED_CONST uint kGpuPartSpinConstant       = 0u;
+SHARED_CONST uint kGpuPartSpinMovement       = 1u;
+
+// GpuEmitterParams.flags
+SHARED_CONST uint kGpuEmitterFlagRespawn            = 0x001u;
+SHARED_CONST uint kGpuEmitterFlagUsesDirection      = 0x002u;
+SHARED_CONST uint kGpuEmitterFlagUsePartSpin        = 0x004u;
+SHARED_CONST uint kGpuEmitterFlagUseRevolution      = 0x008u;
+SHARED_CONST uint kGpuEmitterFlagCollides           = 0x010u;
+SHARED_CONST uint kGpuEmitterFlagMulRGBWithAlpha    = 0x020u;
+SHARED_CONST uint kGpuEmitterFlagCoordSystemLocal   = 0x040u;
+
+// GpuEmitterInstance.flags
+SHARED_CONST uint kGpuInstanceFlagInvertCull        = 0x001u; // reflection frustum
+SHARED_CONST uint kGpuInstanceFlagWarming           = 0x002u; // warm-up catch-up step
+
+// GpuParticle.packed bit layout.
+SHARED_CONST uint kGpuParticleAliveBit       = 0x80000000u;
+SHARED_CONST uint kGpuParticleSubDivShift    = 0u;           // bits  0..11
+SHARED_CONST uint kGpuParticleSubDivMask     = 0x00000fffu;
+SHARED_CONST uint kGpuParticleBounceShift    = 12u;          // bits 12..23
+SHARED_CONST uint kGpuParticleBounceMask     = 0x00fff000u;
+
+// -----------------------------------------------------------------------------
+// Persistent per-particle state: exactly 64 B (one cache line) under scalar
+// layout. Every value cParticleEmitter_UserData::SetParticleDefaults randomises
+// -- start pos, start vel, acceleration, speed multiplier, max speed, bounce
+// amount, revolution velocity, start colour, start size, life span, spin
+// velocity, sub-div index -- is re-derived each step from `seed` with the same
+// hash instead of being stored. That is free on the GPU and keeps the record
+// small enough that the whole shipped game's particle population (14,056) is
+// under 1 MB.
+//
+// `lastPos` is needed by kGpuDrawTypeLine (the velocity streak) and by the
+// depth-buffer collision sweep, so it is stored rather than re-derived.
+// -----------------------------------------------------------------------------
+SLANG_PUBLIC struct GpuParticle {
+    SLANG_PUBLIC float3 pos;
+    SLANG_PUBLIC float  life;          // counts DOWN to zero, like cParticle::mfLife
+    SLANG_PUBLIC float3 vel;
+    SLANG_PUBLIC float  spin;          // accumulated radians (kGpuDrawTypeDynamicPoint)
+    SLANG_PUBLIC float3 lastPos;
+    SLANG_PUBLIC uint   packed;        // alive bit | bounceCount | subDivIdx
+    SLANG_PUBLIC uint   seed;          // hash(emitterId, slot, spawnGeneration)
+    SLANG_PUBLIC float  startLife;     // for the life-relative size/colour curves
+    SLANG_PUBLIC uint   emitterSlot;   // index into gParticleEmitters
+    SLANG_PUBLIC uint   pad0;
+};
+
+// -----------------------------------------------------------------------------
+// Static authored emitter data -- one record per <ParticleEmitter> element
+// across every loaded .ps file, uploaded once when the resource loads.
+// Field order follows cParticleEmitterData_UserData (ParticleEmitter_UserData.h)
+// so the two stay diffable. Min/Max pairs are the authored random ranges.
+// -----------------------------------------------------------------------------
+SLANG_PUBLIC struct GpuEmitterParams {
+    // --- start position ---
+    SLANG_PUBLIC float3 minStartPos;
+    SLANG_PUBLIC float3 maxStartPos;
+    SLANG_PUBLIC float2 minStartAngles;      // radians
+    SLANG_PUBLIC float2 maxStartAngles;      // radians
+    SLANG_PUBLIC float  minStartRadius;
+    SLANG_PUBLIC float  maxStartRadius;
+    SLANG_PUBLIC uint   startPosType;        // kGpuStartType*
+
+    // --- start velocity ---
+    SLANG_PUBLIC uint   startVelType;        // kGpuStartType*
+    SLANG_PUBLIC float3 minStartVel;
+    SLANG_PUBLIC float3 maxStartVel;
+    SLANG_PUBLIC float2 minStartVelAngles;   // radians
+    SLANG_PUBLIC float2 maxStartVelAngles;   // radians
+    SLANG_PUBLIC float  minStartVelSpeed;
+    SLANG_PUBLIC float  maxStartVelSpeed;
+
+    // --- movement ---
+    SLANG_PUBLIC float  minSpeedMultiply;    // drag: vel *= pow(speedMul, dt)
+    SLANG_PUBLIC float  maxSpeedMultiply;
+    SLANG_PUBLIC float3 minStartAcc;
+    SLANG_PUBLIC float3 maxStartAcc;
+    SLANG_PUBLIC float  minVelMaximum;       // speed clamp; <= 0 disables
+    SLANG_PUBLIC float  maxVelMaximum;
+    SLANG_PUBLIC uint   gravityType;         // kGpuGravity*
+    SLANG_PUBLIC float3 gravityAcc;
+
+    // --- spin / revolution ---
+    SLANG_PUBLIC uint   partSpinType;        // kGpuPartSpin*
+    SLANG_PUBLIC float  minSpinRange;
+    SLANG_PUBLIC float  maxSpinRange;
+    SLANG_PUBLIC float3 minRevVel;
+    SLANG_PUBLIC float3 maxRevVel;
+
+    // --- life span ---
+    SLANG_PUBLIC float  minLifeSpan;
+    SLANG_PUBLIC float  maxLifeSpan;
+
+    // --- size, life-relative curve (3 segments: start / middle / end) ---
+    SLANG_PUBLIC float2 minStartSize;
+    SLANG_PUBLIC float2 maxStartSize;
+    SLANG_PUBLIC float  startRelSize;
+    SLANG_PUBLIC float  middleRelSize;
+    SLANG_PUBLIC float  middleRelSizeTime;
+    SLANG_PUBLIC float  middleRelSizeLength;
+    SLANG_PUBLIC float  endRelSize;
+
+    // --- colour, life-relative curve (3 segments) ---
+    SLANG_PUBLIC float4 minStartColor;
+    SLANG_PUBLIC float4 maxStartColor;
+    SLANG_PUBLIC float4 startRelColor;
+    SLANG_PUBLIC float4 middleRelColor;
+    SLANG_PUBLIC float4 endRelColor;
+    SLANG_PUBLIC float  middleRelColorTime;
+    SLANG_PUBLIC float  middleRelColorLength;
+
+    // --- collision (screen-space depth sweep; replaces the physics raycast) ---
+    SLANG_PUBLIC float  minBounceAmount;
+    SLANG_PUBLIC float  maxBounceAmount;
+    SLANG_PUBLIC uint   minCollisionMax;
+    SLANG_PUBLIC uint   maxCollisionMax;
+
+    // --- sub-division UV animation ---
+    SLANG_PUBLIC uint   subDivType;          // kGpuSubDiv*
+    SLANG_PUBLIC uint   subDivCount;         // mvSubDivUV.size(); 0 => whole texture
+    SLANG_PUBLIC uint2  subDiv;              // authored SubDiv grid (cols, rows)
+
+    // --- rendering ---
+    SLANG_PUBLIC uint   drawType;            // kGpuDrawType*
+    SLANG_PUBLIC uint   flags;               // kGpuEmitterFlag*
+    SLANG_PUBLIC float2 drawSize;            // mvDrawSize (kGpuDrawTypeFixedPoint)
+    SLANG_PUBLIC uint   pad0;
+    SLANG_PUBLIC uint   pad1;
+};
+
+// -----------------------------------------------------------------------------
+// Per-frame, per-live-emitter record. The CPU rebuilds this every frame for
+// every emitter that is awake; `spawnCount` is the number of particles the
+// emitter's CPU-side accounting decided to create this step, so IsDead() stays
+// exact without any readback.
+// -----------------------------------------------------------------------------
+// -----------------------------------------------------------------------------
+// One spawn, decided by the CPU shadow scheduler. The scheduler owns slot
+// allocation (free stack) and expiry (min-heap keyed on death time) so that
+// mlNumOfParticles / mlMaxParticles / mbDying keep exactly the values they have
+// today and IsDead() needs no readback. `startLife` is drawn host-side with
+// cMath::RandRectf and shipped here because both sides must agree on it.
+// -----------------------------------------------------------------------------
+SLANG_PUBLIC struct GpuParticleSpawn {
+    SLANG_PUBLIC uint  slot;          // absolute index into gParticleState
+    SLANG_PUBLIC uint  emitterSlot;   // index into gParticleEmitters
+    SLANG_PUBLIC uint  seed;          // hash(emitterCookie, spawnSerial, slot)
+    SLANG_PUBLIC float startLife;
+};
+
+SLANG_PUBLIC struct GpuEmitterInstance {
+    SLANG_PUBLIC float4x4 worldMat;          // emitter node world transform
+    SLANG_PUBLIC float4x4 prevWorldMat;
+    SLANG_PUBLIC float3   direction;         // mvDirection (UsesDirection)
+    SLANG_PUBLIC float    dt;                // this step's time slice
+    SLANG_PUBLIC float3   worldPos;          // gravity-center origin / BV anchor
+    SLANG_PUBLIC float    frameTime;
+    SLANG_PUBLIC float3   right;             // mvRight  (kGpuDrawTypeAxis)
+    SLANG_PUBLIC uint     paramId;           // index into gParticleEmitterParams
+    SLANG_PUBLIC float3   forward;           // mvForward (kGpuDrawTypeAxis)
+    SLANG_PUBLIC uint     sliceBase;         // first slot in gParticleState
+    SLANG_PUBLIC uint     sliceCapacity;     // == authored MaxParticleNum
+    SLANG_PUBLIC uint     spawnCount;        // particles to create this step
+    SLANG_PUBLIC uint     spawnGeneration;   // bumped per step; seeds the RNG
+    SLANG_PUBLIC uint     flags;             // kGpuInstanceFlag*
+    SLANG_PUBLIC float4   parentColor;       // cParticleSystem::mColor
+    SLANG_PUBLIC float    fadeMinStart;      // distance fade (ParticleEmitter.cpp:337)
+    SLANG_PUBLIC float    fadeMinEnd;
+    SLANG_PUBLIC float    fadeMaxStart;
+    SLANG_PUBLIC float    fadeMaxEnd;
 };
 HOST_NAMESPACE_END

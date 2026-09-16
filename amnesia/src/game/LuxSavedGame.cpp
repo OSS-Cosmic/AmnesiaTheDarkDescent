@@ -583,6 +583,16 @@ static void ListToSet(cContainerList<T> &aList, std::set<T> &aSet)
 	}
 }
 
+static void RemapRendererMaskIDs(cWorld *apWorld, std::set<int> &aSet)
+{
+	std::set<int> setRemapped;
+	for(std::set<int>::iterator it = aSet.begin(); it != aSet.end(); ++it)
+		setRemapped.insert(apWorld->RemapRendererMaskID(*it));
+	aSet.swap(setRemapped);
+}
+
+//-----------------------------------------------------------------------
+
 template <class T>
 static bool ExistsInSet(T aVar, std::set<T> &aSet)
 {
@@ -800,6 +810,8 @@ void cLuxSavedGameMap::ToMap(cLuxMap *apMap)
 		{
 			cEngineLight_SaveData& saveLight = lightSaveLight.Next();
 			iLight *pLight = pWorld->GetLightFromUniqueID(saveLight.mlID);
+			// A save from the other renderer backend may know the light only by name.
+			if(pLight==NULL) pLight = pWorld->GetLight(saveLight.msName);
 			if(pLight)
 			{
 				saveLight.ToLight(pLight);	
@@ -858,7 +870,7 @@ void cLuxSavedGameMap::ToMap(cLuxMap *apMap)
 				{
 					savePS.ToPS(pPS);	
 				}
-				setSavedPS.insert(savePS.mlID);
+				setSavedPS.insert(pWorld->RemapRendererMaskID(savePS.mlID));
 			}
 			///////////////////////
 			// PS created by script
@@ -910,7 +922,27 @@ void cLuxSavedGameMap::ToMap(cLuxMap *apMap)
 
 			if(pEntity==NULL)
 			{
+				// Tagged for the other renderer backend with nothing standing in for
+				// it here: the entity does not exist on this backend.
+				if(pWorld->IsRendererMaskSkippedID(pSavedEntity->mlID))
+				{
+					Warning("Saved entity '%s' only exists for the other renderer backend. Skipping it.\n", pSavedEntity->msName.c_str());
+					continue;
+				}
 				pEntity = pSavedEntity->CreateEntity(apMap);
+				// The saved file is gone (a Redux entity folded back into the retail
+				// lamp): keep the map's same-named entity of the same kind.
+				if(pEntity==NULL)
+				{
+					pEntity = apMap->GetEntityByName(pSavedEntity->msName);
+					if(pEntity && static_cast<int>(pEntity->GetEntityType()) != pSavedEntity->mlEntityType) pEntity = NULL;
+					if(pEntity) Warning("Saved entity '%s' could not be recreated from its file. Using the map's entity.\n", pSavedEntity->msName.c_str());
+				}
+			}
+			else if(pEntity->GetID() != pSavedEntity->mlID && static_cast<int>(pEntity->GetEntityType()) != pSavedEntity->mlEntityType)
+			{
+				Warning("Saved entity '%s' is a different kind of entity on this renderer backend. Keeping its map state.\n", pSavedEntity->msName.c_str());
+				continue;
 			}
 
 			if(pEntity)
@@ -927,7 +959,7 @@ void cLuxSavedGameMap::ToMap(cLuxMap *apMap)
 		while(entIt.HasNext())
 		{
 			iLuxEntity *pEntity = entIt.Next();
-			if(pEntity->GetFullGameSave() && EntitySaveDataExists(pEntity->GetID())==false)
+			if(pEntity->GetFullGameSave() && EntitySaveDataExists(pWorld, pEntity->GetID())==false)
 			{
 				apMap->DestroyEntity(pEntity);
 			}
@@ -949,6 +981,11 @@ void cLuxSavedGameMap::ToMap(cLuxMap *apMap)
 		ListToSet(mlstUnbrokenItemContainers, setUnbrokenItemContainers);
 		ListToSet(mlstBrokenContainersWithActiveItem, setBrokenContainersWithActiveItem);
 		ListToSet(mlstUnlitLamps, setUnlitLamps);
+
+		// IDs saved on the other renderer backend name the objects loaded in their place.
+		std::set<int>* vIDSets[] = { &setDisabledEntities, &setLockedDoors, &setLockedLevelDoors, &setActiveItems,
+									 &setUnbrokenItemContainers, &setBrokenContainersWithActiveItem, &setOpenChests, &setUnlitLamps };
+		for(size_t i=0; i<sizeof(vIDSets)/sizeof(vIDSets[0]); ++i) RemapRendererMaskIDs(pWorld, *vIDSets[i]);
 		
 		
 		cLuxEntityIterator it = apMap->GetEntityIterator();
@@ -1070,14 +1107,14 @@ void cLuxSavedGameMap::ToMap(cLuxMap *apMap)
 
 //-----------------------------------------------------------------------
 
-bool cLuxSavedGameMap::EntitySaveDataExists(int alID)
+bool cLuxSavedGameMap::EntitySaveDataExists(cWorld *apWorld, int alID)
 {
 	cContainerListIterator<iLuxEntity_SaveData*> it = mlstFullEntities.GetIterator();
 	while(it.HasNext())
 	{
 		iLuxEntity_SaveData *pSavedEntity = it.Next();
 		
-		if(pSavedEntity->mlID == alID) return true;
+		if(apWorld->RemapRendererMaskID(pSavedEntity->mlID) == alID) return true;
 	}
 	return false;
 }

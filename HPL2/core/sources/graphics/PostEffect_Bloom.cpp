@@ -135,18 +135,14 @@ void cPostEffect_Bloom::RenderEffect(const PostEffectRenderCtx &ctx) {
         eTextureWrap_ClampToEdge, eTextureWrap_ClampToEdge,
         eTextureWrap_ClampToEdge, eTextureFilter_Bilinear);
 
-    // Pipelines: downsample + composite are opaque; upsample blends additively
-    // (ONE/ONE/ADD) onto the destination mip's own downsample content.
+    // Pipelines: downsample + composite are opaque; upsample alpha-blends
+    // (SRC_ALPHA/ONE_MINUS_SRC_ALPHA) onto the destination mip's own downsample
+    // content. The shader's alpha is the lerp weight, so the mip weights sum to
+    // 1 instead of adding up every level.
     PostEffectPipelineState downState{};
     InitPostEffectPipelineState(downState, cGraphics::PogoColorFormat, false);
     PostEffectPipelineState upState{};
     InitPostEffectPipelineState(upState, cGraphics::PogoColorFormat, true);
-    upState.blendAttachment.srcColorBlendFactor = VK_BLEND_FACTOR_ONE;
-    upState.blendAttachment.dstColorBlendFactor = VK_BLEND_FACTOR_ONE;
-    upState.blendAttachment.colorBlendOp        = VK_BLEND_OP_ADD;
-    upState.blendAttachment.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
-    upState.blendAttachment.dstAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
-    upState.blendAttachment.alphaBlendOp        = VK_BLEND_OP_ADD;
     PostEffectPipelineState compState{};
     InitPostEffectPipelineState(compState, cGraphics::PogoColorFormat, false);
 
@@ -163,7 +159,7 @@ void cPostEffect_Bloom::RenderEffect(const PostEffectRenderCtx &ctx) {
 
     // Render a fullscreen-triangle pass into `destView` (size mw x mh) sampling
     // `inputDesc` through `prog`/`pipeline`, with `pc` push constants. `loadOp`
-    // is LOAD for the additive upsample, DONT_CARE otherwise.
+    // is LOAD for the blended upsample, DONT_CARE otherwise.
     auto fullscreenPass = [&](RIProgram &prog, hash_t pipeHash,
                               VkGraphicsPipelineCreateInfo *pipeCI,
                               const char *dbgName, VkImageView destView,
@@ -243,7 +239,7 @@ void cPostEffect_Bloom::RenderEffect(const PostEffectRenderCtx &ctx) {
     }
     // After the loop: mip[N-1] is RENDER_TARGET, mips[0..N-2] are SHADER_RESOURCE.
 
-    // ----- 3. Upsample chain: additively blend mip[i] into mip[i-1] -----
+    // ----- 3. Upsample chain: lerp mip[i] into mip[i-1] -----
     for (int i = mipCount - 1; i >= 1; --i) {
         barrier(&m_mips[(size_t)i].texture, RI_RESOURCE_STATE_RENDER_TARGET,
                 RI_STAGE_NONE, RI_RESOURCE_STATE_SHADER_RESOURCE,

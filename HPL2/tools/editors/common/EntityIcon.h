@@ -42,7 +42,8 @@ public:
 				  bool abIsSelected,
 				  const cVector3f& avPos,
 				  bool abIsActive,
-				  const cColor& aDisabledCol=cColor(0.1f, 1));
+				  const cColor& aDisabledCol=cColor(0.1f, 1),
+				  const cColor& aActiveCol=cColor(0.5f, 1));
 
 	cRect2l GetIconClipRectangle(cEditorWindowViewport* apViewport, iEntityWrapper* apEntity);
 

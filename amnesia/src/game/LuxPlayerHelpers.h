@@ -436,7 +436,7 @@ private:
 	bool mbDisabled;
 	bool mbActive;
 	float mfAlpha;
-	cLightPoint *mpLight;
+	iLightPoint *mpLight;
 	
 };
 
@@ -684,7 +684,7 @@ public:
 	void CreateWorldEntities(cLuxMap *apMap);
 	void DestroyWorldEntities(cLuxMap *apMap);
 
-	cLightPoint* GetAmbientLight(){ return mpAmbientLight;}
+	iLightPoint* GetAmbientLight(){ return mpAmbientLight;}
 
 	bool InDarkness();
 
@@ -718,7 +718,7 @@ private:
 	cSoundEntry *mpLoopSound;
 	float mfLoopSoundCount;
 
-	cLightPoint *mpAmbientLight;
+	iLightPoint *mpAmbientLight;
 	bool mbAmbientLightIsOn;
 
 	bool mbActive;

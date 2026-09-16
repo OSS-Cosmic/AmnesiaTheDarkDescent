@@ -2654,7 +2654,8 @@ void iLuxEnemy::LoadFromSaveData(iLuxEntity_SaveData* apSaveData)
 	//Lights
 	for(size_t i=0; i<mvLights.size(); ++i)
 	{
-		pData->mvLights[i].ToLight(mvLights[i]);
+		cEngineLight_SaveData *pSaveLight = FindSavedChildLight(pData->mvLights, mvLights[i], i);
+		if(pSaveLight) pSaveLight->ToLight(mvLights[i]);
 	}
 	
 	///////////////////////
@@ -2692,7 +2693,7 @@ void iLuxEnemy::LoadFromSaveData(iLuxEntity_SaveData* apSaveData)
 	//Billboards
 	for(size_t i=0; i<mvBillboards.size(); ++i)
 	{
-		pData->mvBillboards[i].ToBillboard(mvBillboards[i]);
+		if(i < pData->mvBillboards.Size()) pData->mvBillboards[i].ToBillboard(mvBillboards[i]);
 	}
 
 	///////////////////////

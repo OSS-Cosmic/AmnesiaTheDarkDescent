@@ -37,6 +37,9 @@ public:
 	void Create();
 
 protected:
+	// Renderer selection for every selected object.
+	void OnUpdate(float afTimeStep);
+	bool WindowSpecificInputCallback(iEditorInput* apInput);
 
 	bool Button_OnPressed(iWidget* apWidget, const cGuiMessageData& aData);
 	kGuiCallbackDeclarationEnd(Button_OnPressed);

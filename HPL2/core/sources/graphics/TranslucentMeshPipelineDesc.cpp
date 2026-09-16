@@ -119,6 +119,13 @@ TranslucentMeshPipelineDesc::TranslucentMeshPipelineDesc(
     blendAttachment.dstAlphaBlendFactor =
         VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
     break;
+  case BLEND_REPLACE:
+    blendAttachment.blendEnable = VK_FALSE;
+    blendAttachment.srcColorBlendFactor = VK_BLEND_FACTOR_ONE;
+    blendAttachment.dstColorBlendFactor = VK_BLEND_FACTOR_ZERO;
+    blendAttachment.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
+    blendAttachment.dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO;
+    break;
   default:
     break;
   }

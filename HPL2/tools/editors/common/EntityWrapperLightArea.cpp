@@ -28,6 +28,8 @@
 
 #include "scene/LightArea.h"
 
+#include <tinyxml2.h>
+
 #include <cmath>
 
 //---------------------------------------------------------------------------
@@ -59,7 +61,7 @@ bool cIconEntityLightArea::Create(const tString& asName)
 
 //---------------------------------------------------------------------------
 
-cEntityWrapperTypeLightArea::cEntityWrapperTypeLightArea() : iEntityWrapperTypeLight("AreaLight", eEditorEntityLightType_Area)
+cEntityWrapperTypeLightArea::cEntityWrapperTypeLightArea() : iEntityWrapperTypeLight("Re_AreaLight", eEditorEntityLightType_Area, true)
 {
 	mScaleType = eScaleType_None;
 
@@ -68,6 +70,11 @@ cEntityWrapperTypeLightArea::cEntityWrapperTypeLightArea() : iEntityWrapperTypeL
 	AddFloat(eLightAreaFloat_BarnDoorAngle, "BarnDoorAngle", cMath::ToRad(45.0f));
 	AddFloat(eLightAreaFloat_BarnDoorLength, "BarnDoorLength", 0.0f);
 	AddString(eLightAreaStr_SourceTexture, "SourceTexture");
+}
+
+bool cEntityWrapperTypeLightArea::IsAppropriateType(tinyxml2::XMLElement* apElement)
+{
+	return iEntityWrapperTypeLight::IsAppropriateType(apElement) || tString(apElement->Value())=="AreaLight";
 }
 
 iEntityWrapperData* cEntityWrapperTypeLightArea::CreateSpecificData()

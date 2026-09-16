@@ -26,12 +26,15 @@
 #include "math/MathTypes.h"
 #include "engine/EngineTypes.h"
 #include "scene/SceneTypes.h"
+#include "scene/Light.h"
 #include "scene/RenderableSet.h" // by-value static/dynamic renderable sets
 #include "graphics/RITypes.h" // RISharedPointer<RIBuffer> decal buffer members
 #include "graphics/IndexPool.h" // stable per-type GPU light slots
 #include "graphics/Graphics.h" // cGraphics::FrameContext (PrepareFrame/TLAS build)
 
 #include <cstdint>
+#include <map>
+#include <set>
 #include <vector>
 
 namespace tinyxml2 { class XMLElement; }
@@ -56,9 +59,14 @@ namespace hpl {
 	class cNode3D;
 	class iEntity3D;
 	class iLight;
-	class cLightSpot;
-	class cLightPoint;
+	class iLightSpot;
+	class iLightPoint;
 	class cLightArea;
+	class cLightBoxLegacy;
+	class cLightPoint;
+	class cLightSpot;
+	class cLightPointLegacy;
+	class cLightSpotLegacy;
 	class cImageEntity;
 	class cParticleManager;
 	class cParticleSystem;
@@ -193,7 +201,8 @@ namespace hpl {
 								const tString& asFile, int alID = -1, bool abActive=true,
 								const cVector3f &avScale=cVector3f(1),
 								cResourceVarsObject *apInstanceVars=NULL,
-								bool abSkipNonStaticEntity=false);
+								bool abSkipNonStaticEntity=false,
+								unsigned alRendererMask=kRendererMaskAll);
 								
 		/**
 		 * Call this when all things have been added to set up things like physics world size.
@@ -253,23 +262,23 @@ namespace hpl {
 
 		// Remove a single decal: unregisters it from the renderable container,
 		// drops it from mvDecals, frees it (and its material) and marks the GPU
-		// buffers dirty. The per-object association is NOT rebuilt here — call
-		// CompileDecals() afterwards (the editor does) so receivers stop
-		// referencing the removed index.
+		// buffers dirty. Receiver associations are rebuilt on the next
+		// PrepareFrame, coalesced with other decal edits.
 		void DestroyDecal(cDecal* apDecal);
 
 		// (Re)build the CPU-side decal association only: Morton-sort mvDecals and
 		// fill mvDecalObjectIndices + each renderable's decalList, then mark the
-		// GPU buffers dirty. Split out of Compile() so the editor can refresh
-		// decal projection after add/move/edit/delete without recompiling the
-		// renderable containers or physics world.
+		// GPU buffers dirty. Split out of Compile() so decal projection can be
+		// refreshed after add/move/edit/delete without recompiling the renderable
+		// containers or physics world.
 		void CompileDecals();
 
 		// All decals, in stable order (== gDecals[] upload order + the index space
 		// of GetDecalObjectIndices()).
 		const std::vector<cDecal*>& GetDecals() const { return mvDecals; }
 		// Flat pool of stable decal indices; each renderable's [offset,count)
-		// (iRenderable::GetDecalList*) addresses a run here. Built by Compile().
+		// (iRenderable::GetDecalList*) addresses a run here. Built by
+		// CompileDecals().
 		const std::vector<uint32_t>& GetDecalObjectIndices() const { return mvDecalObjectIndices; }
 
 		// Per-world decal GPU buffers, baked once by PrepareFrame (geometry from
@@ -347,8 +356,7 @@ namespace hpl {
 		// Request a decal↔object association rebuild (CompileDecals) without doing
 		// it now. PrepareFrame runs the rebuild at most once per frame when set, so
 		// many editor edits in one frame (e.g. a drag) coalesce into one walk.
-		// Only the editor sets this; the runtime builds associations once at load
-		// (Compile), so gameplay pays no per-frame cost.
+		// Decal edits use this deferred path; load-time Compile() rebuilds directly.
 		void MarkDecalAssociationsDirty() { mbDecalAssociationsDirty = true; }
 		cMeshEntity* GetDynamicMeshEntity(const tString& asName);
 		
@@ -359,12 +367,37 @@ namespace hpl {
 		
 		///// LIGHT METHODS ////////////////////
 
+		cLightPointLegacy* CreateLightPointLegacy(const tString &asName="",const tString &asGobo="", bool abStatic=false);
+		cLightSpotLegacy* CreateLightSpotLegacy(const tString &asName="", const tString &asGobo="", bool abStatic=false);
+		cLightArea* CreateLightArea(const tString &asName="", bool abStatic=false);
+		cLightBoxLegacy* CreateLightBoxLegacy(const tString &asName="", bool abStatic=false);
+		// Redux light classes (ray traced). The *Legacy lights above are
+		// Standard-renderer lights and never take a GPU light slot.
 		cLightPoint* CreateLightPoint(const tString &asName="",const tString &asGobo="", bool abStatic=false);
 		cLightSpot* CreateLightSpot(const tString &asName="", const tString &asGobo="", bool abStatic=false);
-		cLightArea* CreateLightArea(const tString &asName="", bool abStatic=false);
+		// Lights created by code (not map data): the class the running backend
+		// renders, with reach set and, on Overdrive, intensity derived from it.
+		iLight* CreateCodePointLight(const tString &asName, const tString &asGobo, bool abStatic,
+		                             float afReach, const cColor &aLitColor, float afIntensityMul = 1.0f);
 		void DestroyLight(iLight* apLight);
 		iLight* GetLight(const tString& asName);
 		iLight* GetLightFromUniqueID(int alID);
+		// Renderer backend this world is loaded for; loaders skip objects whose
+		// RendererMask excludes it.
+		void SetRendererBackend(eRendererBackend aBackend){ mRendererBackend = aBackend; }
+		eRendererBackend GetRendererBackend() const { return mRendererBackend; }
+		unsigned GetRendererMaskBit() const
+		{
+			return mRendererBackend == eRendererBackend_Standard ? kRendererMaskStandard : kRendererMaskOverdrive;
+		}
+
+		// Objects the map tags for the other renderer are skipped at load, but a save
+		// made on that backend still refers to them by ID. The loader records the
+		// skipped IDs and, where a same-named object stands in for one here, its ID;
+		// the *FromUniqueID lookups follow that remap.
+		void SetRendererMaskSkippedIDs(const std::set<int>& aSkippedIDs, const std::map<int,int>& aRemap);
+		int RemapRendererMaskID(int alID) const;
+		bool IsRendererMaskSkippedID(int alID) const;
 
 		tLightList * GetLightList(){ return &mlstLights;}
 
@@ -515,6 +548,9 @@ namespace hpl {
 		cColor mFogColor;
 
 		tLightList mlstLights;
+		eRendererBackend mRendererBackend = eRendererBackend_Overdrive;
+		std::set<int> msetRendererMaskSkippedIDs;
+		std::map<int,int> mmapRendererMaskIDRemap;
 		tMeshEntityList mlstDynamicMeshEntities;
 		tMeshEntityList mlstStaticMeshEntities;
 		std::vector<cDecal*> mvDecals;
@@ -525,13 +561,14 @@ namespace hpl {
 		// stable bindless diffuse slot is baked into each GpuDecal; a SharedResourcePin
 		// per diffuse Image (mvDecalImagePins) keeps that slot valid for the buffer's
 		// lifetime, independent of the decal objects. The object-index pool rides
-		// mvDecalObjectIndices (built by Compile() — empty in an uncompiled world).
+		// mvDecalObjectIndices (built by CompileDecals() — empty in an uncompiled
+		// world).
 		RISharedPointer<RIBuffer> mpDecalBuffer;
 		RISharedPointer<RIBuffer> mpDecalObjectIndexBuffer;
 		std::vector<SharedResourcePin> mvDecalImagePins;
 		bool mbDecalBuffersDirty = true;
-		// Editor-only: a decal was added/moved/edited/removed; PrepareFrame rebuilds
-		// the association (CompileDecals) once per frame when set (debounce).
+		// A decal was added/moved/edited/removed; PrepareFrame rebuilds the
+		// association (CompileDecals) once per frame when set (debounce).
 		bool mbDecalAssociationsDirty = false;
 
 		// Per-world ray-tracing TLAS, built each frame by BuildTlas (called from
@@ -577,6 +614,7 @@ namespace hpl {
 		// uploaded to the GPU (box lights). Centralizes the type→pool switch used by
 		// Create*/Destroy/PrepareFrame.
 		IndexPool* GpuLightPoolFor(iLight* apLight);
+		void RegisterLight(iLight* apLight, bool abStatic);
 
 		size_t pointLightReserved = 0;
 		uint32_t mPointLightCount = 0;

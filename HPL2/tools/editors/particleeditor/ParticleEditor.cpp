@@ -520,6 +520,7 @@ void cParticleEditor::OnLoadConfig()
 	SetSettingValue("ScreenWidth", mpLocalConfig->GetString("Screen","Width","1024"));
 	SetSettingValue("ScreenHeight", mpLocalConfig->GetString("Screen","Height","768"));
 	SetSettingValue("FullScreen", mpLocalConfig->GetString("Screen","Fullscreen","false"));
+	SetSettingValue("RendererBackend", mpLocalConfig->GetString("Screen", "RendererBackend", "standard"));
 
 	 // Set Input config
 	SetSettingValue("TumbleFactor", mpLocalConfig->GetString("Input", "TumbleSpeed", "0.005"));
@@ -566,6 +567,7 @@ void cParticleEditor::OnSaveConfig()
 	mpLocalConfig->SetString("Screen","Width", GetSetting("ScreenWidth"));
 	mpLocalConfig->SetString("Screen","Height", GetSetting("ScreenHeight"));
 	mpLocalConfig->SetString("Screen","Fullscreen", GetSetting("Fullscreen"));
+	mpLocalConfig->SetString("Screen", "RendererBackend", GetSetting("RendererBackend"));
 
 	mpLocalConfig->SetString("Input", "TumbleFactor", GetSetting("TumbleFactor"));
 	mpLocalConfig->SetString("Input", "TrackFactor", GetSetting("TrackFactor"));

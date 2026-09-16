@@ -8,8 +8,11 @@
 #include "graphics/Renderer.h"
 #include "graphics/RISegmentAlloc.h"
 #include "graphics/RITypes.h"
+#include "graphics/StandardHiZPass.h"
+#include "graphics/StandardShadowCullPass.h"
 #include "graphics/WaterReflectionPass.h"
 #include <array>
+#include <memory>
 
 #include "Constants.h"
 
@@ -54,6 +57,81 @@ private:
 
   RISegmentAlloc<RI_NUMBER_FRAME_SEGMENTS> m_indirectSegment;
   struct RIBuffer m_indirectDrawBuffer;
+
+  // ---------------------------------------------------------------------
+  // GPU occlusion cull for the translucent families.
+  //
+  // The pyramid is built from the G-buffer's depth -- which is final opaque
+  // depth, since nothing writes depth again before water/particles/meshes --
+  // and the kernel zeroes the instanceCount word of any draw it can prove is
+  // hidden behind it. Both passes are borrowed from the Standard renderer
+  // unchanged; only the host wiring below is Hybrid's.
+  //
+  // Every family runs kStandardCullModeInstanceMask, the only mode that leaves
+  // slot order alone: translucency is drawn back-to-front and a compacting
+  // mode would reorder it.
+  // ---------------------------------------------------------------------
+  std::unique_ptr<cStandardHiZPass> m_hiZ;
+  std::unique_ptr<cStandardShadowCullPass> m_cull;
+  bool m_cullLoaded = false;
+
+  // One candidate and one 5-word command slot per DRAW (not per renderable:
+  // the mesh path emits a second draw for the cube-map variant).
+  RISegmentAlloc<RI_NUMBER_FRAME_SEGMENTS> m_cullCandidateSegment;
+  struct RIBuffer m_cullCandidateBuffer;
+  RISegmentAlloc<RI_NUMBER_FRAME_SEGMENTS> m_cullCommandSegment;
+  struct RIBuffer m_cullCommandBuffer;
+  RISegmentAlloc<RI_NUMBER_FRAME_SEGMENTS> m_cullTileSegment;
+  struct RIBuffer m_cullTileBuffer;
+  RISegmentAlloc<RI_NUMBER_FRAME_SEGMENTS> m_cullGroupSegment;
+  struct RIBuffer m_cullGroupBuffer;
+  RISegmentAlloc<RI_NUMBER_FRAME_SEGMENTS> m_cullCameraSegment;
+  struct RIBuffer m_cullCameraBuffer;
+  RISegmentAlloc<RI_NUMBER_FRAME_SEGMENTS> m_cullDrawCountSegment;
+  struct RIBuffer m_cullDrawCountBuffer;
+  // Bound because the kernel reflects gCullVisibility on every dispatch; the
+  // two-phase visibility modes are the only ones that index it and this
+  // renderer never runs them, so one element is enough. Anything here that
+  // starts using a visibility mode must grow this first.
+  struct RIBuffer m_cullVisibilityBuffer;
+  // Opaque two-phase camera cull: per-frame candidates, and the opt-in gate.
+  RISegmentAlloc<RI_NUMBER_FRAME_SEGMENTS> m_cameraCandidateSegment;
+  struct RIBuffer m_cameraCandidateBuffer;
+
+  // One family's reserved slice of those rings, plus the host-mapped pointers
+  // into it. Filled by ReserveCull, consumed by WriteCullDraw + DispatchCull.
+  struct TranslucentCull {
+    bool usable = false;
+    uint32_t candidateBase = 0;
+    uint32_t commandBase = 0;   // in 5-word slots
+    uint32_t tileBase = 0;
+    uint32_t groupBase = 0;
+    uint32_t capacity = 0;
+    uint32_t groupCapacity = 0;
+    StandardCullCandidate *candidates = nullptr;
+    uint32_t *commandWords = nullptr;   // 5 per slot, from commandBase
+    StandardCullTile *tile = nullptr;
+    StandardCullGroup *groups = nullptr;
+    uint32_t commandCount = 0;          // draws written so far
+  };
+
+  // Reserves one family's ranges and fills its tile record. `cameraIndex` is
+  // the ring offset of the StandardCullCamera this Draw published, or
+  // kStandardCullNoCamera to frustum-cull only. Returns false -- leaving `out`
+  // unusable -- if anything does not fit, in which case the caller draws
+  // directly as it did before.
+  bool ReserveCull(uint32_t worstCase, const cMatrixf &viewProjection,
+                   uint32_t cameraIndex, TranslucentCull &out);
+  // Writes one draw's command words and its candidate. `slot` is the draw
+  // index within the family, `elementCount` the index count when indexed and
+  // the vertex count otherwise.
+  void WriteCullDraw(TranslucentCull &cull, uint32_t slot, bool indexed,
+                     uint32_t elementCount, uint32_t objectSlot,
+                     const cVector3f &boundsMin, const cVector3f &boundsMax,
+                     bool isStatic, bool neverOcclude);
+  // Records the cull for one family. Must be called outside dynamic rendering.
+  bool DispatchCull(RICmd *cmd, TranslucentCull &cull,
+                    struct RITextureView *hiZ);
 
   // The ray-tracing TLAS (storage + instance buffer) is owned by cWorld and built
   // in cWorld::PrepareFrame; each RT pass binds it via apWorld->GetTlas().

@@ -72,6 +72,7 @@ namespace hpl {
 		eLightType_Point,
 		eLightType_Spot,
 		eLightType_Area,
+		eLightType_Box,
 		eLightType_LastEnum
 	};
 
@@ -81,6 +82,16 @@ namespace hpl {
 		eShadowVolumeType_ZPass,
 		eShadowVolumeType_ZFail,
 		eShadowVolumeType_LastEnum,
+	};
+
+	// Which renderer a light class belongs to. Legacy lights (cLightPointLegacy,
+	// cLightSpotLegacy, cLightBoxLegacy) carry the retail Radius and render in
+	// Standard. Redux lights (cLightPoint, cLightSpot, cLightArea) carry
+	// Intensity, Radius (reach) and SourceRadius and feed the ray-traced grid.
+	enum eLightModel
+	{
+		eLightModel_Legacy,
+		eLightModel_Overdrive,
 	};
 
 	//------------------------------------------
@@ -110,6 +121,7 @@ namespace hpl {
 		bool CheckObjectIntersection(iRenderable *apObject);
 		
 		eLightType GetLightType(){ return mLightType;}
+		eLightModel GetLightModel() const { return mLightModel;}
 
 		// Stable per-type GPU light slot, assigned by the owning cWorld's
 		// light-slot pool at creation and kept for the light's lifetime (returned
@@ -167,6 +179,8 @@ namespace hpl {
 
         //////////////////////////
 		//Fading
+		// Fades the animated value (radius on legacy lights, intensity on
+		// Overdrive lights); GetDestIntensity returns its destination.
 		void FadeTo(const cColor& aCol, float afIntensity, float afTime);
 		void StopFading();
 		bool IsFading();
@@ -194,15 +208,16 @@ namespace hpl {
 		float GetFlickerOnMaxLength(){ return mfFlickerOnMaxLength;}
 		float GetFlickerOffMaxLength(){ return mfFlickerOffMaxLength;}
 		cColor GetFlickerOffColor(){ return mFlickerOffColor;}
-		float GetFlickerOffIntensity(){ return mfFlickerOffIntensity;}
 		bool GetFlickerFade(){ return mbFlickerFade;}
 		float GetFlickerOnFadeMinLength(){ return mfFlickerOnFadeMinLength;}
 		float GetFlickerOnFadeMaxLength(){ return mfFlickerOnFadeMaxLength;}
 		float GetFlickerOffFadeMinLength(){ return mfFlickerOffFadeMinLength;}
-		float GetFlickerOffFadeMaxLength(){ return mfFlickerOnFadeMaxLength;}
+		float GetFlickerOffFadeMaxLength(){ return mfFlickerOffFadeMaxLength;}
 
 		cColor GetFlickerOnColor(){ return mFlickerOnColor;}
-		float GetFlickerOnIntensity(){ return mfFlickerOnIntensity;}
+		// Flicker endpoints of the animated value (radius on legacy lights, intensity on Overdrive lights).
+		float GetFlickerOffValue() const { return mfFlickerOffValue; }
+		float GetFlickerOnValue() const { return mfFlickerOnValue; }
 
 		//////////////////////////
 		//Properties
@@ -235,14 +250,30 @@ namespace hpl {
 		void SetShadowMapBiasMul(float afX){ mfShadowMapBiasMul = afX;}
 		void SetShadowMapSlopeScaleBiasMul(float afX){ mfShadowMapSlopeScaleBiasMul = afX;}
 		
+		// Overdrive intensity; unused by legacy lights.
 		virtual void SetIntensity(float afX);
 		float GetIntensity(){return mfIntensity;}
 
+		// Reach: where attenuation ends. The retail Radius on legacy lights.
 		virtual void SetRadius(float afX);
 		float GetRadius() { return mfRadius; }
 
+		// Value animated by fades and flicker: radius on legacy lights,
+		// intensity on Overdrive lights.
+		float GetAnimatedValue() const;
+		void SetAnimatedValue(float afX);
+
+		// Also invalidates the bounds so the render container picks up the change.
+		void SetRendererMask(unsigned aMask) override;
+
 		void SetSourceRadius(float afX);
 		float GetSourceRadius(){ return mfSourceRadius; }
+
+		// A Redux light whose map gives no Radius derives its reach from the
+		// intensity and colour, and keeps deriving it as fades, flicker and
+		// scripts change them -- so a light a script turns up from zero reaches.
+		void SetReachFollowsIntensity(bool abX);
+		bool GetReachFollowsIntensity() const { return mbReachFollowsIntensity; }
 
 		void UpdateLight(float afTimeStep);
 
@@ -253,7 +284,7 @@ namespace hpl {
 		void OnFlickerOff();
 		void OnFlickerOn();
 		void OnSetDiffuse();
-
+		void UpdateDerivedReach();
         virtual void ExtraXMLProperties(tinyxml2::XMLElement *apMainElem){}
 		virtual void UpdateBoundingVolume()=0;
 		
@@ -281,6 +312,8 @@ namespace hpl {
 		float mfIntensity;
 		float mfRadius;
 		float mfSourceRadius;
+		eLightModel mLightModel = eLightModel_Legacy;
+		bool mbReachFollowsIntensity = false;
 
 		bool mbCastShadows;
 		tObjectVariabilityFlag mlShadowCastersAffected;
@@ -310,7 +343,7 @@ namespace hpl {
 		float mfFlickerOnMaxLength;
 		float mfFlickerOffMaxLength;
 		cColor mFlickerOffColor;
-		float mfFlickerOffIntensity;
+		float mfFlickerOffValue;
 		bool mbFlickerFade;
 		float mfFlickerOnFadeMinLength;
 		float mfFlickerOnFadeMaxLength;
@@ -318,7 +351,7 @@ namespace hpl {
 		float mfFlickerOffFadeMaxLength;
 
 		cColor mFlickerOnColor;
-		float mfFlickerOnIntensity;
+		float mfFlickerOnValue;
 
 		bool mbFlickerOn;
 		float mfFlickerTime;

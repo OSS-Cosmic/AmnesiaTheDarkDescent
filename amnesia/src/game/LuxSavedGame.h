@@ -150,7 +150,7 @@ public:
 	cContainerList<int> mlstBrokenContainersWithActiveItem;
 	cContainerList<int> mlstUnlitLamps;
 private:
-	bool EntitySaveDataExists(int alID);
+	bool EntitySaveDataExists(cWorld *apWorld, int alID);
 };
 
 //----------------------------------------------

@@ -65,8 +65,13 @@ project "TemporalCameraTests"
         ROOT .. "/HPL2/core/sources/graphics/CubeMipGen.cpp",
         ROOT .. "/HPL2/core/sources/graphics/BlockCompressionDecode.cpp",
         ROOT .. "/HPL2/core/sources/graphics/RIFormat.c",
+        ROOT .. "/HPL2/core/sources/graphics/StandardShadowCull.cpp",
     }
-    includedirs { ROOT .. "/HPL2/core/include" }
+    -- StandardShadowCull.cpp shares its predicates with the cull compute shader
+    -- through amnesia/slang/StandardCull.h, and the frustum test compares itself
+    -- against MathLib's MvpToPlanes, so both include paths are required here.
+    includedirs { ROOT .. "/HPL2/core/include", ROOT .. "/amnesia/slang" }
+    mathlib_use()
     add_utest()
     add_test_postbuild()
     -- gmake2 drops postbuildcommands on kind "Utility" projects, so the python
@@ -74,6 +79,22 @@ project "TemporalCameraTests"
     if _OPTIONS["with-python-tests"] ~= "no" then
         add_python_test_postbuild()
     end
+
+project "ParticleScheduleTests"
+    kind "ConsoleApp"
+    language "C++"
+    objdir (BUILD_OUT .. "/obj/%{prj.name}/%{cfg.buildcfg}")
+    targetdir (BUILD_OUT .. "/tests/%{cfg.buildcfg}")
+    -- Its own project rather than a TU in TemporalCameraTests: cParticleSchedule
+    -- links nothing (no engine, no GPU), so keeping it isolated makes the
+    -- lifetime-parity suite runnable on its own.
+    files {
+        ROOT .. "/tests/graphics/particles/*.cpp",
+        ROOT .. "/HPL2/core/sources/graphics/ParticleSchedule.cpp",
+    }
+    includedirs { ROOT .. "/HPL2/core/include" }
+    add_utest()
+    add_test_postbuild()
 
 project "FsrUpscalerParamsTests"
     kind "ConsoleApp"
@@ -85,6 +106,40 @@ project "FsrUpscalerParamsTests"
         ROOT .. "/HPL2/core/sources/graphics/FsrUpscalerParams.cpp",
     }
     includedirs { ROOT .. "/HPL2/core/include" }
+    add_utest()
+    add_test_postbuild()
+
+-- Planar water reflection bounds and sort key. Pure math, but it calls into
+-- cMath / cFrustum / cBoundingVolume, so this project links the engine math
+-- sources plus a small stub TU standing in for the SDL / tinyxml2 / vertex
+-- buffer symbols those pull in. Own directory because the tests/graphics/*.cpp
+-- glob above already owns a main().
+project "StandardWaterReflectionTests"
+    kind "ConsoleApp"
+    language "C++"
+    objdir (BUILD_OUT .. "/obj/%{prj.name}/%{cfg.buildcfg}")
+    targetdir (BUILD_OUT .. "/tests/%{cfg.buildcfg}")
+    files {
+        ROOT .. "/tests/graphics/waterreflection/*.cpp",
+        ROOT .. "/HPL2/core/sources/graphics/StandardWaterReflectionClip.cpp",
+        ROOT .. "/HPL2/core/sources/graphics/StandardWaterReflectionSort.cpp",
+        ROOT .. "/HPL2/core/sources/graphics/StandardWaterMath.cpp",
+        ROOT .. "/HPL2/core/sources/math/Math.cpp",
+        ROOT .. "/HPL2/core/sources/math/MathTypes.cpp",
+        ROOT .. "/HPL2/core/sources/math/Frustum.cpp",
+        ROOT .. "/HPL2/core/sources/math/BoundingVolume.cpp",
+        ROOT .. "/HPL2/core/sources/math/Quaternion.cpp",
+    }
+    includedirs {
+        ROOT .. "/HPL2/core/include",
+        ROOT .. "/HPL2/include",
+        ROOT .. "/HPL2/extern/volk",
+        ROOT .. "/HPL2/extern/Vulkan-Headers/include",
+        ROOT .. "/HPL2/extern/VulkanMemoryAllocator/include",
+        ROOT .. "/premake/config/common",
+    }
+    defines { "USE_SDL2", "VK_USE_PLATFORM_XLIB_KHR" }
+    mathlib_use()
     add_utest()
     add_test_postbuild()
 

@@ -51,7 +51,17 @@ namespace hpl {
 	//     <Add Category="Entities">
 	//       <Entity Name="mymod_lamp_1" Filename="entities/lights/lamp.ent" .../>
 	//     </Add>
+	//     <Add Category="Entities" After="12">   (inserted behind object 12)
+	//       <Re_PointLight Name="PointLight_1" RendererMask="2" .../>
+	//     </Add>
 	//   </MapDelta>
+	//
+	// An <Add>ed object may reuse an existing name only when it carries an
+	// explicit RendererMask and no renderer it loads for then has the name more
+	// often than the base file did -- the other half of an object split by
+	// backend, e.g. a retail light narrowed to RendererMask="1" by a <Modify>
+	// placed before the <Add> of its RendererMask="2" replacement. Added objects
+	// a later <Modify> makes overlap again are dropped.
 	//
 	// The .ent form is identical with an <EntDelta> root; its categories are the
 	// <ModelData> children (Mesh/Bones/Shapes/Bodies/Joints/Animations).

@@ -4,6 +4,7 @@
 #include "graphics/RITypes.h"
 #include "graphics/RIVK.h"
 #include "graphics/XessVulkanSupport.h"
+#include "graphics/RendererCapabilityPolicy.h"
 #include "system/Hasher.h"
 #include "system/QStr.h"
 #include "system/Types.h"
@@ -87,19 +88,6 @@ const static char *DefaultDeviceExtension[] = {
     /************************************************************************/
     VK_KHR_SHADER_ATOMIC_INT64_EXTENSION_NAME,
     /************************************************************************/
-    // Raytracing
-    /************************************************************************/
-    VK_KHR_RAY_QUERY_EXTENSION_NAME,
-    VK_KHR_RAY_TRACING_PIPELINE_EXTENSION_NAME,
-    // Required by VK_KHR_ray_tracing_pipeline
-    VK_KHR_SPIRV_1_4_EXTENSION_NAME,
-    // Required by VK_KHR_spirv_1_4
-    VK_KHR_SHADER_FLOAT_CONTROLS_EXTENSION_NAME,
-
-    VK_KHR_ACCELERATION_STRUCTURE_EXTENSION_NAME,
-    // Required by VK_KHR_acceleration_structure
-    VK_KHR_DEFERRED_HOST_OPERATIONS_EXTENSION_NAME,
-    /************************************************************************/
     // YCbCr format support
     /************************************************************************/
     // Requirement for VK_KHR_sampler_ycbcr_conversion
@@ -139,6 +127,21 @@ const static char *DefaultDeviceExtension[] = {
     // buffer (see amnesia/slang/VBuffer/VBufferRaster.3d.slang).
     /************************************************************************/
     VK_KHR_FRAGMENT_SHADER_BARYCENTRIC_EXTENSION_NAME,
+};
+
+// Only enabled in RENDERER_CAPABILITY_OVERDRIVE. Also the definition of a
+// "ray tracing extension" when screening XeSS requirements in raster mode.
+const static char *RayTracingDeviceExtension[] = {
+    VK_KHR_RAY_QUERY_EXTENSION_NAME,
+    VK_KHR_RAY_TRACING_PIPELINE_EXTENSION_NAME,
+    // Required by VK_KHR_ray_tracing_pipeline
+    VK_KHR_SPIRV_1_4_EXTENSION_NAME,
+    // Required by VK_KHR_spirv_1_4
+    VK_KHR_SHADER_FLOAT_CONTROLS_EXTENSION_NAME,
+
+    VK_KHR_ACCELERATION_STRUCTURE_EXTENSION_NAME,
+    // Required by VK_KHR_acceleration_structure
+    VK_KHR_DEFERRED_HOST_OPERATIONS_EXTENSION_NAME,
 };
 
 void VK_ConfigureBufferQueueFamilies(VkBufferCreateInfo *info,
@@ -284,6 +287,60 @@ static bool __VK_XessFeatureBitsSupported(const VkBool32 *requested,
   return true;
 }
 
+static bool __VK_ValidateXessFeatureChain(
+    const void *chain, const VkBaseOutStructure *const *engineNodes,
+    size_t engineNodeCount, const char **reason) {
+  const VkBaseOutStructure *node =
+      reinterpret_cast<const VkBaseOutStructure *>(chain);
+  const VkBaseOutStructure *seenNodes[32] = {};
+  size_t seenNodeCount = 0;
+  while (node) {
+    if (seenNodeCount == sizeof(seenNodes) / sizeof(seenNodes[0])) {
+      if (reason)
+        *reason = "XeSS returned an excessively long or cyclic feature chain";
+      return false;
+    }
+    for (size_t i = 0; i < seenNodeCount; i++) {
+      if (seenNodes[i] == node) {
+        if (reason)
+          *reason = "XeSS returned a duplicate or cyclic feature chain";
+        return false;
+      }
+    }
+    seenNodes[seenNodeCount++] = node;
+
+    bool isEngineNode = false;
+    for (size_t i = 0; i < engineNodeCount; i++) {
+      if (engineNodes[i] == node) {
+        isEngineNode = true;
+        break;
+      }
+    }
+    if (!isEngineNode) {
+      if (reason)
+        *reason = "XeSS returned a feature structure not owned by the engine";
+      return false;
+    }
+    node = node->pNext;
+  }
+
+  for (size_t i = 0; i < engineNodeCount; i++) {
+    bool present = false;
+    for (size_t j = 0; j < seenNodeCount; j++) {
+      if (engineNodes[i] == seenNodes[j]) {
+        present = true;
+        break;
+      }
+    }
+    if (!present) {
+      if (reason)
+        *reason = "XeSS removed an engine-owned feature structure";
+      return false;
+    }
+  }
+  return true;
+}
+
 #define VK_XESS_CHECK_FEATURES(type, firstMember, requested, supported)         \
   __VK_XessFeatureBitsSupported(                                               \
       &(requested).firstMember, &(supported).firstMember,                      \
@@ -380,6 +437,12 @@ int EnumerateRIAdapters(struct RIPhysicalAdapter *adapters,
         const bool hasDeferredHostOpsExt = __VK_SupportExtension(
             extensionProperties, extensionNum,
             qCToStrRef(VK_KHR_DEFERRED_HOST_OPERATIONS_EXTENSION_NAME));
+        const bool hasSpirv14Ext = __VK_SupportExtension(
+            extensionProperties, extensionNum,
+            qCToStrRef(VK_KHR_SPIRV_1_4_EXTENSION_NAME));
+        const bool hasShaderFloatControlsExt = __VK_SupportExtension(
+            extensionProperties, extensionNum,
+            qCToStrRef(VK_KHR_SHADER_FLOAT_CONTROLS_EXTENSION_NAME));
 
         VkPhysicalDeviceAccelerationStructurePropertiesKHR accelStructProps = {
             VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ACCELERATION_STRUCTURE_PROPERTIES_KHR};
@@ -736,32 +799,47 @@ int EnumerateRIAdapters(struct RIPhysicalAdapter *adapters,
         //         physicalAdapter->sampleLocationsTier = 2;
         // }
 
-        physicalAdapter->vk.accelerationStructureExtension =
-            (hasAccelStructExt && accelStructFeatures.accelerationStructure)
-                ? 1
-                : 0;
-        physicalAdapter->vk.rayTracingPipelineExtension =
-            (hasRayTracingPipelineExt && rayTracingFeatures.rayTracingPipeline)
-                ? 1
-                : 0;
-        physicalAdapter->vk.rayQueryExtension =
-            (hasRayQueryExt && rayQueryFeatures.rayQuery) ? 1 : 0;
+        physicalAdapter->vk.accelerationStructureExtension = hasAccelStructExt;
+        physicalAdapter->vk.rayTracingPipelineExtension = hasRayTracingPipelineExt;
+        physicalAdapter->vk.rayQueryExtension = hasRayQueryExt;
         physicalAdapter->vk.deferredHostOperationsExtension =
             (hasDeferredHostOpsExt) ? 1 : 0;
 
         physicalAdapter->isRayQuerySupported =
             (physicalAdapter->vk.accelerationStructureExtension &&
-             physicalAdapter->vk.rayQueryExtension)
+             physicalAdapter->vk.rayQueryExtension &&
+             accelStructFeatures.accelerationStructure &&
+             rayQueryFeatures.rayQuery &&
+             hasDeferredHostOpsExt &&
+             (properties.properties.apiVersion >= VK_API_VERSION_1_2 ||
+              (hasSpirv14Ext && hasShaderFloatControlsExt)) &&
+             physicalAdapter->vk.isBufferDeviceAddressSupported)
                 ? 1
                 : 0;
 
-        // DXR 1.0 baseline; promote to 1.1 when ray query + indirect-trace are
-        // present.
-        physicalAdapter->rayTracingTier = 1;
-        if (physicalAdapter->vk.rayQueryExtension &&
-            rayTracingFeatures.rayTracingPipelineTraceRaysIndirect) {
-          physicalAdapter->rayTracingTier = 2;
-        }
+        RendererCapabilitySet tierCapabilities = {};
+        tierCapabilities.accelerationStructureExtension = hasAccelStructExt;
+        tierCapabilities.accelerationStructure =
+            accelStructFeatures.accelerationStructure != VK_FALSE;
+        tierCapabilities.rayQueryExtension = hasRayQueryExt;
+        tierCapabilities.rayQuery = rayQueryFeatures.rayQuery != VK_FALSE;
+        tierCapabilities.rayTracingPipelineExtension = hasRayTracingPipelineExt;
+        tierCapabilities.rayTracingPipeline =
+            rayTracingFeatures.rayTracingPipeline != VK_FALSE;
+        tierCapabilities.bufferDeviceAddress =
+            features12.bufferDeviceAddress != VK_FALSE;
+        tierCapabilities.deferredHostOperationsExtension = hasDeferredHostOpsExt;
+        tierCapabilities.deferredHostOperations = hasDeferredHostOpsExt;
+        tierCapabilities.spirv14 =
+            properties.properties.apiVersion >= VK_API_VERSION_1_2 ||
+            hasSpirv14Ext;
+        tierCapabilities.shaderFloatControls =
+            properties.properties.apiVersion >= VK_API_VERSION_1_2 ||
+            hasShaderFloatControlsExt;
+        tierCapabilities.rayTracingPipelineTraceRaysIndirect =
+            rayTracingFeatures.rayTracingPipelineTraceRaysIndirect != VK_FALSE;
+        physicalAdapter->rayTracingTier =
+            RendererEvaluateRayTracingTier(tierCapabilities);
 
         // if (physicalAdapter->shadingRateTier) {
         //     physicalAdapter->isAdditionalShadingRatesSupported =
@@ -849,8 +927,11 @@ int RIDevice::init(struct RIDeviceDesc *init) {
   memset(this, 0, sizeof(*this));
   struct RIDevice *device = this; // body below predates the method form
 
-  enum RIResult_e riResult = RI_SUCCESS;
+  int riResult = RI_SUCCESS;
   struct RIPhysicalAdapter *physicalAdapter = init->physicalAdapter;
+  const RendererCapabilityMode_e capabilityMode =
+      init->requestRayTracing ? RENDERER_CAPABILITY_OVERDRIVE
+                              : RENDERER_CAPABILITY_RASTER;
   hpl::cXessVulkanSupport &xessSupport =
       hpl::XessVulkanSupportInstance();
   auto setXessUnavailable = [&](const char *reason) {
@@ -868,6 +949,8 @@ int RIDevice::init(struct RIDeviceDesc *init) {
   }
 
   device->physicalAdapter = *init->physicalAdapter;
+  // Physical support is not the same thing as a feature enabled on this device.
+  device->rayTracingEnabled = false;
 
 #if (DEVICE_IMPL_VULKAN)
   {
@@ -886,6 +969,22 @@ int RIDevice::init(struct RIDeviceDesc *init) {
     vkEnumerateDeviceExtensionProperties(physicalAdapter->vk.physicalDevice,
                                          NULL, &extensionNum,
                                          extensionProperties);
+
+    const bool hasAccelStructExt = __VK_SupportExtension(
+        extensionProperties, extensionNum,
+        qCToStrRef(VK_KHR_ACCELERATION_STRUCTURE_EXTENSION_NAME));
+    const bool hasRayTracingPipelineExt = __VK_SupportExtension(
+        extensionProperties, extensionNum,
+        qCToStrRef(VK_KHR_RAY_TRACING_PIPELINE_EXTENSION_NAME));
+    const bool hasRayQueryExt = __VK_SupportExtension(
+        extensionProperties, extensionNum,
+        qCToStrRef(VK_KHR_RAY_QUERY_EXTENSION_NAME));
+    const bool hasDeferredHostOpsExt = __VK_SupportExtension(
+        extensionProperties, extensionNum,
+        qCToStrRef(VK_KHR_DEFERRED_HOST_OPERATIONS_EXTENSION_NAME));
+    const bool hasShaderFloatControlsExt = __VK_SupportExtension(
+        extensionProperties, extensionNum,
+        qCToStrRef(VK_KHR_SHADER_FLOAT_CONTROLS_EXTENSION_NAME));
 
     for (size_t i = 0; i < extensionNum; i++) {
       hpl::Log("VK Extension %s - %u\n", extensionProperties[i].extensionName,
@@ -1141,6 +1240,17 @@ int RIDevice::init(struct RIDeviceDesc *init) {
         arrpush(enabledExtensionNames, DefaultDeviceExtension[idx]);
       }
     }
+    if (capabilityMode == RENDERER_CAPABILITY_OVERDRIVE) {
+      for (size_t idx = 0; idx < ARRAY_COUNT(RayTracingDeviceExtension); idx++) {
+        if (__VK_SupportExtension(extensionProperties, extensionNum,
+                                  qCToStrRef(RayTracingDeviceExtension[idx]))) {
+          hpl::Log("Enabled Extension: %s\n", RayTracingDeviceExtension[idx]);
+          arrpush(enabledExtensionNames, RayTracingDeviceExtension[idx]);
+        }
+      }
+    } else {
+      hpl::Log("Ray tracing extensions skipped: raster capability mode\n");
+    }
 
     VkPhysicalDeviceFeatures2 features = {
         VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2};
@@ -1301,6 +1411,65 @@ int RIDevice::init(struct RIDeviceDesc *init) {
 
     vkGetPhysicalDeviceFeatures2(physicalAdapter->vk.physicalDevice, &features);
 
+    RendererCapabilitySet capabilitySet = {};
+    capabilitySet.swapchain = physicalAdapter->vk.isSwapChainSupported;
+    capabilitySet.descriptorIndexing = features12.descriptorIndexing != 0;
+    capabilitySet.bufferDeviceAddress = features12.bufferDeviceAddress != 0;
+    capabilitySet.scalarBlockLayout = features12.scalarBlockLayout != 0;
+    capabilitySet.shaderInt64 = features.features.shaderInt64 != 0;
+    capabilitySet.shaderBufferInt64Atomics =
+        features12.shaderBufferInt64Atomics != 0;
+    capabilitySet.fragmentShaderBarycentric = __VK_isExtensionNamesSupported(
+        qCToStrRef(VK_KHR_FRAGMENT_SHADER_BARYCENTRIC_EXTENSION_NAME),
+        enabledExtensionNames, arrlen(enabledExtensionNames));
+    capabilitySet.fragmentShaderInterlock = __VK_isExtensionNamesSupported(
+        qCToStrRef(VK_EXT_FRAGMENT_SHADER_INTERLOCK_EXTENSION_NAME),
+        enabledExtensionNames, arrlen(enabledExtensionNames));
+    capabilitySet.dynamicRendering = features13.dynamicRendering != 0;
+    capabilitySet.accelerationStructure = accelerationStructureFeatures.accelerationStructure != 0;
+    capabilitySet.rayQuery = rayQueryFeatures.rayQuery != 0;
+    capabilitySet.rayTracingPipeline = rayTracingPipelineFeatures.rayTracingPipeline != 0;
+    capabilitySet.spirv14 = physicalAdapter->vk.apiVersion >= VK_API_VERSION_1_2 ||
+                            __VK_isExtensionNamesSupported(
+        qCToStrRef(VK_KHR_SPIRV_1_4_EXTENSION_NAME), enabledExtensionNames,
+        arrlen(enabledExtensionNames));
+    capabilitySet.shaderFloatControls =
+        physicalAdapter->vk.apiVersion >= VK_API_VERSION_1_2 ||
+        hasShaderFloatControlsExt;
+    capabilitySet.deferredHostOperations =
+        hasDeferredHostOpsExt;
+    capabilitySet.accelerationStructureExtension = hasAccelStructExt;
+    capabilitySet.rayQueryExtension = hasRayQueryExt;
+    capabilitySet.rayTracingPipelineExtension = hasRayTracingPipelineExt;
+    capabilitySet.deferredHostOperationsExtension = hasDeferredHostOpsExt;
+    capabilitySet.spirv14Extension = __VK_isExtensionSupported(
+        VK_KHR_SPIRV_1_4_EXTENSION_NAME, extensionProperties, extensionNum);
+    capabilitySet.shaderFloatControlsExtension = __VK_isExtensionSupported(
+        VK_KHR_SHADER_FLOAT_CONTROLS_EXTENSION_NAME, extensionProperties,
+        extensionNum);
+    capabilitySet.descriptorBindingPartiallyBound = features12.descriptorBindingPartiallyBound;
+    capabilitySet.shaderSampledImageArrayNonUniformIndexing =
+        features12.shaderSampledImageArrayNonUniformIndexing;
+    capabilitySet.descriptorBindingSampledImageUpdateAfterBind =
+        features12.descriptorBindingSampledImageUpdateAfterBind;
+    capabilitySet.descriptorBindingStorageBufferUpdateAfterBind =
+        features12.descriptorBindingStorageBufferUpdateAfterBind;
+    capabilitySet.descriptorBindingStorageImageUpdateAfterBind =
+        features12.descriptorBindingStorageImageUpdateAfterBind;
+    capabilitySet.rayTracingPipelineTraceRaysIndirect =
+        rayTracingPipelineFeatures.rayTracingPipelineTraceRaysIndirect;
+    const RendererCapabilityDecision capabilityDecision =
+        RendererEvaluateCapabilityPolicy(capabilityMode, capabilitySet);
+    if (!capabilityDecision.supported) {
+      hpl::Log("ERROR: renderer capability policy rejected adapter: %s\n",
+               capabilityDecision.missingRequirement);
+      riResult = RI_UNSUPPORTED;
+      free(queueFamilyProps);
+      free(extensionProperties);
+      arrfree(enabledExtensionNames);
+      return riResult;
+    }
+
 #if defined(HPL2_XESS_AVAILABLE) && HPL2_XESS_AVAILABLE
     // Keep copies of every engine-owned feature structure. XeSS may patch
     // these structures and append SDK-owned structures to the chain; the
@@ -1308,6 +1477,18 @@ int RIDevice::init(struct RIDeviceDesc *init) {
     // GPU again and accidentally replacing requirements with support bits.
     xessPlainExtensionCount = arrlen(enabledExtensionNames);
     void *xessFeatureChain = &features;
+    // Capture exact engine-owned nodes before XeSS mutates the chain. An SDK
+    // node must not be accepted just because it uses a known sType.
+    const VkBaseOutStructure *xessEngineFeatureNodes[32] = {};
+    size_t xessEngineFeatureNodeCount = 0;
+    for (const VkBaseOutStructure *node =
+             reinterpret_cast<const VkBaseOutStructure *>(&features);
+         node && xessEngineFeatureNodeCount <
+                     sizeof(xessEngineFeatureNodes) /
+                         sizeof(xessEngineFeatureNodes[0]);
+         node = node->pNext) {
+      xessEngineFeatureNodes[xessEngineFeatureNodeCount++] = node;
+    }
     const VkPhysicalDeviceFeatures2 xessSupportedFeatures = features;
     const VkPhysicalDeviceVulkan11Features xessSupportedFeatures11 = features11;
     const VkPhysicalDeviceVulkan12Features xessSupportedFeatures12 = features12;
@@ -1379,6 +1560,16 @@ int RIDevice::init(struct RIDeviceDesc *init) {
         for (uint32_t extensionIdx = 0; extensionIdx < requiredExtensionCount;
              extensionIdx++) {
           const char *requiredName = requiredExtensionNames[extensionIdx];
+          if (capabilityMode == RENDERER_CAPABILITY_RASTER && requiredName &&
+              __VK_isExtensionNamesSupported(
+                  qCToStrRef(requiredName), RayTracingDeviceExtension,
+                  ARRAY_COUNT(RayTracingDeviceExtension))) {
+            setXessUnavailable(
+                "XeSS requested a ray-tracing extension prohibited in raster mode");
+            hpl::Log("XeSS: %s\n", device->xessUnavailableReason);
+            deviceExtensionsSupported = false;
+            break;
+          }
           if (!requiredName ||
               !__VK_isExtensionSupported(requiredName, extensionProperties,
                                           extensionNum)) {
@@ -1418,6 +1609,14 @@ int RIDevice::init(struct RIDeviceDesc *init) {
             setXessUnavailable("required device feature query returned no chain");
             hpl::Log("XeSS: %s\n", device->xessUnavailableReason);
           } else {
+            const char *chainReason = nullptr;
+            const bool chainValid = __VK_ValidateXessFeatureChain(
+                xessFeatureChain, xessEngineFeatureNodes,
+                xessEngineFeatureNodeCount, &chainReason);
+            if (!chainValid) {
+              setXessUnavailable(chainReason);
+              hpl::Log("XeSS: %s\n", device->xessUnavailableReason);
+            }
             bool featuresSupported = __VK_XessFeatureBitsSupported(
                 reinterpret_cast<const VkBool32 *>(&features.features),
                 reinterpret_cast<const VkBool32 *>(&xessSupportedFeatures.features),
@@ -1489,7 +1688,7 @@ int RIDevice::init(struct RIDeviceDesc *init) {
                     xessSupportedAmdCoherentMemoryFeatures) &&
                 featuresSupported;
 
-            if (featuresSupported) {
+            if (chainValid && featuresSupported) {
               xessRequirementsMerged = true;
               hpl::Log("XeSS: device extensions and feature requirements accepted\n");
             } else {
@@ -1556,6 +1755,52 @@ int RIDevice::init(struct RIDeviceDesc *init) {
       riResult = RI_FAIL;
       goto vk_done;
     }
+    // Publish logical capability state only after vkCreateDevice succeeds.
+    // These flags describe the feature bits actually submitted to Vulkan,
+    // rather than physical-adapter advertisements or a failed attempt.
+    device->accelerationStructureEnabled =
+        capabilityMode == RENDERER_CAPABILITY_OVERDRIVE &&
+        accelerationStructureFeatures.accelerationStructure != VK_FALSE;
+    device->rayTracingPipelineEnabled =
+        capabilityMode == RENDERER_CAPABILITY_OVERDRIVE &&
+        rayTracingPipelineFeatures.rayTracingPipeline != VK_FALSE;
+    device->rayQueryEnabled =
+        capabilityMode == RENDERER_CAPABILITY_OVERDRIVE &&
+        rayQueryFeatures.rayQuery != VK_FALSE;
+    device->fragmentShaderBarycentricEnabled =
+        __VK_isExtensionNamesSupported(
+            qCToStrRef(VK_KHR_FRAGMENT_SHADER_BARYCENTRIC_EXTENSION_NAME),
+            enabledExtensionNames, arrlen(enabledExtensionNames)) &&
+        fragmentBarycentricFeatures.fragmentShaderBarycentric != VK_FALSE;
+    device->shaderInt16Enabled = features.features.shaderInt16 != VK_FALSE;
+    device->shaderFloat16Enabled = features12.shaderFloat16 != VK_FALSE;
+    device->geometryShaderEnabled = features.features.geometryShader != VK_FALSE;
+    device->occlusionQueryPreciseEnabled =
+        features.features.occlusionQueryPrecise != VK_FALSE;
+    device->rayTracingEnabled = device->accelerationStructureEnabled &&
+                                device->rayTracingPipelineEnabled;
+    device->vk.accelerationStructureExtensionEnabled =
+        __VK_isExtensionNamesSupported(
+            qCToStrRef(VK_KHR_ACCELERATION_STRUCTURE_EXTENSION_NAME),
+            enabledExtensionNames, arrlen(enabledExtensionNames));
+    device->vk.rayTracingPipelineExtensionEnabled =
+        __VK_isExtensionNamesSupported(
+            qCToStrRef(VK_KHR_RAY_TRACING_PIPELINE_EXTENSION_NAME),
+            enabledExtensionNames, arrlen(enabledExtensionNames));
+    device->vk.rayQueryExtensionEnabled = __VK_isExtensionNamesSupported(
+        qCToStrRef(VK_KHR_RAY_QUERY_EXTENSION_NAME), enabledExtensionNames,
+        arrlen(enabledExtensionNames));
+    device->vk.deferredHostOperationsExtensionEnabled =
+        __VK_isExtensionNamesSupported(
+            qCToStrRef(VK_KHR_DEFERRED_HOST_OPERATIONS_EXTENSION_NAME),
+            enabledExtensionNames, arrlen(enabledExtensionNames));
+    device->vk.spirv14ExtensionEnabled = __VK_isExtensionNamesSupported(
+        qCToStrRef(VK_KHR_SPIRV_1_4_EXTENSION_NAME), enabledExtensionNames,
+        arrlen(enabledExtensionNames));
+    device->vk.shaderFloatControlsExtensionEnabled =
+        __VK_isExtensionNamesSupported(
+            qCToStrRef(VK_KHR_SHADER_FLOAT_CONTROLS_EXTENSION_NAME),
+            enabledExtensionNames, arrlen(enabledExtensionNames));
     device->vk.deviceCoherentMemoryEnabled =
         amdCoherentMemoryExtensionEnabled &&
         amdCoherentMemoryFeatures.deviceCoherentMemory != 0;
@@ -2209,6 +2454,10 @@ void RIPool::reset(struct RIDevice *device) {
 }
 
 void RICmd::init(struct RIDevice *device, struct RIPool *pool) {
+  barrierCapabilities.rayTracingPipelineEnabled =
+      device->rayTracingPipelineEnabled;
+  barrierCapabilities.accelerationStructureEnabled =
+      device->accelerationStructureEnabled;
 #if (DEVICE_IMPL_VULKAN)
   {
     VkCommandBufferAllocateInfo command_allocate_info = {
@@ -2264,6 +2513,7 @@ void RICmd::dispose(struct RIDevice *device) {
     vk.pool = VK_NULL_HANDLE;
   }
 #endif
+  barrierCapabilities = RIBarrierCapabilities{};
 }
 
 void ShutdownRIRenderer() {
@@ -2898,6 +3148,33 @@ void RICmd::drawIndirect(struct RIDevice *device, struct RIBuffer *buffer,
   }
 #endif
   assert(false && "unhandled backend");
+}
+
+void RICmd::drawIndirectCount(struct RIDevice *device, struct RIBuffer *buffer,
+                             RIDeviceSize offset, struct RIBuffer *countBuffer,
+                             RIDeviceSize countOffset, uint32_t maxDrawCount,
+                             uint32_t stride) {
+#if (DEVICE_IMPL_VULKAN)
+  if (RIIsTargetSelected(RI_DEVICE_API_VK)) {
+    assert(device->physicalAdapter.isDrawIndirectCountSupported &&
+           "drawIndirectCount used on a device that does not support it");
+    vkCmdDrawIndirectCount(vk.cmd, buffer->vk.buffer, offset,
+                           countBuffer->vk.buffer, countOffset, maxDrawCount,
+                           stride);
+    return;
+  }
+#endif
+  // Deliberately no Metal path: a GPU-sourced draw count needs an indirect
+  // command buffer there, which this layer does not model. The capability bit
+  // is only ever set on the Vulkan path, so a caller that honours it never
+  // reaches here.
+  (void)buffer;
+  (void)offset;
+  (void)countBuffer;
+  (void)countOffset;
+  (void)maxDrawCount;
+  (void)stride;
+  assert(false && "drawIndirectCount unsupported on this backend");
 }
 
 void RICmd::drawIndexedIndirect(struct RIDevice *device,

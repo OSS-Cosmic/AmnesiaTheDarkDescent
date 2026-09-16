@@ -67,6 +67,7 @@ private:
 	void SetInputValues(cResourceVarsObject& pObj);
 	void RefreshTemporalUpscalerStatusLabel();
 	void RefreshRenderScaleControl();
+	void RefreshRendererBackendControl();
 	void RebuildTemporalUpscalerQualityList();
 
 	void SetUpInput(cWidgetLabel* apLabel, iWidget* apInput, bool abNeedsRestart, const tWString& asMessage);
@@ -170,6 +171,8 @@ private:
 	cWidgetComboBox *mpCBTemporalUpscalerQuality;
 	cWidgetComboBox *mpCBRenderScale;
 	cWidgetLabel    *mpLRenderScaleHelp;
+	cWidgetComboBox *mpCBRendererBackend;
+	cWidgetLabel    *mpLRendererBackendHelp;
 	cWidgetLabel    *mpLTemporalUpscalerStatus;
 
 	cWidgetCheckBox *mpChBWorldReflection;

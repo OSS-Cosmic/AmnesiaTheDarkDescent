@@ -153,7 +153,8 @@ public:
 
 	///////////////////////////////////////////////////////
 	// Object Naming
-    bool IsNameAvailable(const tString& asName);
+    // Objects that load for disjoint renderers may share a name.
+    bool IsNameAvailable(const tString& asName, int alRendererMask=static_cast<int>(hpl::kRendererMaskAll));
 
 	tString GenerateName(const tString& asBaseName);
 
@@ -273,6 +274,10 @@ public:
 	void SetFogColor(const cColor& aX);
 
 	bool GetShowFog() { return mbShowFog; }
+
+	// Show objects the editor renderer would skip in the game.
+	void SetShowOtherRendererObjects(bool abX);
+	bool GetShowOtherRendererObjects() { return mbShowOtherRendererObjects; }
 	bool GetFogActive() { return mbFogActive; }
 	bool GetFogCulling();
 	float GetFogStart();
@@ -336,7 +341,7 @@ protected:
 
 	////////////////////////////////
 	// Global Lights
-	cLightPoint* mpGlobalPointLight;
+	iLightPoint* mpGlobalPointLight;
 
 	bool mbWorldLightsEnabled;
 	bool mbWorldPSEnabled;
@@ -355,6 +360,7 @@ protected:
 	////////////////////////////////
 	// Fog
 	bool mbShowFog;
+	bool mbShowOtherRendererObjects;
 	bool mbFogActive;
 
 	////////////////////////////////

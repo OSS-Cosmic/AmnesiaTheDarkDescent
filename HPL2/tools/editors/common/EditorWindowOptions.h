@@ -53,6 +53,7 @@ protected:
 	cEditorInputColorFrame* mpInpBackgroundColor;
 	cEditorInputNumber* mpInpDisabledCoverage;
 	cEditorInputNumber* mpInpDisplayGamma;
+	cEditorInputEnum* mpCBRendererBackend;
 
 	// Input
 	cEditorInputNumber* mpInpTumbleFactor;
@@ -70,6 +71,7 @@ protected:
 
 	cEditorInputBool* mpInpShowSkybox;
 	cEditorInputBool* mpInpShowFog;
+	cEditorInputBool* mpInpShowOtherRenderer;
 
 	cEditorInputEnum* mpInpTextureQuality;
 	// Development-only render scale control.

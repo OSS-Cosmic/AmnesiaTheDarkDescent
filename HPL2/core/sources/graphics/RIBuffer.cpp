@@ -12,6 +12,11 @@ void RIBuffer::setDebugObjectName(struct RIDevice *device,
         VK_OBJECT_TYPE_BUFFER, (uint64_t)vk.buffer, name};
     VK_WrapResult(vkSetDebugUtilsObjectNameEXT(device->vk.device, &nameInfo));
   }
+  // Name the allocation too, not just the VkBuffer. vmaBuildStatsString prints
+  // this, so the teardown leak dump names what leaked instead of leaving a bare
+  // offset and size to reverse-engineer. VMA copies the string.
+  if (vk.allocation && name)
+    vmaSetAllocationName(device->vk.vmaAllocator, vk.allocation, name);
 }
 
 

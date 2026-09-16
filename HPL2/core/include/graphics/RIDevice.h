@@ -411,6 +411,17 @@ struct RIDevice {
   // Provider query consumed by the XeSS upscaler adapter.
   bool xessAvailable;
   char xessUnavailableReason[128];
+  // Logical-device state; distinct from physicalAdapter.isRayQuerySupported.
+  bool rayTracingEnabled;
+  bool accelerationStructureEnabled;
+  bool rayTracingPipelineEnabled;
+  bool rayQueryEnabled;
+  bool fragmentShaderBarycentricEnabled;
+  bool shaderInt16Enabled;
+  bool shaderFloat16Enabled;
+  bool geometryShaderEnabled;
+  // Precise occlusion sample counts (Standard billboard halos).
+  bool occlusionQueryPreciseEnabled;
   union {
 #if (DEVICE_IMPL_VULKAN)
     struct {
@@ -420,6 +431,14 @@ struct RIDevice {
       uint32_t memoryBudget : 1;
       uint32_t deviceCoherentMemoryEnabled
           : 1; // Feature enabled on the logical device, never mere physical availability
+      // Extensions submitted to vkCreateDevice (physical advertisement lives
+      // in physicalAdapter.vk.*Extension). Raster mode never enables these.
+      uint32_t accelerationStructureExtensionEnabled : 1;
+      uint32_t rayTracingPipelineExtensionEnabled : 1;
+      uint32_t rayQueryExtensionEnabled : 1;
+      uint32_t deferredHostOperationsExtensionEnabled : 1;
+      uint32_t spirv14ExtensionEnabled : 1;
+      uint32_t shaderFloatControlsExtensionEnabled : 1;
       VkDevice device;
       VmaAllocator vmaAllocator;
     } vk;

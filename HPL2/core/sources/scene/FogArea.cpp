@@ -67,7 +67,7 @@ namespace hpl {
 	{
 		mvSize = avSize;
 
-		mBoundingVolume.SetSize(cVector3f(mvSize.x, mvSize.y, mvSize.x));
+		mBoundingVolume.SetSize(mvSize);
 		
 		
 		SetTransformUpdated();

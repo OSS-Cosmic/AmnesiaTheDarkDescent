@@ -29,6 +29,7 @@ using namespace hpl;
 #include "EditorUserClassDefinitionManager.h"
 
 #include "system/Event.h"
+#include "graphics/RendererMask.h"
 
 #include <set>
 
@@ -74,6 +75,7 @@ unsigned long long GUIDFromHex(const tString& asHex);
 enum eObjInt
 {
 	eObjInt_ID,
+	eObjInt_RendererMask,
 
 	eObjInt_LastEnum,
 };
@@ -254,6 +256,7 @@ public:
 	iPropVal* CreateValue();
 
 	int GetDefault() { return mlVal; }
+	void SetDefault(int alX) { mlVal = alX; }
 
 private:
 	int mlVal;
@@ -917,6 +920,19 @@ public:
 	void SetVisible(bool abX) { mbVisible = abX; }
 
 	///////////////////////////
+	// Renderers the object loads for in the game (RendererMask). The editor
+	// loads every object and hides those its own renderer would skip, unless
+	// the world shows other-renderer objects.
+	virtual void SetRendererMask(int alMask);
+	int GetRendererMask() { return mlRendererMask; }
+	bool IsInEditorRenderer();
+	// Light handles stay visible for both renderers; their engine lights are
+	// gated separately (iEntityWrapperLight::IsLitByEditorRenderer).
+	virtual bool FiltersByEditorRenderer() { return true; }
+	// Icon colour when active and not selected.
+	virtual cColor GetIconTint() { return cColor(0.5f,1); }
+
+	///////////////////////////
 	// Properties
 	void SetID(int alX) { mlID = alX; }
 	int GetID() { return mlID; }
@@ -1089,6 +1105,7 @@ protected:
 	bool mbActive;
 	bool mbVisible;
 	bool mbCulledByPlane;
+	int mlRendererMask;
 
 	bool mbSelected;
 

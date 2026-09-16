@@ -24,6 +24,7 @@
 
 #include "graphics/DisplayDepthPolicy.h"
 #include "graphics/GraphicsTypes.h"
+#include "graphics/HiZPyramid.h"
 #include "graphics/NrdIntegration.h"
 #include "graphics/TemporalCamera.h"
 #include "graphics/TemporalUpscaler.h"
@@ -49,6 +50,8 @@
 
 namespace hpl {
 class WaterReflectionViewportState;
+struct StandardWaterReflectionState;
+struct StandardHaloQueryState;
 }
 
 namespace std {
@@ -147,14 +150,15 @@ bool CreateViewportColorTexture(struct RIDevice *device, uint32_t width,
                                 RISharedPointer<RITextureView> *view,
                                 const char *what);
 
-// One attachment image + a plain view (depth / visibility targets).
+// One attachment image + a plain view (depth / visibility targets). layerNum > 1
+// makes a 2D array image whose view spans every layer.
 bool CreateViewportAttachmentTexture(struct RIDevice *device, uint32_t width,
                                      uint32_t height, enum RI_Format_e format,
                                      uint32_t usage, // RITextureUsageBits_e
                                      enum RITextureViewType_e viewType,
                                      RISharedPointer<RITexture> *tex,
                                      RISharedPointer<RITextureView> *view,
-                                     const char *what);
+                                     const char *what, uint32_t layerNum = 1);
 
 // Defer the attachment's shared handles to the graphics freelist and reset both
 // to empty (used by headless one-off targets like the editor thumbnail builder).
@@ -273,6 +277,10 @@ public:
     // depthView above can't be sampled (Vulkan forbids sampling a DEPTH|STENCIL
     // view). Bound by the particle pass for soft-particle scene-depth reads.
     RISharedPointer<RITextureView> depthSampleView[RI_MAX_SWAPCHAIN_IMAGES];
+    // Depth pyramid for the GPU occlusion cull the translucent passes run. See
+    // HiZPyramid.h. Built from the G-buffer's depth, which is final opaque
+    // depth: nothing writes depth again before the translucent families.
+    HiZPyramid hiZ;
     // Lazy full-resolution nearest water view-depth, used only by particles.
     RISharedPointer<RITexture> particleWaterDepth[RI_MAX_SWAPCHAIN_IMAGES];
     RISharedPointer<RITextureView> particleWaterDepthView[RI_MAX_SWAPCHAIN_IMAGES];
@@ -441,8 +449,133 @@ public:
     RISharedPointer<RITextureView> depthView[RI_MAX_SWAPCHAIN_IMAGES];
   };
 
+  // cStandardRenderer: full-resolution material G-buffer plus packed visibility
+  // and depth. Visibility has a shader-resource view and a separate color
+  // attachment view because Vulkan image views encode the aspect/layout use.
+  struct StandardViewportState {
+    uint32_t width = 0;
+    uint32_t height = 0;
+
+    StandardViewportState() = default;
+    ~StandardViewportState();
+    StandardViewportState(const StandardViewportState &) = delete;
+    StandardViewportState &operator=(const StandardViewportState &) = delete;
+    StandardViewportState(StandardViewportState &&rhs) noexcept;
+    StandardViewportState &operator=(StandardViewportState &&rhs) noexcept;
+
+    void Update(cGraphics::FrameContext *cntx, cVector2l size);
+    BackBuffer GetBackBuffer() {
+      const uint32_t swapchainIndex = Interface<cGraphics>::Get()->swapchainIndex;
+      if (width == 0 || height == 0 ||
+          renderTarget[swapchainIndex].isEmpty() ||
+          renderTargetView[swapchainIndex].isEmpty())
+        return {};
+      return {0, 0, width, height, *renderTarget[swapchainIndex],
+              *renderTargetView[swapchainIndex]};
+    }
+
+    RISharedPointer<RITexture> renderTarget[RI_MAX_SWAPCHAIN_IMAGES];
+    RISharedPointer<RITexture> depthTextures[RI_MAX_SWAPCHAIN_IMAGES];
+    RISharedPointer<RITextureView> renderTargetView[RI_MAX_SWAPCHAIN_IMAGES];
+    RISharedPointer<RITextureView> depthView[RI_MAX_SWAPCHAIN_IMAGES];
+    RISharedPointer<RITextureView> depthSampleView[RI_MAX_SWAPCHAIN_IMAGES];
+    // Depth pyramid for the camera occlusion cull. See HiZPyramid.h.
+    HiZPyramid hiZ;
+    RISharedPointer<RITexture> visibilityTexture[RI_MAX_SWAPCHAIN_IMAGES];
+    RISharedPointer<RITextureView> visibilityView[RI_MAX_SWAPCHAIN_IMAGES];
+    RISharedPointer<RITextureView> visibilityAttachmentView[RI_MAX_SWAPCHAIN_IMAGES];
+    RISharedPointer<RITexture> positionTexture[RI_MAX_SWAPCHAIN_IMAGES];
+    RISharedPointer<RITextureView> positionView[RI_MAX_SWAPCHAIN_IMAGES];
+    RISharedPointer<RITextureView> positionAttachmentView[RI_MAX_SWAPCHAIN_IMAGES];
+    RISharedPointer<RITexture> normalTexture[RI_MAX_SWAPCHAIN_IMAGES];
+    RISharedPointer<RITextureView> normalView[RI_MAX_SWAPCHAIN_IMAGES];
+    RISharedPointer<RITextureView> normalAttachmentView[RI_MAX_SWAPCHAIN_IMAGES];
+    // Geometric view normal is retained for receiver tests/AO. Shading normal
+    // is the authored normal-map result produced by the Standard material pass.
+    RISharedPointer<RITexture> shadingNormalTexture[RI_MAX_SWAPCHAIN_IMAGES];
+    RISharedPointer<RITextureView> shadingNormalView[RI_MAX_SWAPCHAIN_IMAGES];
+    RISharedPointer<RITextureView> shadingNormalAttachmentView[RI_MAX_SWAPCHAIN_IMAGES];
+    RISharedPointer<RITexture> surfaceTexture[RI_MAX_SWAPCHAIN_IMAGES];
+    RISharedPointer<RITextureView> surfaceView[RI_MAX_SWAPCHAIN_IMAGES];
+    RISharedPointer<RITextureView> surfaceAttachmentView[RI_MAX_SWAPCHAIN_IMAGES];
+    RISharedPointer<RITexture> materialColorTexture[RI_MAX_SWAPCHAIN_IMAGES];
+    RISharedPointer<RITextureView> materialColorView[RI_MAX_SWAPCHAIN_IMAGES];
+    RISharedPointer<RITextureView> materialColorAttachmentView[RI_MAX_SWAPCHAIN_IMAGES];
+    // Decal pass output, kept separate so lighting consumes modified albedo.
+    RISharedPointer<RITexture> decalColorTexture[RI_MAX_SWAPCHAIN_IMAGES];
+    RISharedPointer<RITextureView> decalColorView[RI_MAX_SWAPCHAIN_IMAGES];
+    RISharedPointer<RITextureView> decalColorAttachmentView[RI_MAX_SWAPCHAIN_IMAGES];
+    bool decalColorInitialized[RI_MAX_SWAPCHAIN_IMAGES] = {};
+    // Type="Decal" mesh accumulators: multiply (cleared white) and add
+    // (cleared black), folded into albedo by the light resolve.
+    RISharedPointer<RITexture> decalMulTexture[RI_MAX_SWAPCHAIN_IMAGES];
+    RISharedPointer<RITextureView> decalMulView[RI_MAX_SWAPCHAIN_IMAGES];
+    RISharedPointer<RITextureView> decalMulAttachmentView[RI_MAX_SWAPCHAIN_IMAGES];
+    RISharedPointer<RITexture> decalAddTexture[RI_MAX_SWAPCHAIN_IMAGES];
+    RISharedPointer<RITextureView> decalAddView[RI_MAX_SWAPCHAIN_IMAGES];
+    RISharedPointer<RITextureView> decalAddAttachmentView[RI_MAX_SWAPCHAIN_IMAGES];
+    RISharedPointer<RITexture> environmentTexture[RI_MAX_SWAPCHAIN_IMAGES];
+    RISharedPointer<RITextureView> environmentView[RI_MAX_SWAPCHAIN_IMAGES];
+    RISharedPointer<RITextureView> environmentAttachmentView[RI_MAX_SWAPCHAIN_IMAGES];
+    // Per-mesh refractive source. It is never used as an attachment: the
+    // Standard translucent pass copies the completed scene into it before a
+    // refractive draw, then returns it to COPY_DST for the next mesh.
+    RISharedPointer<RITexture> translucentSceneCopy[RI_MAX_SWAPCHAIN_IMAGES];
+    RISharedPointer<RITextureView> translucentSceneCopyView[RI_MAX_SWAPCHAIN_IMAGES];
+    // Once initialized, each copy remains shader-readable between Draw calls;
+    // do not reissue an UNDEFINED transition and discard the prior read dependency.
+    bool translucentSceneCopyInitialized[RI_MAX_SWAPCHAIN_IMAGES] = {};
+    // Planar reflection and its refraction snapshot are owned by this
+    // viewport, not by the renderer.  Every swapchain image has independent
+    // storage so an in-flight capture can never alias another image.
+    RISharedPointer<RITexture> waterReflectionTexture[RI_MAX_SWAPCHAIN_IMAGES];
+    RISharedPointer<RITextureView> waterReflectionView[RI_MAX_SWAPCHAIN_IMAGES];
+    RISharedPointer<RITextureView> waterReflectionAttachmentView[RI_MAX_SWAPCHAIN_IMAGES];
+    // Opaque planar capture inputs for the environment compositor.  These are
+    // separate from the final reflection image so the capture can depth-test
+    // geometry and retain world positions for sky/fog composition.
+    RISharedPointer<RITexture> waterReflectionPositionTexture[RI_MAX_SWAPCHAIN_IMAGES];
+    RISharedPointer<RITextureView> waterReflectionPositionView[RI_MAX_SWAPCHAIN_IMAGES];
+    RISharedPointer<RITextureView> waterReflectionPositionAttachmentView[RI_MAX_SWAPCHAIN_IMAGES];
+    RISharedPointer<RITexture> waterReflectionOpaqueTexture[RI_MAX_SWAPCHAIN_IMAGES];
+    RISharedPointer<RITextureView> waterReflectionOpaqueView[RI_MAX_SWAPCHAIN_IMAGES];
+    RISharedPointer<RITextureView> waterReflectionOpaqueAttachmentView[RI_MAX_SWAPCHAIN_IMAGES];
+    RISharedPointer<RITexture> waterReflectionDepthTexture[RI_MAX_SWAPCHAIN_IMAGES];
+    RISharedPointer<RITextureView> waterReflectionDepthView[RI_MAX_SWAPCHAIN_IMAGES];
+    RISharedPointer<RITextureView> waterReflectionDepthSampleView[RI_MAX_SWAPCHAIN_IMAGES];
+    RISharedPointer<RITextureView> waterReflectionDepthAttachmentView[RI_MAX_SWAPCHAIN_IMAGES];
+    RISharedPointer<RITexture> waterSceneCopy[RI_MAX_SWAPCHAIN_IMAGES];
+    RISharedPointer<RITextureView> waterSceneCopyView[RI_MAX_SWAPCHAIN_IMAGES];
+    // Refraction source for translucents drawn INSIDE the planar capture.
+    // Same contract as translucentSceneCopy, at the capture's half resolution.
+    RISharedPointer<RITexture> waterReflectionSceneCopy[RI_MAX_SWAPCHAIN_IMAGES];
+    RISharedPointer<RITextureView> waterReflectionSceneCopyView[RI_MAX_SWAPCHAIN_IMAGES];
+    bool waterReflectionSceneCopyInitialized[RI_MAX_SWAPCHAIN_IMAGES] = {};
+    bool waterReflectionInitialized[RI_MAX_SWAPCHAIN_IMAGES] = {};
+    bool waterSceneCopyInitialized[RI_MAX_SWAPCHAIN_IMAGES] = {};
+    std::shared_ptr<StandardWaterReflectionState> waterReflection;
+    // Billboard halo occlusion queries, one pool per in-flight frame.
+    std::shared_ptr<StandardHaloQueryState> haloQueries;
+    bool environmentInitialized[RI_MAX_SWAPCHAIN_IMAGES] = {};
+    RISharedPointer<RITexture> aoPreparedDepthTexture[RI_MAX_SWAPCHAIN_IMAGES];
+    RISharedPointer<RITextureView> aoPreparedDepthStorageView[RI_MAX_SWAPCHAIN_IMAGES];
+    RISharedPointer<RITexture> aoQuarterTexture[RI_MAX_SWAPCHAIN_IMAGES];
+    RISharedPointer<RITextureView> aoQuarterStorageView[RI_MAX_SWAPCHAIN_IMAGES];
+    RISharedPointer<RITexture> aoTexture[RI_MAX_SWAPCHAIN_IMAGES];
+    RISharedPointer<RITextureView> aoStorageView[RI_MAX_SWAPCHAIN_IMAGES];
+    RISharedPointer<RITextureView> aoView[RI_MAX_SWAPCHAIN_IMAGES];
+    // One per swapchain image, like every other per-image target here: Update
+    // allocates and Draw indexes these by swapchain image index.
+    RISharedPointer<RITexture> velocityTexture[RI_MAX_SWAPCHAIN_IMAGES];
+    RISharedPointer<RITextureView> velocityView[RI_MAX_SWAPCHAIN_IMAGES];
+    RISharedPointer<RITextureView> velocityAttachmentView[RI_MAX_SWAPCHAIN_IMAGES];
+    hpl::TemporalViewportState temporal;
+    bool aoInitialized[RI_MAX_SWAPCHAIN_IMAGES] = {};
+  };
+
   using ViewportState =
-      std::variant<std::monostate, HybridViewportState, SimpleViewportState>;
+      std::variant<std::monostate, HybridViewportState, SimpleViewportState,
+                   StandardViewportState>;
 
   // Where the viewport's finished image is delivered by cScene after the
   // viewport is fully evaluated (world draw + post processing):

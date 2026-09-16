@@ -302,12 +302,15 @@ class Document:
         return attrs
 
     def all_names(self):
-        names = set()
+        return set(self.objects_by_name())
+
+    def objects_by_name(self):
+        names = {}
         for category in self.contents:
             for obj in category:
                 name = obj.get("Name")
                 if name:
-                    names.add(name.lower())
+                    names.setdefault(name.lower(), []).append(obj)
         return names
 
     def save(self, path):
@@ -595,6 +598,27 @@ def _apply_var_ops(target, op):
                 block.remove(var)
 
 
+OVERDRIVE_LIGHT_TAGS = ("Re_PointLight", "Re_SpotLight", "Re_AreaLight", "AreaLight")
+
+
+def renderer_mask(obj):
+    """Renderers an object loads for (1 Standard, 2 Overdrive), as XmlDelta.cpp
+    reads it: RendererMask, else 2 for Overdrive lights, else both."""
+    if obj.get("RendererMask") is not None:
+        try:
+            return int(obj.get("RendererMask")) & 3
+        except ValueError:
+            return 0
+    return 2 if obj.tag in OVERDRIVE_LIGHT_TAGS else 3
+
+
+def fits_base_name_count(same, obj, base_count, extra):
+    allowed = max(base_count, 1)
+    mask = renderer_mask(obj)
+    return all(extra + sum(1 for other in same if renderer_mask(other) & bit) <= allowed
+               for bit in (1, 2) if mask & bit)
+
+
 def apply_delta(document, delta_root, next_add_id):
     """Applies one delta to a parsed Document, in place.
     Returns (stats, next_add_id)."""
@@ -609,7 +633,9 @@ def apply_delta(document, delta_root, next_add_id):
                          % (version, FORMAT_VERSION))
 
     objects_cache = {}
-    names_in_use = document.all_names()
+    names_in_use = document.objects_by_name()
+    base_name_counts = {name: len(objs) for name, objs in names_in_use.items()}
+    added_objects = []
 
     for op in delta_root:
         tag = op.tag
@@ -635,7 +661,9 @@ def apply_delta(document, delta_root, next_add_id):
 
             document.category_element(category).remove(obj)
             del objects_cache[category][obj_id]
-            names_in_use.discard(obj.get("Name", "").lower())
+            same = names_in_use.get(obj.get("Name", "").lower(), [])
+            if obj in same:
+                same.remove(obj)
             stats.removed += 1
 
         elif tag == "Modify":
@@ -677,6 +705,13 @@ def apply_delta(document, delta_root, next_add_id):
 
             parent = document.category_element(category, create=True)
 
+            # After="ID" inserts the added objects, in order, behind that object.
+            anchor = None
+            if op.get("After") is not None:
+                anchor = next((o for o in parent if o.get("ID") == op.get("After")), None)
+                if anchor is None:
+                    warn("<Add After=\"%s\"> names no object in %s. Appending instead." % (op.get("After"), category))
+
             for new in op:
                 # FileIndex/MaterialIndex refer to the base file's index tables,
                 # which a delta must not renumber.
@@ -687,8 +722,13 @@ def apply_delta(document, delta_root, next_add_id):
                     stats.skipped += 1
                     continue
 
+                # A name may be reused only by an object with an explicit
+                # RendererMask that leaves no renderer with the name more often
+                # than the base file had it (one half of a backend split).
                 name = new.get("Name", "")
-                if name and name.lower() in names_in_use:
+                same = names_in_use.get(name.lower(), []) if name else []
+                if same and not (new.get("RendererMask") is not None and renderer_mask(new)
+                                 and fits_base_name_count(same, new, base_name_counts.get(name.lower(), 0), 1)):
                     warn("added object name '%s' is already used in the base file. Skipping." % name)
                     stats.skipped += 1
                     continue
@@ -697,15 +737,32 @@ def apply_delta(document, delta_root, next_add_id):
                 added.set("ID", str(next_add_id))
                 next_add_id += 1
 
-                parent.append(added)
+                if anchor is not None:
+                    parent.insert(list(parent).index(anchor) + 1, added)
+                    anchor = added
+                else:
+                    parent.append(added)
                 if category in objects_cache:
                     objects_cache[category][int(added.get("ID"))] = added
                 if name:
-                    names_in_use.add(name.lower())
+                    names_in_use.setdefault(name.lower(), []).append(added)
+                added_objects.append((parent, added))
                 stats.added += 1
 
         else:
             warn("unknown operation <%s>" % tag)
+            stats.skipped += 1
+
+    # A later <Modify> can widen a mask after the <Add> was accepted.
+    for parent, added in added_objects:
+        name = added.get("Name", "").lower()
+        same = names_in_use.get(name, [])
+        if name and added in same and not fits_base_name_count(same, added, base_name_counts.get(name, 0), 0):
+            warn("added object '%s' shares its name with an object loaded for the same renderer. Dropping it."
+                 % added.get("Name"))
+            parent.remove(added)
+            same.remove(added)
+            stats.added -= 1
             stats.skipped += 1
 
     return stats, next_add_id

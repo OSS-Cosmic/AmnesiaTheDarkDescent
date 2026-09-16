@@ -1311,6 +1311,8 @@ void cLevelEditor::OnLoadConfig() {
 
   SetSettingValue("TexQuality",
                   mpLocalConfig->GetString("Screen", "TexQuality", "0"));
+  SetSettingValue("RendererBackend",
+                  mpLocalConfig->GetString("Screen", "RendererBackend", "standard"));
 
   // Set Input config
   SetSettingValue("TumbleFactor",
@@ -1423,6 +1425,8 @@ void cLevelEditor::OnSaveConfig() {
   mpLocalConfig->SetString("Screen", "Fullscreen", GetSetting("Fullscreen"));
 
   mpLocalConfig->SetString("Screen", "TexQuality", GetSetting("TexQuality"));
+  mpLocalConfig->SetString("Screen", "RendererBackend",
+                           GetSetting("RendererBackend"));
 
   mpLocalConfig->SetString("Input", "TumbleFactor", GetSetting("TumbleFactor"));
   mpLocalConfig->SetString("Input", "TrackFactor", GetSetting("TrackFactor"));

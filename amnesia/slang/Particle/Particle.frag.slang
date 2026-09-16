@@ -112,11 +112,18 @@ float4 psMain(ParticleVSOut psIn) : SV_TARGET
     // Opacity and lighting modulate linear RGB; gamma never changes alpha.
     float4 modulated    = applyBlendModulation(pc.blendMode, diffuseColor,
                                                finalAlpha, lightLevel);
-    float4 finalColor   = encodeBlendOutputLinear(pc.blendMode, modulated);
 
-    // Preserve the full opacity tail. A 1% alpha test cuts a contour through
-    // each smoke sprite and through its soft intersection/lifetime fades.
-    // Zero-opacity alpha sources already blend as the identity; no discard
-    // is needed (and additive emission need not track texture alpha).
-    return finalColor;
+    // The legacy alpha test (translucency_particle.frag: `finalColor.a < 0.01
+    // -> discard`), tested on the post-modulation alpha exactly as the original
+    // did. This is NOT redundant with the blend state: applyBlendModulation
+    // never folds texture alpha into RGB for Add/Mul/MulX2, so for those modes
+    // the discard is the only thing that honours a cutout stored in alpha.
+    // Drop it and a texture whose shape lives in alpha (ps_glass_piece,
+    // ps_glass_shards) emits its transparent-region RGB across the whole quad
+    // and reads as a solid square. The soft-intersection and lifetime fades
+    // ride in `finalAlpha`, not in `.a`, so no sprite gains a contour here.
+    if (modulated.a < kParticleAlphaDiscard)
+        discard;
+
+    return encodeBlendOutputLinear(pc.blendMode, modulated);
 }

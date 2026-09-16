@@ -167,7 +167,7 @@ void cLuxCritter_Spider::UpdateVelocity(float afTimeStep)
 	//If lantern is on, flee!
 	if(mState != eLuxCritterState_Flee && gpBase->mpPlayer->GetHelperLantern()->IsActive())
 	{
-		float fDist = gpBase->mpPlayer->GetHelperLantern()->GetLight()->GetIntensity();
+		float fDist = gpBase->mpPlayer->GetHelperLantern()->GetLight()->GetRadius();
 		
 		if(GetDistanceToPlayer() < fDist)
 		{

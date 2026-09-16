@@ -94,6 +94,17 @@ void cEditorWindowOptions::OnInitLayout()
 		mpInpDisplayGamma->SetLowerBound(true, 0.3f);
 		mpInpDisplayGamma->SetUpperBound(true, 2.0f);
 		mpInpDisplayGamma->SetDecimals(2);
+
+		// Renderer backend: kept as the "RendererBackend" editor setting (same
+		// strings as the game's Graphics/RendererBackend) and applied when the
+		// editor next creates its engine.
+		vPos.y += mpInpDisplayGamma->GetSize().y + 15;
+		tWStringList lstBackendOptions;
+		lstBackendOptions.push_back(_W("Standard (original)"));
+		lstBackendOptions.push_back(_W("Ray traced (Overdrive)"));
+		mpCBRendererBackend = CreateInputEnum(vPos, _W("Renderer (needs restart)"), "", lstBackendOptions, pTab, 170);
+		mpCBRendererBackend->SetLayoutStyle(eEditorInputLayoutStyle_RowLabelOnLeft);
+		mpCBRendererBackend->UpdateLayout();
 	}
 
 	/////////////////////////////////////////////////////////
@@ -122,6 +133,8 @@ void cEditorWindowOptions::OnInitLayout()
 	mpInpShowSkybox = CreateInputBool(vPos, _W("Show Skybox"), "", pTab);
 	vPos.y += mpInpShowSkybox->GetSize().y + 10;
 	mpInpShowFog = CreateInputBool(vPos, _W("Show Fog"), "", pTab);
+	vPos.y += mpInpShowFog->GetSize().y + 10;
+	mpInpShowOtherRenderer = CreateInputBool(vPos, _W("Show Other Renderer Objects"), "", pTab);
 
 	vPos.x = mpInpLightsActive->GetPosition().x + mpInpLightsActive->GetSize().x + 100;
 	vPos.y = 15;
@@ -253,6 +266,7 @@ void cEditorWindowOptions::OnUpdate(float afTimeStep)
 	mpInpDisabledCoverage->SetValue(iEngineEntityMesh::GetDisabledCoverage(), false);
 	mpInpUndoStackSize->SetValue((float)mpEditor->GetActionHandler()->GetMaxUndoSize(), false);
 	mpInpDisplayGamma->SetValue(mpEditor->GetViewportDisplayGamma(), false);
+	mpCBRendererBackend->SetValue(mpEditor->GetSetting("RendererBackend")=="overdrive" ? 1 : 0, false);
 
 	{
 		mpInpLightsActive->SetValue(pWorld->GetTypeActive(eEditorEntityType_Light), false);
@@ -260,6 +274,7 @@ void cEditorWindowOptions::OnUpdate(float afTimeStep)
 		mpInpWorldReflection->SetValue(mpEditor->GetWorldReflectionActive(), false);
 		mpInpShowSkybox->SetValue(pWorld->GetShowSkybox(), false);
 		mpInpShowFog->SetValue(pWorld->GetShowFog(), false);
+		mpInpShowOtherRenderer->SetValue(pWorld->GetShowOtherRendererObjects(), false);
 
 		mpInpTextureQuality->SetValue(cString::ToInt(mpEditor->GetSetting("TexQuality").c_str(), 0), false);
 	}
@@ -309,6 +324,9 @@ bool cEditorWindowOptions::WindowSpecificInputCallback(iEditorInput* apInput)
 	else if(apInput==mpInpDisplayGamma)
 		mpEditor->SetViewportDisplayGamma(mpInpDisplayGamma->GetValue());
 
+	else if(apInput==mpCBRendererBackend)
+		mpEditor->SetSettingValue("RendererBackend", mpCBRendererBackend->GetValue()==1 ? "overdrive" : "standard");
+
 	else if(apInput==mpInpUndoStackSize)
 		mpEditor->GetActionHandler()->SetMaxUndoSize((int)mpInpUndoStackSize->GetValue());
 
@@ -326,6 +344,9 @@ bool cEditorWindowOptions::WindowSpecificInputCallback(iEditorInput* apInput)
 
 	else if(apInput==mpInpShowFog)
 		pWorld->SetShowFog(mpInpShowFog->GetValue());
+
+	else if(apInput==mpInpShowOtherRenderer)
+		pWorld->SetShowOtherRendererObjects(mpInpShowOtherRenderer->GetValue());
 
 	else if(apInput==mpInpShowSkybox)
 		pWorld->SetShowSkybox(mpInpShowSkybox->GetValue());

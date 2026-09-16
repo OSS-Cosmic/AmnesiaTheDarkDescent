@@ -1,18 +1,18 @@
 /*
  * Copyright © 2009-2020 Frictional Games
- * 
+ *
  * This file is part of Amnesia: The Dark Descent.
- * 
+ *
  * Amnesia: The Dark Descent is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
- * (at your option) any later version. 
+ * (at your option) any later version.
 
  * Amnesia: The Dark Descent is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
- * 
+ *
  * You should have received a copy of the GNU General Public License
  * along with Amnesia: The Dark Descent.  If not, see <https://www.gnu.org/licenses/>.
  */
@@ -44,16 +44,18 @@ public:
 
 #define LightPropIdStart 60
 
+inline bool IsEditorPointLightType(int alType)
+{
+	return alType==eEditorEntityLightType_Point || alType==eEditorEntityLightType_OverdrivePoint;
+}
+
+inline bool IsEditorSpotLightType(int alType)
+{
+	return alType==eEditorEntityLightType_Spot || alType==eEditorEntityLightType_OverdriveSpot;
+}
+
 //////////////////////////////////////////////
 // General Light properties
-enum eLightInt
-{
-	//eLightInt_GoboAnimMode = eObjInt_LastEnum,
-
-	eLightInt_LastEnum = LightPropIdStart,
-};
-
-
 enum eLightBool
 {
 	eLightBool_FlickerActive = LightPropIdStart,
@@ -61,6 +63,7 @@ enum eLightBool
 	eLightBool_CastShadows,
 	eLightBool_ShadowsAffectStatic,
 	eLightBool_ShadowsAffectDynamic,
+	eLightBool_RadiusDerived,     // Redux lights: no Radius in the file, reach follows intensity
 
 	eLightBool_LastEnum,
 };
@@ -75,22 +78,23 @@ enum eLightCol
 
 enum eLightFloat
 {
-	eLightFloat_Intensity = LightPropIdStart, // light brightness
-	eLightFloat_Radius,                       // light reach
-	eLightFloat_SourceRadius,
+	eLightFloat_Intensity = LightPropIdStart, // Overdrive lights only
+	eLightFloat_Radius,                       // legacy radius, or the Overdrive reach
+	eLightFloat_SourceRadius,                 // Overdrive lights only
 
-	eLightFloat_GoboAnimFrameTime, 
+	eLightFloat_GoboAnimFrameTime,
 	eLightFloat_FlickerOnMinLength,
 	eLightFloat_FlickerOnMaxLength,
 	eLightFloat_FlickerOffMinLength,
 	eLightFloat_FlickerOffMaxLength,
-	eLightFloat_FlickerOffRadius,
+	eLightFloat_FlickerOffRadius,             // legacy lights only
 	eLightFloat_FlickerOnFadeMinLength,
 	eLightFloat_FlickerOnFadeMaxLength,
 	eLightFloat_FlickerOffFadeMinLength,
 	eLightFloat_FlickerOffFadeMaxLength,
-	
-	eLightFloat_LastEnum,	
+	eLightFloat_FlickerOffIntensity,          // Overdrive lights only
+
+	eLightFloat_LastEnum,
 };
 
 enum eLightStr
@@ -118,6 +122,7 @@ public:
 	void CopyToEntity(iEntityWrapper* apEntity, int alCopyFlags);
 
 	bool Load(tinyxml2::XMLElement* apElement);
+	bool SaveSpecific(tinyxml2::XMLElement* apElement);
 
 	const tIntList& GetConnectedBBIDS();
 protected:
@@ -125,21 +130,39 @@ protected:
 
 };
 
+//---------------------------------------------------------------------
+
+////////////////////////////////////////////////////////////////////////
+// Light types come in two kinds, matching the engine light classes:
+//  - legacy (PointLight, SpotLight): Radius and FlickerOffRadius, as the
+//    retail maps author them.
+//  - Overdrive (Re_PointLight, Re_SpotLight, Re_AreaLight):
+//    Intensity, Radius as the reach, SourceRadius and FlickerOffIntensity.
+//    They load only for the Overdrive renderer.
 class iEntityWrapperTypeLight : public iEntityWrapperType
 {
 	friend class iIconEntityLight;
 public:
-	iEntityWrapperTypeLight(const tString& asElementString, int alSubType) : iEntityWrapperType(eEditorEntityType_Light, _W("Light"), asElementString),
-																				mlSubType(alSubType)
+	iEntityWrapperTypeLight(const tString& asElementString, int alSubType, bool abOverdrive) : iEntityWrapperType(eEditorEntityType_Light, _W("Light"), asElementString),
+																								mlSubType(alSubType), mbOverdrive(abOverdrive)
 	{
 		AddBool(eLightBool_CastShadows, "CastShadows", false);
 		AddString(eLightStr_ShadowResolution, "ShadowResolution", "High");
 		AddBool(eLightBool_ShadowsAffectStatic, "ShadowsAffectStatic");
 		AddBool(eLightBool_ShadowsAffectDynamic, "ShadowsAffectDynamic");
 
-		AddFloat(eLightFloat_Intensity, "Intensity", 1.0f);
-		AddFloat(eLightFloat_Radius, "Radius", 1.0f);
-		AddFloat(eLightFloat_SourceRadius, "SourceRadius", 0.0f);
+		if(abOverdrive)
+		{
+			AddFloat(eLightFloat_Intensity, "Intensity", 1.0f);
+			AddFloat(eLightFloat_Radius, "Radius", 1.0f);
+			AddFloat(eLightFloat_SourceRadius, "SourceRadius", 0.0f);
+			AddBool(eLightBool_RadiusDerived, "RadiusDerived", false, ePropCopyStep_PostEnt, false);
+			GetPropInt(eObjInt_RendererMask)->SetDefault(static_cast<int>(hpl::kRendererMaskOverdrive));
+		}
+		else
+		{
+			AddFloat(eLightFloat_Radius, "Radius", 1.0f);
+		}
 		AddString(eLightStr_FalloffMap, "FalloffMap");
 		AddString(eLightStr_Gobo, "Gobo");
 		AddString(eLightStr_GoboAnimMode, "GoboAnimMode", "None");
@@ -157,7 +180,10 @@ public:
 		AddString(eLightStr_FlickerOffPS, "FlickerOffPS");
 		AddString(eLightStr_FlickerOffSound, "FlickerOffSound");
 		AddColor(eLightCol_FlickerOff, "FlickerOffColor", cColor(0));
-		AddFloat(eLightFloat_FlickerOffRadius, "FlickerOffRadius");
+		if(abOverdrive)
+			AddFloat(eLightFloat_FlickerOffIntensity, "FlickerOffIntensity");
+		else
+			AddFloat(eLightFloat_FlickerOffRadius, "FlickerOffRadius");
 
 		AddBool(eLightBool_FlickerFade, "FlickerFade", false);
 		AddFloat(eLightFloat_FlickerOnFadeMinLength, "FlickerOnFadeMinLength");
@@ -167,17 +193,20 @@ public:
 	}
 
 	int GetLightType() { return mlSubType; }
+	bool IsOverdrive() { return mbOverdrive; }
 
-	bool IsVisible() { return mbLightsVisible; }
+	// Also honours the per-set toggle (Legacy / Overdrive lights).
+	bool IsVisible();
 	void SetVisible(bool abX);
 
 	bool IsActive() { return mbLightsActive; }
 	void SetActive(bool abX);
-	
+
 
 protected:
 
 	int mlSubType;
+	bool mbOverdrive;
 
 	static bool mbLightsVisible;
 	static bool mbLightsActive;
@@ -204,6 +233,17 @@ public:
 	bool SetProperty(int, const cColor&);
 
 	int GetLightType() { return ((iEntityWrapperTypeLight*)mpType)->GetLightType(); }
+	bool IsOverdrive() { return ((iEntityWrapperTypeLight*)mpType)->IsOverdrive(); }
+	// Overdrive lights, and legacy ones previewed promoted in an Overdrive
+	// editor, use the Overdrive engine light class.
+	bool UsesOverdriveLightClass();
+
+	// Handles of both light sets show in every editor renderer; only the
+	// engine light follows the renderer mask.
+	bool FiltersByEditorRenderer() { return false; }
+	bool IsLitByEditorRenderer();
+	// Legacy lights warm, Overdrive lights cool; dimmed when not lit.
+	cColor GetIconTint();
 
 	bool EntitySpecificCheckCulled(cEditorClipPlane* apPlane);
 
@@ -237,9 +277,17 @@ public:
 	virtual void SetSourceRadius(float afSourceRadius);
 	float GetSourceRadius() { return mfSourceRadius; }
 
+	// Redux lights without an authored Radius derive the reach from intensity
+	// and colour; editing the radius makes it authored.
+	void SetRadiusDerived(bool abX);
+	bool IsRadiusDerived() { return mbRadiusDerived; }
+
+	// Overdrive lights never load for the Standard renderer.
+	void SetRendererMask(int alMask);
+
 	void SetFalloffMap(const tString& asFalloffMap);
 	const tString& GetFalloffMap() { return msFalloffMap; }
-	
+
 	void SetDiffuseColor(const cColor& aDiffuseColor);
 	cColor GetDiffuseColor() { return mcolDiffuseColor; }
 
@@ -252,14 +300,18 @@ public:
 	float GetFlickerOnMaxLength() { return mfFlickerOnMaxLength; }
 	const tString& GetFlickerOnSound() { return msFlickerOnSound; }
 	const tString& GetFlickerOnPS() { return msFlickerOnPS; }
-	
+
 	float GetFlickerOffMinLength() { return mfFlickerOffMinLength; }
 	float GetFlickerOffMaxLength() { return mfFlickerOffMaxLength; }
 	float GetFlickerOffRadius() { return mfFlickerOffRadius; }
+	float GetFlickerOffIntensity() { return mfFlickerOffIntensity; }
+	// What the light switches to when flickering off: the radius of a legacy
+	// light, the intensity of an Overdrive one.
+	float GetFlickerOffValue() { return IsOverdrive() ? mfFlickerOffIntensity : mfFlickerOffRadius; }
 	cColor GetFlickerOffColor() { return mcolFlickerOffColor; }
 	const tString& GetFlickerOffSound() { return msFlickerOffSound; }
 	const tString& GetFlickerOffPS() { return msFlickerOffPS; }
-	
+
 	bool GetFlickerFade() { return mbFlickerFade; }
 
 	float GetFlickerOnFadeMinLength() { return mfFlickerOnFadeMinLength; }
@@ -281,10 +333,11 @@ public:
 	void SetFlickerOffSound(const tString& asStr);
 	void SetFlickerOffPS(const tString& asStr);
 	void SetFlickerOffRadius(float afX);
+	void SetFlickerOffIntensity(float afX);
 	void SetFlickerOffColor(const cColor& aCol);
 
 	void SetFlickerFade(bool abX);
-	
+
 	void SetFlickerOnFadeMinLength(float afX);
 	void SetFlickerOnFadeMaxLength(float afX);
 	void SetFlickerOffFadeMinLength(float afX);
@@ -297,7 +350,7 @@ public:
 	void AddConnectedBillboard(cEntityWrapperBillboard* apBB);
 	void RemoveConnectedBillboard(cEntityWrapperBillboard* apBB);
 	std::list<cEntityWrapperBillboard*>& GetConnectedBillboards() { return mlstConnectedBBs; }
-	
+
 
 	void Draw(cEditorWindowViewport* apViewport, DebugDraw* apFunctions, iEditorEditMode* apEditMode, bool abIsSelected, const cColor& aHighlightCol, const cColor& aDisabledCol);
 
@@ -309,10 +362,15 @@ protected:
 	void OnSetVisible(bool abX) {}
 	void OnSetCulled(bool abX) {}
 	void OnSetActive(bool abX);
+
+	// Pushes intensity, radius and source radius to the engine light the way
+	// the game loads this kind of light.
+	void ApplyLightValues();
+
 	///////////////////////////
 	// To be implemented
 	virtual void DrawLightTypeSpecific(cEditorWindowViewport* apViewport, DebugDraw* apFunctions, iEditorEditMode* apEditMode, bool abIsSelectedc)=0;
-	
+
 
 	//////////////////////
 	// Data
@@ -329,6 +387,7 @@ protected:
 	float mfIntensity;
 	float mfRadius;
 	float mfSourceRadius;
+	bool mbRadiusDerived;
 
 	cColor mcolDiffuseColor;
 
@@ -349,10 +408,11 @@ protected:
 	tString msFlickerOffSound;
 	tString msFlickerOffPS;
 	float mfFlickerOffRadius;
+	float mfFlickerOffIntensity;
 	cColor mcolFlickerOffColor;
 
 	bool mbFlickerFade;
-	
+
 	float mfFlickerOnFadeMinLength;
 	float mfFlickerOnFadeMaxLength;
 	float mfFlickerOffFadeMinLength;

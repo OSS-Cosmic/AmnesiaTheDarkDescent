@@ -26,6 +26,7 @@
 #include "EntityWrapperLightSpot.h"
 #include "EntityWrapperLightPoint.h"
 #include "EntityWrapperLightArea.h"
+#include "EntityWrapperLightBox.h"
 
 #include "EditorWindowViewport.h"
 #include "EditorWindowLights.h"
@@ -117,7 +118,17 @@ bool cEditorEditModeLights::SetUpCreationData(iEntityWrapperData* apData)
 
 	switch(mlSubType)
 	{
+	case eEditorEntityLightType_Box:
+		{
+			cBoxCreator* pCreator = (cBoxCreator*)mpCurrentCreator;
+			apData->SetVec3f(eObjVec3f_Position, pCreator->GetBoxCenter());
+			apData->SetVec3f(eObjVec3f_Scale, pCreator->GetBoxSize());
+			apData->SetVec3f(eLightBoxVec3f_Size, pCreator->GetBoxSize());
+
+			break;
+		}
 	case eEditorEntityLightType_Point:
+	case eEditorEntityLightType_OverdrivePoint:
 		{
 			cSphereCreator* pCreator = (cSphereCreator*)mpCurrentCreator;
 			apData->SetVec3f(eObjVec3f_Position, pCreator->GetSphereCenter());
@@ -156,5 +167,15 @@ void cEditorEditModeLights::CreateTypes()
 
 	mvTypes.push_back(hplNew(cEntityWrapperTypeLightArea,()));
 	mvShapeCreators.push_back(NULL);
+
+	// Indexed by eEditorEntityLightType.
+	mvTypes.push_back(hplNew(cEntityWrapperTypeLightPoint,(true)));
+	mvShapeCreators.push_back(hplNew(cSphereCreator,(this)));
+
+	mvTypes.push_back(hplNew(cEntityWrapperTypeLightSpot,(true)));
+	mvShapeCreators.push_back(NULL);
+
+	mvTypes.push_back(hplNew(cEntityWrapperTypeLightBox,()));
+	mvShapeCreators.push_back(hplNew(cBoxCreator,(this)));
 }
 

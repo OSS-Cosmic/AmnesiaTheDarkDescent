@@ -29,19 +29,22 @@ For an existing checkout:
 git submodule update --init --recursive
 ```
 
-## 2. Game assets (required for `deploy`)
+## 2. Game assets (`deploy.sh`)
 
-The Premake `deploy` action copies the installed Amnesia: The Dark Descent assets into the runtime output directories, next to the freshly built executable, so each output is a self-contained run directory. You need a legitimate copy of **Amnesia: The Dark Descent** (e.g. via Steam).
-
-Run deploy with an explicit game directory:
+[`deploy.sh`](deploy.sh) stages a self-contained run directory after a build: it copies the installed Amnesia: The Dark Descent assets into `build-premake/amnesia/Debug/` and `build-premake/amnesia/Release/` (whichever exist), then brings in the Redux resources from `amnesia/resources`. You need a legitimate copy of **Amnesia: The Dark Descent** (e.g. via Steam).
 
 ```bash
-premake5 deploy --game-dir="/path/to/Amnesia The Dark Descent"
+./deploy.sh --game-dir "/path/to/Amnesia The Dark Descent"
+./deploy.sh --resources merge
+./deploy.sh --config debug --no-game-assets
 ```
 
-The action copies from the install into `build-premake/amnesia/Debug/` and `build-premake/amnesia/Release/` when those directories exist. It skips names beginning with `Amnesia` and files ending in `.rar`, `.pdf`, `.dll`, or `.exe`. It does not copy built binaries into the game installation.
+- `--game-dir <path>` — installed game (fallback: `AMNESIA_GAME_DIRECTORY`, then the default Steam library path)
+- `--config release|debug|all` — output directories to stage (default: all that exist)
+- `--resources copy|merge|none` — `copy` (default) places the `.map_delta` / `.ent_delta` overlay next to the retail files and the engine applies it at load; `merge` bakes the deltas into the deployed `.map` / `.ent` files with `scripts/mapdelta.py` (originals kept as `<file>.mapdelta-orig`) and copies only the non-delta assets
+- `--no-game-assets` — skip the install copy and refresh only the Redux resources
 
-The native Premake action has no built-in game-directory default and does not read `AMNESIA_GAME_DIRECTORY` by itself; `--game-dir=PATH` is required for a direct deploy. The Linux container wrapper accepts `--game-dir <path>` and falls back to `AMNESIA_GAME_DIRECTORY`. The Windows wrapper accepts `-GameDir`/`--game-dir` and falls back to `ATDD_DIR`, then `AMNESIA_GAME_DIRECTORY`. If no game directory is supplied, the wrappers skip deploy.
+Game assets skip names beginning with `Amnesia` and files ending in `.rar`, `.pdf`, `.dll`, or `.exe`; nothing is written into the game installation. Files the Redux step placed are listed in `<Config>/.redux_overlay_manifest`, and files no longer placed (deleted assets, or delta files after switching to `merge`) are removed on the next run.
 
 ## 3. Linux build (containerized or native)
 
@@ -51,13 +54,11 @@ The canonical Linux command is [`build-linux-docker.sh`](build-linux-docker.sh).
 ./build-linux-docker.sh [release|debug] [options] [-- <extra premake args>]
 ```
 
-Inside the container, the wrapper optionally removes `build-premake/` for `--clean`, runs `premake5 gmake2`, optionally exports the compile database, builds with `make`, runs the Python tests, and runs `premake5 deploy --game-dir=...` unless deploy is disabled or no game directory is available. Its options are:
+Inside the container, the wrapper optionally removes `build-premake/` for `--clean`, runs `premake5 gmake2`, optionally exports the compile database, builds with `make`, and runs the Python tests. Stage assets afterwards with `./deploy.sh`. Its options are:
 
 - `release|debug` — build configuration (default: `release`)
 - `--clean` — remove `build-premake/` before generating projects
-- `--no-deploy` — skip asset staging
 - `--compile-commands` — run `premake5 export-compile-commands` and symlink the selected database to `compile_commands.json` in the repository root
-- `--game-dir <path>` — path to the installed game (fallback: `AMNESIA_GAME_DIRECTORY`)
 - `-- <args>` — forward extra arguments to `premake5 gmake2`
 
 Memory tracking is an opt-in Debug/Release build option. It defaults to `no` in
@@ -66,8 +67,8 @@ for report paths, lifecycle guidance, and verification boundaries. The
 canonical Linux rollout sequence is:
 
 ```bash
-./build-linux-docker.sh debug --no-deploy -- --memory-tracking=yes
-./build-linux-docker.sh debug --no-deploy -- --memory-tracking=no
+./build-linux-docker.sh debug -- --memory-tracking=yes
+./build-linux-docker.sh debug -- --memory-tracking=no
 ```
 
 The second command returns to the normal build. Regenerate the Premake project
@@ -78,8 +79,8 @@ Examples:
 
 ```bash
 ./build-linux-docker.sh
-./build-linux-docker.sh debug --clean --no-deploy
-./build-linux-docker.sh release --compile-commands --game-dir "$HOME/atdd"
+./build-linux-docker.sh debug --clean
+./build-linux-docker.sh release --compile-commands
 ./build-linux-docker.sh release -- --with-tools=no
 ```
 
@@ -89,12 +90,10 @@ For a native Linux build, use [`build-linux.sh`](build-linux.sh) as the native w
 ./build-linux.sh [release|debug] [options] [-- <extra premake args>]
 ```
 
-It requires premake5 `5.0.0-beta8` on `PATH`, a working C/C++ toolchain on the host, GNU Make, and Python 3. It runs `premake5 gmake2`, builds the selected configuration, runs the Python tests, and runs `premake5 deploy --game-dir=...` unless deployment is disabled or no game directory is available. Unlike the container wrapper, it has no `--compile-commands` option and does not use any `AMNESIA_DOCKER_*` environment variables. Its options are:
+It requires premake5 `5.0.0-beta8` on `PATH`, a working C/C++ toolchain on the host, GNU Make, and Python 3. It runs `premake5 gmake2`, builds the selected configuration, and runs the Python tests. Stage assets afterwards with `./deploy.sh`. Unlike the container wrapper, it has no `--compile-commands` option and does not use any `AMNESIA_DOCKER_*` environment variables. Its options are:
 
 - `release|debug` — build configuration (default: `release`)
 - `--clean` — remove `build-premake/` before generating projects
-- `--no-deploy` — skip `premake5 deploy`
-- `--game-dir <path>` — path to the installed game (fallback: `AMNESIA_GAME_DIRECTORY`); deploy is skipped when neither is set
 - `-h, --help` — show help
 - `-- <args>` — forward extra arguments to `premake5 gmake2`
 
@@ -102,8 +101,8 @@ Examples:
 
 ```bash
 ./build-linux.sh
-./build-linux.sh debug --clean --no-deploy
-./build-linux.sh release --game-dir "$HOME/atdd" -- --with-tools=no
+./build-linux.sh debug --clean
+./build-linux.sh release -- --with-tools=no
 ```
 
 The underlying commands can also be run directly:
@@ -114,7 +113,7 @@ make -C build-premake config=release -j"$(nproc)"
 # Or: make -C build-premake config=debug -j"$(nproc)"
 ```
 
-Premake writes runtime output to `build-premake/amnesia/Release/` and `build-premake/amnesia/Debug/`. After the build, stage the game assets with `premake5 deploy --game-dir="/path/to/Amnesia The Dark Descent"`.
+Premake writes runtime output to `build-premake/amnesia/Release/` and `build-premake/amnesia/Debug/`. After the build, stage the game assets with `./deploy.sh --game-dir "/path/to/Amnesia The Dark Descent"`.
 
 ### Container environment and mounts
 
@@ -152,12 +151,11 @@ Requires `premake5.exe` on `PATH` and a Visual Studio 2026 installation. MSBuild
 .\build-windows.ps1                                  # release
 .\build-windows.ps1 debug                            # debug
 .\build-windows.ps1 release -Clean                   # wipe build-premake\
-.\build-windows.ps1 release -NoDeploy                # skip asset staging
 .\build-windows.ps1 release -GameDir "C:\Program Files (x86)\Steam\steamapps\common\Amnesia The Dark Descent"
 .\build-windows.ps1 release -- --with-tools=no
 ```
 
-The script generates a Visual Studio solution under `build-premake\` with `premake5 vs2026`, then runs `msbuild` for `x64` and optionally runs the Premake `deploy` action. Extra arguments after `--` are forwarded to `premake5 vs2026` as Premake options, not to MSBuild. Generated project files and runtime output stay under `build-premake\`; runtime output is `build-premake\amnesia\<Config>\`.
+The script generates a Visual Studio solution under `build-premake\` with `premake5 vs2026`, then runs `msbuild` for `x64`. Stage assets with `deploy.sh` (for example from Git Bash or WSL). Extra arguments after `--` are forwarded to `premake5 vs2026` as Premake options, not to MSBuild. Generated project files and runtime output stay under `build-premake\`; runtime output is `build-premake\amnesia\<Config>\`.
 
 The Windows CI workflow ([`.github/workflows/windows-build.yml`](.github/workflows/windows-build.yml)) uses `premake5 vs2022` because its hosted runner provides Visual Studio 2022. Both `vs2022` and `vs2026` are valid here: [`premake5.lua`](premake5.lua) does not pin `_ACTION`, so they generate the same projects. CI builds with `msbuild` targeting `x64` as well.
 
@@ -224,7 +222,6 @@ The options below are defined in [`premake/options.lua`](premake/options.lua). P
 | `--python=PATH` | Unset; find `python3`/`python` | Select the Python executable forwarded to the FidelityFX SDK wrapper and used by Premake Python test projects. |
 | `--glslang=PATH` | Unset; find `glslangValidator`/`glslang` | Select the GLSL compiler for FidelityFX shader generation. |
 | `--spirv-val=PATH` | Unset; use `spirv-val` if found | Select the optional SPIR-V validator for FidelityFX shader generation. |
-| `--game-dir=PATH` | Unset; no built-in path | Path to the installed game used by the `deploy` action. |
 | `--with-tools=yes\|no` | `yes` | Build the HPL2 editors and tools. |
 | `--with-tests=yes\|no` | `yes` | Build and run the headless unit tests. |
 | `--with-python-tests=yes\|no` | `yes` | Build and run the Python unit tests in the Premake test projects. |
@@ -247,12 +244,12 @@ The main menu shows the build's version and short commit hash; both are also
 written to the startup log. For a local versioned build, pass
 `--build-version=v1.2.3` to Premake or through a build wrapper after `--`.
 
-Run the built game from the self-contained runtime directory, such as `build-premake/amnesia/Release/` or `build-premake/amnesia/Debug/`. The `deploy` action copies the game assets from the install directory you passed with `--game-dir=PATH` into those output directories; it does not put the newly built executable into the game installation.
+Run the built game from the self-contained runtime directory, such as `build-premake/amnesia/Release/` or `build-premake/amnesia/Debug/`. `deploy.sh` copies the game assets from the install directory you pass with `--game-dir <path>` into those output directories, together with the Redux resources; it does not put the newly built executable into the game installation.
 
-If the game complains about missing files, verify the install path and rerun the asset staging action:
+If the game complains about missing files, verify the install path and rerun asset staging:
 
 ```bash
-premake5 deploy --game-dir="/path/to/Amnesia The Dark Descent"
+./deploy.sh --game-dir "/path/to/Amnesia The Dark Descent"
 ```
 
-With the Linux wrapper, pass `--game-dir <path>` or set `AMNESIA_GAME_DIRECTORY`; with the Windows wrapper, pass `-GameDir <path>` or set `ATDD_DIR`/`AMNESIA_GAME_DIRECTORY`.
+`deploy.sh` falls back to `AMNESIA_GAME_DIRECTORY`, then the default Steam library path. The Windows wrapper's `-GameDir <path>` (or `ATDD_DIR`) only sets the Visual Studio debugging directory.

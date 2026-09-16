@@ -6,7 +6,7 @@
 // the bloom mip chain: each mip samples the previous (larger) mip.
 //
 // On the FIRST downsample (applyThreshold != 0, sampling the full-res HDR scene)
-// the 5 overlapping 2x2 boxes are weighted by a Karis average (1/(1+luma)) to
+// the 5 overlapping 2x2 boxes are combined with a normalized Karis average (1/(1+luma)) to
 // stop a single fireflies from dominating the box, then a soft-knee threshold is
 // applied so only bright pixels feed the bloom. Subsequent downsamples are a
 // plain weighted 13-tap (applyThreshold == 0).
@@ -90,11 +90,16 @@ float4 psMain(PSIn pin) : SV_Target
         float3 b2 = (d + e + g + hh) * 0.25f; // bottom-left
         float3 b3 = (e + f + hh + i) * 0.25f; // bottom-right
         float3 b4 = (j + k + l + m) * 0.25f; // center
-        result  = b0 * (0.125f * karisWeight(b0));
-        result += b1 * (0.125f * karisWeight(b1));
-        result += b2 * (0.125f * karisWeight(b2));
-        result += b3 * (0.125f * karisWeight(b3));
-        result += b4 * (0.5f   * karisWeight(b4));
+        // Normalize by the summed weights: without it the output is roughly
+        // c / (1 + luma(c)), so white sources never reach the threshold while
+        // saturated ones do.
+        float w0 = 0.125f * karisWeight(b0);
+        float w1 = 0.125f * karisWeight(b1);
+        float w2 = 0.125f * karisWeight(b2);
+        float w3 = 0.125f * karisWeight(b3);
+        float w4 = 0.5f   * karisWeight(b4);
+        result = (b0 * w0 + b1 * w1 + b2 * w2 + b3 * w3 + b4 * w4) /
+                 max(w0 + w1 + w2 + w3 + w4, 1e-5f);
         result = prefilter(result);
     }
     else

@@ -21,6 +21,12 @@ function memory_backend(enabled)
     if not enabled then return end
     files { MEMORY_ROOT .. "/mmgr.c" }
     includedirs { MEMORY_ROOT }
+    -- mmgr.c is C11 (_Thread_local, _Alignof(max_align_t)). The workspace
+    -- cdialect "gnu11" has no Visual Studio mapping, so MSVC would compile it
+    -- as pre-C11 C; request C11 for this file only.
+    filter { "files:**/mmgr.c", "system:windows" }
+        buildoptions { "/std:c11" }
+    filter {}
 end
 
 -- The C++ platform boundary and the platform libraries it requires.

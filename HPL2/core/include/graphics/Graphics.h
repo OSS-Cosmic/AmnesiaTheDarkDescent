@@ -76,6 +76,7 @@ struct cTexture;
 // GlobalManagedSets.h -> Graphics.h header cycle).
 class GlobalManagedSets;
 class cLightProbeQuery;
+class cGpuParticleSystem;
 
 typedef std::list<cPostEffectComposite *> tPostEffectCompositeList;
 typedef tPostEffectCompositeList::iterator tPostEffectCompositeListIt;
@@ -129,6 +130,11 @@ public:
   DebugDraw *GetDebugDraw() { return mpDebugDraw; }
 
   bool GetScreenIsSetUp() { return mbScreenIsSetup; }
+
+  eRendererBackend GetRendererBackend() const;
+  // True when the selected adapter can run the ray-traced Overdrive backend,
+  // whichever backend this session actually started.
+  bool IsOverdriveSupported() const { return mbOverdriveSupported; }
 
   // The window/screen size is owned by cWindow — query it via
   // Interface<cWindow>::Get()->GetSize() / GetSizeF(). The swapchain follows
@@ -341,6 +347,13 @@ public:
   // consumers must handle anyway.
   cLightProbeQuery *lightProbe = nullptr;
 
+  // Engine-lifetime GPU particle pool: the persistent per-particle state
+  // buffer, the authored-parameter table, and the slice allocator that gives
+  // each live emitter a fixed range of the pool. Null until Init (and on a
+  // build with no device), and inert unless HPL_GPU_PARTICLES is set, so every
+  // caller null-checks and falls back to the legacy CPU particle path.
+  cGpuParticleSystem *gpuParticles = nullptr;
+
   void IncrementFrame();
   std::optional<RIDescriptor> resolve_filter_descriptor(eTextureWrap wrapS,
                                                         eTextureWrap wrapT,
@@ -388,6 +401,8 @@ private:
   cDecalCreator *mpDecalCreator = nullptr;
   DebugDraw *mpDebugDraw = nullptr;
   cResources *mpResources = nullptr;
+  eRendererBackend mRendererBackend = eRendererBackend_Overdrive;
+  bool mbOverdriveSupported = false;
 
   std::vector<iRenderer *> mvRenderers;
   std::vector<iPostEffectType *> mvPostEffectTypes;

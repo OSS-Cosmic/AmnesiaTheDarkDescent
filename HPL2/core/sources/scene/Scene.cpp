@@ -398,6 +398,8 @@ namespace hpl {
 
 		mlstWorlds.push_back(pWorld);
 
+		pWorld->SetRendererBackend(mpGraphics->GetRendererBackend());
+
 		return pWorld;
 	}
 

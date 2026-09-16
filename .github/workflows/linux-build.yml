@@ -78,13 +78,6 @@ jobs:
           path: build-premake/_deps/slang-prebuilt
           key: slang-${{ runner.os }}-${{ hashFiles('premake/slang.lua') }}
 
-      # The Premake postbuild also runs these tests, but this standalone check
-      # fails fast (it needs no generated makefiles) and still covers
-      # --with-tests=no builds. They must never need a game install, GPU, or
-      # display.
-      - name: Python tests
-        run: python3 scripts/run_python_tests.py -v
-
       - name: Generate makefiles
         run: premake5 gmake2 "--build-version=$BUILD_VERSION" ${{ inputs.premake_args }}
 

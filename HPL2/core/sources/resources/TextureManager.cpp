@@ -170,7 +170,7 @@ SharedResourceHandle<Image>
 cTextureManager::Create1DImage(const tString &asName, bool abUseMipMaps,
                                eTextureUsage aUsage,
                                unsigned int alTextureSizeLevel, bool abSRGB) {
-  return _wrapperImageResource(
+  auto handle = _wrapperImageResource(
       asName,
       [&abUseMipMaps, &abSRGB, this](const tString &asName,
                                      const tWString &path,
@@ -194,6 +194,11 @@ cTextureManager::Create1DImage(const tString &asName, bool abUseMipMaps,
         auto resource = new Image(asName, path, std::move(singleImage));
         return resource;
       });
+  // Light falloff and spot-cone ramps are sampled through textures_2d[] by
+  // their bindless slot; without one the Standard light shader falls back to
+  // an identity ramp (no falloff, hard cut at the radius).
+  AssignBindlessSlot(handle.Get(), /*cube*/ false);
+  return handle;
 }
 
 SharedResourceHandle<Image>

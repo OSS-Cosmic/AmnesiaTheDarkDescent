@@ -37,6 +37,8 @@
 
 #include "engine/Engine.h"
 
+#include <algorithm>
+
 namespace hpl {
 
 	//////////////////////////////////////////////////////////////////////////
@@ -324,6 +326,43 @@ namespace hpl {
 		if(mColor.r <= 0 && mColor.g <= 0 && mColor.b <= 0) return false;
 
 		return mbIsVisible;
+	}
+
+	//-----------------------------------------------------------------------
+
+	// Inside area over total area of a normalized clip rectangle, the inside
+	// part clamped to the [-1,1] screen square.
+	static float HaloClipRectCoverage(cVector3f avMin, cVector3f avMax)
+	{
+		const cVector3f vTotalSize = avMax - avMin;
+		avMin.x = std::max(avMin.x, -1.0f);
+		avMin.y = std::max(avMin.y, -1.0f);
+		avMax.x = std::min(avMax.x, 1.0f);
+		avMax.y = std::min(avMax.y, 1.0f);
+		const cVector3f vInsideSize = avMax - avMin;
+		const float fTotalArea = vTotalSize.x * vTotalSize.y;
+		if(fTotalArea <= 0 || vInsideSize.x <= 0 || vInsideSize.y <= 0) return 0;
+		return (vInsideSize.x * vInsideSize.y) / fTotalArea;
+	}
+
+	float cBillboard::GetHaloScreenCoverage(cFrustum *apFrustum)
+	{
+		if(mbIsHalo == false || mpHaloSourceBV == NULL || apFrustum == NULL) return 0;
+
+		if(mbHaloSizeUpdated)
+		{
+			mpHaloSourceBV->SetSize(mvHaloSourceSize);
+			mbHaloSizeUpdated = false;
+		}
+		if(mlHaloBVMatrixCount != GetTransformUpdateCount())
+		{
+			mpHaloSourceBV->SetTransform(GetWorldMatrix());
+			mlHaloBVMatrixCount = GetTransformUpdateCount();
+		}
+
+		cVector3f vMin, vMax;
+		if(cMath::GetNormalizedClipRectFromBV(vMin, vMax, *mpHaloSourceBV, apFrustum, 0) == false) return 0;
+		return HaloClipRectCoverage(vMin, vMax);
 	}
 
 	//-----------------------------------------------------------------------

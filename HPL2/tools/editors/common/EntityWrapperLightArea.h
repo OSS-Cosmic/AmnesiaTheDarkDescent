@@ -62,6 +62,9 @@ class cEntityWrapperTypeLightArea : public iEntityWrapperTypeLight
 public:
 	cEntityWrapperTypeLightArea();
 
+	// AreaLight is the pre-split spelling of Re_AreaLight.
+	bool IsAppropriateType(tinyxml2::XMLElement* apElement);
+
 protected:
 	iEntityWrapperData* CreateSpecificData();
 };

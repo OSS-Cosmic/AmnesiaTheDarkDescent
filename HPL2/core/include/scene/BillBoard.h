@@ -35,6 +35,7 @@ namespace hpl {
 	class cGraphics;
 	class cMaterial;
 	class cVertexBuffer;
+	class cFrustum;
 	
 	//------------------------------------------
 
@@ -70,6 +71,10 @@ namespace hpl {
 
 		void SetHaloSourceSize(const cVector3f &avSize);
 		cVector3f GetHaloSourceSize(){return mvHaloSourceSize;}
+
+		// Fraction of the halo source box's screen rectangle inside the view
+		// (legacy getAreaOfScreenSpace); 0 for non-halos and off-screen boxes.
+		float GetHaloScreenCoverage(cFrustum *apFrustum);
 
 		/////////////////////////////////
 		//Entity implementation

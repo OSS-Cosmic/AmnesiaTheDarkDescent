@@ -15,7 +15,7 @@
 
 #include "Constants.h"
 import SceneTypes;
-import bindless;
+import FogBindings;
 import PerFrame.resource;
 import Utils.Color.ColorHelpers;  // linearToSRGB / sRGBToLinear — display-space fog blend
 

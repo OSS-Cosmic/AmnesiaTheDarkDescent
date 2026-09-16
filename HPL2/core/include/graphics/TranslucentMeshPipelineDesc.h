@@ -59,7 +59,10 @@ struct TranslucentMeshPipelineDesc {
     BLEND_MULX2 = 2,
     BLEND_ALPHA = 3,
     BLEND_PREMUL_ALPHA = 4,
-    BLEND_LAST_ENUM = 5,
+    // Blend disabled: refractive draws compose against the scene copy in the
+    // shader, as the legacy renderer did with eMaterialBlendMode_None.
+    BLEND_REPLACE = 5,
+    BLEND_LAST_ENUM = 6,
   };
 
   // vertexPresentMask is a bitset of eVertexElementFlag_* naming the optional

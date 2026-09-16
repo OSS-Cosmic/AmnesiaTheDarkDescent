@@ -49,7 +49,10 @@ cIconEntityLightSpot::cIconEntityLightSpot(iEntityWrapper* apParent) : iIconEnti
 bool cIconEntityLightSpot::Create(const tString& asName)
 {
 	cWorld* pWorld = mpParent->GetEditorWorld()->GetWorld();
-	mpEntity = pWorld->CreateLightSpot(asName);
+	if(static_cast<iEntityWrapperLight*>(mpParent)->UsesOverdriveLightClass())
+		mpEntity = pWorld->CreateLightSpot(asName);
+	else
+		mpEntity = pWorld->CreateLightSpotLegacy(asName);
 
 	return true;
 }
@@ -62,7 +65,9 @@ bool cIconEntityLightSpot::Create(const tString& asName)
 
 //---------------------------------------------------------------------------
 
-cEntityWrapperTypeLightSpot::cEntityWrapperTypeLightSpot() : iEntityWrapperTypeLight("SpotLight", eEditorEntityLightType_Spot)
+cEntityWrapperTypeLightSpot::cEntityWrapperTypeLightSpot(bool abOverdrive) : iEntityWrapperTypeLight(abOverdrive ? "Re_SpotLight" : "SpotLight",
+																							   abOverdrive ? eEditorEntityLightType_OverdriveSpot : eEditorEntityLightType_Spot,
+																							   abOverdrive)
 {
 	mScaleType = eScaleType_None;
 
@@ -211,7 +216,7 @@ void cEntityWrapperLightSpot::SetFOV(float afAngle)
 {
 	mfFOV = afAngle;
 
-	((cLightSpot*)mpEngineEntity->GetEntity())->SetFOV(mfFOV);
+	((iLightSpot*)mpEngineEntity->GetEntity())->SetFOV(mfFOV);
 }
 
 //---------------------------------------------------------------------------
@@ -220,16 +225,14 @@ void cEntityWrapperLightSpot::SetAspect(float afAngle)
 {
 	mfAspect = afAngle;
 
-	((cLightSpot*)mpEngineEntity->GetEntity())->SetAspect(mfAspect);
+	((iLightSpot*)mpEngineEntity->GetEntity())->SetAspect(mfAspect);
 }
 
 //---------------------------------------------------------------------------
 
 void cEntityWrapperLightSpot::SetRadius(float afX)
 {
-	mfRadius = afX;
-
-	((cLightSpot*)mpEngineEntity->GetEntity())->SetRadius(mfRadius);
+	iEntityWrapperLight::SetRadius(afX);
 }
 
 //---------------------------------------------------------------------------
@@ -238,7 +241,7 @@ void cEntityWrapperLightSpot::SetNearClipPlane(float afX)
 {
 	mfNearClipPlane = afX;
 
-	((cLightSpot*)mpEngineEntity->GetEntity())->SetNearClipPlane(mfNearClipPlane);
+	((iLightSpot*)mpEngineEntity->GetEntity())->SetNearClipPlane(mfNearClipPlane);
 }
 
 //---------------------------------------------------------------------------
@@ -256,7 +259,7 @@ void cEntityWrapperLightSpot::SetSpotFalloffMap(const tString& asFalloffMap)
 		msSpotFalloffMap = "";
 	}
 
-	((cLightSpot*)mpEngineEntity->GetEntity())->SetSpotFalloffMap(pTex);	
+	((iLightSpot*)mpEngineEntity->GetEntity())->SetSpotFalloffMap(pTex);	
 }
 
 //---------------------------------------------------------------------------
@@ -266,7 +269,7 @@ void cEntityWrapperLightSpot::DrawLightTypeSpecific(cEditorWindowViewport* apVie
 {
 	// Frustum edge wireframe (cFrustum::Draw needs the legacy GL path; walk
 	// the corner vertices directly instead).
-	cFrustum* pFrustum = ((cLightSpot*)mpEngineEntity->GetEntity())->GetFrustum();
+	cFrustum* pFrustum = ((iLightSpot*)mpEngineEntity->GetEntity())->GetFrustum();
 	const cColor frustumCol = cColor(1,1);
 	for(int i=0; i<4; ++i)
 		apFunctions->DebugDrawLine(pFrustum->GetVertex(i==0?3:i-1), pFrustum->GetVertex(i), frustumCol);

@@ -56,7 +56,8 @@ namespace hpl {
 				mbFullscreen(false),
 				mbVsync(false),
 				msWindowCaption(""),
-				mvWindowPosition(-1)
+				mvWindowPosition(-1),
+				mRendererBackend(eRendererBackend_Overdrive)
 			{}
 
 			cVector2l mvScreenSize;
@@ -66,6 +67,7 @@ namespace hpl {
 			bool mbVsync;
 			tString msWindowCaption;
 			cVector2l mvWindowPosition;
+			eRendererBackend mRendererBackend;
 		};
 		cGraphicsVars mGraphics;
 		

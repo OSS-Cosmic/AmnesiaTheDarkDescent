@@ -24,6 +24,7 @@
 #include "system/SystemTypes.h"
 #include "math/MathTypes.h"
 #include "graphics/GraphicsTypes.h"
+#include "graphics/RendererMask.h"
 #include "resources/ResourcesTypes.h"
 
 #include "engine/Updateable.h"
@@ -119,10 +120,15 @@ namespace hpl {
 	class iEntityLoader : public iMapDataLoader
 	{
 	public:
-		iEntityLoader(const tString& asName): iMapDataLoader(asName), mbCreatesStaticEntity(false){}
+		iEntityLoader(const tString& asName): iMapDataLoader(asName), mbCreatesStaticEntity(false), mlInstanceRendererMask(kRendererMaskAll){}
 		virtual ~iEntityLoader(){}
 
 		bool GetCreatesStaticEntity(){ return mbCreatesStaticEntity; }
+
+		// RendererMask of the map object being loaded; cWorld::CreateEntity sets it
+		// around Load so the created renderables and .ent children inherit it.
+		void SetInstanceRendererMask(unsigned alMask){ mlInstanceRendererMask = SanitizeRendererMask(alMask); }
+		unsigned GetInstanceRendererMask() const { return mlInstanceRendererMask; }
 		
 		virtual iEntity3D* Load(const tString &asName, int alID, bool abActive, tinyxml2::XMLElement* apRootElem,
 								const cMatrixf &a_mtxTransform, const cVector3f &avScale, 
@@ -130,6 +136,7 @@ namespace hpl {
 
 	protected:
 		bool mbCreatesStaticEntity;
+		unsigned mlInstanceRendererMask;
 	};
 
 	typedef std::map<tString,iEntityLoader*> tEntityLoaderMap;
@@ -247,6 +254,13 @@ namespace hpl {
 		// it on at startup.
 		static void SetDeltasEnabled(bool abX){ mbDeltasEnabled = abX;}
 		static bool GetDeltasEnabled(){ return mbDeltasEnabled ;}
+
+		// Skip map/entity objects whose RendererMask excludes the running backend,
+		// so a Standard/Overdrive pair sharing one name loads as one object.
+		// Off by default so the editors keep both halves of a pair editable; the
+		// game turns it on at startup.
+		static void SetRendererMaskFilterEnabled(bool abX){ mbRendererMaskFilterEnabled = abX;}
+		static bool GetRendererMaskFilterEnabled(){ return mbRendererMaskFilterEnabled ;}
 		
 	private:
 		iLowLevelResources *mpLowLevelResources;
@@ -287,6 +301,7 @@ namespace hpl {
 		static bool mbForceCacheLoadingAndSkipSaving;
 		static bool mbCreateAndLoadCompressedMaps;
 		static bool mbDeltasEnabled;
+		static bool mbRendererMaskFilterEnabled;
 	};
 
 };

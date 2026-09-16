@@ -130,6 +130,12 @@ public:
   inline static int GetRenderFrameCount() { return mlRenderFrameCount; }
   inline static void IncRenderFrameCount() { ++mlRenderFrameCount; }
 
+  static bool GetRefractionEnabled() { return mbRefractionEnabled; }
+  static void SetRefractionEnabled(bool enabled) { mbRefractionEnabled = enabled; }
+  // Legacy spotlight shadow filter: Low (single compare), Medium, High.
+  static eShadowMapQuality GetShadowMapQuality() { return mShadowMapQuality; }
+  static void SetShadowMapQuality(eShadowMapQuality quality) { mShadowMapQuality = quality; }
+
   float GetTimeCount() { return mfTimeCount; }
 
   virtual bool LoadData() = 0;
@@ -157,6 +163,8 @@ protected:
   cRenderList *mpCurrentRenderList;
   float mfTempAlpha;
   static int mlRenderFrameCount;
+  static bool mbRefractionEnabled;
+  static eShadowMapQuality mShadowMapQuality;
   float mfTimeCount;
 
   // Static variables

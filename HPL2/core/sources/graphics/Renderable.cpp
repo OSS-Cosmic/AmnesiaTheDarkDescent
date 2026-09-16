@@ -82,6 +82,13 @@ namespace hpl {
 
 	//-----------------------------------------------------------------------
 
+	void iRenderable::SetRendererMask(unsigned alMask)
+	{
+		mRendererMask = SanitizeRendererMask(alMask);
+	}
+
+	//-----------------------------------------------------------------------
+
 	void iRenderable::SetVisible(bool abVisible)
 	{
 		mbIsVisible = abVisible;

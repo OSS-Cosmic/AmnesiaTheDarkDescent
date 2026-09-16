@@ -3,8 +3,11 @@
 //
 // Mip-chain bloom upsample. 9-tap tent filter (Jimenez, "Next Generation Post
 // Processing in Call of Duty: Advanced Warfare"). Samples a smaller mip and the
-// host additively blends the result into the next-larger mip (pipeline blend =
-// ONE/ONE, load-op LOAD), progressively accumulating the glow up the chain.
+// host lerps the result into the next-larger mip (pipeline blend =
+// SRC_ALPHA/ONE_MINUS_SRC_ALPHA, load-op LOAD) by kUpsampleBlend. Each level
+// halves the weight of everything below it, so the mip weights sum to 1 and
+// the accumulated bloom never exceeds the prefiltered scene. A plain ONE/ONE
+// add summed every level, scaling bloom by up to the mip count.
 //
 // Bindings (set 0):
 //   binding 0 : SamplerState inputSampler  (bilinear, clamp)
@@ -24,6 +27,8 @@ struct BloomUpsamplePC
 
 [vk::push_constant]
 BloomUpsamplePC pc;
+
+static const float kUpsampleBlend = 0.5f;
 
 struct PSIn
 {
@@ -54,5 +59,5 @@ float4 psMain(PSIn pin) : SV_Target
     result += (a + c + g + i);
     result *= (1.0f / 16.0f);
 
-    return float4(result, 1.0f);
+    return float4(result, kUpsampleBlend);
 }

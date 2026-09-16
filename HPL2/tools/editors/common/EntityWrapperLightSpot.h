@@ -62,7 +62,7 @@ enum eLightSpotStr
 class cEntityWrapperTypeLightSpot : public iEntityWrapperTypeLight
 {
 public:
-	cEntityWrapperTypeLightSpot();
+	cEntityWrapperTypeLightSpot(bool abOverdrive=false);
 
 protected:
 	iEntityWrapperData* CreateSpecificData();

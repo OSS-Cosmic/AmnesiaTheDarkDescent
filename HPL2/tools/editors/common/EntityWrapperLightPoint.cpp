@@ -36,12 +36,17 @@ cIconEntityLightPoint::cIconEntityLightPoint(iEntityWrapper* apParent) : iIconEn
 bool cIconEntityLightPoint::Create(const tString& asName)
 {
 	cWorld* pWorld = mpParent->GetEditorWorld()->GetWorld();
-	mpEntity = pWorld->CreateLightPoint(asName);
+	if(static_cast<iEntityWrapperLight*>(mpParent)->UsesOverdriveLightClass())
+		mpEntity = pWorld->CreateLightPoint(asName);
+	else
+		mpEntity = pWorld->CreateLightPointLegacy(asName);
 
 	return true;
 }
 
-cEntityWrapperTypeLightPoint::cEntityWrapperTypeLightPoint() : iEntityWrapperTypeLight("PointLight", eEditorEntityLightType_Point)
+cEntityWrapperTypeLightPoint::cEntityWrapperTypeLightPoint(bool abOverdrive) : iEntityWrapperTypeLight(abOverdrive ? "Re_PointLight" : "PointLight",
+																								abOverdrive ? eEditorEntityLightType_OverdrivePoint : eEditorEntityLightType_Point,
+																								abOverdrive)
 {
 	mScaleType = eScaleType_None;
 }
@@ -80,7 +85,7 @@ cEntityWrapperLightPoint::cEntityWrapperLightPoint(iEntityWrapperData* apData) :
 																										  eEditorEntityLightType_Point,
 																										  true, eScaleType_None)*/
 {
-	//mpLight = (cLightPoint*)mpEngineEntity;
+	//mpLight = (iLightPoint*)mpEngineEntity;
 
 	//SetDiffuseColor(cColor(1,1));
 }
@@ -110,7 +115,7 @@ void cEntityWrapperLightPoint::SetGobo(const tString& asGoboFilename)
 	else
 		msGoboFilename = "";
 
-	((cLightPoint*)mpEngineEntity->GetEntity())->SetGoboTexture(pTex);	
+	((iLightPoint*)mpEngineEntity->GetEntity())->SetGoboTexture(pTex);	
 
 }
 

@@ -25,6 +25,7 @@
 
 #include "LuxPlayer.h"
 #include "LuxPlayerHelpers.h"
+#include "LuxLightSensingMath.h"
 
 //-----------------------------------------------------------------------
 
@@ -545,17 +546,25 @@ float cLuxMapHelper::GetLightLevelAtPos(const cVector3f& avPos, std::vector<iLig
 	while(lightIt.HasNext())
 	{
 		iLight *pLight = lightIt.Next();
+		if(pLight->GetLightModel() == eLightModel_Legacy && pLight->IsLegacyRendererEnabled()==false) continue;
 		if(pLight->IsVisible()==false) continue;
+		// Gameplay reach: the legacy radius, or the Overdrive intensity (the value
+		// retail maps authored as Radius), whichever the light animates.
+		const float fReach = pLight->GetAnimatedValue();
 
 		bool bAdd = false;
 		switch(pLight->GetLightType())
 		{
 		case eLightType_Point:
-			bAdd = cMath::CheckPointInSphereIntersection(avPos, pLight->GetWorldPosition(), pLight->GetIntensity());
+			bAdd = cMath::CheckPointInSphereIntersection(avPos, pLight->GetWorldPosition(), fReach);
 			break;
-		case eLightType_Spot:
-			cLightSpot *pSpotLight = static_cast<cLightSpot*>(pLight);
+		case eLightType_Spot: {
+			iLightSpot *pSpotLight = static_cast<iLightSpot*>(pLight);
 			bAdd = pSpotLight->GetFrustum()->CollidePoint(avPos);
+			break;
+		}
+		case eLightType_Box:
+			bAdd = true;
 			break;
 		}
 
@@ -590,6 +599,14 @@ float cLuxMapHelper::GetLightLevelAtPos(const cVector3f& avPos, std::vector<iLig
 
 
 		///////////////////////////
+		//Box light — pure ambient, no distance falloff
+		if(pLight->GetLightType() == eLightType_Box)
+		{
+			fLightLevel += GetMaxRGB(pLight->GetDiffuseColor());
+			continue;
+		}
+
+		///////////////////////////
 		//Spot and Point
 		{
 			//Check line of sight
@@ -606,8 +623,12 @@ float cLuxMapHelper::GetLightLevelAtPos(const cVector3f& avPos, std::vector<iLig
 			float fDist = cMath::Vector3Dist(pLight->GetWorldPosition(), avPos);
 
 			//Calculate attenuation
-			float fT = 1 - fDist / (pLight->GetIntensity() + afRadiusAdd);
-			if(fT<0)fT =0;
+			const float fReach = pLight->GetAnimatedValue();
+			float fT = 0.0f;
+			if(lux::TryGetLightAttenuation(fDist, fReach, afRadiusAdd, &fT)==false)
+			{
+				continue;
+			}
 			fAmount *= fT;
 
 			fLightLevel += fAmount;
@@ -627,6 +648,5 @@ float cLuxMapHelper::GetLightLevelAtPos(const cVector3f& avPos, std::vector<iLig
 //-----------------------------------------------------------------------
 
 //-----------------------------------------------------------------------
-
 
 

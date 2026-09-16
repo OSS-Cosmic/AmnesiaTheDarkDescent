@@ -43,9 +43,14 @@ namespace hpl {
 		// Linear SIMD scan over the set's AABBs (ml::cFrustum::CheckAabb per
 		// element). A null frustum or abIgnoreFrustumCull emits every object —
 		// the hybrid renderer uses that so the TLAS sees whole-map geometry.
+		//
+		// clipPlanes is forwarded to IsObjectIsVisible, so a caller with extra
+		// half-spaces (the planar water reflection's max-distance and screen-rect
+		// bounds) gets them applied on the same pass as the visibility and flag
+		// tests, exactly as the legacy iRenderer::CheckObjectIsVisible did.
 		void WalkAndPrepareRenderList(cRenderableSet* apSet, cFrustum* apFrustum,
 			std::function<void(iRenderable*)> handler, tRenderableFlag renderableFlag,
-			bool abIgnoreFrustumCull = false);
+			bool abIgnoreFrustumCull = false, std::span<cPlanef> clipPlanes = {});
 
 	} // namespace rendering
 

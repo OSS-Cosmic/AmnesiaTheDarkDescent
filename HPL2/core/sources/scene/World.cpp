@@ -66,6 +66,7 @@
 #include "scene/LightArea.h"
 #include "scene/LightPoint.h"
 #include "scene/LightSpot.h"
+#include "scene/LightBox.h"
 #include "scene/MeshEntity.h"
 #include "scene/Node3D.h"
 #include "scene/ParticleEmitter.h"
@@ -341,6 +342,17 @@ void cWorld::Compile(bool abCalcPhysicsWorldSize) {
 //-----------------------------------------------------------------------
 
 void cWorld::CompileDecals() {
+  // An explicit compile consumes any queued association rebuild. This avoids
+  // PrepareFrame repeating the same load-time rebuild when Compile() called it.
+  mbDecalAssociationsDirty = false;
+
+  // Clear every receiver before rebuilding. This is required even when there
+  // are no decals, or when a receiver has no bounds to test against.
+  for (int i = 0; i < 2; ++i) {
+    for (iRenderable *pObj : mvRenderableSets[i].GetObjects())
+      pObj->SetDecalList(0, 0);
+  }
+
   if (mvDecals.size() > 1) {
     cVector3f vBoundsMin(0.0f), vBoundsMax(0.0f);
     bool bFirst = true;
@@ -542,13 +554,13 @@ static PointLight BuildPointLight(iLight *pLight) {
   pl.worldToLightZ[0] = world.m[2][0];
   pl.worldToLightZ[1] = world.m[2][1];
   pl.worldToLightZ[2] = world.m[2][2];
-  if (!pLight->IsVisible())
+  if (!pLight->IsVisible() || !pLight->IsOverdriveEnabled())
     pl.radius = 0.0f; // grid skips radius <= 0
   return pl;
 }
 
 static SpotLight BuildSpotLight(iLight *pLight) {
-  cLightSpot *pSpot = static_cast<cLightSpot *>(pLight);
+  iLightSpot *pSpot = static_cast<iLightSpot *>(pLight);
   SpotLight sl{};
   const cVector3f pos = pSpot->GetWorldPosition();
   sl.position[0] = pos.x;
@@ -581,7 +593,7 @@ static SpotLight BuildSpotLight(iLight *pLight) {
   const ml::float4x4 vpF4 =
       cMath::ToFloatTranspose4x4(pSpot->GetViewProjMatrix());
   std::memcpy(sl.viewProjection, vpF4.a, sizeof(sl.viewProjection));
-  if (!pSpot->IsVisible())
+  if (!pSpot->IsVisible() || !pSpot->IsOverdriveEnabled())
     sl.radius = 0.0f;
   return sl;
 }
@@ -617,7 +629,7 @@ static RectLight BuildRectLight(iLight *pLight) {
   al.normal[0] = world.m[0][0];
   al.normal[1] = world.m[1][0];
   al.normal[2] = world.m[2][0];
-  if (!pArea->IsVisible())
+  if (!pArea->IsVisible() || !pArea->IsOverdriveEnabled())
     al.radius = 0.0f;
   return al;
 }
@@ -672,6 +684,9 @@ static uint32_t AcquireLightSlot(IndexPool &pool) {
 }
 
 IndexPool *cWorld::GpuLightPoolFor(iLight *apLight) {
+  // Only Overdrive lights are uploaded; legacy lights render in Standard.
+  if (apLight->GetLightModel() != eLightModel_Overdrive)
+    return nullptr;
   switch (apLight->GetLightType()) {
   case eLightType_Point:
     return &mPointLightPool;
@@ -695,11 +710,10 @@ void cWorld::PrepareFrame(cGraphics::FrameContext *cntx) {
     return;
   mlPreparedFrameIndex = mpGraphics->frameIndex;
 
-  // Debounced decal association rebuild: the editor marks this on each edit
-  // rather than recompiling synchronously, so a continuous drag coalesces into
-  // one CompileDecals() per frame here (which also marks the GPU buffers dirty
-  // for the bake below). Runtime worlds never set the flag — associations are
-  // built once at load (Compile) — so gameplay pays nothing.
+  // Debounced decal association rebuild: decal edits mark this rather than
+  // recompiling synchronously, so a continuous drag coalesces into one
+  // CompileDecals() per frame here (which also marks the GPU buffers dirty for
+  // the bake below). Load-time Compile() still performs the rebuild directly.
   if (mbDecalAssociationsDirty) {
     mbDecalAssociationsDirty = false;
     CompileDecals();
@@ -834,7 +848,7 @@ void cWorld::PrepareFrame(cGraphics::FrameContext *cntx) {
                      decals.size() * sizeof(GpuDecal));
     }
 
-    // gObjectDecalIndices[] — flat per-object pool (built by Compile()). Allocate
+    // gObjectDecalIndices[] — flat per-object pool (built by CompileDecals()). Allocate
     // at least one element so the set-2 binding stays valid even with no receivers.
     {
       const size_t count =
@@ -859,7 +873,8 @@ void cWorld::PrepareFrame(cGraphics::FrameContext *cntx) {
   // Build this world's ray-tracing TLAS from its own renderable set (whole-scene,
   // no frustum cull — meshes' model matrices are frustum-independent, so a null
   // frustum is fine for this viewport-less per-world prepare). Bound via GetTlas().
-  BuildTlas(cntx, /*apFrustum=*/nullptr);
+  if (mpGraphics->device.accelerationStructureEnabled)
+    BuildTlas(cntx, /*apFrustum=*/nullptr);
 }
 
 //-----------------------------------------------------------------------
@@ -882,11 +897,14 @@ uint32_t cWorld::SubmitRenderableObject(iRenderable *pObject,
   ObjectSubmitDesc d;
   d.modelMatrix = pObject->GetModelMatrix(apFrustum);
   d.materialId = materialId;
+  // UV animation/transform is per material and must travel with the object
+  // slot; a shared slot may be submitted by multiple viewport panes.
+  d.uvMatrix = pMat->GetUvMatrix();
   d.dissolveAmount = pObject->GetCoverageAmount();
   d.illuminationAmount = pObject->GetIlluminationAmount();
   d.renderFlags = pObject->GetRenderFlags();
-  // Precomputed static decal list (cWorld::Compile): (offset<<8)|count into
-  // gObjectDecalIndices. Dynamic objects keep the default (0,0) → no decals.
+  // Precomputed receiver list (cWorld::CompileDecals): (offset<<8)|count into
+  // gObjectDecalIndices. Receivers without associated decals have count 0.
   {
     const uint32_t off = (uint32_t)pObject->GetDecalListOffset();
     const uint32_t cnt = (uint32_t)pObject->GetDecalListCount();
@@ -921,6 +939,9 @@ uint32_t cWorld::SubmitRenderableObject(iRenderable *pObject,
 // and BuildBlas ensures each mesh's BLAS is current before its device address is
 // read. Then grow/upload the instance buffer and record the TLAS build.
 void cWorld::BuildTlas(cGraphics::FrameContext *cntx, cFrustum *apFrustum) {
+  if (!mpGraphics->device.accelerationStructureEnabled)
+    return;
+
   // Keep last frame's TLAS resources alive for any in-flight frame (and across
   // world teardown), exactly like the light/fog/decal buffers above — a re-init
   // or grow below then just overwrites the members.
@@ -1183,7 +1204,8 @@ iEntity3D *cWorld::CreateEntity(const tString &asName,
                                 const tString &asFile, int alID, bool abActive,
                                 const cVector3f &avScale,
                                 cResourceVarsObject *apInstanceVars,
-                                bool abSkipNonStaticEntity) {
+                                bool abSkipNonStaticEntity,
+                                unsigned alRendererMask) {
   iEntity3D *pEntity = NULL;
 
   // World owns the cEntFile via mlstEntFileCache (raw list, Destroyed in
@@ -1214,9 +1236,11 @@ iEntity3D *cWorld::CreateEntity(const tString &asName,
   iEntityLoader *pLoader = mpResources->GetEntityLoader(sEntityType);
   if (pLoader) {
     if (abSkipNonStaticEntity == false || pLoader->GetCreatesStaticEntity()) {
+      pLoader->SetInstanceRendererMask(alRendererMask);
       pEntity = pLoader->Load(asName, alID, abActive, pDoc, a_mtxTransform,
                               avScale, this, pEntFile->GetName(),
                               pEntFile->GetFullPath(), apInstanceVars);
+      pLoader->SetInstanceRendererMask(kRendererMaskAll);
       if (pEntity)
         pEntity->SetSourceFile(pEntFile->GetName());
     }
@@ -1280,6 +1304,7 @@ cDecal *cWorld::CreateDecal(const tString &asName, const tString &asMaterial,
   AddRenderableToContainer(pDecal);
 
   MarkDecalBuffersDirty(); // membership changed → re-bake the decal buffers
+  MarkDecalAssociationsDirty();
   return pDecal;
 }
 
@@ -1292,10 +1317,10 @@ void cWorld::DestroyDecal(cDecal *apDecal) {
   RemoveRenderableFromContainer(apDecal);
   STLFindAndDelete(mvDecals, apDecal);
 
-  // Membership changed → re-bake the GPU buffers. The per-object association
-  // (mvDecalObjectIndices) still references the old indices; the caller must
-  // CompileDecals() to rebuild it before the next render.
+  // Membership changed → re-bake the GPU buffers and rebuild receiver
+  // associations at the next PrepareFrame (coalesced with other decal edits).
   MarkDecalBuffersDirty();
+  MarkDecalAssociationsDirty();
 }
 
 //-----------------------------------------------------------------------
@@ -1332,68 +1357,105 @@ cMeshEntityIterator cWorld::GetStaticMeshEntityIterator() {
 
 //-----------------------------------------------------------------------
 
-cLightPoint *cWorld::CreateLightPoint(const tString &asName,
-                                      const tString &asGobo, bool abStatic) {
-  cLightPoint *pLight = hplNew(cLightPoint, (asName, mpResources));
-  mlstLights.push_back(pLight);
-  pLight->SetGpuLightSlot(AcquireLightSlot(mPointLightPool)); // stable GPU slot for life
+void cWorld::RegisterLight(iLight *apLight, bool abStatic) {
+  mlstLights.push_back(apLight);
+  if (IndexPool *pool = GpuLightPoolFor(apLight))
+    apLight->SetGpuLightSlot(AcquireLightSlot(*pool)); // stable GPU slot for life
 
-  if (asGobo != "") {
-    Image *pImage = mpResources->GetTextureManager()
-                        ->CreateCubeMapImage(asGobo, true)
-                        .Release();
-    if (pImage != NULL)
-      pLight->SetGoboTexture(pImage);
-    else
-      Warning("Couldn't load gobo texture '%s' for light '%s'", asGobo.c_str(),
-              asName.c_str());
-  }
+  apLight->SetStatic(abStatic);
+  AddRenderableToContainer(apLight);
 
-  pLight->SetStatic(abStatic);
-  AddRenderableToContainer(pLight);
-
-  pLight->SetWorld(this);
+  apLight->SetWorld(this);
 
   MarkLightBuffersDirty(); // membership changed → re-bake the light buffers
+}
+
+static void LoadPointLightGobo(cResources *apResources, iLight *apLight,
+                               const tString &asGobo, const tString &asName) {
+  if (asGobo == "")
+    return;
+  Image *pImage =
+      apResources->GetTextureManager()->CreateCubeMapImage(asGobo, true).Release();
+  if (pImage != NULL)
+    apLight->SetGoboTexture(pImage);
+  else
+    Warning("Couldn't load gobo texture '%s' for light '%s'", asGobo.c_str(),
+            asName.c_str());
+}
+
+static void LoadSpotLightGobo(cResources *apResources, iLight *apLight,
+                              const tString &asGobo, const tString &asName) {
+  if (asGobo == "")
+    return;
+  Image *pImage =
+      apResources->GetTextureManager()->Create2DImage(asGobo, true).Release();
+  if (pImage != NULL)
+    apLight->SetGoboTexture(pImage);
+  else
+    Warning("Couldn't load gobo texture '%s' for light '%s'", asGobo.c_str(),
+            asName.c_str());
+}
+
+cLightPointLegacy *cWorld::CreateLightPointLegacy(const tString &asName,
+                                      const tString &asGobo, bool abStatic) {
+  cLightPointLegacy *pLight = hplNew(cLightPointLegacy, (asName, mpResources));
+  LoadPointLightGobo(mpResources, pLight, asGobo, asName);
+  RegisterLight(pLight, abStatic);
+  return pLight;
+}
+
+cLightPoint *cWorld::CreateLightPoint(const tString &asName,
+                                                        const tString &asGobo,
+                                                        bool abStatic) {
+  cLightPoint *pLight = hplNew(cLightPoint, (asName, mpResources));
+  LoadPointLightGobo(mpResources, pLight, asGobo, asName);
+  RegisterLight(pLight, abStatic);
+  return pLight;
+}
+
+cLightSpotLegacy *cWorld::CreateLightSpotLegacy(const tString &asName,
+                                    const tString &asGobo, bool abStatic) {
+  cLightSpotLegacy *pLight = hplNew(cLightSpotLegacy, (asName, mpResources));
+  LoadSpotLightGobo(mpResources, pLight, asGobo, asName);
+  RegisterLight(pLight, abStatic);
   return pLight;
 }
 
 cLightSpot *cWorld::CreateLightSpot(const tString &asName,
-                                    const tString &asGobo, bool abStatic) {
+                                                      const tString &asGobo,
+                                                      bool abStatic) {
   cLightSpot *pLight = hplNew(cLightSpot, (asName, mpResources));
-  mlstLights.push_back(pLight);
-  pLight->SetGpuLightSlot(AcquireLightSlot(mSpotLightPool)); // stable GPU slot for life
-
-  if (asGobo != "") {
-    Image *pImage =
-        mpResources->GetTextureManager()->Create2DImage(asGobo, true).Release();
-    if (pImage != NULL)
-      pLight->SetGoboTexture(pImage);
-    else
-      Warning("Couldn't load gobo texture '%s' for light '%s'", asGobo.c_str(),
-              asName.c_str());
-  }
-
-  pLight->SetStatic(abStatic);
-  AddRenderableToContainer(pLight);
-
-  pLight->SetWorld(this);
-
-  MarkLightBuffersDirty(); // membership changed → re-bake the light buffers
+  LoadSpotLightGobo(mpResources, pLight, asGobo, asName);
+  RegisterLight(pLight, abStatic);
   return pLight;
 }
 
 cLightArea *cWorld::CreateLightArea(const tString &asName, bool abStatic) {
   cLightArea *pLight = hplNew(cLightArea, (asName, mpResources));
-  mlstLights.push_back(pLight);
-  pLight->SetGpuLightSlot(AcquireLightSlot(mAreaLightPool)); // stable GPU slot for life
+  RegisterLight(pLight, abStatic);
+  return pLight;
+}
 
-  pLight->SetStatic(abStatic);
-  AddRenderableToContainer(pLight);
+cLightBoxLegacy *cWorld::CreateLightBoxLegacy(const tString &asName, bool abStatic) {
+  cLightBoxLegacy *pLight = hplNew(cLightBoxLegacy, (asName, mpResources));
+  RegisterLight(pLight, abStatic);
+  return pLight;
+}
 
-  pLight->SetWorld(this);
-
-  MarkLightBuffersDirty(); // membership changed → re-bake the light buffers
+iLight *cWorld::CreateCodePointLight(const tString &asName, const tString &asGobo,
+                                     bool abStatic, float afReach,
+                                     const cColor &aLitColor, float afIntensityMul) {
+  if (mRendererBackend == eRendererBackend_Standard) {
+    iLightPoint *pLight = CreateLightPointLegacy(asName, asGobo, abStatic);
+    pLight->SetDiffuseColor(aLitColor);
+    pLight->SetRadius(afReach);
+    return pLight;
+  }
+  // Overdrive lights with no reach are dropped by the light grid.
+  cLightPoint *pLight = CreateLightPoint(asName, asGobo, abStatic);
+  pLight->SetDiffuseColor(aLitColor);
+  pLight->SetRadius(afReach);
+  pLight->SetIntensity(DeriveLightIntensityForReach(afReach, aLitColor) * afIntensityMul);
   return pLight;
 }
 
@@ -1426,6 +1488,23 @@ iLight *cWorld::GetLight(const tString &asName) {
   return NULL;
 }
 
+void cWorld::SetRendererMaskSkippedIDs(const std::set<int> &aSkippedIDs,
+                                       const std::map<int, int> &aRemap) {
+  msetRendererMaskSkippedIDs = aSkippedIDs;
+  mmapRendererMaskIDRemap = aRemap;
+}
+
+int cWorld::RemapRendererMaskID(int alID) const {
+  std::map<int, int>::const_iterator it = mmapRendererMaskIDRemap.find(alID);
+  return it == mmapRendererMaskIDRemap.end() ? alID : it->second;
+}
+
+bool cWorld::IsRendererMaskSkippedID(int alID) const {
+  return msetRendererMaskSkippedIDs.count(alID) != 0;
+}
+
+//-----------------------------------------------------------------------
+
 iLight *cWorld::GetLightFromUniqueID(int alID) {
   tLightListIt LightIt = mlstLights.begin();
   for (; LightIt != mlstLights.end(); ++LightIt) {
@@ -1433,7 +1512,9 @@ iLight *cWorld::GetLightFromUniqueID(int alID) {
       return *LightIt;
     }
   }
-  return NULL;
+  // A save from the other renderer backend can name an object skipped here.
+  const int lRemappedID = RemapRendererMaskID(alID);
+  return lRemappedID != alID ? GetLightFromUniqueID(lRemappedID) : NULL;
 }
 
 //-----------------------------------------------------------------------
@@ -1628,7 +1709,9 @@ cParticleSystem *cWorld::GetParticleSystemFromUniqueID(int alID) {
     if ((*PSIt)->GetUniqueID() == alID)
       return *PSIt;
   }
-  return NULL;
+  // A save from the other renderer backend can name an object skipped here.
+  const int lRemappedID = RemapRendererMaskID(alID);
+  return lRemappedID != alID ? GetParticleSystemFromUniqueID(lRemappedID) : NULL;
 }
 
 //-----------------------------------------------------------------------
@@ -1852,7 +1935,9 @@ cSoundEntity *cWorld::GetSoundEntityFromUniqueID(int alID) {
     if ((*it)->GetUniqueID() == alID)
       return *it;
   }
-  return NULL;
+  // A save from the other renderer backend can name an object skipped here.
+  const int lRemappedID = RemapRendererMaskID(alID);
+  return lRemappedID != alID ? GetSoundEntityFromUniqueID(lRemappedID) : NULL;
 }
 
 bool cWorld::SoundEntityExists(cSoundEntity *apEntity, int alCreationID) {

@@ -363,6 +363,7 @@ namespace hpl {
 
 			//Create entity
 			mpEntity = apWorld->CreateMeshEntity(asName, mpMesh, mbLoadAsStatic);
+			mpEntity->SetRendererMask(mlInstanceRendererMask);
 			
 			if(mpMesh->GetSkeleton()!=NULL)
 				mpEntity->SetMatrix(cMath::MatrixScale(mvScale));
@@ -470,6 +471,9 @@ namespace hpl {
 		////////////////////////////////////////
 		// Load World entities
 		{
+			//List that contain light and billboard connections
+			tEFL_LightBillboardConnectionList lstLightBillboardListConnections;
+
             tinyxml2::XMLElement *pEntitiesElem  = pModelDataElem->FirstChildElement("Entities");
 			if(pEntitiesElem)
 			{
@@ -479,6 +483,9 @@ namespace hpl {
 				{
 					const tString sEntityType = pEntityElem->Value();
 					iEntity3D *pEntity = NULL;
+
+					// Child objects tagged for the other renderer backend are not created.
+					if(cEngineFileLoading::IsElementEnabledForWorld(pEntityElem, apWorld)==false) continue;
 
 					/////////////////////////
 					// Particle System
@@ -497,7 +504,8 @@ namespace hpl {
 					{
 						if(mbLoadBillboards)
 						{
-							cBillboard *pBillboard = cEngineFileLoading::LoadBillboard(pEntityElem,asName +"_", apWorld, apWorld->GetResources(), mbLoadAsStatic);
+							cBillboard *pBillboard = cEngineFileLoading::LoadBillboard(pEntityElem,asName +"_", apWorld, apWorld->GetResources(), mbLoadAsStatic,
+																						&lstLightBillboardListConnections);
 							if(pBillboard)	mvBillboards.push_back(pBillboard);
 							pEntity = pBillboard;
 						}
@@ -535,6 +543,10 @@ namespace hpl {
 					// Add to list and scale!
 					if(pEntity)
 					{
+						// Children belong only to the renderers their instance does.
+						iRenderable *pRenderable = dynamic_cast<iRenderable*>(pEntity);
+						if(pRenderable) pRenderable->SetRendererMask(pRenderable->GetRendererMask() & mlInstanceRendererMask);
+
 						//Scale the local position accoringly!
 						cVector3f vPos = pEntity->GetLocalPosition();
 						pEntity->SetPosition(vPos * mvScale);
@@ -542,6 +554,25 @@ namespace hpl {
 						lstEntities.push_back(pEntity);
 					}
 				}
+			}
+
+			/////////////////////////////////////
+			//Set up light and billboard connections
+			for(tEFL_LightBillboardConnectionListIt connIt = lstLightBillboardListConnections.begin(); connIt != lstLightBillboardListConnections.end(); ++connIt)
+			{
+				cEFL_LightBillboardConnection& lightConnect = *connIt;
+
+				cBillboard *pBB = NULL;
+				for(size_t i=0; i<mvBillboards.size() && pBB==NULL; ++i)
+					if(mvBillboards[i]->GetUniqueID() == lightConnect.msBillboardID) pBB = mvBillboards[i];
+				iLight *pLight = NULL;
+				for(size_t i=0; i<mvLights.size() && pLight==NULL; ++i)
+					if(mvLights[i]->GetName() == lightConnect.msLightName) pLight = mvLights[i];
+
+				// The light may be tagged for the other renderer backend and not loaded.
+				if(pLight==NULL || pBB==NULL) continue;
+
+				pLight->AttachBillboard(pBB, pBB->GetColor());
 			}
 
 		}

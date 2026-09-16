@@ -25,6 +25,7 @@
 #include "graphics/RIRenderer.h"
 #include "graphics/RIVK.h"
 #include "graphics/Renderer.h"
+#include "graphics/StandardRenderer.h"
 #include "graphics/TemporalReactiveMask.h"
 #include "graphics/TemporalPresentation.h"
 #include "graphics/WaterReflectionPass.h"
@@ -261,6 +262,9 @@ namespace hpl {
 	void cViewport::PublishRasterCamera(const float aViewMat[16],
 											const float aProjMat[16])
 	{
+		// A raster-only publication must not retain a previous backend's
+		// jitter/history. Temporal renderers publish their snapshot afterward.
+		mRasterCamera = {};
 		if (aViewMat == nullptr || aProjMat == nullptr)
 		{
 			mRasterCamera.valid = false;
@@ -513,6 +517,25 @@ namespace hpl {
 
 	//-----------------------------------------------------------------------
 
+// Names a viewport image for Vulkan validation and captures, so a layout or
+// usage error reports "StandardViewportState.depth" instead of a bare handle.
+static void NameViewportImage(struct RIDevice *device, const RITexture &texture,
+							  const char *what) {
+#if (DEVICE_IMPL_VULKAN)
+	if (what == nullptr || vkSetDebugUtilsObjectNameEXT == nullptr ||
+		texture.vk.image == VK_NULL_HANDLE)
+		return;
+	VkDebugUtilsObjectNameInfoEXT name = {
+		VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT};
+	name.objectType = VK_OBJECT_TYPE_IMAGE;
+	name.objectHandle = reinterpret_cast<uint64_t>(texture.vk.image);
+	name.pObjectName = what;
+	vkSetDebugUtilsObjectNameEXT(device->vk.device, &name);
+#else
+	(void)device; (void)texture; (void)what;
+#endif
+}
+
 bool CreateViewportColorTexture(struct RIDevice *device, uint32_t width,
 								uint32_t height, enum RI_Format_e format,
 								uint32_t usage,
@@ -545,6 +568,7 @@ bool CreateViewportColorTexture(struct RIDevice *device, uint32_t width,
 		*view = {};
 		return false;
 	}
+	NameViewportImage(device, t, what);
 	*tex = RISharedPointer<RITexture>(device, t);
 	*view = RISharedPointer<RITextureView>(device, v);
 	return true;
@@ -559,12 +583,13 @@ bool CreateViewportAttachmentTexture(struct RIDevice *device, uint32_t width,
 									 enum RITextureViewType_e viewType,
 									 RISharedPointer<RITexture> *tex,
 									 RISharedPointer<RITextureView> *view,
-									 const char *what) {
+									 const char *what, uint32_t layerNum) {
 	RITextureDesc desc = {};
 	desc.type = RI_TEXTURE_2D;
 	desc.format = format;
 	desc.width = width;
 	desc.height = height;
+	desc.layerNum = layerNum;
 	desc.usage = usage;
 	RITexture t = RITexture::create(device, desc);
 	if (t.isEmpty()) {
@@ -577,7 +602,7 @@ bool CreateViewportAttachmentTexture(struct RIDevice *device, uint32_t width,
 	viewDesc.viewType = viewType;
 	viewDesc.format = format;
 	viewDesc.mipNum = 1;
-	viewDesc.layerNum = 1;
+	viewDesc.layerNum = layerNum;
 	RITextureView v = RITextureView::create(device, &t, viewDesc);
 	if (v.isEmpty()) {
 		Error("%s: failed to create image view\n", what);
@@ -585,6 +610,7 @@ bool CreateViewportAttachmentTexture(struct RIDevice *device, uint32_t width,
 		*tex = {};
 		return false;
 	}
+	NameViewportImage(device, t, what);
 	*tex = RISharedPointer<RITexture>(device, t);
 	*view = RISharedPointer<RITextureView>(device, v);
 	return true;
@@ -847,6 +873,8 @@ void ReleaseViewportAttachmentTexture(RISharedPointer<RITexture> *tex,
 				TemporalUpscalerQuality::Quality;
 		mTemporalUpscalerStatus.available =
 				desired.provider == TemporalUpscalerProvider::Off;
+
+
 
 		const cVector2l displaySize = GetDisplayExtent();
 		const bool displayValid = displaySize.x > 0 && displaySize.y > 0;
@@ -1285,12 +1313,6 @@ void ReleaseViewportAttachmentTexture(RISharedPointer<RITexture> *tex,
 						GetRenderDepthView();
 					presentationInput.scene.renderDepthSampleView =
 						GetRenderDepthSampleView();
-					// HybridRenderer leaves the scene depth in DEPTH_WRITE;
-					// ResolveDepth temporarily samples it and restores this state.
-					presentationInput.scene.renderDepthEntryState =
-						RI_RESOURCE_STATE_DEPTH_WRITE;
-					presentationInput.scene.renderDepthExitState =
-						RI_RESOURCE_STATE_DEPTH_WRITE;
 
 					presentationInput.provider =
 							mbTemporalProviderPrepared
@@ -1300,10 +1322,38 @@ void ReleaseViewportAttachmentTexture(RISharedPointer<RITexture> *tex,
 
 					// Keep optional motion-vector metadata tied to this render image
 					// for the future activation path.
+					// Depth entry/exit states depend on how each renderer variant leaves the depth.
 					std::visit(
 						[&](auto &&arg) {
 							using T = std::decay_t<decltype(arg)>;
 							if constexpr (std::is_same_v<T, HybridViewportState>) {
+								presentationInput.scene.renderDepthEntryState =
+									RI_RESOURCE_STATE_DEPTH_WRITE;
+								presentationInput.scene.renderDepthExitState =
+									RI_RESOURCE_STATE_DEPTH_WRITE;
+								const uint32_t imageIndex = pGraphics->swapchainIndex;
+								if (!arg.velocityTexture[imageIndex].isEmpty() &&
+									!arg.velocityView[imageIndex].isEmpty()) {
+									presentationInput.scene.motionVectors.texture =
+										arg.velocityTexture[imageIndex].Get();
+									presentationInput.scene.motionVectors.view =
+										arg.velocityView[imageIndex].Get();
+									presentationInput.scene.motionVectors.format =
+										cGraphics::VelocityFormat;
+									presentationInput.scene.motionVectors.extent =
+										presentationInput.renderExtent;
+									presentationInput.scene.motionVectors.entryState =
+										RI_RESOURCE_STATE_SHADER_RESOURCE;
+									presentationInput.scene.motionVectors.exitState =
+										RI_RESOURCE_STATE_SHADER_RESOURCE;
+								}
+						} else if constexpr (std::is_same_v<T, StandardViewportState>) {
+								// cStandardRenderer::Draw hands depth back in
+								// DEPTH_WRITE, like Hybrid.
+								presentationInput.scene.renderDepthEntryState =
+									RI_RESOURCE_STATE_DEPTH_WRITE;
+								presentationInput.scene.renderDepthExitState =
+									RI_RESOURCE_STATE_DEPTH_WRITE;
 								const uint32_t imageIndex = pGraphics->swapchainIndex;
 								if (!arg.velocityTexture[imageIndex].isEmpty() &&
 									!arg.velocityView[imageIndex].isEmpty()) {
@@ -1325,7 +1375,6 @@ void ReleaseViewportAttachmentTexture(RISharedPointer<RITexture> *tex,
 						m_state);
 
 					// Explicit, caller-produced masks. GetBindings is frame- and
-					// viewport-scoped, so an invalid snapshot yields no bindings at all
 					// and the provider falls back to its own neutral default; an old
 					// frame's or another viewport's resource can never be passed.
 					if (mTemporalReactiveMaskActive && mpTemporalReactiveMask) {

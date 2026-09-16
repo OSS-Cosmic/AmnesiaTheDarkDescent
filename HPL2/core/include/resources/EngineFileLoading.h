@@ -50,8 +50,17 @@ namespace hpl {
 		static cFogArea* LoadFogArea(tinyxml2::XMLElement* apElement, const tString& asNamePrefix, cWorld *apWorld, bool abStatic);
 		static cParticleSystem* LoadParticleSystem(tinyxml2::XMLElement* apElement, const tString& asNamePrefix, cWorld *apWorld);
 		static cSoundEntity* LoadSound(tinyxml2::XMLElement* apElement, const tString& asNamePrefix, cWorld *apWorld);
-		static cBillboard* LoadBillboard(	tinyxml2::XMLElement* apElement, const tString& asNamePrefix, cWorld *apWorld, cResources *apResources, bool abStatic);
+		static cBillboard* LoadBillboard(	tinyxml2::XMLElement* apElement, const tString& asNamePrefix, cWorld *apWorld, cResources *apResources, bool abStatic,
+											tEFL_LightBillboardConnectionList *apLightBillboardList=NULL);
 		static iLight* LoadLight(tinyxml2::XMLElement* apElement, const tString& asNamePrefix, cWorld *apWorld, cResources *apResources, bool abStatic);
+
+		// RendererMask for a map/entity element: the attribute when present,
+		// otherwise the light element's default (legacy lights both backends,
+		// Overdrive lights Overdrive only), otherwise all backends.
+		static unsigned GetElementRendererMask(tinyxml2::XMLElement* apElement);
+		// False when the renderer mask filter is on and the element excludes the
+		// world's backend; such objects are not created at all.
+		static bool IsElementEnabledForWorld(tinyxml2::XMLElement* apElement, cWorld *apWorld);
 
 		static cMesh* LoadDecalMeshHelper(tinyxml2::XMLElement* apElement, cGraphics* apGraphics, cResources* apResources, const tString& asName, const tString& asMaterial, const cColor& aColor);
 

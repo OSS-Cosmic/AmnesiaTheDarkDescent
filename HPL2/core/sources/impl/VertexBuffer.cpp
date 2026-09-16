@@ -522,7 +522,8 @@ void cVertexBuffer::SubmitToGPU(RICmd *cmd, RIDevice *device,
     const size_t needed = element.m_shadowData.size();
     uint32_t usage =
         RI_BUFFER_USAGE_VERTEX_BUFFER | RI_BUFFER_USAGE_SHADER_RESOURCE_STORAGE;
-    if (element.type == eVertexBufferElement_Position) {
+    if (element.type == eVertexBufferElement_Position &&
+        device->accelerationStructureEnabled) {
       usage |= RI_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPT;
     }
     // m_internalBufferSize == 0 with element.buffer set is the CreateCopy
@@ -553,7 +554,9 @@ void cVertexBuffer::SubmitToGPU(RICmd *cmd, RIDevice *device,
     const size_t needed = m_indices.size() * sizeof(uint32_t);
     const uint32_t idxUsage =
         RI_BUFFER_USAGE_INDEX_BUFFER | RI_BUFFER_USAGE_SHADER_RESOURCE_STORAGE |
-        RI_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPT;
+        (device->accelerationStructureEnabled
+             ? RI_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPT
+             : 0);
     const bool needsAlloc =
         m_indexBuffer.isEmpty() || m_indexBufferCapacity < needed;
     if (needsAlloc) {
@@ -588,6 +591,9 @@ void cVertexBuffer::BuildBlas(RICmd *cmd, RIDevice *device,
   // Streams must be current before any build — no-op if a prior submit (e.g.
   // the translucent/decal prepare) already uploaded this generation.
   SubmitToGPU(cmd, device, cntx);
+
+  if (!device->accelerationStructureEnabled)
+    return;
 
   if (!m_blas.isEmpty() && m_blasGeneration == m_generation) {
     return;

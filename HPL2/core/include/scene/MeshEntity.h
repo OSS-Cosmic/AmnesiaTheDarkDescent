@@ -180,6 +180,9 @@ namespace hpl {
 		bool IsStatic(){ return mbStatic;}
 
 		void SetRenderFlagBit(tRenderableFlag alFlagBit, bool abSet);
+		// Forwarded to every submesh; cMeshEntity is not itself an iRenderable.
+		void SetRendererMask(unsigned alMask);
+		unsigned GetRendererMask() const { return mlRendererMask; }
 		//bool GetRenderFlagBit(tRenderableFlag alFlagBit){ return (mlRenderFlags & alFlagBit)!=0;} 
 		//inline tRenderableFlag GetRenderFlags() const { return mlRenderFlags;}
 
@@ -225,6 +228,7 @@ namespace hpl {
 		float mfIlluminationAmount;
 		float mfCoverageAmount;
 		tRenderableFlag mlRenderFlags;
+		unsigned mlRendererMask = kRendererMaskAll;
 		
 		bool mbBoneMatricesNeedUpdate;
 		int mlBoneMatricesTransformCount;

@@ -42,7 +42,7 @@ public:
     // Post black-point lift applied after the curve (0 = none); raises pitch-
     // blacks back into the visible range so deep shadows aren't crushed.
     float mfShadowLift;
-    // User display-gamma (1.0 = no-op) applied as the final encode step;
+    // User display-gamma (1.0 = identity) applied as the final encode step;
     // authored game-side in cLuxConfigHandler. Scene brightness comes from
     // mfExposure (kSceneExposure), NOT from this — see the shader header.
     float mfGamma;

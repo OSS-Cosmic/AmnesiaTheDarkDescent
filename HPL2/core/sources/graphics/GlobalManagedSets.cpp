@@ -27,20 +27,22 @@ GlobalManagedSets::GlobalManagedSets()
 // Image is complete.
 GlobalManagedSets::~GlobalManagedSets() = default;
 
-void GlobalManagedSets::initialize(RIDevice *device,
-                                        cResources *resources) {
-  cGraphics* pGraphics = Interface<cGraphics>::Get();
+void GlobalManagedSets::initialize(RIDevice *device, cResources *resources) {
+  cGraphics *pGraphics = Interface<cGraphics>::Get();
   {
     std::vector<RIBindlessDescriptorSet::Binding> bindings = {};
     // Stage mask shared by every binding the RT pipeline touches —
     // raygen/any-hit/closest-hit/miss all need bindless texture+vertex
     // access for the alpha test, camera-ray reconstruction, and material
     // shading inside the path-tracer.
-    const VkShaderStageFlags kRtSharedStages =
-        VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT |
-        VK_SHADER_STAGE_COMPUTE_BIT | VK_SHADER_STAGE_RAYGEN_BIT_KHR |
-        VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR |
+    const VkShaderStageFlags kSharedStages = VK_SHADER_STAGE_VERTEX_BIT |
+                                             VK_SHADER_STAGE_FRAGMENT_BIT |
+                                             VK_SHADER_STAGE_COMPUTE_BIT;
+    const VkShaderStageFlags kRtStages =
+        VK_SHADER_STAGE_RAYGEN_BIT_KHR | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR |
         VK_SHADER_STAGE_ANY_HIT_BIT_KHR | VK_SHADER_STAGE_MISS_BIT_KHR;
+    const VkShaderStageFlags kRtSharedStages =
+        kSharedStages | (device->rayTracingPipelineEnabled ? kRtStages : 0);
     // textures_2d[] — sampled by the gbuffer, the composite, and the
     // RT pipeline (any-hit alpha test + closest-hit albedo).
     bindings.push_back(RIBindlessDescriptorSet::Binding{
@@ -66,13 +68,14 @@ void GlobalManagedSets::initialize(RIDevice *device,
     // read by the bindless sample helper. One bound buffer (contents written by
     // cTextureManager via the uploader; descriptor written once below).
     bindings.push_back(RIBindlessDescriptorSet::Binding{
-        kBindingAnimTex, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, kRtSharedStages, 0});
+        kBindingAnimTex, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, kRtSharedStages,
+        0});
     // (Former opaque*Handles bindings 3..8 removed — the per-stream BDAs now
     // live in UniformObject; those binding slots are unused/reserved.)
     // materialSampler — paired with textures_2d at every sample site.
     bindings.push_back(RIBindlessDescriptorSet::Binding{
-        kBindingMaterialSampler, VK_DESCRIPTOR_TYPE_SAMPLER, 1,
-        kRtSharedStages, 0});
+        kBindingMaterialSampler, VK_DESCRIPTOR_TYPE_SAMPLER, 1, kRtSharedStages,
+        0});
     // Slot-generation + light-grid SSBOs. Reachable from compute, ray-tracing,
     // and fragment stages (LightGridBuildPass writes the grid; the direct pass,
     // the path tracer's getCellLights and the object-slot consumers read).
@@ -82,9 +85,7 @@ void GlobalManagedSets::initialize(RIDevice *device,
         kBindingLightGridList,
     };
     const VkShaderStageFlags kGridSlotStageFlags =
-        VK_SHADER_STAGE_COMPUTE_BIT | VK_SHADER_STAGE_FRAGMENT_BIT |
-        VK_SHADER_STAGE_RAYGEN_BIT_KHR | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR |
-        VK_SHADER_STAGE_ANY_HIT_BIT_KHR | VK_SHADER_STAGE_MISS_BIT_KHR;
+        kSharedStages | (device->rayTracingPipelineEnabled ? kRtStages : 0);
     for (uint32_t b : kGridSlotBindings) {
       bindings.push_back(RIBindlessDescriptorSet::Binding{
           b, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, kGridSlotStageFlags, 0});
@@ -110,33 +111,29 @@ void GlobalManagedSets::initialize(RIDevice *device,
     // reflection RayQuery loops) — the legacy solid_z dissolve fade.
     bindings.push_back(RIBindlessDescriptorSet::Binding{
         kBindingDissolveMap, VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, 1,
-        VK_SHADER_STAGE_COMPUTE_BIT | VK_SHADER_STAGE_FRAGMENT_BIT |
-            VK_SHADER_STAGE_RAYGEN_BIT_KHR |
-            VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR |
-            VK_SHADER_STAGE_ANY_HIT_BIT_KHR | VK_SHADER_STAGE_MISS_BIT_KHR,
+        kSharedStages | (device->rayTracingPipelineEnabled ? kRtStages : 0),
         0});
 
     VkDescriptorPoolSize poolSizes[3] = {};
     // Sampled-image budget covers textures_2d[] + textures_cube[] +
     // textures_2d_array[] + the dissolve noise map.
     poolSizes[0] = VkDescriptorPoolSize{VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,
-                                        kTextureSlotCapacity * 2 + kTexture2DArrayCapacity + 2};
+                                        kTextureSlotCapacity * 2 +
+                                            kTexture2DArrayCapacity + 2};
     // Storage-buffer pool budget: 3 slot-generation / light-grid bindings
     // (kGridSlotBindings) + 2 scene/material + 1 animTex = 6 actually bound.
     // The per-world light/fog SSBOs are no longer here (they ride kWorldSet).
     // 16 keeps slack for future set-0 SSBOs.
-    poolSizes[1] =
-        VkDescriptorPoolSize{VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 16};
+    poolSizes[1] = VkDescriptorPoolSize{VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 16};
     // One sampler: gMaterialSampler.
     poolSizes[2] = VkDescriptorPoolSize{VK_DESCRIPTOR_TYPE_SAMPLER, 1};
 
     m_bindlessSet.initialize(device, bindings, poolSizes);
   }
 
-  const VkBufferUsageFlags kStorage =
-      VK_BUFFER_USAGE_STORAGE_BUFFER_BIT |
-      VK_BUFFER_USAGE_TRANSFER_DST_BIT |
-      VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
+  const VkBufferUsageFlags kStorage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT |
+                                      VK_BUFFER_USAGE_TRANSFER_DST_BIT |
+                                      VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
   m_objectBuffer = detail::CreateBindlessSlotBuffer(
       device, kObjectSlotCapacity, sizeof(UniformObject), kStorage,
       /*deviceLocalOnly*/ true);
@@ -246,8 +243,8 @@ void GlobalManagedSets::initialize(RIDevice *device,
     // gDissolveMap — the legacy 128×128 dissolve noise (solid_z.frag.fsl),
     // bound once here on set 0. UV-sampled by the shared
     // SceneMaterials.alphaTest for the CoverageAmount fade.
-    m_dissolveMap =
-        resources->GetTextureManager()->Create2DImage("core_dissolve.tga", false);
+    m_dissolveMap = resources->GetTextureManager()->Create2DImage(
+        "core_dissolve.tga", false);
     if (auto disTex = m_dissolveMap ? m_dissolveMap->GetTexture() : nullptr) {
       writes[count].binding = kBindingDissolveMap;
       writes[count].arrayElement = 0;
@@ -256,15 +253,14 @@ void GlobalManagedSets::initialize(RIDevice *device,
     } else {
       Warning("Failed to load core_dissolve.tga; dissolve fade unbound\n");
     }
-    m_bindlessSet.writeDescriptors(device,
-                                   std::span(writes).subspan(0, count));
+    m_bindlessSet.writeDescriptors(device, std::span(writes).subspan(0, count));
   }
 }
 
 GlobalManagedSets::MaterialSubmitResult
-GlobalManagedSets::submitMaterial(cGraphics::FrameContext *cntx,
-                                       cMaterial *mat, uint32_t frameIndex) {
-  cGraphics* pGraphics = Interface<cGraphics>::Get();
+GlobalManagedSets::submitMaterial(cGraphics::FrameContext *cntx, cMaterial *mat,
+                                  uint32_t frameIndex) {
+  cGraphics *pGraphics = Interface<cGraphics>::Get();
   // cTextureManager stamps each Image with a lifetime-stable bindless slot at
   // load (binding 0 = textures_2d[], binding 1 = textures_cube[]); read it AND
   // pin the Image for this frame. The hybrid renderer references material
@@ -299,7 +295,6 @@ GlobalManagedSets::submitMaterial(cGraphics::FrameContext *cntx,
   // too; stored outside tex[].
   gpu.cubeMapTextureIndex = slotFor(eMaterialTexture_CubeMap);
 
-
   auto isSingleChannel = [](const Image *image) {
     if (!image) {
       return false;
@@ -310,17 +305,27 @@ GlobalManagedSets::submitMaterial(cGraphics::FrameContext *cntx,
   const Image *alphaImage = mat->GetImage(eMaterialTexture_Alpha);
   const Image *heightImage = mat->GetImage(eMaterialTexture_Height);
   gpu.materialConfig =
-      (mat->GetImage(eMaterialTexture_Diffuse) ? kMaterialFlagEnableDiffuse : 0) |
+      (mat->GetImage(eMaterialTexture_Diffuse) ? kMaterialFlagEnableDiffuse
+                                               : 0) |
       (mat->GetImage(eMaterialTexture_NMap) ? kMaterialFlagEnableNormal : 0) |
-      (mat->GetImage(eMaterialTexture_Specular) ? kMaterialFlagEnableSpecular : 0) |
+      (mat->GetImage(eMaterialTexture_Specular) ? kMaterialFlagEnableSpecular
+                                                : 0) |
       (alphaImage ? kMaterialFlagEnableAlpha : 0) |
       (isSingleChannel(alphaImage) ? kMaterialFlagIsAlphaSingleChannel : 0) |
       (heightImage ? kMaterialFlagEnableHeight : 0) |
-      (isSingleChannel(heightImage) ? kMaterialFlagIsHeightMapSingleChannel : 0) |
-      (mat->GetImage(eMaterialTexture_Illumination) ? kMaterialFlagEnableIllumination : 0) |
-      (mat->GetImage(eMaterialTexture_CubeMap) ? kMaterialFlagEnableCubeMap : 0) |
-      (mat->GetImage(eMaterialTexture_DissolveAlpha) ? kMaterialFlagEnableDissolveAlpha : 0) |
-      (mat->GetImage(eMaterialTexture_CubeMapAlpha) ? kMaterialFlagEnableCubeMapAlpha : 0);
+      (isSingleChannel(heightImage) ? kMaterialFlagIsHeightMapSingleChannel
+                                    : 0) |
+      (mat->GetImage(eMaterialTexture_Illumination)
+           ? kMaterialFlagEnableIllumination
+           : 0) |
+      (mat->GetImage(eMaterialTexture_CubeMap) ? kMaterialFlagEnableCubeMap
+                                               : 0) |
+      (mat->GetImage(eMaterialTexture_DissolveAlpha)
+           ? kMaterialFlagEnableDissolveAlpha
+           : 0) |
+      (mat->GetImage(eMaterialTexture_CubeMapAlpha)
+           ? kMaterialFlagEnableCubeMapAlpha
+           : 0);
 
   // The typed material tables share the same leading layout
   // (type, materialConfig, tex[8]); only the trailing scalars differ. Copy the
@@ -339,30 +344,35 @@ GlobalManagedSets::submitMaterial(cGraphics::FrameContext *cntx,
       [&](const auto &data) -> MaterialSubmitResult {
         using T = std::decay_t<decltype(data)>;
 
-        static_assert(sizeof(MaterialDataBlob) >= sizeof(DiffuseMaterial) &&
-                          sizeof(MaterialDataBlob) >= sizeof(TranslucentMaterial) &&
-                          sizeof(MaterialDataBlob) >= sizeof(WaterMaterial),
-                      "MaterialDataBlob must hold the largest typed material struct");
+        static_assert(
+            sizeof(MaterialDataBlob) >= sizeof(DiffuseMaterial) &&
+                sizeof(MaterialDataBlob) >= sizeof(TranslucentMaterial) &&
+                sizeof(MaterialDataBlob) >= sizeof(WaterMaterial),
+            "MaterialDataBlob must hold the largest typed material struct");
         MaterialDataBlob blob = {};
 
         if constexpr (std::is_same_v<T, MaterialTranslucent>) {
           gpu.materialConfig |=
-              (data.m_refractionNormals ? kMaterialFlagUseRefractionNormals : 0) |
-              (mat->HasRefraction() && data.m_refractionEdgeCheck ? kMaterialFlagUseRefractionEdgeCheck : 0) |
+              (data.m_refractionNormals ? kMaterialFlagUseRefractionNormals
+                                        : 0) |
+              (mat->HasRefraction() && data.m_refractionEdgeCheck
+                   ? kMaterialFlagUseRefractionEdgeCheck
+                   : 0) |
               (mat->HasRefraction() ? kMaterialFlagHasRefraction : 0) |
-              (data.m_isAffectedByLightLevel ? kMaterialFlagAffectedByLightLevel : 0) |
+              (data.m_isAffectedByLightLevel ? kMaterialFlagAffectedByLightLevel
+                                             : 0) |
               (data.m_diffuseIsMask ? kMaterialFlagDiffuseIsMask : 0) |
               (data.m_smoothHalo ? kMaterialFlagSmoothHalo : 0) |
               (data.m_litDiffuse ? kMaterialFlagLitDiffuse : 0);
           TranslucentMaterial trans = {};
-          trans.type                = MATERIAL_TYPE_TRANSLUCENT;
+          trans.type = MATERIAL_TYPE_TRANSLUCENT;
           copyShared(trans);
           trans.cubeMapTextureIndex = gpu.cubeMapTextureIndex;
-          trans.refractionScale     = data.m_refractionScale;
-          trans.frenselBias         = data.m_frenselBias;
-          trans.frenselPow          = data.m_frenselPow;
-          trans.rimLightMul         = data.m_rimLightMul;
-          trans.rimLightPow         = data.m_rimLightPow;
+          trans.refractionScale = data.m_refractionScale;
+          trans.frenselBias = data.m_frenselBias;
+          trans.frenselPow = data.m_frenselPow;
+          trans.rimLightMul = data.m_rimLightMul;
+          trans.rimLightPow = data.m_rimLightPow;
           trans.particleOpacityScale = data.m_particleOpacityScale;
           trans.particleBrightnessScale = data.m_particleBrightnessScale;
           trans.litDiffuseScale = data.m_litDiffuseScale;
@@ -374,24 +384,27 @@ GlobalManagedSets::submitMaterial(cGraphics::FrameContext *cntx,
           // surface is the unrefracted composite. The HasRefraction flag is
           // kept because the CPU side reads it (e.g. TLAS instance gathering in
           // cWorld) and it stays correct once a refraction pass lands.
-          gpu.materialConfig |= kMaterialFlagIsWater | kMaterialFlagHasRefraction;
+          gpu.materialConfig |=
+              kMaterialFlagIsWater | kMaterialFlagHasRefraction;
           WaterMaterial water = {};
-          water.type            = MATERIAL_TYPE_WATER;
+          water.type = MATERIAL_TYPE_WATER;
           copyShared(water);
-          water.refractionScale     = data.m_refractionScale;
-          water.frenselBias         = data.m_frenselBias;
-          water.frenselPow          = data.m_frenselPow;
+          water.refractionScale = data.m_refractionScale;
+          water.frenselBias = data.m_frenselBias;
+          water.frenselPow = data.m_frenselPow;
           water.reflectionFadeStart = data.m_reflectionFadeStart;
-          water.reflectionFadeEnd   = data.m_reflectionFadeEnd;
-          water.waveSpeed           = data.m_waveSpeed;
-          water.waveAmplitude       = data.m_waveAmplitude;
-          water.waveFreq            = data.m_waveFreq;
+          water.reflectionFadeEnd = data.m_reflectionFadeEnd;
+          water.waveSpeed = data.m_waveSpeed;
+          water.waveAmplitude = data.m_waveAmplitude;
+          water.waveFreq = data.m_waveFreq;
           std::memcpy(blob.data, &water, sizeof(water));
         } else {
           // SolidDiffuse, Decal and the blank/unknown (monostate) material all
           // use the DiffuseMaterial layout.
           if constexpr (std::is_same_v<T, MaterialDiffuseSolid>) {
-            gpu.materialConfig |= (data.m_alphaDissolveFilter ? kMaterialFlagUseDissolveFilter : 0);
+            gpu.materialConfig |=
+                (data.m_alphaDissolveFilter ? kMaterialFlagUseDissolveFilter
+                                            : 0);
             gpu.heightMapScale = data.m_heightMapScale;
             gpu.heightMapBias = data.m_heightMapBias;
             gpu.frenselBias = data.m_frenselBias;
@@ -421,20 +434,21 @@ GlobalManagedSets::submitMaterial(cGraphics::FrameContext *cntx,
         trans.currentStages = RI_STAGE_ALL_SHADER;
         trans.postState = RI_RESOURCE_STATE_UNORDERED_ACCESS;
         trans.postStages = RI_STAGE_ALL_SHADER;
-        RI_ResourceBeginCopyBuffer(&pGraphics->device, &pGraphics->uploader, &trans);
+        RI_ResourceBeginCopyBuffer(&pGraphics->device, &pGraphics->uploader,
+                                   &trans);
         std::memcpy(trans.mapped.data, &blob, sizeof(blob));
-        RI_ResourceEndCopyBuffer(&pGraphics->device, &pGraphics->uploader, &trans);
+        RI_ResourceEndCopyBuffer(&pGraphics->device, &pGraphics->uploader,
+                                 &trans);
         return {req.id};
       },
       mat->Data());
 }
 
 uint32_t GlobalManagedSets::submitObject(uint64_t objectCookie,
-                                              uint32_t frameIndex,
-                                              cVertexBuffer *vb,
-                                              const ObjectSubmitDesc &desc,
-                                              uint32_t flags) {
-  cGraphics* pGraphics = Interface<cGraphics>::Get();
+                                         uint32_t frameIndex, cVertexBuffer *vb,
+                                         const ObjectSubmitDesc &desc,
+                                         uint32_t flags) {
+  cGraphics *pGraphics = Interface<cGraphics>::Get();
   // Stable slot per object: keyed on the renderable's unique cookie only, so a
   // moving object keeps its slot (the per-frame modelMat upload below carries
   // the movement). frameInFlight = 0, so a slot is only unavailable if every
@@ -456,8 +470,8 @@ uint32_t GlobalManagedSets::submitObject(uint64_t objectCookie,
     // dereferences the freed vertex/index BDA. Writes the CPU shadow only (may
     // fire off-frame during teardown); flushMirrors() stages it next frame.
     req.state->onDestroy = EventHandler<>([this, slot]() {
-      m_bindlessSlotGenerationMirror.write<uint32_t>(
-          slot, ++m_nextSlotGeneration);
+      m_bindlessSlotGenerationMirror.write<uint32_t>(slot,
+                                                     ++m_nextSlotGeneration);
     });
     req.state->onDestroy.Connect(vb->OnDestroyed());
   }
@@ -491,12 +505,15 @@ uint32_t GlobalManagedSets::submitObject(uint64_t objectCookie,
     // object's velocity → temporal smear on animated/physics objects. New occupant
     // (!found): prev = cur so the first frame reads zero velocity, not a teleport.
     if (!req.found) {
-      std::memcpy(req.state->prevModelMat, modelF4.a, sizeof(req.state->prevModelMat));
-      std::memcpy(req.state->curModelMat, modelF4.a, sizeof(req.state->curModelMat));
+      std::memcpy(req.state->prevModelMat, modelF4.a,
+                  sizeof(req.state->prevModelMat));
+      std::memcpy(req.state->curModelMat, modelF4.a,
+                  sizeof(req.state->curModelMat));
     } else if (req.state->lastSubmitFrame != frameIndex) {
       std::memcpy(req.state->prevModelMat, req.state->curModelMat,
                   sizeof(req.state->prevModelMat));
-      std::memcpy(req.state->curModelMat, modelF4.a, sizeof(req.state->curModelMat));
+      std::memcpy(req.state->curModelMat, modelF4.a,
+                  sizeof(req.state->curModelMat));
     }
     req.state->lastSubmitFrame = frameIndex;
     std::memcpy(payload.prevModelMat, req.state->prevModelMat,
@@ -512,12 +529,12 @@ uint32_t GlobalManagedSets::submitObject(uint64_t objectCookie,
     // every frame so a SubmitToGPU realloc can't dangle them; the memcmp-skip
     // below keeps a stable-source object's upload skipped after frame 0.
     if (desc.streamHandles.set) {
-      payload.posHandle     = desc.streamHandles.pos;
-      payload.normalHandle  = desc.streamHandles.normal;
+      payload.posHandle = desc.streamHandles.pos;
+      payload.normalHandle = desc.streamHandles.normal;
       payload.tangentHandle = desc.streamHandles.tangent;
-      payload.uv0Handle     = desc.streamHandles.uv0;
-      payload.colorHandle   = desc.streamHandles.color;
-      payload.indexHandle   = desc.streamHandles.index;
+      payload.uv0Handle = desc.streamHandles.uv0;
+      payload.colorHandle = desc.streamHandles.color;
+      payload.indexHandle = desc.streamHandles.index;
     } else if (vb && (flags & (kSubmitVertex | kSubmitIndex))) {
       auto bdaOf = [&](eVertexBufferElement type) -> uint64_t {
         const auto *element = vb->GetElement(type);
@@ -525,23 +542,24 @@ uint32_t GlobalManagedSets::submitObject(uint64_t objectCookie,
         return buf ? buf->GetDeviceHandle(&pGraphics->device) : 0;
       };
       if (flags & kSubmitVertex) {
-        payload.posHandle     = bdaOf(eVertexBufferElement_Position);
-        payload.normalHandle  = bdaOf(eVertexBufferElement_Normal);
+        payload.posHandle = bdaOf(eVertexBufferElement_Position);
+        payload.normalHandle = bdaOf(eVertexBufferElement_Normal);
         payload.tangentHandle = bdaOf(eVertexBufferElement_Texture1Tangent);
-        payload.colorHandle   = bdaOf(eVertexBufferElement_Color0);
-        payload.uv0Handle     = bdaOf(eVertexBufferElement_Texture0);
+        payload.colorHandle = bdaOf(eVertexBufferElement_Color0);
+        payload.uv0Handle = bdaOf(eVertexBufferElement_Texture0);
       }
       if (flags & kSubmitIndex)
-        payload.indexHandle = vb->GetIndexRIBuffer()
-                                  ? vb->GetIndexRIBuffer()->GetDeviceHandle(&pGraphics->device)
-                                  : 0;
+        payload.indexHandle =
+            vb->GetIndexRIBuffer()
+                ? vb->GetIndexRIBuffer()->GetDeviceHandle(&pGraphics->device)
+                : 0;
     } else if (req.found) {
-      payload.posHandle     = req.state->lastPayload.posHandle;
-      payload.normalHandle  = req.state->lastPayload.normalHandle;
+      payload.posHandle = req.state->lastPayload.posHandle;
+      payload.normalHandle = req.state->lastPayload.normalHandle;
       payload.tangentHandle = req.state->lastPayload.tangentHandle;
-      payload.uv0Handle     = req.state->lastPayload.uv0Handle;
-      payload.colorHandle   = req.state->lastPayload.colorHandle;
-      payload.indexHandle   = req.state->lastPayload.indexHandle;
+      payload.uv0Handle = req.state->lastPayload.uv0Handle;
+      payload.colorHandle = req.state->lastPayload.colorHandle;
+      payload.indexHandle = req.state->lastPayload.indexHandle;
     }
 
     // Permissive upload: a new occupant (!found, so lastPayload still belongs to
@@ -549,7 +567,9 @@ uint32_t GlobalManagedSets::submitObject(uint64_t objectCookie,
     // unchanged static object skips the uploader entirely. m_objectBuffer is a
     // single persistent device buffer, so the slot keeps last frame's value when
     // skipped.
-    const bool payloadChanged = !req.found || std::memcmp(&payload, &req.state->lastPayload, sizeof(payload)) != 0;
+    const bool payloadChanged =
+        !req.found ||
+        std::memcmp(&payload, &req.state->lastPayload, sizeof(payload)) != 0;
     if (payloadChanged) {
       RIResourceBufferTransaction trans = {};
       trans.target = m_objectBuffer;
@@ -559,9 +579,11 @@ uint32_t GlobalManagedSets::submitObject(uint64_t objectCookie,
       trans.currentStages = RI_STAGE_ALL_SHADER;
       trans.postState = RI_RESOURCE_STATE_UNORDERED_ACCESS;
       trans.postStages = RI_STAGE_ALL_SHADER;
-      RI_ResourceBeginCopyBuffer(&pGraphics->device, &pGraphics->uploader, &trans);
+      RI_ResourceBeginCopyBuffer(&pGraphics->device, &pGraphics->uploader,
+                                 &trans);
       std::memcpy(trans.mapped.data, &payload, sizeof(payload));
-      RI_ResourceEndCopyBuffer(&pGraphics->device, &pGraphics->uploader, &trans);
+      RI_ResourceEndCopyBuffer(&pGraphics->device, &pGraphics->uploader,
+                               &trans);
       req.state->lastPayload = payload;
     }
   }
@@ -572,7 +594,7 @@ uint32_t GlobalManagedSets::submitObject(uint64_t objectCookie,
 }
 
 void GlobalManagedSets::flushMirrors(RIDevice *device) {
-  cGraphics* pGraphics = Interface<cGraphics>::Get();
+  cGraphics *pGraphics = Interface<cGraphics>::Get();
   struct Item {
     RIBuffer *buf;
     BindlessShadowMirror *mir;
@@ -608,12 +630,9 @@ void GlobalManagedSets::destroy(RIDevice *device) {
   // Everything initialize() created — a missed entry here trips the VMA
   // leak assert in vmaDestroyAllocator at device teardown.
   RIBuffer *ownedBuffers[] = {
-      &m_objectBuffer,
-      &m_bindlessSlotGenerationBuffer,
-      &m_lightGridCountBuffer,
-      &m_lightGridListBuffer,
-      &m_materialBuffer,
-      &m_animTexBuffer,
+      &m_objectBuffer,         &m_bindlessSlotGenerationBuffer,
+      &m_lightGridCountBuffer, &m_lightGridListBuffer,
+      &m_materialBuffer,       &m_animTexBuffer,
   };
   // Point/spot/area light buffers + the fog buffer are owned + disposed by cWorld.
   for (RIBuffer *buf : ownedBuffers) {
@@ -628,7 +647,7 @@ void GlobalManagedSets::destroy(RIDevice *device) {
 // there is a single entry point; a pointer (not a value member on cGraphics)
 // keeps GlobalManagedSets.h's include of Graphics.h cycle-free.
 void InitGlobalManagedSets(RIDevice *device, cResources *resources) {
-  cGraphics* pGraphics = Interface<cGraphics>::Get();
+  cGraphics *pGraphics = Interface<cGraphics>::Get();
   // Runs in cGraphics::Init before any managed texture is created, so textures
   // write their descriptors directly at load (no catch-up pass needed).
   pGraphics->globalset = new GlobalManagedSets();
@@ -636,7 +655,7 @@ void InitGlobalManagedSets(RIDevice *device, cResources *resources) {
 }
 
 void ShutdownGlobalManagedSets(RIDevice *device) {
-  cGraphics* pGraphics = Interface<cGraphics>::Get();
+  cGraphics *pGraphics = Interface<cGraphics>::Get();
   if (pGraphics->globalset) {
     pGraphics->globalset->destroy(device);
     delete pGraphics->globalset;
