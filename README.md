@@ -3,6 +3,9 @@
 [![Build](https://github.com/flying-swallow/Redux-AmnesiaTheDarkDescent/actions/workflows/build.yml/badge.svg?branch=main)](https://github.com/flying-swallow/Redux-AmnesiaTheDarkDescent/actions/workflows/build.yml)
 [![Itch.io](https://img.shields.io/badge/Itch-%23FF0B34.svg?style=for-the-badge&logo=Itch.io&logoColor=white)](https://mpollind.itch.io/amnesia-the-dark-descent-redux)
 
+
+![Preview](./images/preview.png?raw=true)
+
 A rework of Frictional Games' HPL2 engine. The fixed-function OpenGL renderer has been replaced with a
 Vulkan render-interface layer, the shaders are written in [Slang](https://shader-slang.org/), and the
 lighting path is being moved onto a hybrid rasterization + ray-tracing renderer with surfel-based global
@@ -56,8 +59,6 @@ The build system is **premake5**. There is no CMake build in this tree any more.
   ```
   git config --system core.longpaths true
   ```
-- `slangc` is downloaded automatically at configure time (pinned by `SLANG_VERSION` in
-  [`premake/slang.lua`](premake/slang.lua)). Point `--slangc=/path/to/slangc` at your own to skip it.
 
 ```
 git clone --recurse-submodules git@github.com:flying-swallow/Redux-AmnesiaTheDarkDescent.git
@@ -148,24 +149,6 @@ On Windows the generated projects set the debugger working directory to `$(ATDD_
 variable to your install and F5 works directly.
 
 [BUILD.md](BUILD.md) has more detail on the wrappers, the option table, and the shader tooling.
-
-## Releasing
-
-Releases are cut manually. Run the **release** workflow from the Actions tab with a tag; it builds both
-platforms, pushes the payload to itch.io with [butler](https://itch.io/docs/butler/), and attaches the same
-archives to a GitHub prerelease.
-
-- Requires an `ITCH_API_KEY` repository secret (itch.io → Settings → API keys).
-- Pushes to the `windows` and `linux` channels of `mpollind/amnesia-the-dark-descent-redux`. The
-  `itch_channel_suffix` input appends to those names, so `-beta` gives a throwaway test channel.
-- The staging step hard-fails if any retail asset directory is found in the payload.
-
-## Continuous integration
-
-[`build.yml`](.github/workflows/build.yml) runs on pushes to `main` and on pull requests, calling the reusable
-[`linux-build.yml`](.github/workflows/linux-build.yml) and
-[`windows-build.yml`](.github/workflows/windows-build.yml) workflows. Those two are the authoritative,
-always-current build recipe — when the instructions above drift, they are the source of truth.
 
 ## License
 
