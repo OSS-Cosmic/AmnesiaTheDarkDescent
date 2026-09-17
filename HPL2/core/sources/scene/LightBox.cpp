@@ -37,6 +37,8 @@ namespace hpl {
 
 	cLightBoxLegacy::cLightBoxLegacy(tString asName, cResources *apResources) : iLight(asName,apResources)
 	{
+		// No ray-traced box light exists, so this shape has only a Standard tuning.
+		mState.Tuning(eLightModel_RayTraced).mbPresent = false;
 		mLightType = eLightType_Box;
 
 		mvSize = 1;
@@ -68,7 +70,8 @@ namespace hpl {
 
 	bool cLightBoxLegacy::IsVisible()
 	{
-		if(mDiffuseColor.r <=0 && mDiffuseColor.g <=0 && mDiffuseColor.b <=0 && mDiffuseColor.a <=0)
+		const cColor& diffuse = GetDiffuseColor();
+		if(diffuse.r <=0 && diffuse.g <=0 && diffuse.b <=0 && diffuse.a <=0)
 			return false;
 
 		return mbIsVisible;

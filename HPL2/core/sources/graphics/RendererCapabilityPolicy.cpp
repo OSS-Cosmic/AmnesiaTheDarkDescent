@@ -3,7 +3,7 @@
 RendererCapabilityDecision RendererEvaluateCapabilityPolicy(
     RendererCapabilityMode_e mode, const RendererCapabilitySet &c) {
   RendererCapabilityDecision result = {mode, false, false, 0, nullptr};
-  if (mode != RENDERER_CAPABILITY_OVERDRIVE && mode != RENDERER_CAPABILITY_RASTER) {
+  if (mode != RENDERER_CAPABILITY_RAYTRACED && mode != RENDERER_CAPABILITY_RASTER) {
     result.missingRequirement = "known renderer capability mode";
     return result;
   }
@@ -31,7 +31,7 @@ RendererCapabilityDecision RendererEvaluateCapabilityPolicy(
   REQUIRE(descriptorBindingSampledImageUpdateAfterBind,
           "sampled image update after bind");
 
-  if (mode == RENDERER_CAPABILITY_OVERDRIVE) {
+  if (mode == RENDERER_CAPABILITY_RAYTRACED) {
     REQUIRE(accelerationStructureExtension, "acceleration structure extension");
     REQUIRE(accelerationStructure, "acceleration structure feature");
     REQUIRE(rayTracingPipelineExtension, "ray tracing pipeline extension");
@@ -53,7 +53,7 @@ RendererCapabilityDecision RendererEvaluateCapabilityPolicy(
 
 uint8_t RendererEvaluateRayTracingTier(const RendererCapabilitySet &c) {
   // Tier 1 is the RT pipeline/AS foundation. Inline ray query is required by
-  // overdrive shaders, but is not part of the tier-1 classification.
+  // raytraced shaders, but is not part of the tier-1 classification.
   const bool tier1 = c.accelerationStructureExtension && c.accelerationStructure &&
                      c.rayTracingPipelineExtension && c.rayTracingPipeline &&
                      c.bufferDeviceAddress && c.deferredHostOperationsExtension &&

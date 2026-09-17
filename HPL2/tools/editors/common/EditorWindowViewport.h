@@ -26,6 +26,7 @@ using namespace hpl;
 
 #include "EditorWindow.h"
 #include "EditorViewport.h"
+#include "EditorRenderMode.h"
 
 //--------------------------------------------------------------------
 
@@ -126,6 +127,11 @@ public:
 	void SetEnlarged(bool abX);
 	bool IsEnlarged() { return (mvSize==mvEnlargedSize); }
 
+	// Re-derives the View menu's check and enable states. Public because the
+	// lit backend is global: iEditorBase refreshes every viewport's menu after
+	// a switch, not just the one that was clicked.
+	void UpdateMenu();
+
 	/////////////////////////////////
 	// DEBUG
 	cVector3f vDebugLineStart;
@@ -158,8 +164,6 @@ protected:
 	bool OnViewportMouseUp(const cGuiMessageData& aData);
 	bool OnViewportKeyPress(const cGuiMessageData& aData);
 	bool OnViewportKeyRelease(const cGuiMessageData& aData);
-	
-	void UpdateMenu();
 
     ///////////////////////////
 	// Implemented Functions
@@ -187,7 +191,9 @@ protected:
 	// Menu Items
 	cWidgetMainMenu* mpMainMenu;
 	cWidgetMenuItem* mpMainMenuView;
-	cWidgetMenuItem* mpMainMenuRenderModes[eRenderer_LastEnum];
+	// Indexed by eEditorRenderModeItem, NOT eRenderer: Shaded has one entry
+	// per backend.
+	cWidgetMenuItem* mpMainMenuRenderModes[eEditorRenderModeItem_LastEnum];
 	cWidgetMenuItem* mpMainMenuShowGrid;
 	cWidgetMenuItem* mpMainMenuShowAxes;
 

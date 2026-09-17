@@ -41,7 +41,9 @@ namespace hpl {
 	cLightArea::cLightArea(tString asName, cResources *apResources) : iLight(asName,apResources)
 	{
 		mLightType = eLightType_Area;
-		mLightModel = eLightModel_Overdrive; // no legacy area light exists
+		mActiveModel = eLightModel_RayTraced;
+		// There is no legacy area light, so this shape has no Standard tuning.
+		mState.Tuning(eLightModel_Legacy).mbPresent = false;
 
 		mfWidth = 1.0f;
 		mfHeight = 1.0f;

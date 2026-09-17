@@ -164,9 +164,9 @@ cLevelEditorCameraCapture::cLevelEditorCameraCapture(iEditorBase* apEditor)
 
 	//////////////////////////////////////////
 	// One persistent HEADLESS viewport — never in cScene's visible loop; Pump
-	// Evaluates it directly. eRenderer_Main (the full lit hybrid renderer) so the
-	// capture matches the editor's Main viewport; the world + per-job target are
-	// set in Pump.
+	// Evaluates it directly. eRenderer_Main (whichever lit renderer is active) so
+	// the capture matches the editor's Main viewport; the world, the renderer and
+	// the per-job target are set in Pump.
 	mpViewport = pScene->CreateViewport(mpCamera, NULL);
 	mpViewport->SetRenderer(pGfx->GetRenderer(eRenderer_Main));
 	mpViewport->SetActive(false);
@@ -403,6 +403,9 @@ void cLevelEditorCameraCapture::Pump(float afFrameTime)
 	if(pWorld == NULL) return; // world gone mid-warm; retry next frame
 
 	mpViewport->SetWorld(pWorld);
+	// Re-fetched per capture, not cached from construction: View > Render mode
+	// can repoint eRenderer_Main at the other lit renderer at any time.
+	mpViewport->SetRenderer(pGfx->GetRenderer(eRenderer_Main));
 	if(pEdWorld) mpViewport->GetRenderSettings()->mClearColor = pEdWorld->GetBGDefaultColor();
 
 	cViewport::TargetView target = {};

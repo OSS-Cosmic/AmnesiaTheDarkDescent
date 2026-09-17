@@ -75,7 +75,7 @@ namespace hpl {
 
 	enum eRendererBackend
 	{
-		eRendererBackend_Overdrive,
+		eRendererBackend_RayTraced,
 		eRendererBackend_Standard,
 		eRendererBackend_LastEnum,
 	};

@@ -54,7 +54,7 @@ cEditorWindowEntityEditBox::cEditorWindowEntityEditBox(cEditorEditModeSelect* ap
 	mpInpTag = NULL;
 	mpInpActive = NULL;
 	mpInpRendererStandard = NULL;
-	mpInpRendererOverdrive = NULL;
+	mpInpRendererRayTraced = NULL;
 	mpInpPosition = NULL;
 	mpInpScale = NULL;
 	mpInpRotation = NULL;
@@ -179,11 +179,11 @@ void cEditorWindowEntityEditBox::AddPropertyActive(cWidgetTab* apParentTab)
 void cEditorWindowEntityEditBox::AddPropertyRendererMask(cWidgetTab* apParentTab)
 {
 	// Which renderers load the object in the game. Objects split by renderer
-	// share a name: one keeps only Standard, its replacement only Overdrive.
+	// share a name: one keeps only Standard, its replacement only ray-traced.
 	cVector3f vPos = cVector3f(10,10,0.1f);
 	mpInpRendererStandard = CreateInputBool(vPos, _W("Standard"), "", apParentTab);
 	vPos.y += mpInpRendererStandard->GetSize().y + 5;
-	mpInpRendererOverdrive = CreateInputBool(vPos, _W("Overdrive"), "", apParentTab);
+	mpInpRendererRayTraced = CreateInputBool(vPos, _W("Ray Traced"), "", apParentTab);
 }
 
 //----------------------------------------------------------------------------
@@ -327,7 +327,7 @@ void cEditorWindowEntityEditBox::OnUpdate(float afTimeStep)
 	{
 		const unsigned lRendererMask = static_cast<unsigned>(mpEntity->GetRendererMask());
 		mpInpRendererStandard->SetValue((lRendererMask & hpl::kRendererMaskStandard) != 0, false);
-		mpInpRendererOverdrive->SetValue((lRendererMask & hpl::kRendererMaskOverdrive) != 0, false);
+		mpInpRendererRayTraced->SetValue((lRendererMask & hpl::kRendererMaskRayTraced) != 0, false);
 	}
 
 	if(mpInpPosition)
@@ -420,10 +420,10 @@ bool cEditorWindowEntityEditBox::WindowSpecificInputCallback(iEditorInput* apInp
 	{
 		pAction = mpEntity->CreateSetPropertyActionBool(eObjBool_Active, mpInpActive->GetValue());
 	}
-	else if(apInput==mpInpRendererStandard || apInput==mpInpRendererOverdrive)
+	else if(apInput==mpInpRendererStandard || apInput==mpInpRendererRayTraced)
 	{
 		// Change only the toggled renderer so the other keeps its state.
-		const unsigned lBit = apInput==mpInpRendererStandard ? hpl::kRendererMaskStandard : hpl::kRendererMaskOverdrive;
+		const unsigned lBit = apInput==mpInpRendererStandard ? hpl::kRendererMaskStandard : hpl::kRendererMaskRayTraced;
 		const bool bEnabled = static_cast<cEditorInputBool*>(apInput)->GetValue();
 		unsigned lRendererMask = static_cast<unsigned>(mpEntity->GetRendererMask());
 		lRendererMask = bEnabled ? (lRendererMask | lBit) : (lRendererMask & ~lBit);

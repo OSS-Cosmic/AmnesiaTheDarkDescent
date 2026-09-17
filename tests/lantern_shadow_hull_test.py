@@ -32,14 +32,17 @@ class LanternShadowHullTest(unittest.TestCase):
         indices = list(map(int, faces.find('c:p', NS).text.split()))[::3]
         cls.triangles = [tuple(vertices[j] for j in indices[i:i+3]) for i in range(0, len(indices), 3)]
         delta = ET.parse(ASSETS / 'hand_lantern.ent_delta')
-        # The emitter moved out of <Modify ID="3"> when the standard renderer
-        # split the lantern light per RendererMask: the Modify now only carries
-        # the mask, and the authored position/radius live on the added light.
-        light = delta.find('./Add/Re_PointLight[@Name="PointLight_1"]')
+        # One element per light: the retail PointLight_1 carries the authored
+        # position, and the ray-traced tuning rides on it as Re_-prefixed
+        # attributes. A twin <Add><Re_PointLight> here would mean the delta was
+        # never migrated, so assert it is gone as well.
+        if delta.find('.//Re_PointLight') is not None:
+            raise AssertionError('hand_lantern.ent_delta still has a pre-merge Re_PointLight twin')
+        light = delta.find('./Modify[@Name="PointLight_1"]/SetAttr')
         if light is None or light.get('WorldPos') is None:
             raise AssertionError('hand_lantern.ent_delta has no emitter light')
         cls.emitter = tuple(map(float, light.get('WorldPos').split()))
-        cls.source_radius = float(light.get('SourceRadius'))
+        cls.source_radius = float(light.get('Re_SourceRadius'))
 
     def hit(self, direction, origin=None):
         origin = self.emitter if origin is None else origin

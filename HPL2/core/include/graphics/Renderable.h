@@ -78,7 +78,7 @@ namespace hpl {
 		unsigned GetRendererMask() const { return mRendererMask; }
 		bool IsRendererEnabled(unsigned alBackendBit) const { return IsRendererMaskEnabled(mRendererMask, alBackendBit); }
 		bool IsLegacyRendererEnabled() const { return IsRendererEnabled(kRendererMaskStandard); }
-		bool IsOverdriveEnabled() const { return IsRendererEnabled(kRendererMaskOverdrive); }
+		bool IsRayTracedEnabled() const { return IsRendererEnabled(kRendererMaskRayTraced); }
 
 		virtual bool IsVisible(){ return mbIsVisible && mfCoverageAmount >0; }
 		void SetVisible(bool abVisible);

@@ -615,7 +615,20 @@ public:
   void SetWorld(cWorld *apWorld);
   cWorld *GetWorld() { return mpWorld; }
 
-  void SetRenderer(iRenderer *apRenderer) { mpRenderer = apRenderer; }
+  // A different renderer means a different target set (PrepareToRender swaps
+  // the m_state alternative on the next draw) but the viewport-level upscaler
+  // and presentation history is reused, so it has to be cut here.
+  // Drop the per-backend render targets. The next PrepareToRender<Backend>()
+  // emplaces a fresh set; the discarded one defers its GPU resources as usual.
+  // Used when the renderer that owned them is about to be destroyed.
+  void ReleaseRenderState() { m_state.emplace<std::monostate>(); }
+
+  void SetRenderer(iRenderer *apRenderer) {
+    if (mpRenderer == apRenderer)
+      return;
+    mpRenderer = apRenderer;
+    mTemporalHistoryReset = true;
+  }
   iRenderer *GetRenderer() { return mpRenderer; }
 
   cRenderSettings *GetRenderSettings() { return mpRenderSettings.get(); }

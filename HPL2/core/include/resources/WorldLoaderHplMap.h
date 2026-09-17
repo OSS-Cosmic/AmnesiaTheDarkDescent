@@ -126,7 +126,7 @@ namespace hpl {
 	{
 		int mlID;
 		tString msName; // lower case
-		tString msKind; // element name; lights by shape, so a retail light matches its Overdrive element
+		tString msKind; // element name; lights by shape, so a retail light matches its ray-traced element
 		unsigned mlMask;
 	};
 

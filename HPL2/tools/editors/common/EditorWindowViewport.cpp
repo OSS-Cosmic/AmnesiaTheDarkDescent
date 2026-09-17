@@ -425,15 +425,23 @@ bool cEditorWindowViewport::MenuView_Rendering(iWidget *apWidget, const cGuiMess
 	// Set render mode
 	cWidgetMenuItem* pItem = (cWidgetMenuItem*) apWidget;
 
-	for(int i=0;i<eRenderer_LastEnum;++i)
+	for(int i=0;i<eEditorRenderModeItem_LastEnum;++i)
 	{
-		bool bSelected = (pItem==mpMainMenuRenderModes[i]);
+		if(pItem!=mpMainMenuRenderModes[i])
+			continue;
 
-		if(bSelected)
-			SetRenderMode((eRenderer)i);
+		const cEditorRenderModeChoice choice = EditorRenderModeFromMenuItem(i);
 
-		mpMainMenuRenderModes[i]->SetChecked(bSelected);
+		// Queued and applied once per frame, so the switch runs outside this
+		// widget callback. The backend is global: every Shaded viewport follows.
+		if(choice.mbSetsBackend)
+			mpEditor->RequestLitRendererBackend(choice.mBackend);
+
+		SetRenderMode(choice.mRenderer);
+		break;
 	}
+	// Check marks come from UpdateMenu alone - the backend is shared, so no
+	// item may be checked by the pick itself.
 	UpdateMenu();
 
 	return true;
@@ -475,13 +483,21 @@ void cEditorWindowViewport::UpdateMenu()
 	if(mpMainMenu==NULL)
 		return;
 
-	if(mCamera.IsOrtho())
-		mpMainMenuRenderModes[0]->SetEnabled(false);
-	else
-		mpMainMenuRenderModes[0]->SetEnabled(true);
+	// Ortho viewports are coerced to wireframe by SetRenderMode, so neither
+	// Shaded item applies to them. The ray-traced one additionally needs its
+	// renderer to have been built: IsRayTracedSupported() is not enough, since
+	// an editor handed an external engine has only the one it started with.
+	const bool bOrtho = mCamera.IsOrtho();
+	const bool bRayTracedBuilt =
+		mpEditor->GetEngine()->GetGraphics()->GetLitRenderer(eRendererBackend_RayTraced)!=NULL;
 
-	for(int i=0;i<eRenderer_LastEnum;++i)
-		mpMainMenuRenderModes[i]->SetChecked(mRenderMode==i);
+	mpMainMenuRenderModes[eEditorRenderModeItem_ShadedStandard]->SetEnabled(bOrtho==false);
+	mpMainMenuRenderModes[eEditorRenderModeItem_ShadedRayTraced]->SetEnabled(bOrtho==false && bRayTracedBuilt);
+
+	const int lCheckedItem = EditorRenderModeToMenuItem(mRenderMode,
+							mpEditor->GetEngine()->GetGraphics()->GetRendererBackend());
+	for(int i=0;i<eEditorRenderModeItem_LastEnum;++i)
+		mpMainMenuRenderModes[i]->SetChecked(i==lCheckedItem);
 
     mpMainMenuShowGrid->SetChecked(GetDrawGrid());
 	mpMainMenuShowAxes->SetChecked(GetDrawAxes());
@@ -693,12 +709,15 @@ void cEditorWindowViewport::OnInitLayout()
 		pItem = mpMainMenu->AddMenuItem(_W("View"));
 		mpMainMenuView = pItem;
 
+		// The lit renderer appears once per backend: picking one sets this
+		// viewport to Shaded AND the global lit backend (see EditorRenderMode.h).
 		pSubItem1 = pItem->AddMenuItem(_W("Render mode"));
-		mpMainMenuRenderModes[0] = pSubItem1->AddMenuItem(_W("Shaded"));
-		mpMainMenuRenderModes[1] = pSubItem1->AddMenuItem(_W("Wireframe"));
-		mpMainMenuRenderModes[2] = pSubItem1->AddMenuItem(_W("Simple"));
+		mpMainMenuRenderModes[eEditorRenderModeItem_ShadedStandard] = pSubItem1->AddMenuItem(_W("Shaded - Standard"));
+		mpMainMenuRenderModes[eEditorRenderModeItem_ShadedRayTraced] = pSubItem1->AddMenuItem(_W("Shaded - Ray Traced"));
+		mpMainMenuRenderModes[eEditorRenderModeItem_WireFrame] = pSubItem1->AddMenuItem(_W("Wireframe"));
+		mpMainMenuRenderModes[eEditorRenderModeItem_Simple] = pSubItem1->AddMenuItem(_W("Simple"));
 
-		for(int i=0;i<eRenderer_LastEnum;++i)
+		for(int i=0;i<eEditorRenderModeItem_LastEnum;++i)
 			mpMainMenuRenderModes[i]->AddCallback(eGuiMessage_ButtonPressed, this, kGuiCallback(MenuView_Rendering));
 
 		

@@ -603,8 +603,11 @@ static cMCPToolResult MakeOk() { JDoc d; InitOk(d); return MakeDoc(d); }
 
 // 'type' resolves against the wrapper display name first ("Light", "Entity",
 // "Static Object", ...), then against the XML element name so subtypes like
-// "SpotLight" / "Re_PointLight" / "Re_AreaLight" are reachable ("Light" alone =
-// legacy point light). "AreaLight" still names the Redux area light.
+// "SpotLight" and "AreaLight" are reachable ("Light" alone = point light).
+//
+// A light is one object carrying both backends' values now, so the pre-merge
+// "Re_PointLight" / "Re_SpotLight" / "Re_AreaLight" spellings resolve to the
+// shape they merged into -- old scripts keep working and produce merged lights.
 static iEntityWrapperType* ResolveCreateType(cLevelEditor* pEditor, iEditorWorld* pWorld, const JValue& aSpec)
 {
 	std::string sType = JStrArg(aSpec, "type");
@@ -627,11 +630,15 @@ static iEntityWrapperType* ResolveCreateType(cLevelEditor* pEditor, iEditorWorld
 	iEntityWrapperType* pType = pWorld->GetEntityTypeByName(sType);
 	if(pType) return pType;
 
+	if(sType=="Re_PointLight")		sType = "PointLight";
+	else if(sType=="Re_SpotLight")	sType = "SpotLight";
+	else if(sType=="Re_AreaLight")	sType = "AreaLight";
+
 	int n = pWorld->GetEntityTypeNum();
 	for(int i=0;i<n;++i)
 	{
 		iEntityWrapperType* t = pWorld->GetEntityType(i);
-		if(t && (t->GetXmlElementName()==sType || (sType=="AreaLight" && t->GetXmlElementName()=="Re_AreaLight"))) return t;
+		if(t && t->GetXmlElementName()==sType) return t;
 	}
 	return NULL;
 }

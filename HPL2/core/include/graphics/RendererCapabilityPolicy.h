@@ -13,7 +13,7 @@ static constexpr int RI_UNSUPPORTED = -2;
 // rather than the mechanism used to expose them.
 enum RendererCapabilityMode_e : uint8_t {
   // RIDevice::init derives this from RIDeviceDesc::requestRayTracing.
-  RENDERER_CAPABILITY_OVERDRIVE = 0,
+  RENDERER_CAPABILITY_RAYTRACED = 0,
   RENDERER_CAPABILITY_RASTER = 1,
 };
 

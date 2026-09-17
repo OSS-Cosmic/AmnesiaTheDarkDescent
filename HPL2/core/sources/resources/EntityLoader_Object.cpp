@@ -43,6 +43,7 @@
 #include "resources/FileSearcher.h"
 #include "resources/EngineFileLoading.h"
 
+#include <map>
 #include <tinyxml2.h>
 #include "resources/XmlHelper.h"
 
@@ -485,7 +486,10 @@ namespace hpl {
 					iEntity3D *pEntity = NULL;
 
 					// Child objects tagged for the other renderer backend are not created.
-					if(cEngineFileLoading::IsElementEnabledForWorld(pEntityElem, apWorld)==false) continue;
+					// Lights are exempt from this filter: they carry both backends'
+					// tuning and their mask gates rendering, not creation.
+					if(cEngineFileLoading::IsElementEnabledForWorld(pEntityElem, apWorld)==false)
+						continue;
 
 					/////////////////////////
 					// Particle System
@@ -569,8 +573,16 @@ namespace hpl {
 				for(size_t i=0; i<mvLights.size() && pLight==NULL; ++i)
 					if(mvLights[i]->GetName() == lightConnect.msLightName) pLight = mvLights[i];
 
-				// The light may be tagged for the other renderer backend and not loaded.
-				if(pLight==NULL || pBB==NULL) continue;
+				if(pBB==NULL) continue;
+
+				// Every light is created regardless of its renderer mask, so a
+				// missing one is a genuinely broken reference.
+				if(pLight==NULL)
+				{
+					Warning("Light '%s' connected to billboard with id '%d' does not exist!\n",
+							lightConnect.msLightName.c_str(), lightConnect.msBillboardID);
+					continue;
+				}
 
 				pLight->AttachBillboard(pBB, pBB->GetColor());
 			}

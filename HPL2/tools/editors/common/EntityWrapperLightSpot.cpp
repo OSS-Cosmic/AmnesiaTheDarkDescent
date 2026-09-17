@@ -48,11 +48,10 @@ cIconEntityLightSpot::cIconEntityLightSpot(iEntityWrapper* apParent) : iIconEnti
 
 bool cIconEntityLightSpot::Create(const tString& asName)
 {
+	// One class per shape: the light carries both backends' tuning and the
+	// world's backend decides which one drives it.
 	cWorld* pWorld = mpParent->GetEditorWorld()->GetWorld();
-	if(static_cast<iEntityWrapperLight*>(mpParent)->UsesOverdriveLightClass())
-		mpEntity = pWorld->CreateLightSpot(asName);
-	else
-		mpEntity = pWorld->CreateLightSpotLegacy(asName);
+	mpEntity = pWorld->CreateLightSpot(asName);
 
 	return true;
 }
@@ -65,16 +64,17 @@ bool cIconEntityLightSpot::Create(const tString& asName)
 
 //---------------------------------------------------------------------------
 
-cEntityWrapperTypeLightSpot::cEntityWrapperTypeLightSpot(bool abOverdrive) : iEntityWrapperTypeLight(abOverdrive ? "Re_SpotLight" : "SpotLight",
-																							   abOverdrive ? eEditorEntityLightType_OverdriveSpot : eEditorEntityLightType_Spot,
-																							   abOverdrive)
+cEntityWrapperTypeLightSpot::cEntityWrapperTypeLightSpot() : iEntityWrapperTypeLight("SpotLight",
+																							   eEditorEntityLightType_Spot,
+																							   eLightSchema_Dual)
 {
 	mScaleType = eScaleType_None;
 
-	AddFloat(eLightSpotFloat_FOV, "FOV", cMath::ToRad(60));
-	AddFloat(eLightSpotFloat_Aspect, "Aspect", 1);
-	AddFloat(eLightSpotFloat_NearClipPlane, "NearClipPlane", 0.1f);
-	AddString(eLightSpotStr_FalloffMap, "SpotFalloffMap");
+	// Through AddLight*, so the cone can be tuned per backend as Re_FOV etc.
+	AddLightFloat(eLightSpotFloat_FOV, "FOV", cMath::ToRad(60));
+	AddLightFloat(eLightSpotFloat_Aspect, "Aspect", 1);
+	AddLightFloat(eLightSpotFloat_NearClipPlane, "NearClipPlane", 0.1f);
+	AddLightString(eLightSpotStr_FalloffMap, "SpotFalloffMap");
 }
 
 //---------------------------------------------------------------------------

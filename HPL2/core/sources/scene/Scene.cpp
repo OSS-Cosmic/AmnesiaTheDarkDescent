@@ -72,6 +72,15 @@ namespace hpl {
 		mpGui = apGui;
 		mpHaptic = apHaptic;
 
+		// cGraphics owns WHEN a backend switch happens (a frame boundary with no
+		// command buffer recording); the scene owns what is attached to what.
+		if(mpGraphics)
+		{
+			mpGraphics->SetRendererBackendHandlers(
+				[this](iRenderer *apOutgoing) { DetachViewportsFromRenderer(apOutgoing); },
+				[this](eRendererBackend aBackend) { AdoptMainRenderer(aBackend); });
+		}
+
 		mpCurrentListener = NULL;
 
 		// Re-apply the screen aspect to perspective cameras when the swapchain
@@ -408,6 +417,54 @@ namespace hpl {
 	void cScene::DestroyWorld(cWorld* apWorld)
 	{
 		STLFindAndDelete(mlstWorlds,apWorld);
+	}
+
+	//-----------------------------------------------------------------------
+
+	void cScene::SetRendererBackend(eRendererBackend aBackend)
+	{
+		for(tWorldListIt it=mlstWorlds.begin(); it!=mlstWorlds.end(); ++it)
+		{
+			if(*it)
+				(*it)->SetRendererBackend(aBackend);
+		}
+	}
+
+	//-----------------------------------------------------------------------
+
+	void cScene::DetachViewportsFromRenderer(iRenderer *apRenderer)
+	{
+		if(apRenderer==NULL) return;
+
+		for(tViewportListIt it=mlstViewports.begin(); it!=mlstViewports.end(); ++it)
+		{
+			cViewport *pViewport = *it;
+			// Every viewport, visible or not: an inventory or journal viewport
+			// would otherwise keep a pointer to freed memory until it is next
+			// shown.
+			if(pViewport==NULL || pViewport->GetRenderer()!=apRenderer) continue;
+
+			pViewport->SetRenderer(NULL);
+			pViewport->ReleaseRenderState();
+		}
+	}
+
+	//-----------------------------------------------------------------------
+
+	void cScene::AdoptMainRenderer(eRendererBackend aBackend)
+	{
+		iRenderer *pMain = mpGraphics->GetRenderer(eRenderer_Main);
+
+		// Only the viewports DetachViewportsFromRenderer emptied: a viewport in
+		// wireframe or simple mode keeps the renderer it was given.
+		for(tViewportListIt it=mlstViewports.begin(); it!=mlstViewports.end(); ++it)
+		{
+			cViewport *pViewport = *it;
+			if(pViewport && pViewport->GetRenderer()==NULL)
+				pViewport->SetRenderer(pMain);
+		}
+
+		SetRendererBackend(aBackend);
 	}
 
 	//-----------------------------------------------------------------------

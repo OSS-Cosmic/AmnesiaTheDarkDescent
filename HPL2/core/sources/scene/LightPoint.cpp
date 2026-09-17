@@ -35,24 +35,11 @@ namespace hpl {
 
 	//-----------------------------------------------------------------------
 
-	iLightPoint::iLightPoint(tString asName, cResources *apResources) : iLight(asName,apResources)
+	cLightPoint::cLightPoint(tString asName, cResources *apResources) : iLight(asName,apResources)
 	{
 		mLightType = eLightType_Point;
 
 		UpdateBoundingVolume();
-	}
-
-	cLightPointLegacy::cLightPointLegacy(tString asName, cResources *apResources)
-		: iLightPoint(asName, apResources)
-	{
-	}
-
-	//-----------------------------------------------------------------------
-
-	cLightPoint::cLightPoint(tString asName, cResources *apResources)
-		: iLightPoint(asName, apResources)
-	{
-		mLightModel = eLightModel_Overdrive;
 	}
 
 	//-----------------------------------------------------------------------
@@ -63,7 +50,7 @@ namespace hpl {
 	
 	//-----------------------------------------------------------------------
 	
-	void iLightPoint::UpdateBoundingVolume()
+	void cLightPoint::UpdateBoundingVolume()
 	{
 		mBoundingVolume.SetSize(GetRadius()*2);
 		mBoundingVolume.SetPosition(GetWorldPosition());

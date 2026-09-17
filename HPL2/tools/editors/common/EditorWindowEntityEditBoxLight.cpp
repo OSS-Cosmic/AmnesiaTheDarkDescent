@@ -49,6 +49,16 @@ cEditorWindowEntityEditBoxLight::cEditorWindowEntityEditBoxLight(cEditorEditMode
 	mpGroupFalloff = NULL;
 	mpInpFalloffMap = NULL;
 	mpInpBoxBlendFunc = NULL;
+
+	// Box and area lights never build the Raytraced group, but OnUpdate still
+	// tests these.
+	mpGroupRayTraced = NULL;
+	mpInpReduxEnabled = NULL;
+	mpInpReduxIntensity = NULL;
+	mpInpReduxReach = NULL;
+	mpInpReduxReachDerived = NULL;
+	mpInpReduxSourceRadius = NULL;
+	mpInpReduxFlickerOff = NULL;
 }
 
 //------------------------------------------------------------
@@ -72,12 +82,12 @@ void cEditorWindowEntityEditBoxLight::Create()
 
 
 	const int lLightType = mpLight->GetLightType();
-	if(IsEditorPointLightType(lLightType))
+	if(lLightType==eEditorEntityLightType_Point)
 	{
 		pTab = mpTabs->AddTab(_W("Point"));
 		AddPropertySetPoint(pTab);
 	}
-	else if(IsEditorSpotLightType(lLightType))
+	else if(lLightType==eEditorEntityLightType_Spot)
 	{
 		pTab = mpTabs->AddTab(_W("Spot"));
 		AddPropertySetSpot(pTab);
@@ -123,8 +133,6 @@ void cEditorWindowEntityEditBoxLight::Create()
 	mpGroupDiffuse->SetPosition(vPos);
 	vPos.y += mpGroupDiffuse->GetSize().y + 5;
 
-	// The two halves of a split light share a name; say which set this is.
-	mpSet->CreateWidgetLabel(vPos, 0, mpLight->IsOverdrive() ? _W("Light set: Overdrive") : _W("Light set: Legacy"), mpTabGeneral);
 }
 
 //------------------------------------------------------------
@@ -139,7 +147,7 @@ void cEditorWindowEntityEditBoxLight::AddPropertyGobo(cWidgetTab *apParentTab)
 	mpInpGobo = CreateInputFile(vPos, _W("Gobo"), "", mpGroupGobo, 120);
 	mpInpGobo->SetInitialPath(mpEditor->GetMainLookUpDir(eDir_Lights));
 	mpInpGobo->SetBrowserType(eEditorResourceType_Texture);
-	if(IsEditorPointLightType(mpLight->GetLightType()))
+	if(mpLight->GetLightType()==eEditorEntityLightType_Point)
 		mpInpGobo->SetBrowserSubType(eEditorTextureResourceType_CubeMap);
 	else
 		mpInpGobo->SetBrowserSubType(eEditorTextureResourceType_2D);
@@ -173,7 +181,7 @@ void cEditorWindowEntityEditBoxLight::AddPropertyRadius(cWidgetTab* apParentTab)
 {
 	mpGroupRadius = mpSet->CreateWidgetDummy(0,apParentTab);
 
-	// The radius of a legacy light, the reach of an Overdrive one.
+	// The radius of a legacy light, the reach of a ray-traced one.
 	mpInpRadius = CreateInputNumber(cVector3f(0,0,0.1f), _W("Radius"), "", mpGroupRadius, 50, 0.5f);
 }
 
@@ -203,8 +211,9 @@ cVector3f cEditorWindowEntityEditBoxLight::AddPropertyLightValues(cWidgetTab* ap
 	mpGroupRadius->SetPosition(avPos);
 	avPos.y += mpGroupRadius->GetSize().y + 5;
 
-	// Overdrive lights also carry an intensity and a source radius.
-	if(mpLight->IsOverdrive())
+	// The area light has no retail half: its plain values ARE the ray-traced
+	// ones, so they stay in the main list rather than in an override box.
+	if(mpLight->IsRayTracedOnly())
 	{
 		AddPropertyIntensity(apParentTab);
 		mpGroupIntensity->SetPosition(avPos);
@@ -214,8 +223,63 @@ cVector3f cEditorWindowEntityEditBoxLight::AddPropertyLightValues(cWidgetTab* ap
 		mpGroupSourceRadius->SetPosition(avPos);
 		avPos.y += mpGroupSourceRadius->GetSize().y + 5;
 	}
+	else if(mpLight->SupportsReduxOverrides())
+	{
+		avPos = AddPropertyRayTracedGroup(apParentTab, avPos);
+	}
 
 	return avPos;
+}
+
+//------------------------------------------------------------
+
+cVector3f cEditorWindowEntityEditBoxLight::AddPropertyRayTracedGroup(cWidgetTab* apParentTab, cVector3f avPos)
+{
+	// The height is set once the rows are in: cWidgetGroup neither auto-fits
+	// nor clips, so a hardcoded one silently spills over the border.
+	mpGroupRayTraced = mpSet->CreateWidgetGroup(avPos, cVector2f(175, 175), _W("Raytraced"), apParentTab);
+	mpGroupRayTraced->SetDefaultFontSize(iEditorInput::GetFontSize());
+
+	cVector3f vPos(10, 10, 0.1f);
+	mpInpReduxEnabled = CreateInputBool(vPos, _W("Override for raytracing"), "", mpGroupRayTraced);
+	vPos.y += mpInpReduxEnabled->GetSize().y + 5;
+
+	mpInpReduxIntensity = CreateInputNumber(vPos, _W("Intensity"), "", mpGroupRayTraced, 50, 0.5f);
+	vPos.y += mpInpReduxIntensity->GetSize().y + 5;
+
+	mpInpReduxReach = CreateInputNumber(vPos, _W("Reach"), "", mpGroupRayTraced, 50, 0.5f);
+	vPos.y += mpInpReduxReach->GetSize().y + 5;
+
+	mpInpReduxReachDerived = CreateInputBool(vPos, _W("Derive from intensity"), "", mpGroupRayTraced);
+	vPos.y += mpInpReduxReachDerived->GetSize().y + 5;
+
+	mpInpReduxSourceRadius = CreateInputNumber(vPos, _W("Source Radius"), "", mpGroupRayTraced, 50, 0.1f);
+	vPos.y += mpInpReduxSourceRadius->GetSize().y + 5;
+
+	mpInpReduxFlickerOff = CreateInputNumber(vPos, _W("Flicker Off Intensity"), "", mpGroupRayTraced, 50, 0.1f);
+	vPos.y += mpInpReduxFlickerOff->GetSize().y;
+
+	// Cast shadows has no ray-traced half: the ray-traced backend shadows every
+	// light regardless of the flag (cGraphics::allLightsCastShadows).
+	mpGroupRayTraced->SetSize(cVector2f(175, vPos.y + 10));
+
+	avPos.y += mpGroupRayTraced->GetSize().y + 5;
+	return avPos;
+}
+
+//------------------------------------------------------------
+
+void cEditorWindowEntityEditBoxLight::UpdateRayTracedGroupState()
+{
+	if(mpInpReduxEnabled==NULL) return;
+
+	const bool bEnabled = mpInpReduxEnabled->GetValue();
+	mpInpReduxIntensity->SetCanEdit(bEnabled);
+	mpInpReduxReach->SetCanEdit(bEnabled && mpInpReduxReachDerived->GetValue()==false);
+	mpInpReduxSourceRadius->SetCanEdit(bEnabled);
+	mpInpReduxFlickerOff->SetCanEdit(bEnabled);
+	// Bool inputs have no SetCanEdit; grey the checkbox widget itself.
+	mpInpReduxReachDerived->GetInputWidget()->SetEnabled(bEnabled);
 }
 
 //------------------------------------------------------------
@@ -313,7 +377,8 @@ void cEditorWindowEntityEditBoxLight::AddPropertySetFlicker(cWidgetTab* apParent
 
 	vPos.y += mpInpFlickerOffPS->GetSize().y + 10;
 
-	mpInpFlickerOffRadius = CreateInputNumber(vPos, mpLight->IsOverdrive() ? _W("Off Intensity") : _W("Off Radius"), "", mpGFlickerOff, 50, 0.1f);
+	// The ray-traced counterpart lives in the Raytraced group box.
+	mpInpFlickerOffRadius = CreateInputNumber(vPos, mpLight->IsRayTracedOnly() ? _W("Off Intensity") : _W("Off Radius"), "", mpGFlickerOff, 50, 0.1f);
 	vPos.y += mpInpFlickerOffRadius->GetSize().y + 10;
 	mpInpFlickerOffColor = CreateInputColorFrame(vPos, _W("Off Color"), "", mpGFlickerOff);
 
@@ -503,10 +568,23 @@ void cEditorWindowEntityEditBoxLight::OnUpdate(float afTimeStep)
 	if(mpInpIntensity) mpInpIntensity->SetValue(mpLight->GetIntensity(), false);
 	if(mpInpSourceRadius) mpInpSourceRadius->SetValue(mpLight->GetSourceRadius(), false);
 
+	// Raytraced group: show the effective values whether or not they are
+	// authored, so enabling the override never moves the light.
+	if(mpInpReduxEnabled)
+	{
+		mpInpReduxEnabled->SetValue(mpLight->HasReduxOverride(eVariableType_Float, eLightFloat_Intensity), false);
+		mpInpReduxIntensity->SetValue(mpLight->GetEffectiveIntensity(), false);
+		mpInpReduxReach->SetValue(mpLight->GetEffectiveReach(), false);
+		mpInpReduxReachDerived->SetValue(mpLight->HasReduxOverride(eVariableType_Float, eLightFloat_Radius)==false, false);
+		mpInpReduxSourceRadius->SetValue(mpLight->GetEffectiveSourceRadius(), false);
+		mpInpReduxFlickerOff->SetValue(mpLight->GetEffectiveFlickerOffValue(), false);
+		UpdateRayTracedGroupState();
+	}
+
 	int lightType = mpLight->GetLightType();
 	////////////
 	// Spot
-	if(IsEditorSpotLightType(lightType))
+	if(lightType==eEditorEntityLightType_Spot)
 	{
 		cEntityWrapperLightSpot* pLight = (cEntityWrapperLightSpot*)mpLight;
 		mpInpSpotFOV->SetValue(cMath::ToDeg(pLight->GetFOV()), false);
@@ -572,7 +650,7 @@ bool cEditorWindowEntityEditBoxLight::WindowSpecificInputCallback(iEditorInput* 
 	{
 		strFilename = cString::To8Char(mpInpGobo->GetValue());
 
-		eEditorTextureResourceType texType = IsEditorPointLightType(mpLight->GetLightType())?
+		eEditorTextureResourceType texType = mpLight->GetLightType()==eEditorEntityLightType_Point?
 										eEditorTextureResourceType_CubeMap :
 										eEditorTextureResourceType_2D;
 
@@ -647,7 +725,7 @@ bool cEditorWindowEntityEditBoxLight::WindowSpecificInputCallback(iEditorInput* 
 	}
 
 	/////////////////////////////////
-	// Intensity (Overdrive lights)
+	// Intensity (ray-traced lights)
 	else if (apInput == mpInpIntensity)
 	{
 		pAction = mpEntity->CreateSetPropertyActionFloat(eLightFloat_Intensity, mpInpIntensity->GetValue());
@@ -717,10 +795,55 @@ bool cEditorWindowEntityEditBoxLight::WindowSpecificInputCallback(iEditorInput* 
 		pAction = mpEntity->CreateSetPropertyActionString(eLightStr_FlickerOffPS, cString::To8Char(mpInpFlickerOffPS->GetValue()));
 	}
 
-	// Off Radius (legacy) / Off Intensity (Overdrive)
+	///////////////////////////
+	// Raytraced overrides. Enabling one seeds it with the value the light would
+	// have been promoted to, so the first click never changes the scene.
+	else if(apInput==mpInpReduxEnabled)
+	{
+		// One undo step for the whole photometric set, otherwise Ctrl+Z leaves
+		// the light half-overridden.
+		const bool bEnable = mpInpReduxEnabled->GetValue();
+		cEditorActionCompoundAction* pCompound = hplNew(cEditorActionCompoundAction,("Set ray-traced override"));
+		const int lIds[] = { eLightFloat_Intensity, eLightFloat_SourceRadius, eLightFloat_FlickerOffIntensity };
+		for(size_t i=0; i<sizeof(lIds)/sizeof(lIds[0]); ++i)
+		{
+			const int lSetId = mpLight->GetReduxSetPropId(eVariableType_Float, lIds[i]);
+			if(lSetId>=0) pCompound->AddAction(mpEntity->CreateSetPropertyActionBool(lSetId, bEnable));
+		}
+		pAction = pCompound;
+	}
+	else if(apInput==mpInpReduxReachDerived)
+	{
+		// "Derived" is the absence of an authored reach, exactly as in the file.
+		const int lSetId = mpLight->GetReduxSetPropId(eVariableType_Float, eLightFloat_Radius);
+		if(lSetId>=0)
+			pAction = mpEntity->CreateSetPropertyActionBool(lSetId, mpInpReduxReachDerived->GetValue()==false);
+	}
+	else if(apInput==mpInpReduxIntensity)
+	{
+		pAction = mpEntity->CreateSetPropertyActionFloat(eLightFloat_Intensity + LightReduxPropIdOffset,
+														 mpInpReduxIntensity->GetValue());
+	}
+	else if(apInput==mpInpReduxReach)
+	{
+		pAction = mpEntity->CreateSetPropertyActionFloat(eLightFloat_Radius + LightReduxPropIdOffset,
+														 mpInpReduxReach->GetValue());
+	}
+	else if(apInput==mpInpReduxSourceRadius)
+	{
+		pAction = mpEntity->CreateSetPropertyActionFloat(eLightFloat_SourceRadius + LightReduxPropIdOffset,
+														 mpInpReduxSourceRadius->GetValue());
+	}
+	else if(apInput==mpInpReduxFlickerOff)
+	{
+		pAction = mpEntity->CreateSetPropertyActionFloat(eLightFloat_FlickerOffIntensity + LightReduxPropIdOffset,
+														 mpInpReduxFlickerOff->GetValue());
+	}
+
+	// Off Radius (legacy) / Off Intensity (ray-traced)
 	else if(apInput==mpInpFlickerOffRadius)
 	{
-		pAction = mpEntity->CreateSetPropertyActionFloat(mpLight->IsOverdrive() ? eLightFloat_FlickerOffIntensity : eLightFloat_FlickerOffRadius,
+		pAction = mpEntity->CreateSetPropertyActionFloat(mpLight->IsRayTracedOnly() ? eLightFloat_FlickerOffIntensity : eLightFloat_FlickerOffRadius,
 														 mpInpFlickerOffRadius->GetValue());
 	}
 

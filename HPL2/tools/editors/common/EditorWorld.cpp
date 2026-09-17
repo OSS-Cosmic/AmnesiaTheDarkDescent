@@ -68,7 +68,7 @@ iEditorWorld::iEditorWorld(iEditorBase* apEditor, const tString& asElementName)
 
 	//////////////////////////////////////////////
 	// Global light creation
-	mpGlobalPointLight = mpWorld->CreateLightPointLegacy("GlobalPoint");
+	mpGlobalPointLight = mpWorld->CreateLightPoint("GlobalPoint");
 	mpGlobalPointLight->SetPosition(cVector3f(0,100,0));
 	mpGlobalPointLight->SetRadius(500);
 	mpGlobalPointLight->SetDiffuseColor(cColor(1,1));

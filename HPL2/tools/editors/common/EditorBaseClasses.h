@@ -351,6 +351,16 @@ public:
 
 	tEditorViewportVec& GetViewports() { return mvViewports; }
 
+	///////////////////////////////////////////////
+	// Lit renderer backend
+	// GLOBAL, not per viewport: one RIDevice, one active lit renderer and one
+	// backend stamp per cWorld. A pick in any viewport's View > Render mode
+	// changes every Shaded viewport. Queued here and applied once per frame in
+	// Update, so the switch never runs on a widget callback stack.
+	void RequestLitRendererBackend(eRendererBackend aBackend);
+	eRendererBackend GetLitRendererBackend();
+	bool CanSwitchLitRendererBackend();
+
 	iEditorAction* CreateFocusOnSelectionAction();
 
 	///////////////////////////////////////////////
@@ -611,6 +621,11 @@ protected:
 	cWidgetMainMenu* mpMainMenu;
 
 	tEditorViewportVec mvViewports;
+
+	// Pending View > Render mode backend pick, applied in Update.
+	void ApplyLitRendererBackendRequest();
+	bool mbLitBackendRequested = false;
+	eRendererBackend mRequestedLitBackend = eRendererBackend_Standard;
 
 	std::map<int, cVector3f> mmapLayoutVecs3f;
 	std::map<int, cVector2f> mmapLayoutVecs2f;

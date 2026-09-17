@@ -13,7 +13,9 @@
  *     so the editor world's per-frame GPU data — TLAS / lights / decals — has
  *     already been published by PrepareFrame). It drives a small state machine:
  *       NEW       -> set the camera pose, point a persistent headless viewport
- *                    (eRenderer_Main + tonemap) at the editor world, allocate a
+ *                    (eRenderer_Main + tonemap -- re-fetched per capture, so it
+ *                    follows a live View > Render mode backend switch) at the
+ *                    editor world, allocate a
  *                    per-job RGBA8_UNORM target + a host-readback buffer, and
  *                    Evaluate once. The viewport's OnPostDelivery records a
  *                    barrier + vkCmdCopyImageToBuffer into the readback buffer.

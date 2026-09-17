@@ -97,20 +97,29 @@ namespace hpl {
 			
 		///////////////////////////////
 		//Fade and flicker init
-		mDiffuseColor = 0;
-		mDefaultDiffuseColor = 0;
 		mSpecularColor = 0;
-		mbCastShadows = false;
 		mlShadowCastersAffected = eObjectVariabilityFlag_All;
-		mfIntensity =0;
-		mfRadius = 0;
-		mfSourceRadius = 0;
+		// Both tunings start dark and unauthored; the loader or the creating
+		// code fills them in.
+		mState = cLightState();
+		for(int i=0; i<2; ++i)
+		{
+			cLightTuningState& tuning = mState.Tuning(i==0 ? eLightModel_Legacy : eLightModel_RayTraced);
+			tuning.mfIntensity = 0;
+			tuning.mfReach = 0;
+			tuning.mfSourceRadius = 0;
+			tuning.mfOnValue = 0;
+			tuning.mfOffValue = 0;
+			tuning.mDiffuseColor = 0;
+			tuning.mDefaultDiffuseColor = 0;
+			tuning.mbCastShadows = false;
+		}
+		InvalidateResolved();
 		mfFadeTime=0;
 		mbFlickering = false;
 	
 		mfFlickerStateLength = 0;
-		mfFlickerOffValue = 0;
-		mfFlickerOnValue = 0;
+		mfFlickerOnLevel = 1.0f;
 
 		mfFadeTime =0;
 
@@ -145,7 +154,10 @@ namespace hpl {
 
 	bool iLight::IsVisible()
 	{ 
-		if(mDiffuseColor.r <=0 && mDiffuseColor.g <=0 && mDiffuseColor.b <=0 && mDiffuseColor.a <=0) 
+		// Resolved for the active backend: a light authored dark on one backend
+		// is invisible there and lit on the other.
+		const cColor& diffuse = GetDiffuseColor();
+		if(diffuse.r <=0 && diffuse.g <=0 && diffuse.b <=0 && diffuse.a <=0) 
 			return false;
 		if(GetAnimatedValue() <= 0) return false;
 
@@ -157,11 +169,47 @@ namespace hpl {
 
 	void iLight::SetDiffuseColor(cColor aColor)
 	{
-		bool bWasVisble = (mDiffuseColor.r >0 || mDiffuseColor.g >0 || mDiffuseColor.b >0 || mDiffuseColor.a >0);
-		
-		mDiffuseColor = aColor;
+		const cColor was = GetDiffuseColor();
+		const bool bWasVisble = (was.r >0 || was.g >0 || was.b >0 || was.a >0);
 
-		bool bVisible = (mDiffuseColor.r >0 || mDiffuseColor.g >0 || mDiffuseColor.b >0 || mDiffuseColor.a >0);
+		// A DRIVE, not an authoring write. Scripts, fades and flicker all come
+		// through here, and they mean "the light looks like this now" -- so it
+		// is expressed as a scale over the active tuning's authored colour and
+		// applied to BOTH tunings. Author a colour with SetTuning instead.
+		//
+		// Writing the active tuning here instead would leave the passive one at
+		// its authored colour, and every lamp a script had turned off would
+		// light up again the moment the renderer backend changed.
+		const cLightTuningState& authored = mState.Tuning(GetActiveLightModel());
+		const float channelsAuthored[4] = { authored.mDiffuseColor.r, authored.mDiffuseColor.g,
+											authored.mDiffuseColor.b, authored.mDiffuseColor.a };
+		const float channelsWanted[4] = { aColor.r, aColor.g, aColor.b, aColor.a };
+
+		// A channel the tuning authored at zero has no ratio to scale, so a
+		// non-zero request there can only be expressed outright.
+		float scale[4] = { 1.0f, 1.0f, 1.0f, 1.0f };
+		bool bNeedsAbsolute = false;
+		for(int i=0; i<4; ++i)
+		{
+			if(DeriveLightColorScale(channelsAuthored[i], channelsWanted[i], &scale[i])==false)
+				bNeedsAbsolute = true;
+		}
+
+		if(bNeedsAbsolute)
+		{
+			mState.mColorDrive.mbColorAbsolute = true;
+			mState.mColorDrive.mAbsoluteColor = aColor;
+		}
+		else
+		{
+			mState.mColorDrive.mbColorAbsolute = false;
+			mState.mColorDrive.mColorScale = cColor(scale[0], scale[1], scale[2], scale[3]);
+		}
+
+		// The reach may follow the colour, so the bounds can move with it.
+		OnTuningChanged();
+
+		const bool bVisible = (aColor.r >0 || aColor.g >0 || aColor.b >0 || aColor.a >0);
 		
 		//Check if the light changed its visibility
 		if(mbIsVisible && bVisible != bWasVisble)
@@ -170,7 +218,6 @@ namespace hpl {
 		}
 
 		OnSetDiffuse();
-		UpdateDerivedReach();
 	}
 
 	//-----------------------------------------------------------------------
@@ -184,22 +231,19 @@ namespace hpl {
 			//Log("Fading: %f / %f\n",afTimeStep,mfFadeTime);
 
 			SetAnimatedValue(GetAnimatedValue() + mfIntensityAdd*afTimeStep);
-			
-			mDiffuseColor.r += mColAdd.r*afTimeStep;
-			mDiffuseColor.g += mColAdd.g*afTimeStep;
-			mDiffuseColor.b += mColAdd.b*afTimeStep;
-			mDiffuseColor.a += mColAdd.a*afTimeStep;
-			SetDiffuseColor(mDiffuseColor);
+
+			cColor faded = GetDiffuseColor();
+			faded.r += mColAdd.r*afTimeStep;
+			faded.g += mColAdd.g*afTimeStep;
+			faded.b += mColAdd.b*afTimeStep;
+			faded.a += mColAdd.a*afTimeStep;
+			SetDiffuseColor(faded);
 
 			mfFadeTime-=afTimeStep;
 
 			//Set the dest values.
 			if(mfFadeTime<=0)
-			{
-				mfFadeTime =0;
-				SetDiffuseColor(mDestCol);
-				SetAnimatedValue(mfDestIntensity);
-			}
+				ApplyFadeDestination();
 		}
 
 		/////////////////////////////////////////////
@@ -216,11 +260,13 @@ namespace hpl {
 					if(!mbFlickerFade)
 					{
 						SetDiffuseColor(mFlickerOffColor);
-						SetAnimatedValue(mfFlickerOffValue);
+						// Level 0: each tuning drops to ITS OWN authored off
+						// value, so the two backends keep their own depth.
+						SetLevel(0.0f);
 					}
 					else
 					{
-						FadeTo(mFlickerOffColor, mfFlickerOffValue,
+						FadeTo(mFlickerOffColor, GetFlickerOffValue(),
 							cMath::RandRectf(mfFlickerOffFadeMinLength, mfFlickerOffFadeMaxLength));
 					}
 					//Sound
@@ -249,12 +295,12 @@ namespace hpl {
 					mbFlickerOn = true;
 					if(!mbFlickerFade)
 					{
-						SetDiffuseColor(mFlickerOnColor);
-						SetAnimatedValue(mfFlickerOnValue);
+						SetColorDrive(mFlickerOnColorDrive);
+						SetLevel(mfFlickerOnLevel);
 					}
 					else
 					{
-						FadeTo(mFlickerOnColor, mfFlickerOnValue,
+						FadeTo(GetFlickerOnColor(), GetFlickerOnValue(),
 							cMath::RandRectf(mfFlickerOnFadeMinLength, mfFlickerOnFadeMaxLength));
 					}
 					if(msFlickerOnSound!=""){
@@ -278,8 +324,8 @@ namespace hpl {
 
 		/*Log("Time: %f Length: %f FadeTime: %f Color: (%f %f %f %f)\n",mfFlickerTime, mfFlickerStateLength,
 		mfFadeTime,
-		mDiffuseColor.r,mDiffuseColor.g,
-		mDiffuseColor.b,mDiffuseColor.a);*/
+		diffuse.r,diffuse.g,
+		diffuse.b,diffuse.a);*/
 	}
 
 	//-----------------------------------------------------------------------
@@ -290,15 +336,33 @@ namespace hpl {
 
 		mfFadeTime = afTime;
 
-		mColAdd.r = (aCol.r - mDiffuseColor.r)/afTime;
-		mColAdd.g = (aCol.g - mDiffuseColor.g)/afTime;
-		mColAdd.b = (aCol.b - mDiffuseColor.b)/afTime;
-		mColAdd.a = (aCol.a - mDiffuseColor.a)/afTime;
+		const cColor from = GetDiffuseColor();
+		mColAdd.r = (aCol.r - from.r)/afTime;
+		mColAdd.g = (aCol.g - from.g)/afTime;
+		mColAdd.b = (aCol.b - from.b)/afTime;
+		mColAdd.a = (aCol.a - from.a)/afTime;
 
 		mfIntensityAdd = (afIntensity - GetAnimatedValue())/afTime;
 
 		mfDestIntensity = afIntensity;
 		mDestCol = aCol;
+	}
+
+	void iLight::ApplyFadeDestination()
+	{
+		mfFadeTime = 0;
+		SetDiffuseColor(mDestCol);
+		SetAnimatedValue(mfDestIntensity);
+	}
+
+	// The destination is in the units of the backend that issued the fade --
+	// reach in metres on Standard, intensity on ray-traced -- so a backend
+	// switch finishes the fade while those units still mean something. The
+	// level and colour scale it lands on are shared, and carry over.
+	void iLight::SnapFadeToDestination()
+	{
+		if(mfFadeTime<=0) return;
+		ApplyFadeDestination();
 	}
 
 	void iLight::StopFading()
@@ -325,7 +389,14 @@ namespace hpl {
 						float afOffFadeMinLength, float afOffFadeMaxLength)
 	{
 		mFlickerOffColor = aOffCol;
-		mfFlickerOffValue = afOffIntensity;
+		// The OFF endpoint belongs to the tuning being driven. The passive one
+		// keeps whatever the map authored for it (Re_FlickerOffIntensity), or
+		// the value the loader promoted -- either way it holds its own depth.
+		{
+			cLightTuningState& tuning = mState.Tuning(GetActiveLightModel());
+			tuning.mfOffValue = afOffIntensity;
+			InvalidateResolved();
+		}
 
 		mfFlickerOnMinLength = afOnMinLength;
 		mfFlickerOnMaxLength = afOnMaxLength;
@@ -344,8 +415,13 @@ namespace hpl {
 		mfFlickerOffFadeMinLength = afOffFadeMinLength;
 		mfFlickerOffFadeMaxLength = afOffFadeMaxLength;
 
-		mFlickerOnColor = mDiffuseColor;
-		mfFlickerOnValue = GetAnimatedValue();
+		// The drive, not the resolved colour: the passive backend's ON colour is
+		// then its own authored one scaled the same way, exactly as the ON value
+		// is its own authored value at mfFlickerOnLevel.
+		mFlickerOnColorDrive = mState.mColorDrive;
+		// Wherever the light sits now is the ON state, expressed as a level so
+		// the other backend's ON value is its own authored one.
+		mfFlickerOnLevel = mState.mfLevel;
 
 		mbFlickerOn = true;
 		mfFlickerTime =0;
@@ -365,7 +441,7 @@ namespace hpl {
 		
 		//////////////////////////////////////////////////////////////
 		// If the lights cast shadows, cull objects that are in shadow
-		if(mbCastShadows)
+		if(GetCastShadows())
 		{
 			return CollidesWithBV(apObject->GetBoundingVolume());
 		}
@@ -382,61 +458,272 @@ namespace hpl {
 
 	//-----------------------------------------------------------------------
 
-	void iLight::SetIntensity(float afX)
-	{ 
-		if(mfIntensity == afX) return;
+	// Resolved per query against the world, so changing the world's backend
+	// re-derives every light instead of needing a reload. Null-safe: a light
+	// resolves its radius inside its own constructor, before cWorld::RegisterLight
+	// has handed it a world.
+	eLightModel iLight::GetActiveLightModel() const
+	{
+		if(mpWorld==NULL) return mActiveModel;
+		return mpWorld->GetRendererBackend()==eRendererBackend_Standard
+			? eLightModel_Legacy : eLightModel_RayTraced;
+	}
 
-		mfIntensity = afX;
+	//-----------------------------------------------------------------------
 
+	void iLight::SetWorld(cWorld *apWorld)
+	{
+		mpWorld = apWorld;
+		// The world decides which tuning is active, so anything resolved
+		// before this point was resolved against the fallback.
+		OnTuningChanged();
+	}
+
+	//-----------------------------------------------------------------------
+
+	void iLight::OnRendererBackendChanged()
+	{
+		const bool bWasVisible = IsVisible();
+
+		OnTuningChanged();
+		// The spot's projection and frustum key off the reach and are otherwise
+		// only invalidated by SetRadius.
+		OnResolvedTuningChanged();
+		// Per-backend colour means connected billboards re-tint.
+		OnSetDiffuse();
+
+		if(mbIsVisible && IsVisible() != bWasVisible)
+			OnChangeVisible();
+	}
+
+	//-----------------------------------------------------------------------
+
+	void iLight::InvalidateResolved()
+	{
+		mbResolvedDirty = true;
+	}
+
+	//-----------------------------------------------------------------------
+
+	const cLightTuningState& iLight::Resolved() const
+	{
+		if(mbResolvedDirty==false) return mResolved;
+
+		const eLightModel model = GetActiveLightModel();
+		const cLightTuningState& authored = mState.Tuning(model);
+		mResolved = authored;
+
+		// Colour first: a derived reach is a function of it.
+		if(mState.mColorDrive.mbColorAbsolute)
+		{
+			mResolved.mDiffuseColor = mState.mColorDrive.mAbsoluteColor;
+		}
+		else
+		{
+			mResolved.mDiffuseColor.r = authored.mDiffuseColor.r * mState.mColorDrive.mColorScale.r;
+			mResolved.mDiffuseColor.g = authored.mDiffuseColor.g * mState.mColorDrive.mColorScale.g;
+			mResolved.mDiffuseColor.b = authored.mDiffuseColor.b * mState.mColorDrive.mColorScale.b;
+			mResolved.mDiffuseColor.a = authored.mDiffuseColor.a * mState.mColorDrive.mColorScale.a;
+		}
+
+		// The animated value is the reach on Standard and the intensity on
+		// ray-traced; the level moves whichever one this tuning animates.
+		const float fAnimated = ResolveLightLevelValue(authored.mfOnValue, authored.mfOffValue,
+														mState.mfLevel);
+		if(model==eLightModel_RayTraced)
+		{
+			mResolved.mfIntensity = fAnimated;
+			mResolved.mfReach = authored.mbReachFollowsIntensity
+				? DeriveLightReach(fAnimated, mResolved.mDiffuseColor.r,
+									mResolved.mDiffuseColor.g, mResolved.mDiffuseColor.b)
+				: authored.mfReach;
+		}
+		else
+		{
+			mResolved.mfReach = fAnimated;
+		}
+
+		mbResolvedDirty = false;
+		return mResolved;
+	}
+
+	//-----------------------------------------------------------------------
+
+	cLightTuningState& iLight::AuthoringTuning()
+	{
+		cLightTuningState& tuning = mState.Tuning(GetActiveLightModel());
+		tuning.mbAuthored = true;
+		return tuning;
+	}
+
+	//-----------------------------------------------------------------------
+
+	// The passive tuning follows the authored one until the map gives it values
+	// of its own -- the same promotion the loader does, kept live so a light a
+	// script turns up is not left dark on the other backend.
+	void iLight::PromotePassiveTuning()
+	{
+		const eLightModel active = GetActiveLightModel();
+		const eLightModel passive = active==eLightModel_RayTraced ? eLightModel_Legacy
+																  : eLightModel_RayTraced;
+		cLightTuningState& target = mState.Tuning(passive);
+		if(target.mbAuthored || target.mbPresent==false) return;
+
+		const cLightTuningState& source = mState.Tuning(active);
+		target.mDiffuseColor = source.mDiffuseColor;
+		target.mDefaultDiffuseColor = source.mDefaultDiffuseColor;
+		target.mbCastShadows = source.mbCastShadows;
+
+		if(passive==eLightModel_RayTraced)
+		{
+			// PromoteLegacyLightParameters: the retail radius IS the intensity,
+			// and the reach derives from it.
+			target.mfIntensity = source.mfReach;
+			target.mfOnValue = source.mfOnValue;
+			target.mfOffValue = source.mfOffValue;
+			target.mbReachFollowsIntensity = true;
+			target.mfSourceRadius = 0;
+			target.mfReach = DeriveLightReach(target.mfIntensity, target.mDiffuseColor.r,
+												target.mDiffuseColor.g, target.mDiffuseColor.b);
+		}
+		else
+		{
+			// Back the other way: the retail radius that would reach as far.
+			target.mfReach = source.mfIntensity;
+			target.mfOnValue = source.mfOnValue;
+			target.mfOffValue = source.mfOffValue;
+			target.mbReachFollowsIntensity = false;
+			target.mfIntensity = source.mfIntensity;
+			target.mfSourceRadius = 0;
+		}
+	}
+
+	//-----------------------------------------------------------------------
+
+	void iLight::OnTuningChanged()
+	{
+		InvalidateResolved();
+		OnResolvedTuningChanged();
 		mbUpdateBoundingVolume = true;
-		
+
 		//This is so that the render container is updated.
 		SetTransformUpdated();
+	}
 
-		UpdateDerivedReach();
+	//-----------------------------------------------------------------------
+
+	void iLight::SetTuning(eLightModel aModel, const cLightTuningState& aTuning)
+	{
+		mState.Tuning(aModel) = aTuning;
+		OnTuningChanged();
+	}
+
+	//-----------------------------------------------------------------------
+
+	void iLight::SetCastShadows(bool afX)
+	{
+		cLightTuningState& tuning = AuthoringTuning();
+		if(tuning.mbCastShadows == afX) return;
+
+		tuning.mbCastShadows = afX;
+		PromotePassiveTuning();
+		InvalidateResolved();
+	}
+
+	//-----------------------------------------------------------------------
+
+	void iLight::SetDefaultDiffuseColor(const cColor& aColor)
+	{
+		AuthoringTuning().mDefaultDiffuseColor = aColor;
+		InvalidateResolved();
+	}
+
+	//-----------------------------------------------------------------------
+
+	void iLight::SetIntensity(float afX)
+	{ 
+		cLightTuningState& tuning = AuthoringTuning();
+		if(tuning.mfIntensity == afX) return;
+
+		tuning.mfIntensity = afX;
+		// Authoring the intensity of the tuning that animates it re-bases the
+		// level: the light now sits at its own authored ON value.
+		if(GetActiveLightModel()==eLightModel_RayTraced)
+		{
+			tuning.mfOnValue = afX;
+			mState.mfLevel = 1.0f;
+		}
+		PromotePassiveTuning();
+		OnTuningChanged();
 	}
 
 	//-----------------------------------------------------------------------
 
 	void iLight::SetReachFollowsIntensity(bool abX)
 	{
-		mbReachFollowsIntensity = abX;
-		UpdateDerivedReach();
-	}
+		cLightTuningState& tuning = AuthoringTuning();
+		if(tuning.mbReachFollowsIntensity == abX) return;
 
-	void iLight::UpdateDerivedReach()
-	{
-		if(mbReachFollowsIntensity==false || mLightModel != eLightModel_Overdrive) return;
-		SetRadius(DeriveLightReach(mfIntensity, mDiffuseColor.r, mDiffuseColor.g, mDiffuseColor.b));
+		// The derivation is applied when the tuning resolves, so there is
+		// nothing to recompute here.
+		tuning.mbReachFollowsIntensity = abX;
+		OnTuningChanged();
 	}
 
 	//-----------------------------------------------------------------------
 
 	void iLight::SetRadius(float afX)
 	{
-		if (mfRadius == afX) return;
+		cLightTuningState& tuning = AuthoringTuning();
+		if (tuning.mfReach == afX) return;
 
-		mfRadius = afX;
-
-		mbUpdateBoundingVolume = true;
-
-		//This is so that the render container is updated.
-		SetTransformUpdated();
+		tuning.mfReach = afX;
+		if(GetActiveLightModel()==eLightModel_RayTraced)
+		{
+			// An authored reach stops following the intensity, as in the loader.
+			tuning.mbReachFollowsIntensity = false;
+		}
+		else
+		{
+			// The retail radius IS the animated value, so authoring it re-bases
+			// the level onto the new authored ON value.
+			tuning.mfOnValue = afX;
+			mState.mfLevel = 1.0f;
+		}
+		PromotePassiveTuning();
+		OnTuningChanged();
 	}
 
 	//-----------------------------------------------------------------------
 
 	float iLight::GetAnimatedValue() const
 	{
-		return mLightModel == eLightModel_Legacy ? mfRadius : mfIntensity;
+		return cLightState::GetTuningAnimatedValue(Resolved(), GetActiveLightModel());
 	}
 
+	// Fades, flicker and scripts come through here. They move the SHARED level
+	// rather than one tuning's numbers, so the other backend follows in
+	// proportion and a light dimmed to half stays half across a switch.
 	void iLight::SetAnimatedValue(float afX)
 	{
-		if (mLightModel == eLightModel_Legacy)
-			SetRadius(afX);
-		else
+		const cLightTuningState& tuning = mState.Tuning(GetActiveLightModel());
+
+		float fLevel = 1.0f;
+		if(DeriveLightLevel(tuning.mfOnValue, tuning.mfOffValue, afX, &fLevel))
+		{
+			if(mState.mfLevel == fLevel) return;
+			mState.mfLevel = fLevel;
+			OnTuningChanged();
+			return;
+		}
+
+		// No authored range to scale against -- a light the map authored dark.
+		// Author the value instead and put every tuning back at level 1.
+		mState.mfLevel = 1.0f;
+		if(GetActiveLightModel()==eLightModel_RayTraced)
 			SetIntensity(afX);
+		else
+			SetRadius(afX);
 	}
 
 	
@@ -460,11 +747,62 @@ namespace hpl {
 
 	//-----------------------------------------------------------------------
 
+	float iLight::GetFlickerOffValue() const
+	{
+		return mState.Tuning(GetActiveLightModel()).mfOffValue;
+	}
+
+	cColor iLight::GetFlickerOnColor() const
+	{
+		if(mFlickerOnColorDrive.mbColorAbsolute) return mFlickerOnColorDrive.mAbsoluteColor;
+
+		const cColor& authored = mState.Tuning(GetActiveLightModel()).mDiffuseColor;
+		const cColor& scale = mFlickerOnColorDrive.mColorScale;
+		return cColor(authored.r*scale.r, authored.g*scale.g, authored.b*scale.b, authored.a*scale.a);
+	}
+
+	void iLight::SetColorDrive(const cLightColorDrive& aDrive)
+	{
+		const bool bWasVisible = IsVisible();
+
+		mState.mColorDrive = aDrive;
+
+		// The reach may follow the colour, so the bounds can move with it.
+		OnTuningChanged();
+
+		if(mbIsVisible && IsVisible() != bWasVisible)
+			OnChangeVisible();
+
+		OnSetDiffuse();
+	}
+
+	//-----------------------------------------------------------------------
+
+	float iLight::GetFlickerOnValue() const
+	{
+		const cLightTuningState& tuning = mState.Tuning(GetActiveLightModel());
+		return ResolveLightLevelValue(tuning.mfOnValue, tuning.mfOffValue, mfFlickerOnLevel);
+	}
+
+	//-----------------------------------------------------------------------
+
+	void iLight::SetLevel(float afLevel)
+	{
+		if(mState.mfLevel == afLevel) return;
+
+		mState.mfLevel = afLevel;
+		OnTuningChanged();
+	}
+
+	//-----------------------------------------------------------------------
+
 	void iLight::SetSourceRadius(float afX)
 	{
-		if (mfSourceRadius == afX) return;
+		cLightTuningState& tuning = AuthoringTuning();
+		if (tuning.mfSourceRadius == afX) return;
 
-		mfSourceRadius = afX;
+		tuning.mfSourceRadius = afX;
+		InvalidateResolved();
 	}
 
 	//-----------------------------------------------------------------------
@@ -591,9 +929,11 @@ namespace hpl {
 				tinyxml2::XMLElement *pMainElem = pRootElem->FirstChildElement("MAIN");
 				if(pMainElem!=NULL)
 				{
-					mbCastShadows = GetAttributeBool(pMainElem, "CastsShadows", mbCastShadows);
+					SetCastShadows(GetAttributeBool(pMainElem, "CastsShadows", GetCastShadows()));
 
-					mDiffuseColor.a = GetAttributeFloat(pMainElem, "Specular", mDiffuseColor.a);
+					cColor specular = GetDiffuseColor();
+					specular.a = GetAttributeFloat(pMainElem, "Specular", specular.a);
+					SetDiffuseColor(specular);
 
 					tString sFalloffImage = GetAttributeString(pMainElem, "FalloffImage");
 					Image *pImage = mpTextureManager->Create1DImage(sFalloffImage,false).Release();
@@ -627,9 +967,14 @@ namespace hpl {
 
 		bbConnection.mpBillboard = apBillboard;
 		bbConnection.mBaseColor = aBaseColor;
+		bbConnection.mlRendererMaskBeforeConnect = apBillboard->GetRendererMask();
 
-		apBillboard->SetColor(aBaseColor * cColor(mDiffuseColor.r,mDiffuseColor.g,mDiffuseColor.b,1));
+		const cColor& tint = GetDiffuseColor();
+		apBillboard->SetColor(aBaseColor * cColor(tint.r,tint.g,tint.b,1));
 		apBillboard->SetVisible(IsVisible());
+		// The mask gate is read per gather from one global bit, so this survives
+		// a runtime backend switch with no further bookkeeping.
+		apBillboard->SetRendererMask(MaskWithoutRayTraced(apBillboard->GetRendererMask()));
 
 		mvBillboards.push_back(bbConnection);
 	}
@@ -644,6 +989,7 @@ namespace hpl {
 			cLightBillboardConnection &bbConnection = *it;
 			if(bbConnection.mpBillboard == apBillboard)
 			{
+				apBillboard->SetRendererMask(bbConnection.mlRendererMaskBeforeConnect);
 				mvBillboards.erase(it);
 				break;
 			}
@@ -652,10 +998,14 @@ namespace hpl {
 
 	//-----------------------------------------------------------------------
 
+	// The editor's path for a billboard whose ConnectLight resolves: it never
+	// goes through AttachBillboard, so the ray-traced bit comes off here too.
 	void iLight::UpdateBillboard(cBillboard* apBillboard, const cColor& aBaseColor)
 	{
-		apBillboard->SetColor(aBaseColor * cColor(mDiffuseColor.r, mDiffuseColor.g, mDiffuseColor.b, 1));
+		const cColor& tint = GetDiffuseColor();
+		apBillboard->SetColor(aBaseColor * cColor(tint.r, tint.g, tint.b, 1));
 		apBillboard->SetVisible(IsVisible());
+		apBillboard->SetRendererMask(MaskWithoutRayTraced(apBillboard->GetRendererMask()));
 	}
 
 	//-----------------------------------------------------------------------
@@ -691,9 +1041,10 @@ namespace hpl {
 
 	void iLight::OnSetDiffuse()
 	{
+		const cColor tint = GetDiffuseColor();
 		for(size_t i =0; i<mvBillboards.size(); ++i)
 		{
-			mvBillboards[i].mpBillboard->SetColor( mvBillboards[i].mBaseColor * cColor(mDiffuseColor.r,mDiffuseColor.g,mDiffuseColor.b,1));
+			mvBillboards[i].mpBillboard->SetColor( mvBillboards[i].mBaseColor * cColor(tint.r,tint.g,tint.b,1));
 		}
 	}
 

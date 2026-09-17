@@ -59,14 +59,12 @@ namespace hpl {
 	class cNode3D;
 	class iEntity3D;
 	class iLight;
-	class iLightSpot;
-	class iLightPoint;
+	class cLightSpot;
+	class cLightPoint;
 	class cLightArea;
 	class cLightBoxLegacy;
 	class cLightPoint;
 	class cLightSpot;
-	class cLightPointLegacy;
-	class cLightSpotLegacy;
 	class cImageEntity;
 	class cParticleManager;
 	class cParticleSystem;
@@ -367,8 +365,6 @@ namespace hpl {
 		
 		///// LIGHT METHODS ////////////////////
 
-		cLightPointLegacy* CreateLightPointLegacy(const tString &asName="",const tString &asGobo="", bool abStatic=false);
-		cLightSpotLegacy* CreateLightSpotLegacy(const tString &asName="", const tString &asGobo="", bool abStatic=false);
 		cLightArea* CreateLightArea(const tString &asName="", bool abStatic=false);
 		cLightBoxLegacy* CreateLightBoxLegacy(const tString &asName="", bool abStatic=false);
 		// Redux light classes (ray traced). The *Legacy lights above are
@@ -376,7 +372,7 @@ namespace hpl {
 		cLightPoint* CreateLightPoint(const tString &asName="",const tString &asGobo="", bool abStatic=false);
 		cLightSpot* CreateLightSpot(const tString &asName="", const tString &asGobo="", bool abStatic=false);
 		// Lights created by code (not map data): the class the running backend
-		// renders, with reach set and, on Overdrive, intensity derived from it.
+		// renders, with reach set and, on the ray-traced backend, intensity derived from it.
 		iLight* CreateCodePointLight(const tString &asName, const tString &asGobo, bool abStatic,
 		                             float afReach, const cColor &aLitColor, float afIntensityMul = 1.0f);
 		void DestroyLight(iLight* apLight);
@@ -384,11 +380,13 @@ namespace hpl {
 		iLight* GetLightFromUniqueID(int alID);
 		// Renderer backend this world is loaded for; loaders skip objects whose
 		// RendererMask excludes it.
-		void SetRendererBackend(eRendererBackend aBackend){ mRendererBackend = aBackend; }
+		// Lights carry both backends' tuning and resolve one per query, so this
+		// re-derives every light in place rather than needing a world reload.
+		void SetRendererBackend(eRendererBackend aBackend);
 		eRendererBackend GetRendererBackend() const { return mRendererBackend; }
 		unsigned GetRendererMaskBit() const
 		{
-			return mRendererBackend == eRendererBackend_Standard ? kRendererMaskStandard : kRendererMaskOverdrive;
+			return mRendererBackend == eRendererBackend_Standard ? kRendererMaskStandard : kRendererMaskRayTraced;
 		}
 
 		// Objects the map tags for the other renderer are skipped at load, but a save
@@ -548,7 +546,7 @@ namespace hpl {
 		cColor mFogColor;
 
 		tLightList mlstLights;
-		eRendererBackend mRendererBackend = eRendererBackend_Overdrive;
+		eRendererBackend mRendererBackend = eRendererBackend_RayTraced;
 		std::set<int> msetRendererMaskSkippedIDs;
 		std::map<int,int> mmapRendererMaskIDRemap;
 		tMeshEntityList mlstDynamicMeshEntities;

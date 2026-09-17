@@ -453,7 +453,7 @@ public:
 			cVector3f vPos;
 
 			pLightSpot = (mpWorld->GetRendererBackend() == eRendererBackend_Standard
-				? mpWorld->CreateLightSpotLegacy("SpotLight"+cString::ToString(i),"")
+				? mpWorld->CreateLightSpot("SpotLight"+cString::ToString(i),"")
 				: mpWorld->CreateLightSpot("SpotLight"+cString::ToString(i),""));
 			pLightSpot->SetDiffuseColor(cColor(1,1,1,1.0f));
 			

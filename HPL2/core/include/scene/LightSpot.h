@@ -31,11 +31,11 @@ namespace hpl {
 
 	//------------------------------------------
 
-	class iLightSpot : public iLight
+	class cLightSpot : public iLight
 	{
 	public:
-		iLightSpot(tString asName, cResources *apResources);
-		~iLightSpot();
+		cLightSpot(tString asName, cResources *apResources);
+		~cLightSpot();
 
 		const cMatrixf& GetViewMatrix();
 		const cMatrixf& GetProjectionMatrix();
@@ -54,9 +54,13 @@ namespace hpl {
 		float GetNearClipPlane() { return mfNearClipPlane;}
 
 		void SetRadius(float afX) override;
+		// The projection, view-projection and frustum are all functions of the
+		// resolved reach, so they must fall out whenever the tuning resolves
+		// differently -- a backend change, not just a SetRadius.
+		void OnResolvedTuningChanged() override { mbProjectionUpdated = true; }
 
 		// Far plane of the projection: the light radius for both light models.
-		float GetReach() const { return mfRadius; }
+		float GetReach() const { return GetRadius(); }
 
 		cFrustum* GetFrustum();
 
@@ -98,21 +102,9 @@ namespace hpl {
 		int mlFrustumMatrixCount;
 	};
 
-	// Retail spot light (<SpotLight>), rendered by the Standard renderer.
-	class cLightSpotLegacy : public iLightSpot
-	{
-	public:
-		cLightSpotLegacy(tString asName, cResources *apResources);
-	};
-
-	// Redux spot light (<Re_SpotLight>): Intensity, Radius (reach) and
-	// SourceRadius feed the ray-traced light grid; the cone shape is shared with
-	// the legacy spot light through iLightSpot.
-	class cLightSpot : public iLightSpot
-	{
-	public:
-		cLightSpot(tString asName, cResources *apResources);
-	};
+	// The shape used to be split into an interface plus two classes; plenty of
+	// code still spells the pointer this way.
+	typedef cLightSpot iLightSpot;
 
 };
 #endif // HPL_LIGHT_SPOT_H

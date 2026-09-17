@@ -656,8 +656,10 @@ static bool BuildStandardLights(
       if (!light)
         continue;
       const float radius = light->GetRadius();
-      // Overdrive light classes never render in Standard.
-      const bool enabled = light->GetLightModel() == eLightModel_Legacy &&
+      // A light carries both tunings and resolves the Standard one here; the
+      // renderer mask, not the class, decides whether it contributes. Area
+      // lights have no Standard tuning at all.
+      const bool enabled = light->GetLightType() != eLightType_Area &&
                            light->GetVisibleVar() &&
                            light->IsLegacyRendererEnabled() &&
                            StandardFinite(radius) && radius > 0.0f;
@@ -775,7 +777,6 @@ static bool BuildStandardLights(
         cLightBoxLegacy *box = static_cast<cLightBoxLegacy *>(light);
         const cVector3f size = box->GetSize();
         const bool boxEnabled =
-            light->GetLightModel() == eLightModel_Legacy &&
             light->GetVisibleVar() && light->IsLegacyRendererEnabled() &&
             StandardFinite(size.x) && size.x > 0.0f && StandardFinite(size.y) &&
             size.y > 0.0f && StandardFinite(size.z) && size.z > 0.0f;
@@ -1854,7 +1855,7 @@ void cStandardRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
   if (apSettings) {
     int renderedLights = 0;
     for (iLight *light : *apWorld->GetLightList()) {
-      if (light && light->GetLightModel() == eLightModel_Legacy &&
+      if (light && light->GetLightType() != eLightType_Area &&
           light->GetVisibleVar() && light->IsLegacyRendererEnabled() &&
           (!apFrustum || apFrustum->CollideBoundingVolume(
                              light->GetBoundingVolume()) != eCollision_Outside))
@@ -1883,7 +1884,7 @@ void cStandardRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
         continue;
       const bool point = light->GetLightType() == eLightType_Point;
       const float radius = light->GetRadius();
-      if (light->GetLightModel() != eLightModel_Legacy ||
+      if (light->GetLightType() == eLightType_Area ||
           !light->GetVisibleVar() || !light->IsLegacyRendererEnabled() ||
           !light->GetCastShadows() || light->GetShadowCastersAffected() == 0 ||
           !StandardFinite(radius) || radius <= 0.0f)

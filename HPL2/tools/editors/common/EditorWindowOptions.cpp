@@ -95,16 +95,9 @@ void cEditorWindowOptions::OnInitLayout()
 		mpInpDisplayGamma->SetUpperBound(true, 2.0f);
 		mpInpDisplayGamma->SetDecimals(2);
 
-		// Renderer backend: kept as the "RendererBackend" editor setting (same
-		// strings as the game's Graphics/RendererBackend) and applied when the
-		// editor next creates its engine.
-		vPos.y += mpInpDisplayGamma->GetSize().y + 15;
-		tWStringList lstBackendOptions;
-		lstBackendOptions.push_back(_W("Standard (original)"));
-		lstBackendOptions.push_back(_W("Ray traced (Overdrive)"));
-		mpCBRendererBackend = CreateInputEnum(vPos, _W("Renderer (needs restart)"), "", lstBackendOptions, pTab, 170);
-		mpCBRendererBackend->SetLayoutStyle(eEditorInputLayoutStyle_RowLabelOnLeft);
-		mpCBRendererBackend->UpdateLayout();
+		// No renderer-backend control here: the lit backend is switched live
+		// from a viewport's View > Render mode menu, which also writes the
+		// "RendererBackend" setting so the next launch matches.
 	}
 
 	/////////////////////////////////////////////////////////
@@ -266,7 +259,6 @@ void cEditorWindowOptions::OnUpdate(float afTimeStep)
 	mpInpDisabledCoverage->SetValue(iEngineEntityMesh::GetDisabledCoverage(), false);
 	mpInpUndoStackSize->SetValue((float)mpEditor->GetActionHandler()->GetMaxUndoSize(), false);
 	mpInpDisplayGamma->SetValue(mpEditor->GetViewportDisplayGamma(), false);
-	mpCBRendererBackend->SetValue(mpEditor->GetSetting("RendererBackend")=="overdrive" ? 1 : 0, false);
 
 	{
 		mpInpLightsActive->SetValue(pWorld->GetTypeActive(eEditorEntityType_Light), false);
@@ -324,8 +316,6 @@ bool cEditorWindowOptions::WindowSpecificInputCallback(iEditorInput* apInput)
 	else if(apInput==mpInpDisplayGamma)
 		mpEditor->SetViewportDisplayGamma(mpInpDisplayGamma->GetValue());
 
-	else if(apInput==mpCBRendererBackend)
-		mpEditor->SetSettingValue("RendererBackend", mpCBRendererBackend->GetValue()==1 ? "overdrive" : "standard");
 
 	else if(apInput==mpInpUndoStackSize)
 		mpEditor->GetActionHandler()->SetMaxUndoSize((int)mpInpUndoStackSize->GetValue());

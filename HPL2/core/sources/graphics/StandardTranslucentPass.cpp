@@ -150,7 +150,7 @@ float StandardTranslucentLightLevel(cWorld *world, iRenderable *object) {
   const cVector3f centre = object->GetBoundingVolume()->GetWorldCenter();
   float level = 0.0f;
   for (iLight *light : *world->GetLightList()) {
-    if (!light || light->GetLightModel() != eLightModel_Legacy ||
+    if (!light || light->GetLightType() == eLightType_Area ||
         !light->GetVisibleVar() || !light->IsLegacyRendererEnabled() ||
         !light->CheckObjectIntersection(object))
       continue;

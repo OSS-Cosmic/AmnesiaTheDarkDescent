@@ -598,18 +598,20 @@ def _apply_var_ops(target, op):
                 block.remove(var)
 
 
-OVERDRIVE_LIGHT_TAGS = ("Re_PointLight", "Re_SpotLight", "Re_AreaLight", "AreaLight")
+# The area light is the one shape with no Standard class. Every other light is a
+# single element carrying both backends' values, so it defaults to both.
+RAYTRACED_LIGHT_TAGS = ("AreaLight",)
 
 
 def renderer_mask(obj):
-    """Renderers an object loads for (1 Standard, 2 Overdrive), as XmlDelta.cpp
-    reads it: RendererMask, else 2 for Overdrive lights, else both."""
+    """Renderers an object loads for (1 Standard, 2 RayTraced), as XmlDelta.cpp
+    reads it: RendererMask, else 2 for the ray-traced-only area light, else both."""
     if obj.get("RendererMask") is not None:
         try:
             return int(obj.get("RendererMask")) & 3
         except ValueError:
             return 0
-    return 2 if obj.tag in OVERDRIVE_LIGHT_TAGS else 3
+    return 2 if obj.tag in RAYTRACED_LIGHT_TAGS else 3
 
 
 def fits_base_name_count(same, obj, base_count, extra):

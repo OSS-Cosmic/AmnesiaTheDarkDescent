@@ -22,6 +22,7 @@
 
 #include "scene/Entity3D.h"
 #include "graphics/GraphicsTypes.h"
+#include "scene/LightState.h"
 #include "resources/ResourceBase.h"
 #include "graphics/Renderable.h"
 
@@ -84,15 +85,8 @@ namespace hpl {
 		eShadowVolumeType_LastEnum,
 	};
 
-	// Which renderer a light class belongs to. Legacy lights (cLightPointLegacy,
-	// cLightSpotLegacy, cLightBoxLegacy) carry the retail Radius and render in
-	// Standard. Redux lights (cLightPoint, cLightSpot, cLightArea) carry
-	// Intensity, Radius (reach) and SourceRadius and feed the ray-traced grid.
-	enum eLightModel
-	{
-		eLightModel_Legacy,
-		eLightModel_Overdrive,
-	};
+	// eLightModel and the per-backend tuning live in scene/LightState.h: a light
+	// carries BOTH tunings and resolves one per query.
 
 	//------------------------------------------
 
@@ -106,6 +100,9 @@ namespace hpl {
 	public:
 		cBillboard *mpBillboard;
 		cColor mBaseColor;
+		// What the billboard's renderer mask was before the light took the
+		// ray-traced bit out of it, so RemoveBillboard can hand it back.
+		unsigned mlRendererMaskBeforeConnect;
 	};
 
 	//------------------------------------------
@@ -121,7 +118,7 @@ namespace hpl {
 		bool CheckObjectIntersection(iRenderable *apObject);
 		
 		eLightType GetLightType(){ return mLightType;}
-		eLightModel GetLightModel() const { return mLightModel;}
+		eLightModel GetLightModel() const { return GetActiveLightModel();}
 
 		// Stable per-type GPU light slot, assigned by the owning cWorld's
 		// light-slot pool at creation and kept for the light's lifetime (returned
@@ -180,10 +177,14 @@ namespace hpl {
         //////////////////////////
 		//Fading
 		// Fades the animated value (radius on legacy lights, intensity on
-		// Overdrive lights); GetDestIntensity returns its destination.
+		// ray-traced lights); GetDestIntensity returns its destination.
 		void FadeTo(const cColor& aCol, float afIntensity, float afTime);
 		void StopFading();
 		bool IsFading();
+		// Finishes an in-flight fade where it stands. The destination is held in
+		// the ACTIVE backend's units, so a backend switch calls this BEFORE the
+		// world flips -- afterwards the same number means something else.
+		void SnapFadeToDestination();
 		cColor GetDestColor(){ return mDestCol;}
 		float GetDestIntensity(){ return mfDestIntensity;}
 
@@ -214,24 +215,39 @@ namespace hpl {
 		float GetFlickerOffFadeMinLength(){ return mfFlickerOffFadeMinLength;}
 		float GetFlickerOffFadeMaxLength(){ return mfFlickerOffFadeMaxLength;}
 
-		cColor GetFlickerOnColor(){ return mFlickerOnColor;}
-		// Flicker endpoints of the animated value (radius on legacy lights, intensity on Overdrive lights).
-		float GetFlickerOffValue() const { return mfFlickerOffValue; }
-		float GetFlickerOnValue() const { return mfFlickerOnValue; }
+		// Resolved against the active tuning, like GetFlickerOnValue: the light
+		// remembers the colour DRIVE it returns to, not one backend's colour.
+		cColor GetFlickerOnColor() const;
+		// Flicker endpoints of the animated value (radius on legacy lights, intensity on ray-traced lights).
+		// Resolved for the active backend: each tuning keeps its own flicker
+		// depth, and the shared level is what actually moves between them.
+		float GetFlickerOffValue() const;
+		float GetFlickerOnValue() const;
+
+		// The shared drive: 1 is each tuning's authored ON value, 0 its authored
+		// flicker OFF value. Fades and flicker move this, so both backends stay
+		// in proportion and a switch mid-fade is coherent.
+		float GetLevel() const { return mState.mfLevel; }
+		void SetLevel(float afLevel);
+		// The level a flicker returns to, i.e. where "on" sits.
+		float GetFlickerOnLevel() const { return mfFlickerOnLevel; }
+		void SetFlickerOnLevel(float afLevel) { mfFlickerOnLevel = afLevel; }
 
 		//////////////////////////
 		//Properties
-		const cColor& GetDiffuseColor(){ return mDiffuseColor; }
+		// Resolved for the backend this light is driving: the authored colour of
+		// the active tuning, moved by any colour fade.
+		const cColor& GetDiffuseColor() const { return Resolved().mDiffuseColor; }
 		void SetDiffuseColor(cColor aColor);
 		
-		const cColor&  GetDefaultDiffuseColor(){ return mDefaultDiffuseColor;}
-		void SetDefaultDiffuseColor(const cColor& aColor) { mDefaultDiffuseColor = aColor; }
+		const cColor&  GetDefaultDiffuseColor() const { return Resolved().mDefaultDiffuseColor;}
+		void SetDefaultDiffuseColor(const cColor& aColor);
 		
 		const cColor& GetSpecularColor(){ return mSpecularColor; }
 		void SetSpecularColor(cColor aColor){ mSpecularColor = aColor; }
 
-		bool GetCastShadows(){ return mbCastShadows;}
-		void SetCastShadows(bool afX){ mbCastShadows = afX;}
+		bool GetCastShadows() const { return Resolved().mbCastShadows;}
+		void SetCastShadows(bool afX);
 
 		tObjectVariabilityFlag GetShadowCastersAffected(){ return mlShadowCastersAffected;}
 		void SetShadowCastersAffected(tObjectVariabilityFlag alX){ mlShadowCastersAffected = alX;}
@@ -250,16 +266,16 @@ namespace hpl {
 		void SetShadowMapBiasMul(float afX){ mfShadowMapBiasMul = afX;}
 		void SetShadowMapSlopeScaleBiasMul(float afX){ mfShadowMapSlopeScaleBiasMul = afX;}
 		
-		// Overdrive intensity; unused by legacy lights.
+		// Ray-traced intensity; unused by legacy lights.
 		virtual void SetIntensity(float afX);
-		float GetIntensity(){return mfIntensity;}
+		float GetIntensity() const {return Resolved().mfIntensity;}
 
 		// Reach: where attenuation ends. The retail Radius on legacy lights.
 		virtual void SetRadius(float afX);
-		float GetRadius() { return mfRadius; }
+		float GetRadius() const { return Resolved().mfReach; }
 
 		// Value animated by fades and flicker: radius on legacy lights,
-		// intensity on Overdrive lights.
+		// intensity on ray-traced lights.
 		float GetAnimatedValue() const;
 		void SetAnimatedValue(float afX);
 
@@ -267,24 +283,55 @@ namespace hpl {
 		void SetRendererMask(unsigned aMask) override;
 
 		void SetSourceRadius(float afX);
-		float GetSourceRadius(){ return mfSourceRadius; }
+		float GetSourceRadius() const { return Resolved().mfSourceRadius; }
 
 		// A Redux light whose map gives no Radius derives its reach from the
 		// intensity and colour, and keeps deriving it as fades, flicker and
 		// scripts change them -- so a light a script turns up from zero reaches.
 		void SetReachFollowsIntensity(bool abX);
-		bool GetReachFollowsIntensity() const { return mbReachFollowsIntensity; }
+
+		// The authored tuning of ONE backend. Both are resident; the active one
+		// is picked per query, so nothing has to be reloaded to change backend.
+		const cLightTuningState& GetTuning(eLightModel aModel) const { return mState.Tuning(aModel); }
+		void SetTuning(eLightModel aModel, const cLightTuningState& aTuning);
+		// Which tuning is driving this light right now.
+		eLightModel GetActiveLightModel() const;
+		bool GetReachFollowsIntensity() const { return Resolved().mbReachFollowsIntensity; }
 
 		void UpdateLight(float afTimeStep);
 
-		void SetWorld(cWorld *apWorld){ mpWorld = apWorld;}
+		void SetWorld(cWorld *apWorld);
+		// The world's renderer backend changed, so a different tuning drives
+		// this light now. Re-resolves and re-fires everything that depends on
+		// the values: bounds, the spot projection, billboard tint, visibility.
+		void OnRendererBackendChanged();
 
 
 	protected:
 		void OnFlickerOff();
 		void OnFlickerOn();
 		void OnSetDiffuse();
-		void UpdateDerivedReach();
+
+		// Puts a whole colour drive back, the way SetLevel puts a level back:
+		// backend neutral, so the flicker's ON colour is not a snapshot of one
+		// backend's resolved colour. SetDiffuseColor is the deriving path.
+		void SetColorDrive(const cLightColorDrive& aDrive);
+		// The fade's destination applied outright; SnapFadeToDestination and the
+		// end of UpdateLight's fade both land here.
+		void ApplyFadeDestination();
+
+		// The active tuning with the shared level and colour drive applied.
+		const cLightTuningState& Resolved() const;
+		void InvalidateResolved();
+		// Writes an authored value into the active tuning and re-derives the
+		// passive one when the map never authored it.
+		cLightTuningState& AuthoringTuning();
+		void PromotePassiveTuning();
+		// Bounds and render-container bookkeeping after a tuning change.
+		void OnTuningChanged();
+		// A subclass cache that keys off the resolved tuning -- the spot's
+		// projection and frustum, which otherwise only invalidate on SetRadius.
+		virtual void OnResolvedTuningChanged() {}
         virtual void ExtraXMLProperties(tinyxml2::XMLElement *apMainElem){}
 		virtual void UpdateBoundingVolume()=0;
 		
@@ -305,17 +352,20 @@ namespace hpl {
 
 		std::vector<cLightBillboardConnection> mvBillboards;
 
-		cColor mDiffuseColor;
-		cColor mDefaultDiffuseColor;
-
 		cColor mSpecularColor;
-		float mfIntensity;
-		float mfRadius;
-		float mfSourceRadius;
-		eLightModel mLightModel = eLightModel_Legacy;
-		bool mbReachFollowsIntensity = false;
 
-		bool mbCastShadows;
+		// Both backends' authored tuning, plus the level/colour drive shared
+		// between them.
+		cLightState mState;
+		// Which tuning drives the light. Latched from the light class for now;
+		// it becomes a query against the world's renderer backend.
+		eLightModel mActiveModel = eLightModel_Legacy;
+
+		// Resolving a tuning derives the reach, which costs three pow() and a
+		// sqrt, and GetRadius() runs in per-light per-frame loops -- so the
+		// result is cached and invalidated on every write.
+		mutable cLightTuningState mResolved;
+		mutable bool mbResolvedDirty = true;
 		tObjectVariabilityFlag mlShadowCastersAffected;
 
 		tShadowCasterCacheMap m_mapShadowCasterCache;
@@ -343,15 +393,16 @@ namespace hpl {
 		float mfFlickerOnMaxLength;
 		float mfFlickerOffMaxLength;
 		cColor mFlickerOffColor;
-		float mfFlickerOffValue;
+		// The OFF endpoint lives in each tuning; the light only remembers the
+		// level the flicker returns TO.
+		float mfFlickerOnLevel;
 		bool mbFlickerFade;
 		float mfFlickerOnFadeMinLength;
 		float mfFlickerOnFadeMaxLength;
 		float mfFlickerOffFadeMinLength;
 		float mfFlickerOffFadeMaxLength;
 
-		cColor mFlickerOnColor;
-		float mfFlickerOnValue;
+		cLightColorDrive mFlickerOnColorDrive;
 
 		bool mbFlickerOn;
 		float mfFlickerTime;

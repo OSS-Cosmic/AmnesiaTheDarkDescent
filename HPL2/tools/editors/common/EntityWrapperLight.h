@@ -44,15 +44,42 @@ public:
 
 #define LightPropIdStart 60
 
-inline bool IsEditorPointLightType(int alType)
-{
-	return alType==eEditorEntityLightType_Point || alType==eEditorEntityLightType_OverdrivePoint;
-}
+// One light object carries both backends' tuning. A ray-traced override of the
+// property with id N is registered at N + LightReduxPropIdOffset under the XML
+// name "Re_<Name>", alongside an unsaved bool that records whether the override
+// is authored at all -- an unauthored one is stripped on save, so a light that
+// was never given Redux values round-trips byte-identically.
+#define LightReduxPropIdOffset 1000
+// Ids for those "is it authored" flags. They are bools whatever the type of the
+// value they guard, so they cannot be derived from the base id (the float and
+// bool id spaces overlap); they come off this counter instead.
+#define LightReduxSetPropIdStart 2000
 
-inline bool IsEditorSpotLightType(int alType)
+//////////////////////////////////////////////
+// How a light shape spells its values.
+enum eLightSchema
 {
-	return alType==eEditorEntityLightType_Spot || alType==eEditorEntityLightType_OverdriveSpot;
-}
+	// PointLight / SpotLight: retail attributes plus optional Re_ overrides.
+	eLightSchema_Dual,
+	// AreaLight: no legacy class, so the plain attributes already are the
+	// ray-traced ones and there is nothing to override.
+	eLightSchema_RayTracedOnly,
+	// BoxLight: no ray-traced class at all.
+	eLightSchema_StandardOnly,
+};
+
+// A property and its Re_ twin.
+class cLightReduxLink
+{
+public:
+	eVariableType mType;
+	int mlBaseId;		// -1 when the value only exists for the ray-traced backend
+	int mlReduxId;
+	int mlSetId;
+	tString msReduxName;
+};
+
+typedef std::vector<cLightReduxLink> tLightReduxLinkVec;
 
 //////////////////////////////////////////////
 // General Light properties
@@ -78,9 +105,9 @@ enum eLightCol
 
 enum eLightFloat
 {
-	eLightFloat_Intensity = LightPropIdStart, // Overdrive lights only
-	eLightFloat_Radius,                       // legacy radius, or the Overdrive reach
-	eLightFloat_SourceRadius,                 // Overdrive lights only
+	eLightFloat_Intensity = LightPropIdStart, // ray-traced lights only
+	eLightFloat_Radius,                       // legacy radius, or the ray-traced reach
+	eLightFloat_SourceRadius,                 // ray-traced lights only
 
 	eLightFloat_GoboAnimFrameTime,
 	eLightFloat_FlickerOnMinLength,
@@ -92,7 +119,7 @@ enum eLightFloat
 	eLightFloat_FlickerOnFadeMaxLength,
 	eLightFloat_FlickerOffFadeMinLength,
 	eLightFloat_FlickerOffFadeMaxLength,
-	eLightFloat_FlickerOffIntensity,          // Overdrive lights only
+	eLightFloat_FlickerOffIntensity,          // ray-traced lights only
 
 	eLightFloat_LastEnum,
 };
@@ -133,69 +160,103 @@ protected:
 //---------------------------------------------------------------------
 
 ////////////////////////////////////////////////////////////////////////
-// Light types come in two kinds, matching the engine light classes:
-//  - legacy (PointLight, SpotLight): Radius and FlickerOffRadius, as the
-//    retail maps author them.
-//  - Overdrive (Re_PointLight, Re_SpotLight, Re_AreaLight):
-//    Intensity, Radius as the reach, SourceRadius and FlickerOffIntensity.
-//    They load only for the Overdrive renderer.
+// One light shape, one editor type. The retail attributes drive the Standard
+// renderer; the ray-traced backend reads the same attribute spelled
+// "Re_<Name>" when the light authors one, and otherwise promotes the retail
+// Radius exactly as cEngineFileLoading::LoadLight does.
+//
+// Overrides are declared through the AddLight* helpers below, so the base-type
+// properties (Name, Tag, WorldPos, Rotation, Scale, RendererMask) are
+// structurally excluded from twinning -- transform and identity can never vary
+// per backend.
 class iEntityWrapperTypeLight : public iEntityWrapperType
 {
 	friend class iIconEntityLight;
 public:
-	iEntityWrapperTypeLight(const tString& asElementString, int alSubType, bool abOverdrive) : iEntityWrapperType(eEditorEntityType_Light, _W("Light"), asElementString),
-																								mlSubType(alSubType), mbOverdrive(abOverdrive)
+	iEntityWrapperTypeLight(const tString& asElementString, int alSubType, eLightSchema aSchema) : iEntityWrapperType(eEditorEntityType_Light, _W("Light"), asElementString),
+																								mlSubType(alSubType), mSchema(aSchema)
 	{
+		// No ray-traced twin: the ray-traced backend shadows every light anyway.
 		AddBool(eLightBool_CastShadows, "CastShadows", false);
-		AddString(eLightStr_ShadowResolution, "ShadowResolution", "High");
-		AddBool(eLightBool_ShadowsAffectStatic, "ShadowsAffectStatic");
-		AddBool(eLightBool_ShadowsAffectDynamic, "ShadowsAffectDynamic");
+		AddLightString(eLightStr_ShadowResolution, "ShadowResolution", "High");
+		AddLightBool(eLightBool_ShadowsAffectStatic, "ShadowsAffectStatic");
+		AddLightBool(eLightBool_ShadowsAffectDynamic, "ShadowsAffectDynamic");
 
-		if(abOverdrive)
+		if(aSchema==eLightSchema_RayTracedOnly)
 		{
+			// Plain names, because there is no legacy meaning to collide with.
 			AddFloat(eLightFloat_Intensity, "Intensity", 1.0f);
 			AddFloat(eLightFloat_Radius, "Radius", 1.0f);
 			AddFloat(eLightFloat_SourceRadius, "SourceRadius", 0.0f);
-			AddBool(eLightBool_RadiusDerived, "RadiusDerived", false, ePropCopyStep_PostEnt, false);
-			GetPropInt(eObjInt_RendererMask)->SetDefault(static_cast<int>(hpl::kRendererMaskOverdrive));
+			GetPropInt(eObjInt_RendererMask)->SetDefault(static_cast<int>(hpl::kRendererMaskRayTraced));
 		}
 		else
 		{
+			// The retail radius. On a Dual shape the ray-traced reach is a
+			// DIFFERENT quantity and lives in Re_Radius -- see LightParameters.h.
 			AddFloat(eLightFloat_Radius, "Radius", 1.0f);
+			if(aSchema==eLightSchema_Dual)
+			{
+				AddReduxOnlyFloat(eLightFloat_Intensity, "Intensity", 1.0f);
+				AddReduxOnlyFloat(eLightFloat_Radius, "Radius", 1.0f);
+				AddReduxOnlyFloat(eLightFloat_SourceRadius, "SourceRadius", 0.0f);
+			}
 		}
-		AddString(eLightStr_FalloffMap, "FalloffMap");
-		AddString(eLightStr_Gobo, "Gobo");
-		AddString(eLightStr_GoboAnimMode, "GoboAnimMode", "None");
-		AddFloat(eLightFloat_GoboAnimFrameTime, "GoboAnimFrameTime");
-		AddColor(eLightCol_Diffuse, "DiffuseColor", cColor(1));
+		// True while the ray-traced reach follows the intensity, i.e. no reach
+		// is authored. Never saved: its absence from the file IS the flag.
+		AddBool(eLightBool_RadiusDerived, "RadiusDerived", false, ePropCopyStep_PostEnt, false);
 
-		AddBool(eLightBool_FlickerActive, "FlickerActive", false);
-		AddFloat(eLightFloat_FlickerOnMinLength, "FlickerOnMinLength");
-		AddFloat(eLightFloat_FlickerOnMaxLength, "FlickerOnMaxLength");
-		AddString(eLightStr_FlickerOnPS, "FlickerOnPS");
-		AddString(eLightStr_FlickerOnSound, "FlickerOnSound");
+		AddLightString(eLightStr_FalloffMap, "FalloffMap");
+		AddLightString(eLightStr_Gobo, "Gobo");
+		AddLightString(eLightStr_GoboAnimMode, "GoboAnimMode", "None");
+		AddLightFloat(eLightFloat_GoboAnimFrameTime, "GoboAnimFrameTime");
+		AddLightColor(eLightCol_Diffuse, "DiffuseColor", cColor(1));
 
-		AddFloat(eLightFloat_FlickerOffMinLength, "FlickerOffMinLength");
-		AddFloat(eLightFloat_FlickerOffMaxLength, "FlickerOffMaxLength");
-		AddString(eLightStr_FlickerOffPS, "FlickerOffPS");
-		AddString(eLightStr_FlickerOffSound, "FlickerOffSound");
-		AddColor(eLightCol_FlickerOff, "FlickerOffColor", cColor(0));
-		if(abOverdrive)
+		AddLightBool(eLightBool_FlickerActive, "FlickerActive", false);
+		AddLightFloat(eLightFloat_FlickerOnMinLength, "FlickerOnMinLength");
+		AddLightFloat(eLightFloat_FlickerOnMaxLength, "FlickerOnMaxLength");
+		AddLightString(eLightStr_FlickerOnPS, "FlickerOnPS");
+		AddLightString(eLightStr_FlickerOnSound, "FlickerOnSound");
+
+		AddLightFloat(eLightFloat_FlickerOffMinLength, "FlickerOffMinLength");
+		AddLightFloat(eLightFloat_FlickerOffMaxLength, "FlickerOffMaxLength");
+		AddLightString(eLightStr_FlickerOffPS, "FlickerOffPS");
+		AddLightString(eLightStr_FlickerOffSound, "FlickerOffSound");
+		AddLightColor(eLightCol_FlickerOff, "FlickerOffColor", cColor(0));
+		if(aSchema==eLightSchema_RayTracedOnly)
+		{
 			AddFloat(eLightFloat_FlickerOffIntensity, "FlickerOffIntensity");
+		}
 		else
+		{
 			AddFloat(eLightFloat_FlickerOffRadius, "FlickerOffRadius");
+			if(aSchema==eLightSchema_Dual)
+				AddReduxOnlyFloat(eLightFloat_FlickerOffIntensity, "FlickerOffIntensity");
+		}
 
-		AddBool(eLightBool_FlickerFade, "FlickerFade", false);
-		AddFloat(eLightFloat_FlickerOnFadeMinLength, "FlickerOnFadeMinLength");
-		AddFloat(eLightFloat_FlickerOnFadeMaxLength, "FlickerOnFadeMaxLength");
-		AddFloat(eLightFloat_FlickerOffFadeMinLength, "FlickerOffFadeMinLength");
-		AddFloat(eLightFloat_FlickerOffFadeMaxLength, "FlickerOffFadeMaxLength");
+		AddLightBool(eLightBool_FlickerFade, "FlickerFade", false);
+		AddLightFloat(eLightFloat_FlickerOnFadeMinLength, "FlickerOnFadeMinLength");
+		AddLightFloat(eLightFloat_FlickerOnFadeMaxLength, "FlickerOnFadeMaxLength");
+		AddLightFloat(eLightFloat_FlickerOffFadeMinLength, "FlickerOffFadeMinLength");
+		AddLightFloat(eLightFloat_FlickerOffFadeMaxLength, "FlickerOffFadeMaxLength");
 	}
 
 	int GetLightType() { return mlSubType; }
-	bool IsOverdrive() { return mbOverdrive; }
+	eLightSchema GetLightSchema() { return mSchema; }
+	// The plain attributes are the ray-traced ones (area light).
+	bool IsRayTracedOnly() { return mSchema==eLightSchema_RayTracedOnly; }
+	// No ray-traced class exists, so Re_ values would never be read (box light).
+	bool IsStandardOnly() { return mSchema==eLightSchema_StandardOnly; }
+	bool SupportsReduxOverrides() { return mSchema==eLightSchema_Dual; }
 
-	// Also honours the per-set toggle (Legacy / Overdrive lights).
+	const tLightReduxLinkVec& GetReduxLinks() { return mvReduxLinks; }
+	const cLightReduxLink* GetReduxLinkByReduxId(eVariableType aType, int alID);
+	const cLightReduxLink* GetReduxLinkBySetId(int alID);
+	// Id of the "is this override authored" flag guarding a property. The flag
+	// ids come off a counter, so they cannot be computed from the base id.
+	int GetReduxSetId(eVariableType aType, int alBaseId);
+
+	// Also honours the light visibility toggle.
 	bool IsVisible();
 	void SetVisible(bool abX);
 
@@ -204,9 +265,28 @@ public:
 
 
 protected:
+	// Registers the retail property and, on a Dual shape, its "Re_<name>" twin
+	// plus the unsaved flag that records whether the twin is authored.
+	//
+	// ORDER MATTERS: the value twin is registered immediately before its flag,
+	// and iEntityWrapperData walks properties in registration order. Copying a
+	// light therefore writes the value (which marks it authored) and only then
+	// the flag, which clears it again for an unauthored override. Swap the two
+	// and every load silently drops its overrides.
+	void AddLightFloat(int alID, const tString& asName, float afDefault=0.0f);
+	void AddLightBool(int alID, const tString& asName, bool abDefault=true);
+	void AddLightString(int alID, const tString& asName, const tString& asDefault="");
+	void AddLightColor(int alID, const tString& asName, const cColor& aDefault=cColor(1));
+	// A value the ray-traced backend has but the retail schema does not
+	// (Intensity, SourceRadius, FlickerOffIntensity, and the reach).
+	void AddReduxOnlyFloat(int alID, const tString& asName, float afDefault=0.0f);
+
+	void AddReduxLink(eVariableType aType, int alBaseId, int alID, const tString& asName);
 
 	int mlSubType;
-	bool mbOverdrive;
+	eLightSchema mSchema;
+	tLightReduxLinkVec mvReduxLinks;
+	int mlNextReduxSetId = LightReduxSetPropIdStart;
 
 	static bool mbLightsVisible;
 	static bool mbLightsActive;
@@ -233,19 +313,44 @@ public:
 	bool SetProperty(int, const cColor&);
 
 	int GetLightType() { return ((iEntityWrapperTypeLight*)mpType)->GetLightType(); }
-	bool IsOverdrive() { return ((iEntityWrapperTypeLight*)mpType)->IsOverdrive(); }
-	// Overdrive lights, and legacy ones previewed promoted in an Overdrive
-	// editor, use the Overdrive engine light class.
-	bool UsesOverdriveLightClass();
+	eLightSchema GetLightSchema() { return ((iEntityWrapperTypeLight*)mpType)->GetLightSchema(); }
+	bool IsRayTracedOnly() { return ((iEntityWrapperTypeLight*)mpType)->IsRayTracedOnly(); }
+	bool SupportsReduxOverrides() { return ((iEntityWrapperTypeLight*)mpType)->SupportsReduxOverrides(); }
+	// The area light, and any light previewed under the ray-traced backend, use
+	// the ray-traced engine light class.
+	bool UsesRayTracedLightClass();
+
+	//////////////////////////////////////////////////////
+	// Ray-traced overrides. A value is authored exactly when it is present in
+	// the map, so there is no separate flag to drift out of step.
+	bool HasReduxOverride(eVariableType aType, int alBaseId);
+	int GetReduxSetPropId(eVariableType aType, int alBaseId)
+		{ return ((iEntityWrapperTypeLight*)mpType)->GetReduxSetId(aType, alBaseId); }
+	void ClearReduxOverride(eVariableType aType, int alBaseId);
+	bool HasAnyReduxOverride();
+
+	// What the ray-traced backend would use: the override when authored,
+	// otherwise the promoted retail value.
+	float GetEffectiveIntensity();
+	float GetEffectiveReach();
+	float GetEffectiveSourceRadius();
+	float GetEffectiveFlickerOffValue();
+	cColor GetEffectiveDiffuseColor();
 
 	// Handles of both light sets show in every editor renderer; only the
 	// engine light follows the renderer mask.
 	bool FiltersByEditorRenderer() { return false; }
 	bool IsLitByEditorRenderer();
-	// Legacy lights warm, Overdrive lights cool; dimmed when not lit.
+	// Warm by default, cool once the light carries ray-traced overrides;
+	// dimmed when this renderer does not light it.
 	cColor GetIconTint();
 
 	bool EntitySpecificCheckCulled(cEditorClipPlane* apPlane);
+
+	// Ray-traced override plumbing, shared by every Get/SetProperty overload.
+	bool GetReduxProperty(int alPropID, eVariableType aType, void* apOut);
+	bool SetReduxProperty(int alPropID, eVariableType aType, const void* apValue);
+	float GetInheritedReduxFloat(const cLightReduxLink& aLink);
 
 	bool GetCastShadows() { return mbCastShadows; }
 	void SetCastShadows(bool abX);
@@ -282,7 +387,7 @@ public:
 	void SetRadiusDerived(bool abX);
 	bool IsRadiusDerived() { return mbRadiusDerived; }
 
-	// Overdrive lights never load for the Standard renderer.
+	// The area light has no Standard class, so it never loads for that renderer.
 	void SetRendererMask(int alMask);
 
 	void SetFalloffMap(const tString& asFalloffMap);
@@ -306,8 +411,10 @@ public:
 	float GetFlickerOffRadius() { return mfFlickerOffRadius; }
 	float GetFlickerOffIntensity() { return mfFlickerOffIntensity; }
 	// What the light switches to when flickering off: the radius of a legacy
-	// light, the intensity of an Overdrive one.
-	float GetFlickerOffValue() { return IsOverdrive() ? mfFlickerOffIntensity : mfFlickerOffRadius; }
+	// light, the intensity of a ray-traced one.
+	// What the flicker actually fades to under the renderer being previewed.
+	float GetFlickerOffValue() { return UsesRayTracedLightClass() ? GetEffectiveFlickerOffValue()
+																  : mfFlickerOffRadius; }
 	cColor GetFlickerOffColor() { return mcolFlickerOffColor; }
 	const tString& GetFlickerOffSound() { return msFlickerOffSound; }
 	const tString& GetFlickerOffPS() { return msFlickerOffPS; }
@@ -374,6 +481,13 @@ protected:
 
 	//////////////////////
 	// Data
+
+	// Authored ray-traced overrides, keyed by the BASE property id. One map per
+	// variable type, because the id spaces overlap between types.
+	std::map<int,float> mmapReduxFloat;
+	std::map<int,bool> mmapReduxBool;
+	std::map<int,tString> mmapReduxStr;
+	std::map<int,cColor> mmapReduxCol;
 
 	bool mbCastShadows;
 	tString msShadowResolution;

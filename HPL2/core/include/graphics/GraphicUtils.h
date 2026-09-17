@@ -34,6 +34,16 @@ namespace hpl {
 
 	namespace rendering {
 
+		// Which renderer is drawing, as a kRendererMask* bit. An object whose
+		// mask excludes it is skipped by every gather -- the mask gates
+		// RENDERING, not creation, so the world's object set does not depend on
+		// the backend and a backend switch needs no reload.
+		//
+		// Held as a plain global rather than read from cGraphics per object:
+		// IsObjectIsVisible runs once per renderable per pass.
+		void SetActiveRendererMaskBit(unsigned alBit);
+		unsigned GetActiveRendererMaskBit();
+
 		bool IsObjectIsVisible(iRenderable* apObject, tRenderableFlag neededFlags,
 			std::span<cPlanef> clipPlanes = {});
 

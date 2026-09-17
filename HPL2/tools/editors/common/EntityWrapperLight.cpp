@@ -59,7 +59,7 @@ void iIconEntityLight::Update()
 	iEditorWorld* pWorld = mpParent->GetEditorWorld();
 	iLight* pLight = (iLight*)mpEntity;
 	iEntityWrapperLight* pParent = (iEntityWrapperLight*)mpParent;
-	// The editor shows both halves of a Standard/Overdrive light pair, but
+	// The editor shows both halves of a Standard/ray-traced light pair, but
 	// only the half the editor renderer loads lights the scene.
 	pLight->SetVisible(mpParent->IsVisible() && mpParent->IsActive() && mpParent->GetType()->IsActive() &&
 					   pParent->IsLitByEditorRenderer());
@@ -87,9 +87,111 @@ void iEntityWrapperTypeLight::SetVisible(bool abX)
 
 bool iEntityWrapperTypeLight::IsVisible()
 {
-	const eEditorVisibilityType set = mbOverdrive ? eEditorVisibilityType_OverdriveLights
-											  : eEditorVisibilityType_LegacyLights;
-	return mbLightsVisible && cEditorHelper::GetVisibilityTypeState(set);
+	return mbLightsVisible && cEditorHelper::GetVisibilityTypeState(eEditorVisibilityType_Lights);
+}
+
+//------------------------------------------------------------------------------
+
+//////////////////////////////////////////////////////////////////////////
+// RAY-TRACED OVERRIDE REGISTRATION
+//////////////////////////////////////////////////////////////////////////
+
+//------------------------------------------------------------------------------
+
+void iEntityWrapperTypeLight::AddReduxLink(eVariableType aType, int alBaseId, int alID, const tString& asName)
+{
+	cLightReduxLink link;
+	link.mType = aType;
+	link.mlBaseId = alBaseId;
+	link.mlReduxId = alID + LightReduxPropIdOffset;
+	link.mlSetId = mlNextReduxSetId++;
+	link.msReduxName = tString(hpl::kLightOverrideAttributePrefix) + asName;
+	mvReduxLinks.push_back(link);
+}
+
+//------------------------------------------------------------------------------
+
+// Value first, flag second -- see the comment on these helpers in the header.
+void iEntityWrapperTypeLight::AddLightFloat(int alID, const tString& asName, float afDefault)
+{
+	AddFloat(alID, asName, afDefault);
+	if(SupportsReduxOverrides()==false) return;
+	AddReduxLink(eVariableType_Float, alID, alID, asName);
+	const cLightReduxLink& link = mvReduxLinks.back();
+	AddFloat(link.mlReduxId, link.msReduxName, afDefault);
+	AddBool(link.mlSetId, link.msReduxName + "_Set", false, ePropCopyStep_PostEnt, false);
+}
+
+void iEntityWrapperTypeLight::AddLightBool(int alID, const tString& asName, bool abDefault)
+{
+	AddBool(alID, asName, abDefault);
+	if(SupportsReduxOverrides()==false) return;
+	AddReduxLink(eVariableType_Bool, alID, alID, asName);
+	const cLightReduxLink& link = mvReduxLinks.back();
+	AddBool(link.mlReduxId, link.msReduxName, abDefault);
+	AddBool(link.mlSetId, link.msReduxName + "_Set", false, ePropCopyStep_PostEnt, false);
+}
+
+void iEntityWrapperTypeLight::AddLightString(int alID, const tString& asName, const tString& asDefault)
+{
+	AddString(alID, asName, asDefault);
+	if(SupportsReduxOverrides()==false) return;
+	AddReduxLink(eVariableType_String, alID, alID, asName);
+	const cLightReduxLink& link = mvReduxLinks.back();
+	AddString(link.mlReduxId, link.msReduxName, asDefault);
+	AddBool(link.mlSetId, link.msReduxName + "_Set", false, ePropCopyStep_PostEnt, false);
+}
+
+void iEntityWrapperTypeLight::AddLightColor(int alID, const tString& asName, const cColor& aDefault)
+{
+	AddColor(alID, asName, aDefault);
+	if(SupportsReduxOverrides()==false) return;
+	AddReduxLink(eVariableType_Color, alID, alID, asName);
+	const cLightReduxLink& link = mvReduxLinks.back();
+	AddColor(link.mlReduxId, link.msReduxName, aDefault);
+	AddBool(link.mlSetId, link.msReduxName + "_Set", false, ePropCopyStep_PostEnt, false);
+}
+
+// Intensity, the reach, SourceRadius and FlickerOffIntensity exist only for the
+// ray-traced backend, so they get no retail half to fall back on.
+void iEntityWrapperTypeLight::AddReduxOnlyFloat(int alID, const tString& asName, float afDefault)
+{
+	AddReduxLink(eVariableType_Float, -1, alID, asName);
+	const cLightReduxLink& link = mvReduxLinks.back();
+	AddFloat(link.mlReduxId, link.msReduxName, afDefault);
+	AddBool(link.mlSetId, link.msReduxName + "_Set", false, ePropCopyStep_PostEnt, false);
+}
+
+//------------------------------------------------------------------------------
+
+const cLightReduxLink* iEntityWrapperTypeLight::GetReduxLinkByReduxId(eVariableType aType, int alID)
+{
+	for(size_t i=0; i<mvReduxLinks.size(); ++i)
+		if(mvReduxLinks[i].mlReduxId==alID && mvReduxLinks[i].mType==aType)
+			return &mvReduxLinks[i];
+	return NULL;
+}
+
+int iEntityWrapperTypeLight::GetReduxSetId(eVariableType aType, int alBaseId)
+{
+	for(size_t i=0; i<mvReduxLinks.size(); ++i)
+	{
+		const cLightReduxLink& link = mvReduxLinks[i];
+		if(link.mType!=aType) continue;
+		const int lKey = link.mlBaseId>=0 ? link.mlBaseId : link.mlReduxId - LightReduxPropIdOffset;
+		if(lKey==alBaseId) return link.mlSetId;
+	}
+	return -1;
+}
+
+//------------------------------------------------------------------------------
+
+const cLightReduxLink* iEntityWrapperTypeLight::GetReduxLinkBySetId(int alID)
+{
+	for(size_t i=0; i<mvReduxLinks.size(); ++i)
+		if(mvReduxLinks[i].mlSetId==alID)
+			return &mvReduxLinks[i];
+	return NULL;
 }
 
 //------------------------------------------------------------------------------
@@ -149,10 +251,18 @@ bool iEntityWrapperDataLight::Load(tinyxml2::XMLElement* apElement)
 {
 	bool bRet = iEntityWrapperData::Load(apElement);
 
-	// Same rules as cEngineFileLoading::LoadLight: an Overdrive light without a
-	// Radius reaches as far as its intensity and colour carry, and it never
-	// loads for the Standard renderer.
-	if(static_cast<iEntityWrapperTypeLight*>(mpType)->IsOverdrive())
+	iEntityWrapperTypeLight* pType = static_cast<iEntityWrapperTypeLight*>(mpType);
+
+	// Presence in the file IS the flag: a Re_ attribute that is not written is
+	// not authored, and the light falls back to its promoted retail value.
+	const tLightReduxLinkVec& vLinks = pType->GetReduxLinks();
+	for(size_t i=0; i<vLinks.size(); ++i)
+		SetBool(vLinks[i].mlSetId, apElement->Attribute(vLinks[i].msReduxName.c_str())!=NULL);
+
+	// Same rule as cEngineFileLoading::LoadLight: with no authored reach the
+	// light reaches as far as its intensity and colour carry it. The area light
+	// spells that reach "Radius", every other shape spells it "Re_Radius".
+	if(pType->IsRayTracedOnly())
 	{
 		const bool bRadiusDerived = apElement->Attribute("Radius")==NULL;
 		SetBool(eLightBool_RadiusDerived, bRadiusDerived);
@@ -161,7 +271,11 @@ bool iEntityWrapperDataLight::Load(tinyxml2::XMLElement* apElement)
 			const cColor color = GetColor(eLightCol_Diffuse);
 			SetFloat(eLightFloat_Radius, hpl::DeriveLightReach(GetFloat(eLightFloat_Intensity), color.r, color.g, color.b));
 		}
-		SetInt(eObjInt_RendererMask, GetInt(eObjInt_RendererMask) & static_cast<int>(hpl::kRendererMaskOverdrive));
+		SetInt(eObjInt_RendererMask, GetInt(eObjInt_RendererMask) & static_cast<int>(hpl::kRendererMaskRayTraced));
+	}
+	else if(pType->SupportsReduxOverrides())
+	{
+		SetBool(eLightBool_RadiusDerived, apElement->Attribute("Re_Radius")==NULL);
 	}
 
 	return bRet;
@@ -173,9 +287,20 @@ bool iEntityWrapperDataLight::SaveSpecific(tinyxml2::XMLElement* apElement)
 {
 	bool bRet = iEntityWrapperData::SaveSpecific(apElement);
 
+	iEntityWrapperTypeLight* pType = static_cast<iEntityWrapperTypeLight*>(mpType);
+
+	// Strip every override the light does not actually author, so a light that
+	// was never given Redux values round-trips exactly as it came in.
+	const tLightReduxLinkVec& vLinks = pType->GetReduxLinks();
+	for(size_t i=0; i<vLinks.size(); ++i)
+	{
+		if(GetBool(vLinks[i].mlSetId)==false)
+			apElement->DeleteAttribute(vLinks[i].msReduxName.c_str());
+	}
+
 	// A derived reach stays out of the file so it keeps following the intensity.
-	if(static_cast<iEntityWrapperTypeLight*>(mpType)->IsOverdrive() && GetBool(eLightBool_RadiusDerived))
-		apElement->DeleteAttribute("Radius");
+	if(GetBool(eLightBool_RadiusDerived))
+		apElement->DeleteAttribute(pType->IsRayTracedOnly() ? "Radius" : "Re_Radius");
 
 	return bRet;
 }
@@ -231,8 +356,236 @@ iEntityWrapperLight::~iEntityWrapperLight()
 
 //------------------------------------------------------------------------------
 
+//------------------------------------------------------------------------------
+
+//////////////////////////////////////////////////////////////////////////
+// RAY-TRACED OVERRIDES
+//////////////////////////////////////////////////////////////////////////
+
+//------------------------------------------------------------------------------
+
+bool iEntityWrapperLight::HasReduxOverride(eVariableType aType, int alBaseId)
+{
+	switch(aType)
+	{
+	case eVariableType_Float:	return mmapReduxFloat.find(alBaseId)!=mmapReduxFloat.end();
+	case eVariableType_Bool:	return mmapReduxBool.find(alBaseId)!=mmapReduxBool.end();
+	case eVariableType_String:	return mmapReduxStr.find(alBaseId)!=mmapReduxStr.end();
+	case eVariableType_Color:	return mmapReduxCol.find(alBaseId)!=mmapReduxCol.end();
+	default:					return false;
+	}
+}
+
+void iEntityWrapperLight::ClearReduxOverride(eVariableType aType, int alBaseId)
+{
+	switch(aType)
+	{
+	case eVariableType_Float:	mmapReduxFloat.erase(alBaseId); break;
+	case eVariableType_Bool:	mmapReduxBool.erase(alBaseId); break;
+	case eVariableType_String:	mmapReduxStr.erase(alBaseId); break;
+	case eVariableType_Color:	mmapReduxCol.erase(alBaseId); break;
+	default: break;
+	}
+}
+
+bool iEntityWrapperLight::HasAnyReduxOverride()
+{
+	return mmapReduxFloat.empty()==false || mmapReduxBool.empty()==false ||
+		   mmapReduxStr.empty()==false || mmapReduxCol.empty()==false;
+}
+
+//------------------------------------------------------------------------------
+
+// What the ray-traced backend uses when nothing is authored: the retail values,
+// promoted exactly as PromoteLegacyLightParameters does.
+float iEntityWrapperLight::GetEffectiveIntensity()
+{
+	if(IsRayTracedOnly()) return mfIntensity;
+	std::map<int,float>::iterator it = mmapReduxFloat.find(eLightFloat_Intensity);
+	return it!=mmapReduxFloat.end() ? it->second : mfRadius;
+}
+
+float iEntityWrapperLight::GetEffectiveReach()
+{
+	if(IsRayTracedOnly()) return mfRadius;
+	std::map<int,float>::iterator it = mmapReduxFloat.find(eLightFloat_Radius);
+	if(it!=mmapReduxFloat.end()) return it->second;
+	const cColor col = GetEffectiveDiffuseColor();
+	return hpl::DeriveLightReach(GetEffectiveIntensity(), col.r, col.g, col.b);
+}
+
+float iEntityWrapperLight::GetEffectiveSourceRadius()
+{
+	if(IsRayTracedOnly()) return mfSourceRadius;
+	std::map<int,float>::iterator it = mmapReduxFloat.find(eLightFloat_SourceRadius);
+	return it!=mmapReduxFloat.end() ? it->second : 0.0f;
+}
+
+float iEntityWrapperLight::GetEffectiveFlickerOffValue()
+{
+	if(IsRayTracedOnly()) return mfFlickerOffIntensity;
+	std::map<int,float>::iterator it = mmapReduxFloat.find(eLightFloat_FlickerOffIntensity);
+	return it!=mmapReduxFloat.end() ? it->second : mfFlickerOffRadius;
+}
+
+cColor iEntityWrapperLight::GetEffectiveDiffuseColor()
+{
+	if(UsesRayTracedLightClass())
+	{
+		std::map<int,cColor>::iterator it = mmapReduxCol.find(eLightCol_Diffuse);
+		if(it!=mmapReduxCol.end()) return it->second;
+	}
+	return mcolDiffuseColor;
+}
+
+//------------------------------------------------------------------------------
+
+// The value an unauthored override shows: the retail half for a shared
+// property, the promoted value for one the retail schema does not have.
+float iEntityWrapperLight::GetInheritedReduxFloat(const cLightReduxLink& aLink)
+{
+	if(aLink.mlBaseId>=0)
+	{
+		float fValue = 0.0f;
+		GetProperty(aLink.mlBaseId, fValue);
+		return fValue;
+	}
+
+	switch(aLink.mlReduxId - LightReduxPropIdOffset)
+	{
+	case eLightFloat_Intensity:				return GetEffectiveIntensity();
+	case eLightFloat_Radius:				return GetEffectiveReach();
+	case eLightFloat_SourceRadius:			return GetEffectiveSourceRadius();
+	case eLightFloat_FlickerOffIntensity:	return GetEffectiveFlickerOffValue();
+	default:								return 0.0f;
+	}
+}
+
+//------------------------------------------------------------------------------
+
+// Every Get/SetProperty overload runs this first. An override id reads the
+// authored value when there is one and the inherited value otherwise; a "_Set"
+// flag id reads and writes whether the override is authored at all.
+bool iEntityWrapperLight::GetReduxProperty(int alPropID, eVariableType aType, void* apOut)
+{
+	iEntityWrapperTypeLight* pType = static_cast<iEntityWrapperTypeLight*>(mpType);
+
+	if(aType==eVariableType_Bool)
+	{
+		const cLightReduxLink* pFlag = pType->GetReduxLinkBySetId(alPropID);
+		if(pFlag)
+		{
+			*static_cast<bool*>(apOut) = HasReduxOverride(pFlag->mType, pFlag->mlBaseId>=0
+				? pFlag->mlBaseId : pFlag->mlReduxId - LightReduxPropIdOffset);
+			return true;
+		}
+	}
+
+	const cLightReduxLink* pLink = pType->GetReduxLinkByReduxId(aType, alPropID);
+	if(pLink==NULL) return false;
+
+	const int lKey = pLink->mlBaseId>=0 ? pLink->mlBaseId : pLink->mlReduxId - LightReduxPropIdOffset;
+	switch(aType)
+	{
+	case eVariableType_Float:
+		{
+			std::map<int,float>::iterator it = mmapReduxFloat.find(lKey);
+			*static_cast<float*>(apOut) = it!=mmapReduxFloat.end() ? it->second
+																  : GetInheritedReduxFloat(*pLink);
+			break;
+		}
+	case eVariableType_Bool:
+		{
+			std::map<int,bool>::iterator it = mmapReduxBool.find(lKey);
+			if(it!=mmapReduxBool.end()) *static_cast<bool*>(apOut) = it->second;
+			else GetProperty(pLink->mlBaseId, *static_cast<bool*>(apOut));
+			break;
+		}
+	case eVariableType_String:
+		{
+			std::map<int,tString>::iterator it = mmapReduxStr.find(lKey);
+			if(it!=mmapReduxStr.end()) *static_cast<tString*>(apOut) = it->second;
+			else GetProperty(pLink->mlBaseId, *static_cast<tString*>(apOut));
+			break;
+		}
+	case eVariableType_Color:
+		{
+			std::map<int,cColor>::iterator it = mmapReduxCol.find(lKey);
+			if(it!=mmapReduxCol.end()) *static_cast<cColor*>(apOut) = it->second;
+			else GetProperty(pLink->mlBaseId, *static_cast<cColor*>(apOut));
+			break;
+		}
+	default:
+		return false;
+	}
+	return true;
+}
+
+//------------------------------------------------------------------------------
+
+bool iEntityWrapperLight::SetReduxProperty(int alPropID, eVariableType aType, const void* apValue)
+{
+	iEntityWrapperTypeLight* pType = static_cast<iEntityWrapperTypeLight*>(mpType);
+
+	if(aType==eVariableType_Bool)
+	{
+		const cLightReduxLink* pFlag = pType->GetReduxLinkBySetId(alPropID);
+		if(pFlag)
+		{
+			const int lKey = pFlag->mlBaseId>=0 ? pFlag->mlBaseId
+												: pFlag->mlReduxId - LightReduxPropIdOffset;
+			if(*static_cast<const bool*>(apValue))
+			{
+				// Seed a freshly enabled override with the value it inherits, so
+				// turning it on changes nothing until something is edited.
+				if(HasReduxOverride(pFlag->mType, lKey)==false)
+				{
+					switch(pFlag->mType)
+					{
+					case eVariableType_Float:	mmapReduxFloat[lKey] = GetInheritedReduxFloat(*pFlag); break;
+					case eVariableType_Bool:	{ bool b=false; GetProperty(pFlag->mlBaseId,b); mmapReduxBool[lKey]=b; break; }
+					case eVariableType_String:	{ tString v; GetProperty(pFlag->mlBaseId,v); mmapReduxStr[lKey]=v; break; }
+					case eVariableType_Color:	{ cColor c; GetProperty(pFlag->mlBaseId,c); mmapReduxCol[lKey]=c; break; }
+					default: break;
+					}
+				}
+			}
+			else
+			{
+				ClearReduxOverride(pFlag->mType, lKey);
+			}
+			ApplyLightValues();
+			return true;
+		}
+	}
+
+	const cLightReduxLink* pLink = pType->GetReduxLinkByReduxId(aType, alPropID);
+	if(pLink==NULL) return false;
+
+	const int lKey = pLink->mlBaseId>=0 ? pLink->mlBaseId : pLink->mlReduxId - LightReduxPropIdOffset;
+	switch(aType)
+	{
+	case eVariableType_Float:
+		mmapReduxFloat[lKey] = *static_cast<const float*>(apValue);
+		// Authoring a reach stops it following the intensity, as in the loader.
+		if(pLink->mlBaseId<0 && (pLink->mlReduxId - LightReduxPropIdOffset)==eLightFloat_Radius)
+			mbRadiusDerived = false;
+		break;
+	case eVariableType_Bool:	mmapReduxBool[lKey] = *static_cast<const bool*>(apValue); break;
+	case eVariableType_String:	mmapReduxStr[lKey] = *static_cast<const tString*>(apValue); break;
+	case eVariableType_Color:	mmapReduxCol[lKey] = *static_cast<const cColor*>(apValue); break;
+	default:					return false;
+	}
+	ApplyLightValues();
+	return true;
+}
+
+//------------------------------------------------------------------------------
+
 bool iEntityWrapperLight::GetProperty(int alPropID, cColor& aX)
 {
+	if(GetReduxProperty(alPropID, eVariableType_Color, &aX)) return true;
+
 	if(iEntityWrapper::GetProperty(alPropID, aX))
 		return true;
 
@@ -253,6 +606,8 @@ bool iEntityWrapperLight::GetProperty(int alPropID, cColor& aX)
 
 bool iEntityWrapperLight::GetProperty(int alPropID, float& afX)
 {
+	if(GetReduxProperty(alPropID, eVariableType_Float, &afX)) return true;
+
 	if(iEntityWrapper::GetProperty(alPropID, afX))
 		return true;
 
@@ -315,6 +670,8 @@ bool iEntityWrapperLight::GetProperty(int alPropID, int& alX)
 
 bool iEntityWrapperLight::GetProperty(int alPropID, tString& asX)
 {
+	if(GetReduxProperty(alPropID, eVariableType_String, &asX)) return true;
+
 	switch(alPropID)
 	{
 	case eLightStr_Gobo:
@@ -350,6 +707,8 @@ bool iEntityWrapperLight::GetProperty(int alPropID, tString& asX)
 
 bool iEntityWrapperLight::GetProperty(int alPropID, bool& abX)
 {
+	if(GetReduxProperty(alPropID, eVariableType_Bool, &abX)) return true;
+
 	switch(alPropID)
 	{
 	case eLightBool_FlickerActive:
@@ -379,6 +738,8 @@ bool iEntityWrapperLight::GetProperty(int alPropID, bool& abX)
 
 bool iEntityWrapperLight::SetProperty(int alPropID, const cColor& aX)
 {
+	if(SetReduxProperty(alPropID, eVariableType_Color, &aX)) return true;
+
 	switch(alPropID)
 	{
 	case eLightCol_Diffuse:
@@ -396,6 +757,8 @@ bool iEntityWrapperLight::SetProperty(int alPropID, const cColor& aX)
 
 bool iEntityWrapperLight::SetProperty(int alPropID, const float& afX)
 {
+	if(SetReduxProperty(alPropID, eVariableType_Float, &afX)) return true;
+
 	switch(alPropID)
 	{
 	case eLightFloat_Intensity:
@@ -454,6 +817,8 @@ bool iEntityWrapperLight::SetProperty(int alPropID, const int& aX)
 
 bool iEntityWrapperLight::SetProperty(int alPropID, const tString& asX)
 {
+	if(SetReduxProperty(alPropID, eVariableType_String, &asX)) return true;
+
 	switch(alPropID)
 	{
 	case eLightStr_Gobo:
@@ -490,6 +855,8 @@ bool iEntityWrapperLight::SetProperty(int alPropID, const tString& asX)
 
 bool iEntityWrapperLight::SetProperty(int alPropID, const bool& abX)
 {
+	if(SetReduxProperty(alPropID, eVariableType_Bool, &abX)) return true;
+
 	switch(alPropID)
 	{
 	case eLightBool_FlickerActive:
@@ -542,9 +909,11 @@ void iEntityWrapperLight::SetShadowsAffectDynamic(bool abX)
 
 //------------------------------------------------------------------------------
 
-bool iEntityWrapperLight::UsesOverdriveLightClass()
+bool iEntityWrapperLight::UsesRayTracedLightClass()
 {
-	if(IsOverdrive()) return true;
+	// The area light has no legacy class; the box light has no ray-traced one.
+	if(IsRayTracedOnly()) return true;
+	if(static_cast<iEntityWrapperTypeLight*>(mpType)->IsStandardOnly()) return false;
 	cWorld* pWorld = GetEditorWorld()->GetWorld();
 	return pWorld->GetRendererBackend() != eRendererBackend_Standard;
 }
@@ -562,7 +931,10 @@ bool iEntityWrapperLight::IsLitByEditorRenderer()
 
 cColor iEntityWrapperLight::GetIconTint()
 {
-	cColor col = IsOverdrive() ? cColor(0.45f, 0.7f, 1.0f, 1.0f) : cColor(1.0f, 0.75f, 0.4f, 1.0f);
+	// Cool once the light carries ray-traced overrides, warm while both backends
+	// read the same authored values.
+	cColor col = HasAnyReduxOverride() ? cColor(0.45f, 0.7f, 1.0f, 1.0f)
+									   : cColor(1.0f, 0.75f, 0.4f, 1.0f);
 	if(IsLitByEditorRenderer()==false)
 	{
 		col.r *= 0.4f; col.g *= 0.4f; col.b *= 0.4f;
@@ -572,34 +944,75 @@ cColor iEntityWrapperLight::GetIconTint()
 
 //------------------------------------------------------------------------------
 
+// The engine light carries BOTH backends' tuning, so the editor writes both and
+// lets the world's backend decide which one is previewed. That also means
+// toggling the editor's backend re-lights the viewport without a reload.
 void iEntityWrapperLight::ApplyLightValues()
 {
 	iLight* pLight = (iLight*)mpEngineEntity->GetEntity();
 
-	if(IsOverdrive())
+	if(IsRayTracedOnly())
 	{
+		// The area light has no retail half: its plain values ARE the
+		// ray-traced ones.
 		if(mbRadiusDerived)
 			mfRadius = hpl::DeriveLightReach(mfIntensity, mcolDiffuseColor.r, mcolDiffuseColor.g, mcolDiffuseColor.b);
-		pLight->SetReachFollowsIntensity(mbRadiusDerived);
-		pLight->SetIntensity(mfIntensity);
-		pLight->SetRadius(mfRadius);
-		pLight->SetSourceRadius(mfSourceRadius);
+
+		hpl::cLightTuningState rayTraced;
+		rayTraced.mfIntensity = mfIntensity;
+		rayTraced.mfOnValue = mfIntensity;
+		rayTraced.mfReach = mfRadius;
+		rayTraced.mfSourceRadius = mfSourceRadius;
+		rayTraced.mbReachFollowsIntensity = mbRadiusDerived;
+		rayTraced.mfOffValue = mfFlickerOffIntensity;
+		rayTraced.mDiffuseColor = mcolDiffuseColor;
+		rayTraced.mDefaultDiffuseColor = mcolDiffuseColor;
+		rayTraced.mbCastShadows = mbCastShadows;
+		rayTraced.mbAuthored = true;
+		pLight->SetTuning(hpl::eLightModel_RayTraced, rayTraced);
+
+		hpl::cLightTuningState absent;
+		absent.mbPresent = false;
+		pLight->SetTuning(hpl::eLightModel_Legacy, absent);
+		return;
 	}
-	else if(pLight->GetLightModel() == eLightModel_Overdrive)
+
+	// Retail half: what the Standard renderer reads.
+	hpl::cLightTuningState standard;
+	standard.mfReach = mfRadius;
+	standard.mfOnValue = mfRadius;
+	standard.mfIntensity = mfRadius;
+	standard.mfOffValue = mfFlickerOffRadius;
+	standard.mDiffuseColor = mcolDiffuseColor;
+	standard.mDefaultDiffuseColor = mcolDiffuseColor;
+	standard.mbCastShadows = mbCastShadows;
+	standard.mbAuthored = true;
+	pLight->SetTuning(hpl::eLightModel_Legacy, standard);
+
+	if(static_cast<iEntityWrapperTypeLight*>(mpType)->IsStandardOnly())
 	{
-		// A legacy light previewed in an Overdrive editor is promoted the way
-		// the game promotes it (PromoteLegacyLightParameters).
-		pLight->SetIntensity(mfRadius);
-		pLight->SetRadius(hpl::DeriveLightReach(mfRadius, mcolDiffuseColor.r, mcolDiffuseColor.g, mcolDiffuseColor.b));
-		pLight->SetSourceRadius(0.0f);
-		pLight->SetReachFollowsIntensity(true);
+		// A box light has no ray-traced representation at all.
+		hpl::cLightTuningState absent;
+		absent.mbPresent = false;
+		pLight->SetTuning(hpl::eLightModel_RayTraced, absent);
+		return;
 	}
-	else
-	{
-		// SetRadius is virtual on the runtime light, so spotlights also rebuild
-		// their frustum and bounding volume here.
-		pLight->SetRadius(mfRadius);
-	}
+
+	// Redux half: the authored Re_ values where the light has them, otherwise
+	// the retail radius promoted exactly as the loader promotes it.
+	hpl::cLightTuningState rayTraced;
+	rayTraced.mfIntensity = GetEffectiveIntensity();
+	rayTraced.mfOnValue = rayTraced.mfIntensity;
+	rayTraced.mfReach = GetEffectiveReach();
+	rayTraced.mfSourceRadius = GetEffectiveSourceRadius();
+	rayTraced.mbReachFollowsIntensity =
+		HasReduxOverride(eVariableType_Float, eLightFloat_Radius)==false;
+	rayTraced.mfOffValue = GetEffectiveFlickerOffValue();
+	rayTraced.mDiffuseColor = GetEffectiveDiffuseColor();
+	rayTraced.mDefaultDiffuseColor = rayTraced.mDiffuseColor;
+	rayTraced.mbCastShadows = mbCastShadows;
+	rayTraced.mbAuthored = HasAnyReduxOverride();
+	pLight->SetTuning(hpl::eLightModel_RayTraced, rayTraced);
 }
 
 //------------------------------------------------------------------------------
@@ -625,14 +1038,16 @@ void iEntityWrapperLight::SetRadius(float afRadius)
 
 void iEntityWrapperLight::SetRendererMask(int alMask)
 {
-	iEntityWrapper::SetRendererMask(IsOverdrive() ? (alMask & static_cast<int>(hpl::kRendererMaskOverdrive)) : alMask);
+	// Only the area light is pinned to one renderer; a merged light loads on
+	// both and picks its values from the backend in play.
+	iEntityWrapper::SetRendererMask(IsRayTracedOnly() ? (alMask & static_cast<int>(hpl::kRendererMaskRayTraced)) : alMask);
 }
 
 //------------------------------------------------------------------------------
 
 void iEntityWrapperLight::SetRadiusDerived(bool abX)
 {
-	mbRadiusDerived = abX && IsOverdrive();
+	mbRadiusDerived = abX && (IsRayTracedOnly() || SupportsReduxOverrides());
 
 	ApplyLightValues();
 }

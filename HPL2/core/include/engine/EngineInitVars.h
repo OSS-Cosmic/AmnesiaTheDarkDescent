@@ -57,7 +57,8 @@ namespace hpl {
 				mbVsync(false),
 				msWindowCaption(""),
 				mvWindowPosition(-1),
-				mRendererBackend(eRendererBackend_Overdrive)
+				mRendererBackend(eRendererBackend_RayTraced),
+				mbAllowRuntimeBackendSwitch(false)
 			{}
 
 			cVector2l mvScreenSize;
@@ -68,6 +69,11 @@ namespace hpl {
 			tString msWindowCaption;
 			cVector2l mvWindowPosition;
 			eRendererBackend mRendererBackend;
+			// Editors only: bring the device up ray-tracing-capable whenever
+			// the adapter allows it and build both lit renderers, so the
+			// backend can be switched from the viewport menu without a
+			// restart. The game leaves this false.
+			bool mbAllowRuntimeBackendSwitch;
 		};
 		cGraphicsVars mGraphics;
 		

@@ -66,6 +66,7 @@ project "TemporalCameraTests"
         ROOT .. "/HPL2/core/sources/graphics/BlockCompressionDecode.cpp",
         ROOT .. "/HPL2/core/sources/graphics/RIFormat.c",
         ROOT .. "/HPL2/core/sources/graphics/StandardShadowCull.cpp",
+        ROOT .. "/HPL2/core/sources/graphics/RendererBackendSwitch.cpp",
     }
     -- StandardShadowCull.cpp shares its predicates with the cull compute shader
     -- through amnesia/slang/StandardCull.h, and the frustum test compares itself
@@ -88,6 +89,41 @@ project "TemporalCameraTests"
         dependson { "Amnesia" }
         add_python_test_postbuild()
     end
+
+-- The merged light element: one object carries the retail attributes plus the
+-- ray-traced "Re_" overrides. LightParameters.cpp links nothing (no engine, no
+-- GPU), so the element table, the class choice and the three parameter
+-- resolvers get their own headless project.
+project "LightParametersTests"
+    kind "ConsoleApp"
+    language "C++"
+    objdir (BUILD_OUT .. "/obj/%{prj.name}/%{cfg.buildcfg}")
+    targetdir (BUILD_OUT .. "/tests/%{cfg.buildcfg}")
+    files {
+        ROOT .. "/tests/scene/*.cpp",
+        ROOT .. "/HPL2/core/sources/scene/LightParameters.cpp",
+    }
+    includedirs { ROOT .. "/HPL2/core/include" }
+    add_utest()
+    add_test_postbuild()
+
+-- The View > Render mode submenu stopped being indexed by eRenderer once the
+-- lit renderer gained one entry per backend. EditorRenderMode.h is header-only
+-- and links nothing (no engine, no GUI), so the item<->(renderer, backend)
+-- mapping - including how a pre-split layout's RenderMode int resolves - gets
+-- its own headless project.
+project "EditorRenderModeTests"
+    kind "ConsoleApp"
+    language "C++"
+    objdir (BUILD_OUT .. "/obj/%{prj.name}/%{cfg.buildcfg}")
+    targetdir (BUILD_OUT .. "/tests/%{cfg.buildcfg}")
+    files { ROOT .. "/tests/editors/*.cpp" }
+    includedirs {
+        ROOT .. "/HPL2/core/include",
+        ROOT .. "/HPL2/tools/editors/common",
+    }
+    add_utest()
+    add_test_postbuild()
 
 project "ParticleScheduleTests"
     kind "ConsoleApp"

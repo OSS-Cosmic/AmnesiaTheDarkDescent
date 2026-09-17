@@ -33,7 +33,7 @@ cIconEntityLightBox::cIconEntityLightBox(iEntityWrapper* apParent) : iIconEntity
 
 bool cIconEntityLightBox::Create(const tString& asName)
 {
-	// Box lights exist only as the legacy class; the Overdrive renderer ignores them.
+	// Box lights exist only as the legacy class; the ray-traced renderer ignores them.
 	cWorld* pWorld = mpParent->GetEditorWorld()->GetWorld();
 	mpEntity = pWorld->CreateLightBoxLegacy(asName);
 
@@ -42,7 +42,7 @@ bool cIconEntityLightBox::Create(const tString& asName)
 
 //---------------------------------------------------------------------------
 
-cEntityWrapperTypeLightBox::cEntityWrapperTypeLightBox() : iEntityWrapperTypeLight("BoxLight", eEditorEntityLightType_Box, false)
+cEntityWrapperTypeLightBox::cEntityWrapperTypeLightBox() : iEntityWrapperTypeLight("BoxLight", eEditorEntityLightType_Box, eLightSchema_StandardOnly)
 {
 	mScaleType = eScaleType_Normal;
 

@@ -48,6 +48,50 @@ namespace hpl {
         return DeriveReach(afIntensity, afRed, afGreen, afBlue);
     }
 
+    float ResolveLightLevelValue(float afOn, float afOff, float afLevel)
+    {
+        const float fOn = FiniteOr(afOn, 0.0f);
+        const float fOff = FiniteOr(afOff, 0.0f);
+        const float fLevel = FiniteOr(afLevel, 0.0f);
+        // The value is clamped, not the level: a fade that passes through zero
+        // reads as invisible and then comes back, and a level above 1 is a
+        // legitimate script overdrive. The product can still overflow when a
+        // caller hands in a huge level, so the result is guarded too.
+        return std::max(FiniteOr(fOff + fLevel * (fOn - fOff), 0.0f), 0.0f);
+    }
+
+    bool DeriveLightColorScale(float afAuthored, float afWanted, float *apScaleOut)
+    {
+        const float fAuthored = FiniteOr(afAuthored, 0.0f);
+        const float fWanted = FiniteOr(afWanted, 0.0f);
+
+        if(fAuthored > 0.0f)
+        {
+            if(apScaleOut) *apScaleOut = fWanted / fAuthored;
+            return true;
+        }
+        // Authored dark and asked for dark: a zero scale says so exactly.
+        if(fWanted <= 0.0f)
+        {
+            if(apScaleOut) *apScaleOut = 0.0f;
+            return true;
+        }
+        return false;
+    }
+
+    bool DeriveLightLevel(float afOn, float afOff, float afValue, float *apLevelOut)
+    {
+        const float fOn = FiniteOr(afOn, 0.0f);
+        const float fOff = FiniteOr(afOff, 0.0f);
+        const float fRange = fOn - fOff;
+        // No range: a light authored dark, or one whose flicker goes nowhere.
+        // There is no ratio to preserve, so the caller re-authors instead.
+        if(std::fabs(fRange) <= std::numeric_limits<float>::epsilon()) return false;
+
+        if(apLevelOut) *apLevelOut = (FiniteOr(afValue, 0.0f) - fOff) / fRange;
+        return true;
+    }
+
     float DeriveLightIntensityForReach(float afReach, float afRed, float afGreen, float afBlue)
     {
         if(!(afReach > 0.0f)) return 0.0f;
@@ -61,16 +105,13 @@ namespace hpl {
 
     cLightElementInfo GetLightElementInfo(const char *asTag)
     {
-        struct Entry { const char *mpTag; eLightElementShape mShape; bool mbOverdrive; };
+        struct Entry { const char *mpTag; eLightElementShape mShape; bool mbRayTracedOnly; };
         static constexpr Entry kEntries[] = {
             {"PointLight", eLightElementShape_Point, false},
             {"SpotLight", eLightElementShape_Spot, false},
             {"BoxLight", eLightElementShape_Box, false},
-            {"Re_PointLight", eLightElementShape_Point, true},
-            {"Re_SpotLight", eLightElementShape_Spot, true},
-            {"Re_AreaLight", eLightElementShape_Area, true},
-            // Area lights never had a legacy class; the pre-split element name
-            // keeps loading as the Overdrive area light.
+            // Area lights never had a legacy class, so their unprefixed
+            // attributes are the ray-traced schema.
             {"AreaLight", eLightElementShape_Area, true},
         };
         cLightElementInfo info;
@@ -81,7 +122,7 @@ namespace hpl {
             {
                 info.mbValid = true;
                 info.mShape = entry.mShape;
-                info.mbOverdrive = entry.mbOverdrive;
+                info.mbRayTracedOnly = entry.mbRayTracedOnly;
                 return info;
             }
         }
@@ -90,7 +131,7 @@ namespace hpl {
 
     unsigned int GetDefaultLightRendererMask(const cLightElementInfo &aInfo)
     {
-        return aInfo.mbOverdrive ? kRendererMaskOverdrive : kRendererMaskAll;
+        return aInfo.mbRayTracedOnly ? kRendererMaskRayTraced : kRendererMaskAll;
     }
 
     cLegacyLightParameters ResolveLegacyLightParameters(const cLegacyLightInput &aInput,
@@ -100,14 +141,12 @@ namespace hpl {
         // Authored retail values are kept verbatim.
         result.mfRadius = aInput.mbHasRadius ? aInput.mfRadius : afDefaultRadius;
         result.mfFlickerOffRadius = aInput.mbHasFlickerOffRadius ? aInput.mfFlickerOffRadius : 0.0f;
-        result.mlRendererMask = aInput.mbHasRendererMask
-            ? SanitizeRendererMask(aInput.mlRendererMask) : kRendererMaskAll;
         return result;
     }
 
-    cOverdriveLightParameters ResolveOverdriveLightParameters(const cOverdriveLightInput &aInput)
+    cRayTracedLightParameters ResolveRayTracedLightParameters(const cRayTracedLightInput &aInput)
     {
-        cOverdriveLightParameters result;
+        cRayTracedLightParameters result;
         result.mfIntensity = FiniteOr(aInput.mbHasIntensity ? aInput.mfIntensity : 1.0f, 0.0f);
         result.mfRadius = aInput.mbHasRadius
             ? FiniteOr(aInput.mfRadius, 0.0f)
@@ -115,31 +154,28 @@ namespace hpl {
         result.mfSourceRadius = aInput.mbHasSourceRadius ? FiniteOr(aInput.mfSourceRadius, 0.0f) : 0.0f;
         result.mfFlickerOffIntensity = aInput.mbHasFlickerOffIntensity
             ? FiniteOr(aInput.mfFlickerOffIntensity, 0.0f) : 0.0f;
-        if(aInput.mbHasRendererMask)
-        {
-            const unsigned int mask = SanitizeRendererMask(aInput.mlRendererMask);
-            result.mbStrippedStandardBit = (mask & kRendererMaskStandard) != 0u;
-            result.mlRendererMask = mask & kRendererMaskOverdrive;
-        }
         return result;
     }
 
-    cOverdriveLightParameters PromoteLegacyLightParameters(const cLegacyLightParameters &aLegacy,
+    cRayTracedLightParameters PromoteLegacyLightParameters(const cLegacyLightParameters &aLegacy,
                                                            float afRed, float afGreen, float afBlue)
     {
-        cOverdriveLightParameters result;
+        cRayTracedLightParameters result;
         result.mfIntensity = FiniteOr(aLegacy.mfRadius, 0.0f);
         result.mfRadius = DeriveReach(result.mfIntensity, afRed, afGreen, afBlue);
         result.mfSourceRadius = 0.0f;
         result.mfFlickerOffIntensity = FiniteOr(aLegacy.mfFlickerOffRadius, 0.0f);
-        result.mlRendererMask = SanitizeRendererMask(aLegacy.mlRendererMask) & kRendererMaskOverdrive;
         return result;
     }
 
-    bool ShouldPromoteLegacyLight(const cLightElementInfo &aInfo, unsigned int alMask,
-                                  bool abOverdriveBackend)
+    bool ShouldUseRayTracedLightClass(const cLightElementInfo &aInfo, unsigned int alMask,
+                                      bool abRayTracedBackend)
     {
-        return aInfo.mbValid && !aInfo.mbOverdrive && aInfo.mShape != eLightElementShape_Box &&
-               abOverdriveBackend && (SanitizeRendererMask(alMask) & kRendererMaskOverdrive) != 0u;
+        if(aInfo.mbValid==false) return false;
+        // The area light has no legacy class, so it is always the ray-traced one.
+        if(aInfo.mbRayTracedOnly) return true;
+        // Box lights have no ray-traced class at all.
+        return aInfo.mShape != eLightElementShape_Box && abRayTracedBackend &&
+               (SanitizeRendererMask(alMask) & kRendererMaskRayTraced) != 0u;
     }
 }

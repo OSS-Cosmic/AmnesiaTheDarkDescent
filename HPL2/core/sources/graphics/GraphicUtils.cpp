@@ -22,6 +22,7 @@
 #include <cmath>
 
 #include "graphics/Renderable.h"
+#include "graphics/RendererMask.h"
 #include "math/BoundingVolume.h"
 #include "math/Frustum.h"
 #include "math/Math.h"
@@ -30,8 +31,22 @@
 namespace hpl {
 	namespace rendering {
 
+		namespace {
+			// Both bits by default: until a renderer says otherwise, nothing is
+			// masked out. Tools that never set it keep seeing every object.
+			unsigned gActiveRendererMaskBit = kRendererMaskAll;
+		}
+
+		void SetActiveRendererMaskBit(unsigned alBit) { gActiveRendererMaskBit = alBit; }
+		unsigned GetActiveRendererMaskBit() { return gActiveRendererMaskBit; }
+
 		bool IsObjectIsVisible(iRenderable* apObject, tRenderableFlag neededFlags, std::span<cPlanef> clipPlanes) {
 			if (apObject->IsVisible() == false)
+				return false;
+
+			// Authored for the other renderer. The object still exists, still
+			// has its bounds and its physics -- it just does not draw here.
+			if ((apObject->GetRendererMask() & gActiveRendererMaskBit) == 0)
 				return false;
 
 			if ((apObject->GetRenderFlags() & neededFlags) != neededFlags)

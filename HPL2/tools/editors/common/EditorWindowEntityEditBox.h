@@ -88,7 +88,7 @@ protected:
 	cEditorInputText* mpInpTag;
 	cEditorInputBool* mpInpActive;
 	cEditorInputBool* mpInpRendererStandard;
-	cEditorInputBool* mpInpRendererOverdrive;
+	cEditorInputBool* mpInpRendererRayTraced;
 
 	cEditorInputVec3* mpInpPosition;
 	cEditorInputVec3* mpInpScale;

@@ -129,7 +129,7 @@ const static char *DefaultDeviceExtension[] = {
     VK_KHR_FRAGMENT_SHADER_BARYCENTRIC_EXTENSION_NAME,
 };
 
-// Only enabled in RENDERER_CAPABILITY_OVERDRIVE. Also the definition of a
+// Only enabled in RENDERER_CAPABILITY_RAYTRACED. Also the definition of a
 // "ray tracing extension" when screening XeSS requirements in raster mode.
 const static char *RayTracingDeviceExtension[] = {
     VK_KHR_RAY_QUERY_EXTENSION_NAME,
@@ -930,7 +930,7 @@ int RIDevice::init(struct RIDeviceDesc *init) {
   int riResult = RI_SUCCESS;
   struct RIPhysicalAdapter *physicalAdapter = init->physicalAdapter;
   const RendererCapabilityMode_e capabilityMode =
-      init->requestRayTracing ? RENDERER_CAPABILITY_OVERDRIVE
+      init->requestRayTracing ? RENDERER_CAPABILITY_RAYTRACED
                               : RENDERER_CAPABILITY_RASTER;
   hpl::cXessVulkanSupport &xessSupport =
       hpl::XessVulkanSupportInstance();
@@ -1240,7 +1240,7 @@ int RIDevice::init(struct RIDeviceDesc *init) {
         arrpush(enabledExtensionNames, DefaultDeviceExtension[idx]);
       }
     }
-    if (capabilityMode == RENDERER_CAPABILITY_OVERDRIVE) {
+    if (capabilityMode == RENDERER_CAPABILITY_RAYTRACED) {
       for (size_t idx = 0; idx < ARRAY_COUNT(RayTracingDeviceExtension); idx++) {
         if (__VK_SupportExtension(extensionProperties, extensionNum,
                                   qCToStrRef(RayTracingDeviceExtension[idx]))) {
@@ -1759,13 +1759,13 @@ int RIDevice::init(struct RIDeviceDesc *init) {
     // These flags describe the feature bits actually submitted to Vulkan,
     // rather than physical-adapter advertisements or a failed attempt.
     device->accelerationStructureEnabled =
-        capabilityMode == RENDERER_CAPABILITY_OVERDRIVE &&
+        capabilityMode == RENDERER_CAPABILITY_RAYTRACED &&
         accelerationStructureFeatures.accelerationStructure != VK_FALSE;
     device->rayTracingPipelineEnabled =
-        capabilityMode == RENDERER_CAPABILITY_OVERDRIVE &&
+        capabilityMode == RENDERER_CAPABILITY_RAYTRACED &&
         rayTracingPipelineFeatures.rayTracingPipeline != VK_FALSE;
     device->rayQueryEnabled =
-        capabilityMode == RENDERER_CAPABILITY_OVERDRIVE &&
+        capabilityMode == RENDERER_CAPABILITY_RAYTRACED &&
         rayQueryFeatures.rayQuery != VK_FALSE;
     device->fragmentShaderBarycentricEnabled =
         __VK_isExtensionNamesSupported(

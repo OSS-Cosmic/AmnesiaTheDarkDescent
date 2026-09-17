@@ -256,7 +256,7 @@ namespace hpl {
 		static bool GetDeltasEnabled(){ return mbDeltasEnabled ;}
 
 		// Skip map/entity objects whose RendererMask excludes the running backend,
-		// so a Standard/Overdrive pair sharing one name loads as one object.
+		// so a Standard/ray-traced pair sharing one name loads as one object.
 		// Off by default so the editors keep both halves of a pair editable; the
 		// game turns it on at startup.
 		static void SetRendererMaskFilterEnabled(bool abX){ mbRendererMaskFilterEnabled = abX;}

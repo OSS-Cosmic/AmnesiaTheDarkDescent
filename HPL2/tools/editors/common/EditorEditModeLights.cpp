@@ -128,7 +128,6 @@ bool cEditorEditModeLights::SetUpCreationData(iEntityWrapperData* apData)
 			break;
 		}
 	case eEditorEntityLightType_Point:
-	case eEditorEntityLightType_OverdrivePoint:
 		{
 			cSphereCreator* pCreator = (cSphereCreator*)mpCurrentCreator;
 			apData->SetVec3f(eObjVec3f_Position, pCreator->GetSphereCenter());
@@ -159,6 +158,8 @@ iEditorWindow* cEditorEditModeLights::CreateSpecificWindow()
 
 void cEditorEditModeLights::CreateTypes()
 {
+	// One type per shape, indexed by eEditorEntityLightType: a light carries its
+	// retail values and its ray-traced overrides on the same object.
 	mvTypes.push_back(hplNew(cEntityWrapperTypeLightPoint,()));
 	mvShapeCreators.push_back(hplNew(cSphereCreator,(this)));
 
@@ -166,13 +167,6 @@ void cEditorEditModeLights::CreateTypes()
 	mvShapeCreators.push_back(NULL);
 
 	mvTypes.push_back(hplNew(cEntityWrapperTypeLightArea,()));
-	mvShapeCreators.push_back(NULL);
-
-	// Indexed by eEditorEntityLightType.
-	mvTypes.push_back(hplNew(cEntityWrapperTypeLightPoint,(true)));
-	mvShapeCreators.push_back(hplNew(cSphereCreator,(this)));
-
-	mvTypes.push_back(hplNew(cEntityWrapperTypeLightSpot,(true)));
 	mvShapeCreators.push_back(NULL);
 
 	mvTypes.push_back(hplNew(cEntityWrapperTypeLightBox,()));

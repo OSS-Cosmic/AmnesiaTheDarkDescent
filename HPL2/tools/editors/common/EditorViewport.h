@@ -250,6 +250,7 @@ public:
 	// Engine specific funcs
 	cViewport* GetEngineViewport() { return mpEngineViewport; }
 	void SetRenderMode(eRenderer aRenderMode);
+	eRenderer GetRenderMode() const { return mRenderMode; }
 	void SetEngineViewportPositionAndSize(const cVector2l& avPos, const cVector2l& avSize);
 	void SetEngineViewportSize(const cVector2l& avSize);
 	void UpdateViewport();

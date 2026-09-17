@@ -90,6 +90,7 @@ protected:
 	// Debug Controls
 	cWidgetGroup* mpDebugControlsGroup;
 	cWidgetButton* mpBShadowFlag;
+	void ApplyShadowFlagOverlay();
 
 	// Camera controls
 	cWidgetDummy* mpHandleCamera;

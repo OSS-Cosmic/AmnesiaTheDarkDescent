@@ -111,7 +111,7 @@ namespace hpl {
 	//-----------------------------------------------------------------------
 
 	// Renderers an object loads for: its RendererMask attribute, else the light
-	// element default (Overdrive lights load only on Overdrive), else all.
+	// element default (ray-traced lights load only on that backend), else all.
 	static unsigned int GetElementRendererMask(const tinyxml2::XMLElement* apElement)
 	{
 		if(apElement->Attribute("RendererMask"))
@@ -192,7 +192,7 @@ namespace hpl {
 		// True when apNew may share asName with the objects already using it: it
 		// carries an explicit RendererMask, and no renderer it loads for ends up
 		// with the name more often than the base document had it. The original
-		// kept for Standard and its replacement added for Overdrive load as one
+		// kept for Standard and its replacement added for ray-traced load as one
 		// object per backend, so the name stays unambiguous at runtime; a name the
 		// base file already used twice may stay at two. Masks are read as they
 		// are when the object is added, so the <Modify> that narrows the original
@@ -240,7 +240,7 @@ namespace hpl {
 			const size_t lAllowed = std::max<size_t>(mmapBaseNameCounts[sLowerName], 1);
 			const unsigned int lMask = GetElementRendererMask(apObject);
 
-			static const unsigned int vBits[] = { kRendererMaskStandard, kRendererMaskOverdrive };
+			static const unsigned int vBits[] = { kRendererMaskStandard, kRendererMaskRayTraced };
 			for(size_t i=0; i<sizeof(vBits)/sizeof(vBits[0]); ++i)
 			{
 				if((lMask & vBits[i])==0) continue;

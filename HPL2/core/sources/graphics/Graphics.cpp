@@ -20,6 +20,7 @@
  */
 
 #include "graphics/Graphics.h"
+#include "graphics/RendererBackendSwitch.h"
 
 #include "engine/EngineTypes.h"
 #include "engine/Updateable.h"
@@ -129,13 +130,17 @@ void cGraphics::DestroyRenderObjects() {
 
   STLDeleteAll(mvPostEffectTypes);
 
-  for (size_t i = 0; i < mvRenderers.size(); ++i) {
-    if (mvRenderers[i]) {
-      mvRenderers[i]->DestroyData();
-      hplDelete(mvRenderers[i]);
+  // mvOwnedRenderers owns them; mvRenderers only points at them.
+  for (size_t i = 0; i < mvOwnedRenderers.size(); ++i) {
+    if (mvOwnedRenderers[i]) {
+      mvOwnedRenderers[i]->DestroyData();
+      hplDelete(mvOwnedRenderers[i]);
     }
   }
+  mvOwnedRenderers.clear();
   mvRenderers.clear();
+  for (int i = 0; i < eRendererBackend_LastEnum; ++i)
+    mLitRenderers[i] = NULL;
 
   // Before the managed set, and after the waitIdle above — the probe's readback
   // copies are recorded into the frame command buffers being retired here.
@@ -193,9 +198,10 @@ void cGraphics::Init(const cEngineInitVars::cGraphicsVars &aVars,
   m_requestedVsync = aVars.mbVsync;
 
   mRendererBackend = aVars.mRendererBackend;
-  if (mRendererBackend != eRendererBackend_Standard && mRendererBackend != eRendererBackend_Overdrive) {
-    mRendererBackend = eRendererBackend_Overdrive;
+  if (mRendererBackend != eRendererBackend_Standard && mRendererBackend != eRendererBackend_RayTraced) {
+    mRendererBackend = eRendererBackend_RayTraced;
   }
+  mbRuntimeBackendSwitchAllowed = aVars.mbAllowRuntimeBackendSwitch;
 
   Log("Initializing Graphics Module\n");
   Log("--------------------------------------------------------\n");
@@ -278,18 +284,36 @@ void cGraphics::Init(const cEngineInitVars::cGraphicsVars &aVars,
         physicalAdapters[selectedAdapterIdx];
     struct RIDeviceDesc deviceInit = {0};
     deviceInit.physicalAdapter = &physicalAdapters[selectedAdapterIdx];
-    // Only Overdrive needs hardware ray tracing; Standard's raster shaders use
+    // Only the ray-traced backend needs hardware ray tracing; Standard's raster shaders use
     // no ray query or acceleration structure, so it runs on any Vulkan GPU.
+    // Always ask for an RT-capable device when the adapter can give one, even
+    // when starting on Standard: the device's capability mode is fixed for the
+    // session, so this is what lets the backend change later without
+    // recreating the device, the swapchain, the global bindless set and every
+    // RIProgram. The ray-traced WORK stays gated on the active backend
+    // (cWorld::BuildTlas), so a Standard session pays for the capability, not
+    // for acceleration structures nothing reads.
+    const bool bAdapterCanRayTrace = selectedAdapter.rayTracingTier >= 1 &&
+                                     selectedAdapter.isRayQuerySupported;
     deviceInit.requestRayTracing =
-        (mRendererBackend == eRendererBackend_Overdrive) ? 1 : 0;
+        (mRendererBackend == eRendererBackend_RayTraced || bAdapterCanRayTrace) ? 1 : 0;
     int deviceResult = device.init(&deviceInit);
-    bool overdriveFallback = false;
+    bool raytracedFallback = false;
     if (deviceResult != RI_SUCCESS && deviceInit.requestRayTracing) {
-      Log("Renderer backend: ray tracing unsupported on '%s', falling back to "
-          "Standard\n",
-          selectedAdapter.name);
-      mRendererBackend = eRendererBackend_Standard;
-      overdriveFallback = true;
+      // The RT device failed. Only the active backend that NEEDS it falls back;
+      // an editor that merely wanted the option keeps the backend it asked for
+      // and loses the switch.
+      if (mRendererBackend == eRendererBackend_RayTraced) {
+        Log("Renderer backend: ray tracing unsupported on '%s', falling back to "
+            "Standard\n",
+            selectedAdapter.name);
+        mRendererBackend = eRendererBackend_Standard;
+        raytracedFallback = true;
+      } else {
+        Log("Renderer backend: ray tracing unavailable on '%s', backend "
+            "switching disabled\n",
+            selectedAdapter.name);
+      }
       deviceInit.requestRayTracing = 0;
       deviceResult = device.init(&deviceInit);
     }
@@ -298,13 +322,11 @@ void cGraphics::Init(const cEngineInitVars::cGraphicsVars &aVars,
                  "your drivers are up to date.\n",
                  selectedAdapter.name);
     }
-    if (overdriveFallback)
-      mbOverdriveSupported = false;
-    else if (mRendererBackend == eRendererBackend_Overdrive)
-      mbOverdriveSupported = true;
-    else
-      mbOverdriveSupported = selectedAdapter.rayTracingTier >= 1 &&
-                             selectedAdapter.isRayQuerySupported;
+    // What the DEVICE came up with, not what the adapter advertised: an adapter
+    // that claims ray tracing but fails device creation must not be offered a
+    // switch it cannot perform.
+    mbRayTracedSupported = device.accelerationStructureEnabled &&
+                           device.rayTracingPipelineEnabled && device.rayQueryEnabled;
     RI_InitResourceUploader(&device, &uploader);
 
     // Swapchain + per-image views. Same RISwapchain::create path as the rebuild
@@ -580,17 +602,49 @@ void cGraphics::Init(const cEngineInitVars::cGraphicsVars &aVars,
   if (alHplSetupFlags & eHplSetup_Screen) {
 
     mvRenderers.resize(eRenderer_LastEnum, NULL);
-    if (mRendererBackend == eRendererBackend_Standard) {
-      mvRenderers[eRenderer_Main] = hplNew(cStandardRenderer, (this, apResources));
-      Log("Renderer backend: Standard\n");
-    } else {
-      mvRenderers[eRenderer_Main] = hplNew(cHybridRenderer, (this, apResources));
-      Log("Renderer backend: Overdrive\n");
+
+    // cHybridRenderer's constructor creates ray-tracing pipelines with no
+    // capability check, so it may only ever be built on a device that actually
+    // came up ray-tracing-capable — not merely on an adapter that could.
+    const bool bDeviceRayTraced = device.accelerationStructureEnabled &&
+                                  device.rayTracingPipelineEnabled &&
+                                  device.rayQueryEnabled;
+    const bool bBuildBoth = mbRuntimeBackendSwitchAllowed && bDeviceRayTraced;
+
+    if (bBuildBoth || mRendererBackend == eRendererBackend_Standard)
+      mLitRenderers[eRendererBackend_Standard] =
+          hplNew(cStandardRenderer, (this, apResources));
+    if (bBuildBoth ||
+        (mRendererBackend == eRendererBackend_RayTraced && bDeviceRayTraced))
+      mLitRenderers[eRendererBackend_RayTraced] =
+          hplNew(cHybridRenderer, (this, apResources));
+
+    // Ray traced was asked for on a device that cannot do it. The device-init
+    // fallback above normally catches this; this is the belt-and-braces path.
+    if (mLitRenderers[mRendererBackend] == NULL) {
+      mRendererBackend = eRendererBackend_Standard;
+      mbRayTracedSupported = false;
+      if (mLitRenderers[eRendererBackend_Standard] == NULL)
+        mLitRenderers[eRendererBackend_Standard] =
+            hplNew(cStandardRenderer, (this, apResources));
     }
+
+    Log("Renderer backend: %s%s\n",
+        mRendererBackend == eRendererBackend_Standard ? "Standard" : "Ray Traced",
+        bBuildBoth ? " (runtime switching available)" : "");
+
+    for (int i = 0; i < eRendererBackend_LastEnum; ++i) {
+      if (mLitRenderers[i])
+        mvOwnedRenderers.push_back(mLitRenderers[i]);
+    }
+
+    mvRenderers[eRenderer_Main] = mLitRenderers[mRendererBackend];
     mvRenderers[eRenderer_WireFrame] =
         hplNew(cRendererWireFrame, (this, apResources));
     mvRenderers[eRenderer_Simple] =
         hplNew(cRendererSimple, (this, apResources));
+    mvOwnedRenderers.push_back(mvRenderers[eRenderer_WireFrame]);
+    mvOwnedRenderers.push_back(mvRenderers[eRenderer_Simple]);
 
     // Editor / debug overlay batcher — flushed by HybridRenderer's
     // offscreen tail (and reusable for thumbnails / previews).
@@ -642,11 +696,10 @@ void cGraphics::Init(const cEngineInitVars::cGraphicsVars &aVars,
 //-----------------------------------------------------------------------
 
 void cGraphics::Update(float afTimeStep) {
-  for (size_t i = 0; i < mvRenderers.size(); ++i) {
-    iRenderer *pRenderer = mvRenderers[i];
-
-    pRenderer->Update(afTimeStep);
-  }
+  // Every renderer built, including an inactive lit one, so a backend switch
+  // never hands out a renderer that missed a frame of updates.
+  for (size_t i = 0; i < mvOwnedRenderers.size(); ++i)
+    mvOwnedRenderers[i]->Update(afTimeStep);
 }
 
 //-----------------------------------------------------------------------
@@ -660,6 +713,152 @@ iRenderer *cGraphics::GetRenderer(eRenderer aType) {
 
 //-----------------------------------------------------------------------
 
+iRenderer *cGraphics::GetLitRenderer(eRendererBackend aBackend) {
+  if (aBackend < 0 || aBackend >= eRendererBackend_LastEnum)
+    return NULL;
+
+  return mLitRenderers[aBackend];
+}
+
+//-----------------------------------------------------------------------
+
+bool cGraphics::CanSwitchRendererBackend() const {
+  return mLitRenderers[eRendererBackend_Standard] != NULL &&
+         mLitRenderers[eRendererBackend_RayTraced] != NULL;
+}
+
+//-----------------------------------------------------------------------
+
+bool cGraphics::SetRendererBackend(eRendererBackend aBackend) {
+  if (aBackend < 0 || aBackend >= eRendererBackend_LastEnum)
+    return false;
+  if (aBackend == mRendererBackend)
+    return true;
+  if (mLitRenderers[aBackend] == NULL)
+    return false;
+  if (eRenderer_Main >= (int)mvRenderers.size())
+    return false;
+
+  mRendererBackend = aBackend;
+  mvRenderers[eRenderer_Main] = mLitRenderers[aBackend];
+
+  return true;
+}
+
+//-----------------------------------------------------------------------
+
+void cGraphics::RequestRendererBackend(eRendererBackend aBackend) {
+  mRequestedBackend = aBackend;
+  mbBackendSwitchPending = true;
+}
+
+//-----------------------------------------------------------------------
+
+bool cGraphics::CanHostRendererBackend(eRendererBackend aBackend) const {
+  if (aBackend == eRendererBackend_Standard)
+    return true;
+  // cHybridRenderer's constructor creates ray-tracing pipelines with no
+  // capability check, so only a device that actually came up ray-tracing
+  // capable can host it -- an adapter that merely could is not enough.
+  return device.accelerationStructureEnabled && device.rayTracingPipelineEnabled &&
+         device.rayQueryEnabled;
+}
+
+//-----------------------------------------------------------------------
+
+void cGraphics::SetRendererBackendHandlers(std::function<void(iRenderer *)> aDetach,
+                                           std::function<void(eRendererBackend)> aAdopt) {
+  mBackendDetachHandler = std::move(aDetach);
+  mBackendAdoptHandler = std::move(aAdopt);
+}
+
+//-----------------------------------------------------------------------
+
+// Runs at the top of BeginActiveSet, where no command buffer is recording and
+// the swapchain has not been acquired yet. Everything here is one synchronous
+// block: the stall the player sees when they change the setting.
+void cGraphics::ApplyPendingBackendSwitch() {
+  if (!mbBackendSwitchPending)
+    return;
+  // Cleared first, so a request raised from anything this switch calls lands on
+  // the NEXT boundary instead of recursing.
+  mbBackendSwitchPending = false;
+
+  const eRendererBackend target = mRequestedBackend;
+
+  cRendererBackendSwitchRequest request;
+  request.mbPending = true;
+  request.mRequested = target;
+  request.mCurrent = mRendererBackend;
+  request.mbDeviceCanRayTrace = CanHostRendererBackend(eRendererBackend_RayTraced);
+  request.mbHaveRenderers =
+      !mvRenderers.empty() && eRenderer_Main < (int)mvRenderers.size();
+
+  const eRendererBackendSwitch decision = EvaluateRendererBackendSwitch(request);
+  if (decision == eRendererBackendSwitch_Refuse) {
+    Warning("Renderer backend: cannot switch to %s here; keeping %s\n",
+            target == eRendererBackend_Standard ? "Standard" : "Ray Traced",
+            mRendererBackend == eRendererBackend_Standard ? "Standard" : "Ray Traced");
+    return;
+  }
+  if (decision != eRendererBackendSwitch_Apply)
+    return;
+
+  iRenderer *pOutgoing = mLitRenderers[mRendererBackend];
+
+  // Nothing submitted may still reference the renderer being destroyed:
+  // ~cHybridRenderer disposes its programs and SBT immediately rather than
+  // through graphicsDefer.
+  device.queues[RI_QUEUE_GRAPHICS].waitIdle(&device);
+
+  // Viewports let go BEFORE the destroy. Not just to avoid a dangling pointer:
+  // cViewport::SetRenderer early-outs on pointer equality, so if the incoming
+  // renderer lands on the address the outgoing one just freed, re-stamping
+  // would silently no-op and the viewport would keep a stale temporal history.
+  if (mBackendDetachHandler && pOutgoing)
+    mBackendDetachHandler(pOutgoing);
+
+  if (pOutgoing) {
+    pOutgoing->DestroyData();
+    for (size_t i = 0; i < mvOwnedRenderers.size(); ++i) {
+      if (mvOwnedRenderers[i] == pOutgoing) {
+        mvOwnedRenderers.erase(mvOwnedRenderers.begin() + i);
+        break;
+      }
+    }
+    mLitRenderers[mRendererBackend] = NULL;
+    hplDelete(pOutgoing);
+  }
+
+  // Turn the deferred releases into actual frees before the incoming renderer
+  // allocates, so peak memory is one renderer rather than two. Safe here only
+  // because of the waitIdle above.
+  graphicsDefer.drainAll();
+
+  iRenderer *pIncoming =
+      target == eRendererBackend_Standard
+          ? static_cast<iRenderer *>(hplNew(cStandardRenderer, (this, mpResources)))
+          : static_cast<iRenderer *>(hplNew(cHybridRenderer, (this, mpResources)));
+  mLitRenderers[target] = pIncoming;
+  mvOwnedRenderers.push_back(pIncoming);
+
+  // Only now is the backend the new one: a future fallible build wants a
+  // coherent rollback point, and a crash dump should name the backend that was
+  // actually running.
+  mRendererBackend = target;
+  mvRenderers[eRenderer_Main] = pIncoming;
+
+  // Re-stamps viewports and every live world, which is what re-resolves the
+  // lights and publishes the active renderer mask.
+  if (mBackendAdoptHandler)
+    mBackendAdoptHandler(target);
+
+  Log("Renderer backend: switched to %s\n",
+      target == eRendererBackend_Standard ? "Standard" : "Ray Traced");
+}
+
+//-----------------------------------------------------------------------
+
 eRendererBackend cGraphics::GetRendererBackend() const {
   return mRendererBackend;
 }
@@ -667,8 +866,8 @@ eRendererBackend cGraphics::GetRendererBackend() const {
 //-----------------------------------------------------------------------
 
 void cGraphics::ReloadRendererData() {
-  for (size_t i = 0; i < mvRenderers.size(); ++i) {
-    iRenderer *pRenderer = mvRenderers[i];
+  for (size_t i = 0; i < mvOwnedRenderers.size(); ++i) {
+    iRenderer *pRenderer = mvOwnedRenderers[i];
 
     pRenderer->DestroyData();
     pRenderer->LoadData();
@@ -1041,6 +1240,13 @@ void cGraphics::BeginActiveSet() {
   // See CloseAndSubmitActiveSet — the frame loop is swapchain-bound.
   assert(!swapchain.isEmpty() && swapchain->IsValid() &&
          "BeginActiveSet requires a swapchain (eHplSetup_Screen)");
+
+  // Before the command ring advances, before the defer queue drains and before
+  // any command buffer is begun: the one point in the frame where a renderer
+  // may be destroyed. It also lands before this frame's cScene::Render, so the
+  // switched-to backend draws this frame rather than one frame late.
+  ApplyPendingBackendSwitch();
+
   FrameContext *cntx = GetActiveSet();
 
   graphicsCmdRing.advance();

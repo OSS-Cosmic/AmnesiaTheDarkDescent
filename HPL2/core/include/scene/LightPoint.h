@@ -26,30 +26,19 @@ namespace hpl {
 
 	//------------------------------------------
 
-	// Point light shape shared by the legacy and Redux point lights.
-	class iLightPoint : public iLight
+	// A point light. It carries BOTH backends' tuning and resolves one per
+	// query, so there is no separate legacy/ray-traced class any more.
+	class cLightPoint : public iLight
 	{
 	public:
-		iLightPoint(tString asName, cResources *apResources);
+		cLightPoint(tString asName, cResources *apResources);
 	protected:
 		void UpdateBoundingVolume() override;
 	};
 
-	// Retail point light (<PointLight>). Radius is where legacy attenuation ends;
-	// rendered by the Standard renderer.
-	class cLightPointLegacy : public iLightPoint
-	{
-	public:
-		cLightPointLegacy(tString asName, cResources *apResources);
-	};
-
-	// Redux point light (<Re_PointLight>): Intensity, Radius (reach) and
-	// SourceRadius feed the ray-traced light grid.
-	class cLightPoint : public iLightPoint
-	{
-	public:
-		cLightPoint(tString asName, cResources *apResources);
-	};
+	// The shape used to be split into an interface plus two classes; plenty of
+	// code still spells the pointer this way.
+	typedef cLightPoint iLightPoint;
 
 };
 #endif // HPL_LIGHT_POINT_H

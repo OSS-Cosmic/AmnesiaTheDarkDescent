@@ -61,7 +61,7 @@ bool cIconEntityLightArea::Create(const tString& asName)
 
 //---------------------------------------------------------------------------
 
-cEntityWrapperTypeLightArea::cEntityWrapperTypeLightArea() : iEntityWrapperTypeLight("Re_AreaLight", eEditorEntityLightType_Area, true)
+cEntityWrapperTypeLightArea::cEntityWrapperTypeLightArea() : iEntityWrapperTypeLight("AreaLight", eEditorEntityLightType_Area, eLightSchema_RayTracedOnly)
 {
 	mScaleType = eScaleType_None;
 
@@ -74,7 +74,10 @@ cEntityWrapperTypeLightArea::cEntityWrapperTypeLightArea() : iEntityWrapperTypeL
 
 bool cEntityWrapperTypeLightArea::IsAppropriateType(tinyxml2::XMLElement* apElement)
 {
-	return iEntityWrapperTypeLight::IsAppropriateType(apElement) || tString(apElement->Value())=="AreaLight";
+	// "Re_AreaLight" was the pre-merge spelling. The engine no longer loads it,
+	// but accepting it here lets an unmigrated map be opened and re-saved as
+	// <AreaLight> instead of losing its area lights.
+	return iEntityWrapperTypeLight::IsAppropriateType(apElement) || tString(apElement->Value())=="Re_AreaLight";
 }
 
 iEntityWrapperData* cEntityWrapperTypeLightArea::CreateSpecificData()

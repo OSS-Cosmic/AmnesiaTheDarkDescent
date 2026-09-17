@@ -1213,12 +1213,12 @@ cEditorWindowMaterialEditor::cEditorWindowMaterialEditor(iEditorBase* apEditor,
 	}
 	mpCurrentPreviewEntity = NULL;
 
-	mpFixedLight = mpMatWorld->CreateLightPointLegacy();
+	mpFixedLight = mpMatWorld->CreateLightPoint();
 	mpFixedLight->SetRadius(6);
 	mpFixedLight->SetDiffuseColor(cColor(1,1));
 	mpFixedLight->SetPosition(cVector3f(0,0,2.5f));
 
-	mpMovableLight = mpMatWorld->CreateLightPointLegacy();
+	mpMovableLight = mpMatWorld->CreateLightPoint();
 	mpMovableLight->SetRadius(6);
 	mpMovableLight->SetDiffuseColor(cColor(1,1));
 	mpMovableLight->SetPosition(cVector3f(2.5f,0,0));

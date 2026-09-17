@@ -111,6 +111,18 @@ public:
   cWorld *LoadWorld(const tString &asFile, tWorldLoadFlag aFlags);
   cWorld *CreateWorld(const tString &asName);
   void DestroyWorld(cWorld *apWorld);
+  // Re-stamps every live world after cGraphics::SetRendererBackend. The
+  // backend is global (one device, one active lit renderer), so no world may
+  // disagree with it. CreateWorld keeps stamping new worlds from cGraphics.
+  void SetRendererBackend(eRendererBackend aBackend);
+
+  // A lit renderer is about to be destroyed: every viewport drawing with it
+  // lets go, and drops the render targets it owns. Those viewports are picked
+  // up again by AdoptMainRenderer once the replacement exists.
+  void DetachViewportsFromRenderer(iRenderer *apRenderer);
+  // Re-stamp the viewports detached above with the current eRenderer_Main, then
+  // re-stamp every world so lights re-resolve for the new backend.
+  void AdoptMainRenderer(eRendererBackend aBackend);
   bool WorldExists(cWorld *apWorld);
 
 private:

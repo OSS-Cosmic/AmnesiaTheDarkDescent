@@ -35,18 +35,17 @@ cIconEntityLightPoint::cIconEntityLightPoint(iEntityWrapper* apParent) : iIconEn
 
 bool cIconEntityLightPoint::Create(const tString& asName)
 {
+	// One class per shape: the light carries both backends' tuning and the
+	// world's backend decides which one drives it.
 	cWorld* pWorld = mpParent->GetEditorWorld()->GetWorld();
-	if(static_cast<iEntityWrapperLight*>(mpParent)->UsesOverdriveLightClass())
-		mpEntity = pWorld->CreateLightPoint(asName);
-	else
-		mpEntity = pWorld->CreateLightPointLegacy(asName);
+	mpEntity = pWorld->CreateLightPoint(asName);
 
 	return true;
 }
 
-cEntityWrapperTypeLightPoint::cEntityWrapperTypeLightPoint(bool abOverdrive) : iEntityWrapperTypeLight(abOverdrive ? "Re_PointLight" : "PointLight",
-																								abOverdrive ? eEditorEntityLightType_OverdrivePoint : eEditorEntityLightType_Point,
-																								abOverdrive)
+cEntityWrapperTypeLightPoint::cEntityWrapperTypeLightPoint() : iEntityWrapperTypeLight("PointLight",
+																								eEditorEntityLightType_Point,
+																								eLightSchema_Dual)
 {
 	mScaleType = eScaleType_None;
 }

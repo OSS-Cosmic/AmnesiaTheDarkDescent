@@ -65,18 +65,18 @@ void cEditorWindowEntityEditBoxGroup::OnUpdate(float afTimeStep)
 		lCommonMask &= static_cast<unsigned>((*it)->GetRendererMask());
 
 	mpInpRendererStandard->SetValue((lCommonMask & hpl::kRendererMaskStandard) != 0, false);
-	mpInpRendererOverdrive->SetValue((lCommonMask & hpl::kRendererMaskOverdrive) != 0, false);
+	mpInpRendererRayTraced->SetValue((lCommonMask & hpl::kRendererMaskRayTraced) != 0, false);
 }
 
 //--------------------------------------------------------------------------
 
 bool cEditorWindowEntityEditBoxGroup::WindowSpecificInputCallback(iEditorInput* apInput)
 {
-	if(apInput!=mpInpRendererStandard && apInput!=mpInpRendererOverdrive)
+	if(apInput!=mpInpRendererStandard && apInput!=mpInpRendererRayTraced)
 		return false;
 
 	// Change only the toggled renderer on each object, as one undo step.
-	const unsigned lBit = apInput==mpInpRendererStandard ? hpl::kRendererMaskStandard : hpl::kRendererMaskOverdrive;
+	const unsigned lBit = apInput==mpInpRendererStandard ? hpl::kRendererMaskStandard : hpl::kRendererMaskRayTraced;
 	const bool bEnabled = static_cast<cEditorInputBool*>(apInput)->GetValue();
 
 	cEditorActionCompoundAction* pAction = hplNew(cEditorActionCompoundAction, ("Set Renderer"));

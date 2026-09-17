@@ -52,14 +52,22 @@ namespace hpl {
 	//       <Entity Name="mymod_lamp_1" Filename="entities/lights/lamp.ent" .../>
 	//     </Add>
 	//     <Add Category="Entities" After="12">   (inserted behind object 12)
-	//       <Re_PointLight Name="PointLight_1" RendererMask="2" .../>
+	//       <Entity Name="mymod_lamp_2" Filename="entities/lights/lamp.ent" .../>
 	//     </Add>
 	//   </MapDelta>
+	//
+	// Retuning a light for the ray-traced renderer is a plain <Modify>: the
+	// retail attributes stay as they are and the overrides ride along with a
+	// "Re_" prefix (see LightParameters.h), so the light remains ONE object.
+	//
+	//   <Modify Category="Entities" ID="11" Name="PointLight_1">
+	//     <SetAttr Re_Intensity="1.3" Re_Radius="10" Re_SourceRadius="0.035"/>
+	//   </Modify>
 	//
 	// An <Add>ed object may reuse an existing name only when it carries an
 	// explicit RendererMask and no renderer it loads for then has the name more
 	// often than the base file did -- the other half of an object split by
-	// backend, e.g. a retail light narrowed to RendererMask="1" by a <Modify>
+	// backend, e.g. a retail object narrowed to RendererMask="1" by a <Modify>
 	// placed before the <Add> of its RendererMask="2" replacement. Added objects
 	// a later <Modify> makes overlap again are dropped.
 	//

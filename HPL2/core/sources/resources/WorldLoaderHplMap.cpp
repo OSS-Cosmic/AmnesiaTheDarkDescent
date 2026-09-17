@@ -2334,8 +2334,16 @@ namespace hpl {
 			cBillboard *pBB = mpCurrentWorld->GetBillboardFromUniqueID(lightConnect.msBillboardID);
 			iLight *pLight = mpCurrentWorld->GetLight(lightConnect.msLightName);
 
-			// The light may be tagged for the other renderer backend and not loaded.
-			if(pLight==NULL || pBB==NULL) continue;
+			if(pBB==NULL) continue;
+
+			// Every light is created regardless of its renderer mask, so a
+			// missing one is a genuinely broken reference.
+			if(pLight==NULL)
+			{
+				Warning("Light '%s' connected to billboard with id '%d' does not exist!\n",
+						lightConnect.msLightName.c_str(), lightConnect.msBillboardID);
+				continue;
+			}
 
 			pLight->AttachBillboard(pBB, pBB->GetColor());
 		}
@@ -2367,6 +2375,8 @@ namespace hpl {
 		// same-named object that stands in for a skipped one.
 		const bool bEnabledForWorld = cEngineFileLoading::IsElementEnabledForWorld(apElement, mpCurrentWorld);
 		if(cResources::GetRendererMaskFilterEnabled()) RecordRendererMaskObject(apElement, bEnabledForWorld);
+		// Lights are exempt (see IsElementEnabledForWorld), so a ConnectLight
+		// always resolves and no stand-in tint is needed any more.
 		if(bEnabledForWorld==false) return;
 
 		//////////////////////////

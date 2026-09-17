@@ -53,7 +53,6 @@ protected:
 	cEditorInputColorFrame* mpInpBackgroundColor;
 	cEditorInputNumber* mpInpDisabledCoverage;
 	cEditorInputNumber* mpInpDisplayGamma;
-	cEditorInputEnum* mpCBRendererBackend;
 
 	// Input
 	cEditorInputNumber* mpInpTumbleFactor;

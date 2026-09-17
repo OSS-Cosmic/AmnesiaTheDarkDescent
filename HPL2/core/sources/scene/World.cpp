@@ -20,6 +20,7 @@
  */
 
 #include "scene/World.h"
+#include "graphics/RayTracedLightColor.h"
 
 #include <tinyxml2.h>
 
@@ -536,9 +537,10 @@ static PointLight BuildPointLight(iLight *pLight) {
   pl.position[1] = pos.y;
   pl.position[2] = pos.z;
   const cColor c = pLight->GetDiffuseColor();
-  pl.color[0] = sRGBToLinear(c.r);
-  pl.color[1] = sRGBToLinear(c.g);
-  pl.color[2] = sRGBToLinear(c.b);
+  const auto linearColor = RayTracedLightColorToLinear(c.r, c.g, c.b);
+  pl.color[0] = linearColor[0];
+  pl.color[1] = linearColor[1];
+  pl.color[2] = linearColor[2];
   pl.intensity = pLight->GetIntensity();
   pl.radius = pLight->GetRadius();
   pl.sourceRadius = pLight->GetSourceRadius();
@@ -554,7 +556,7 @@ static PointLight BuildPointLight(iLight *pLight) {
   pl.worldToLightZ[0] = world.m[2][0];
   pl.worldToLightZ[1] = world.m[2][1];
   pl.worldToLightZ[2] = world.m[2][2];
-  if (!pLight->IsVisible() || !pLight->IsOverdriveEnabled())
+  if (!pLight->IsVisible() || !pLight->IsRayTracedEnabled())
     pl.radius = 0.0f; // grid skips radius <= 0
   return pl;
 }
@@ -582,9 +584,10 @@ static SpotLight BuildSpotLight(iLight *pLight) {
   }
   sl.cosOuterAngle = std::cos(pSpot->GetFOV() * 0.5f);
   const cColor c = pSpot->GetDiffuseColor();
-  sl.color[0] = sRGBToLinear(c.r);
-  sl.color[1] = sRGBToLinear(c.g);
-  sl.color[2] = sRGBToLinear(c.b);
+  const auto linearColor = RayTracedLightColorToLinear(c.r, c.g, c.b);
+  sl.color[0] = linearColor[0];
+  sl.color[1] = linearColor[1];
+  sl.color[2] = linearColor[2];
   sl.intensity = pSpot->GetIntensity();
   sl.radius = pSpot->GetRadius();
   sl.sourceRadius = pSpot->GetSourceRadius();
@@ -593,7 +596,7 @@ static SpotLight BuildSpotLight(iLight *pLight) {
   const ml::float4x4 vpF4 =
       cMath::ToFloatTranspose4x4(pSpot->GetViewProjMatrix());
   std::memcpy(sl.viewProjection, vpF4.a, sizeof(sl.viewProjection));
-  if (!pSpot->IsVisible() || !pSpot->IsOverdriveEnabled())
+  if (!pSpot->IsVisible() || !pSpot->IsRayTracedEnabled())
     sl.radius = 0.0f;
   return sl;
 }
@@ -606,9 +609,10 @@ static RectLight BuildRectLight(iLight *pLight) {
   al.position[1] = pos.y;
   al.position[2] = pos.z;
   const cColor c = pArea->GetDiffuseColor();
-  al.color[0] = sRGBToLinear(c.r);
-  al.color[1] = sRGBToLinear(c.g);
-  al.color[2] = sRGBToLinear(c.b);
+  const auto linearColor = RayTracedLightColorToLinear(c.r, c.g, c.b);
+  al.color[0] = linearColor[0];
+  al.color[1] = linearColor[1];
+  al.color[2] = linearColor[2];
   al.intensity = pArea->GetIntensity();
   al.radius = pArea->GetRadius();
   al.width = pArea->GetWidth();
@@ -629,7 +633,7 @@ static RectLight BuildRectLight(iLight *pLight) {
   al.normal[0] = world.m[0][0];
   al.normal[1] = world.m[1][0];
   al.normal[2] = world.m[2][0];
-  if (!pArea->IsVisible() || !pArea->IsOverdriveEnabled())
+  if (!pArea->IsVisible() || !pArea->IsRayTracedEnabled())
     al.radius = 0.0f;
   return al;
 }
@@ -684,9 +688,11 @@ static uint32_t AcquireLightSlot(IndexPool &pool) {
 }
 
 IndexPool *cWorld::GpuLightPoolFor(iLight *apLight) {
-  // Only Overdrive lights are uploaded; legacy lights render in Standard.
-  if (apLight->GetLightModel() != eLightModel_Overdrive)
-    return nullptr;
+  // Slot ownership follows the SHAPE, not the backend: a slot is a stable
+  // identity that ReSTIR reuses across frames, so it must survive a backend
+  // change untouched. A light the mask excludes keeps its slot and uploads a
+  // zero radius (BuildPointLight and friends), which costs one array entry and
+  // keeps every reservoir valid.
   switch (apLight->GetLightType()) {
   case eLightType_Point:
     return &mPointLightPool;
@@ -744,15 +750,23 @@ void cWorld::PrepareFrame(cGraphics::FrameContext *cntx) {
   // consume as slot capacities — NOT live light counts. Holding each light's
   // slot for life is what keeps the packed id (packLightId(type, slot)) stable
   // across frames for ReSTIR DI reservoir reuse.
+  //
+  // Every light now holds a slot for its lifetime regardless of backend, so
+  // that identity survives a backend change -- but a Standard session has no
+  // ray-traced renderer to read these buffers, so the whole scatter is skipped
+  // there rather than uploading a frame's worth of lights nobody samples.
   std::vector<PointLight> pointLight;
   std::vector<SpotLight> spotLight;
   std::vector<RectLight> rectLight;
+  const bool bUploadGpuLights = mRendererBackend != eRendererBackend_Standard;
   auto scatter = [](auto &vec, uint32_t slot, auto &&built) {
     if (slot >= vec.size())
       vec.resize(slot + 1);   // value-inits holes (radius 0)
     vec[slot] = built;
   };
   for (iLight *light : mlstLights) {
+    if (!bUploadGpuLights)
+      break;
     IndexPool *pool = GpuLightPoolFor(light);
     if (!pool)
       continue; // light type not uploaded to the GPU (e.g. box lights)
@@ -873,7 +887,14 @@ void cWorld::PrepareFrame(cGraphics::FrameContext *cntx) {
   // Build this world's ray-tracing TLAS from its own renderable set (whole-scene,
   // no frustum cull — meshes' model matrices are frustum-independent, so a null
   // frustum is fine for this viewport-less per-world prepare). Bound via GetTlas().
-  if (mpGraphics->device.accelerationStructureEnabled)
+  // Gated on the ACTIVE backend, not just the device: GetTlas() is consumed
+  // only by cHybridRenderer, so a Standard session -- including one on the
+  // RT-capable device kept for switching backends at runtime -- would otherwise
+  // build a whole-map BLAS set and TLAS that nothing reads. Switching back to
+  // ray-traced rebuilds them on the first frame after the switch, which is part
+  // of that switch's cost. Same shape as the light-scatter gate above.
+  if (mpGraphics->device.accelerationStructureEnabled &&
+      mRendererBackend != eRendererBackend_Standard)
     BuildTlas(cntx, /*apFrustum=*/nullptr);
 }
 
@@ -940,6 +961,9 @@ uint32_t cWorld::SubmitRenderableObject(iRenderable *pObject,
 // read. Then grow/upload the instance buffer and record the TLAS build.
 void cWorld::BuildTlas(cGraphics::FrameContext *cntx, cFrustum *apFrustum) {
   if (!mpGraphics->device.accelerationStructureEnabled)
+    return;
+  // Nothing reads a TLAS while Standard is drawing.
+  if (mRendererBackend == eRendererBackend_Standard)
     return;
 
   // Keep last frame's TLAS resources alive for any in-flight frame (and across
@@ -1396,27 +1420,11 @@ static void LoadSpotLightGobo(cResources *apResources, iLight *apLight,
             asName.c_str());
 }
 
-cLightPointLegacy *cWorld::CreateLightPointLegacy(const tString &asName,
-                                      const tString &asGobo, bool abStatic) {
-  cLightPointLegacy *pLight = hplNew(cLightPointLegacy, (asName, mpResources));
-  LoadPointLightGobo(mpResources, pLight, asGobo, asName);
-  RegisterLight(pLight, abStatic);
-  return pLight;
-}
-
 cLightPoint *cWorld::CreateLightPoint(const tString &asName,
                                                         const tString &asGobo,
                                                         bool abStatic) {
   cLightPoint *pLight = hplNew(cLightPoint, (asName, mpResources));
   LoadPointLightGobo(mpResources, pLight, asGobo, asName);
-  RegisterLight(pLight, abStatic);
-  return pLight;
-}
-
-cLightSpotLegacy *cWorld::CreateLightSpotLegacy(const tString &asName,
-                                    const tString &asGobo, bool abStatic) {
-  cLightSpotLegacy *pLight = hplNew(cLightSpotLegacy, (asName, mpResources));
-  LoadSpotLightGobo(mpResources, pLight, asGobo, asName);
   RegisterLight(pLight, abStatic);
   return pLight;
 }
@@ -1442,20 +1450,32 @@ cLightBoxLegacy *cWorld::CreateLightBoxLegacy(const tString &asName, bool abStat
   return pLight;
 }
 
+// A light the code makes rather than the map: it is authored for BOTH backends
+// up front, so it survives a backend change like any loaded light.
 iLight *cWorld::CreateCodePointLight(const tString &asName, const tString &asGobo,
                                      bool abStatic, float afReach,
                                      const cColor &aLitColor, float afIntensityMul) {
-  if (mRendererBackend == eRendererBackend_Standard) {
-    iLightPoint *pLight = CreateLightPointLegacy(asName, asGobo, abStatic);
-    pLight->SetDiffuseColor(aLitColor);
-    pLight->SetRadius(afReach);
-    return pLight;
-  }
-  // Overdrive lights with no reach are dropped by the light grid.
   cLightPoint *pLight = CreateLightPoint(asName, asGobo, abStatic);
-  pLight->SetDiffuseColor(aLitColor);
-  pLight->SetRadius(afReach);
-  pLight->SetIntensity(DeriveLightIntensityForReach(afReach, aLitColor) * afIntensityMul);
+
+  cLightTuningState standard;
+  standard.mDiffuseColor = aLitColor;
+  standard.mDefaultDiffuseColor = aLitColor;
+  // The retail radius is the reach and the animated value alike.
+  standard.mfReach = afReach;
+  standard.mfOnValue = afReach;
+  standard.mfIntensity = afReach;
+  standard.mbAuthored = true;
+
+  cLightTuningState rayTraced = standard;
+  // Ray-traced lights with no reach are dropped by the light grid, so the reach
+  // is authored rather than derived.
+  rayTraced.mfIntensity = DeriveLightIntensityForReach(afReach, aLitColor) * afIntensityMul;
+  rayTraced.mfOnValue = rayTraced.mfIntensity;
+  rayTraced.mfReach = afReach;
+  rayTraced.mbReachFollowsIntensity = false;
+
+  pLight->SetTuning(eLightModel_Legacy, standard);
+  pLight->SetTuning(eLightModel_RayTraced, rayTraced);
   return pLight;
 }
 
@@ -1487,6 +1507,56 @@ iLight *cWorld::GetLight(const tString &asName) {
   }
   return NULL;
 }
+
+// Every light carries both backends' tuning, so switching the backend is a
+// re-resolve, not a reload: each light re-derives its radius, bounds, spot
+// projection and billboard tint from the tuning that is now active.
+void cWorld::SetRendererBackend(eRendererBackend aBackend) {
+  // Set unconditionally, even when the backend is unchanged: this is also the
+  // path that stamps a freshly created world, and the gather has to know which
+  // renderer is drawing before the first frame.
+  const unsigned bit = aBackend == eRendererBackend_Standard ? kRendererMaskStandard
+                                                             : kRendererMaskRayTraced;
+  rendering::SetActiveRendererMaskBit(bit);
+
+  if (mRendererBackend == aBackend)
+    return;
+
+  // Still on the outgoing backend here. An in-flight fade holds its destination
+  // in that backend's units -- reach in metres on Standard, intensity on
+  // ray-traced -- so it is finished now rather than reinterpreted against the
+  // incoming tuning, which is what used to make a flickering light jump its
+  // radius. The level and colour scale it lands on are shared and carry over.
+  for (iLight *light : mlstLights) {
+    if (light)
+      light->SnapFadeToDestination();
+  }
+
+  mRendererBackend = aBackend;
+
+  // Nothing reads a TLAS on Standard, so hand this world's back. Switching to
+  // ray-traced rebuilds it on the first frame after the switch, which is part
+  // of that switch's cost.
+  if (mRendererBackend == eRendererBackend_Standard && mpGraphics) {
+    mpGraphics->graphicsDefer.push(mpTlas);
+    mpGraphics->graphicsDefer.push(mpTlasStorage);
+    mpGraphics->graphicsDefer.push(mpTlasInstanceBuffer);
+    mpTlas = {};
+    mpTlasStorage = {};
+    mpTlasInstanceBuffer = {};
+    mTlasCapacity = 0;
+  }
+
+  // Lights carry both tunings and re-resolve in place; objects authored for the
+  // other renderer stay loaded and simply stop drawing (rendering::IsObjectIsVisible).
+  for (iLight *light : mlstLights) {
+    if (light)
+      light->OnRendererBackendChanged();
+  }
+  MarkLightBuffersDirty();
+}
+
+//-----------------------------------------------------------------------
 
 void cWorld::SetRendererMaskSkippedIDs(const std::set<int> &aSkippedIDs,
                                        const std::map<int, int> &aRemap) {

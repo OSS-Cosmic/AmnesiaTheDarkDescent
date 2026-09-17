@@ -118,8 +118,7 @@ enum eEditorVisibilityType
 	eEditorVisibilityType_Areas,     // area gizmos (EntityWrapperArea)
 	eEditorVisibilityType_Blockers,  // blocker meshes (EngineEntity)
 	eEditorVisibilityType_GlobalFog, // world fog (EditorWorld)
-	eEditorVisibilityType_LegacyLights,    // PointLight/SpotLight/BoxLight handles and lights
-	eEditorVisibilityType_OverdriveLights, // Re_PointLight/Re_SpotLight/Re_AreaLight
+	eEditorVisibilityType_Lights,    // light handles and the lights themselves
 
 	eEditorVisibilityType_LastEnum
 };
@@ -194,12 +193,11 @@ enum eEditorResourceType
 
 enum eEditorEntityLightType
 {
+	// One type per shape: a light carries both backends' values on one object.
 	eEditorEntityLightType_Point,
 	eEditorEntityLightType_Spot,
-	eEditorEntityLightType_Area,
-	eEditorEntityLightType_OverdrivePoint,
-	eEditorEntityLightType_OverdriveSpot,
-	eEditorEntityLightType_Box,          // legacy BoxLight (Standard only)
+	eEditorEntityLightType_Area,         // ray-traced only (no legacy area light)
+	eEditorEntityLightType_Box,          // Standard only (no ray-traced box light)
 
 	eEditorEntityLightType_LastEnum,
 };

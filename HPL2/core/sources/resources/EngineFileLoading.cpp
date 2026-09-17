@@ -81,15 +81,132 @@ namespace hpl {
 		unsigned lMask = apElement->Attribute("RendererMask")
 			? SanitizeRendererMask(static_cast<unsigned>(GetAttributeInt(apElement, "RendererMask", 0)))
 			: (lightInfo.mbValid ? GetDefaultLightRendererMask(lightInfo) : kRendererMaskAll);
-		// Overdrive light classes never load on Standard.
-		if(lightInfo.mbValid && lightInfo.mbOverdrive) lMask &= kRendererMaskOverdrive;
+		// The ray-traced-only shape never loads on Standard.
+		if(lightInfo.mbValid && lightInfo.mbRayTracedOnly) lMask &= kRendererMaskRayTraced;
 		return lMask;
 	}
 
-	bool cEngineFileLoading::IsElementEnabledForWorld(tinyxml2::XMLElement* apElement, cWorld *apWorld)
+	bool cEngineFileLoading::IsElementEnabledForWorld(tinyxml2::XMLElement*, cWorld*)
 	{
-		if(cResources::GetRendererMaskFilterEnabled()==false || apWorld==NULL) return true;
-		return IsRendererMaskEnabled(GetElementRendererMask(apElement), apWorld->GetRendererMaskBit());
+		// Nothing is filtered out at load any more. Every object is created and
+		// its renderer mask gates whether it DRAWS (rendering::IsObjectIsVisible)
+		// and, for game entities, whether it is active. That is what makes the
+		// world's contents independent of the backend the session started in, so
+		// the backend can change without reloading the map -- and it is why a
+		// ConnectLight always resolves.
+		return true;
+	}
+
+	//-----------------------------------------------------------------------
+
+	//////////////////////////////////////////////////////////////////////////
+	// LIGHT ELEMENT ATTRIBUTES
+	//////////////////////////////////////////////////////////////////////////
+
+	//-----------------------------------------------------------------------
+
+	cLightElementAttributes::cLightElementAttributes(tinyxml2::XMLElement* apElement, bool abUseOverrides)
+		: mpElement(apElement), mbUseOverrides(abUseOverrides)
+	{
+	}
+
+	tString cLightElementAttributes::Resolve(const tString& asName) const
+	{
+		if(mbUseOverrides)
+		{
+			const tString sOverride = tString(kLightOverrideAttributePrefix) + asName;
+			if(mpElement && mpElement->Attribute(sOverride.c_str())) return sOverride;
+		}
+		return asName;
+	}
+
+	bool cLightElementAttributes::Has(const tString& asName) const
+	{
+		return mpElement && mpElement->Attribute(Resolve(asName).c_str()) != NULL;
+	}
+
+	tString cLightElementAttributes::GetStr(const tString& asName, const tString& asDefault) const
+	{
+		return GetAttributeString(mpElement, Resolve(asName), asDefault);
+	}
+
+	float cLightElementAttributes::GetFloat(const tString& asName, float afDefault) const
+	{
+		return GetAttributeFloat(mpElement, Resolve(asName), afDefault);
+	}
+
+	int cLightElementAttributes::GetInt(const tString& asName, int alDefault) const
+	{
+		return GetAttributeInt(mpElement, Resolve(asName), alDefault);
+	}
+
+	bool cLightElementAttributes::GetBool(const tString& asName, bool abDefault) const
+	{
+		return GetAttributeBool(mpElement, Resolve(asName), abDefault);
+	}
+
+	cColor cLightElementAttributes::GetColor(const tString& asName, const cColor& aDefault) const
+	{
+		return GetAttributeColor(mpElement, Resolve(asName), aDefault);
+	}
+
+	cVector3f cLightElementAttributes::GetVec3(const tString& asName, const cVector3f& avDefault) const
+	{
+		return GetAttributeVector3f(mpElement, Resolve(asName), avDefault);
+	}
+
+	bool cLightElementAttributes::HasOverride(const tString& asName) const
+	{
+		if(mbUseOverrides==false || mpElement==NULL) return false;
+		return mpElement->Attribute((tString(kLightOverrideAttributePrefix) + asName).c_str()) != NULL;
+	}
+
+	float cLightElementAttributes::GetOverrideFloat(const tString& asName, float afDefault) const
+	{
+		if(mpElement==NULL) return afDefault;
+		return GetAttributeFloat(mpElement, tString(kLightOverrideAttributePrefix) + asName, afDefault);
+	}
+
+	//-----------------------------------------------------------------------
+
+	// Every attribute LoadLight reads, so a Re_ spelling of anything else can be
+	// reported instead of silently doing nothing.
+	static bool IsOverridableLightAttribute(const tString& asName)
+	{
+		// The per-backend tuning, and nothing else. A light is ONE object with
+		// two tunings, so an attribute outside this set has one value shared by
+		// both backends and a Re_ spelling of it would do nothing -- which is
+		// what the caller warns about.
+		static const char *kNames[] = {
+			// photometry (Re_ only on shapes that have a legacy class)
+			"Intensity", "Radius", "SourceRadius", "FlickerOffIntensity", "FlickerOffRadius",
+			"CastShadows", "DiffuseColor",
+		};
+		for(const char *pName : kNames)
+			if(asName == pName) return true;
+		return false;
+	}
+
+	void cLightElementAttributes::WarnAboutUnusableOverrides(const tString& asLightName) const
+	{
+		if(mpElement==NULL) return;
+
+		const size_t lPrefixLen = strlen(kLightOverrideAttributePrefix);
+		for(const tinyxml2::XMLAttribute *pAttr = mpElement->FirstAttribute(); pAttr;
+			pAttr = pAttr->Next())
+		{
+			const tString sName = pAttr->Name();
+			if(sName.size() <= lPrefixLen) continue;
+			if(sName.compare(0, lPrefixLen, kLightOverrideAttributePrefix) != 0) continue;
+
+			const tString sSuffix = sName.substr(lPrefixLen);
+			if(IsOverridableLightAttribute(sSuffix)) continue;
+
+			Warning("Light '%s' has attribute '%s', which the loader never reads."
+					" Only photometry, CastShadows and DiffuseColor differ per"
+					" renderer; everything else is shared by both.\n",
+					asLightName.c_str(), sName.c_str());
+		}
 	}
 
 	//-----------------------------------------------------------------------
@@ -233,17 +350,30 @@ namespace hpl {
 		const cLightElementInfo info = GetLightElementInfo(apElement->Value());
 		if(info.mbValid==false)
 		{
-			Error("Unknown light type '%s'\n", apElement->Value());
+			// Re_PointLight and friends were the pre-merge twin elements; one
+			// light is one element now, with Re_-prefixed ray-traced overrides.
+			Error("Unknown light type '%s'%s\n", apElement->Value(),
+				strncmp(apElement->Value(), kLightOverrideAttributePrefix,
+						strlen(kLightOverrideAttributePrefix))==0
+					? " (pre-merge twin element -- run scripts/merge_raytraced_lights.py)" : "");
 			return NULL;
 		}
 
-		// Retail lights with no Overdrive replacement load as the Overdrive class
-		// on Overdrive, with values derived from their Radius. The class choice
-		// ignores the load filter so editors preview the backend they run.
+		// One class per shape: the light gets both tunings below and resolves
+		// whichever the world's backend selects, so nothing here depends on the
+		// backend any more.
 		const unsigned int lElementMask = GetElementRendererMask(apElement);
-		const bool bOverdriveBackend = apWorld->GetRendererBackend() != eRendererBackend_Standard;
-		const bool bOverdriveClass = info.mbOverdrive ||
-			ShouldPromoteLegacyLight(info, lElementMask, bOverdriveBackend);
+
+		// Two readers over the same element: the retail attributes drive the
+		// Standard tuning, the Re_-prefixed ones the ray-traced tuning. The
+		// typo warning now runs on every backend, not just the ray-traced one.
+		const cLightElementAttributes legacyAttr(apElement, false);
+		const cLightElementAttributes reduxAttr(apElement, true);
+		// Shape and behaviour attributes (FOV, gobo, falloff, shadow resolution,
+		// flicker timings) are shared by both backends, so they are read from
+		// the plain name only; a Re_ spelling of one is a typo and is reported.
+		const cLightElementAttributes& attr = legacyAttr;
+		reduxAttr.WarnAboutUnusableOverrides(sName);
 
 		bool bStatic = abStatic;
 
@@ -254,13 +384,13 @@ namespace hpl {
 			cLightArea *pLightArea = apWorld->CreateLightArea(asNamePrefix+sName, bStatic);
 			pLight = pLightArea;
 
-			pLightArea->SetWidth(GetAttributeFloat(apElement, "SourceWidth", 1.0f));
-			pLightArea->SetHeight(GetAttributeFloat(apElement, "SourceHeight", 1.0f));
-			pLightArea->SetBarnDoorAngle(GetAttributeFloat(apElement, "BarnDoorAngle", cMath::ToRad(45.0f)));
-			pLightArea->SetBarnDoorLength(GetAttributeFloat(apElement, "BarnDoorLength", 0.0f));
+			pLightArea->SetWidth(attr.GetFloat("SourceWidth", 1.0f));
+			pLightArea->SetHeight(attr.GetFloat("SourceHeight", 1.0f));
+			pLightArea->SetBarnDoorAngle(attr.GetFloat("BarnDoorAngle", cMath::ToRad(45.0f)));
+			pLightArea->SetBarnDoorLength(attr.GetFloat("BarnDoorLength", 0.0f));
 
 			//Optional source texture (stored in the base gobo slot — a 2D image). Tints emission.
-			tString sSourceTex = GetAttributeString(apElement, "SourceTexture");
+			tString sSourceTex = attr.GetStr("SourceTexture");
 			if(sSourceTex != "")
 			{
 				Image *pTex = apResources->GetTextureManager()->Create2DImage(sSourceTex,true).Release();
@@ -274,25 +404,23 @@ namespace hpl {
 			cLightBoxLegacy *pLightBox = apWorld->CreateLightBoxLegacy(asNamePrefix+sName, bStatic);
 			pLight = pLightBox;
 
-			pLightBox->SetSize(GetAttributeVector3f(apElement, "Size", cVector3f(1,1,1)));
-			pLightBox->SetBlendFunc((eLightBoxBlendFunc)GetAttributeInt(apElement, "BlendFunc", (int)eLightBoxBlendFunc_Add));
+			pLightBox->SetSize(attr.GetVec3("Size", cVector3f(1,1,1)));
+			pLightBox->SetBlendFunc((eLightBoxBlendFunc)attr.GetInt("BlendFunc", (int)eLightBoxBlendFunc_Add));
 		}
 		//////////////////////////
 		// Spotlightt
 		else if(info.mShape == eLightElementShape_Spot)
 		{
-			iLightSpot *pLightSpot = bOverdriveClass
-				? static_cast<iLightSpot*>(apWorld->CreateLightSpot(asNamePrefix+sName,"", bStatic))
-				: static_cast<iLightSpot*>(apWorld->CreateLightSpotLegacy(asNamePrefix+sName,"", bStatic));
+			cLightSpot *pLightSpot = apWorld->CreateLightSpot(asNamePrefix+sName,"", bStatic);
 			pLight = pLightSpot;
 
 			//Frustum related
-			pLightSpot->SetFOV(GetAttributeFloat(apElement, "FOV", 1.0f));
-			pLightSpot->SetAspect(GetAttributeFloat(apElement, "Aspect", 1.0f));
-			pLightSpot->SetNearClipPlane(GetAttributeFloat(apElement, "NearClipPlane", 0.1f));
+			pLightSpot->SetFOV(attr.GetFloat("FOV", 1.0f));
+			pLightSpot->SetAspect(attr.GetFloat("Aspect", 1.0f));
+			pLightSpot->SetNearClipPlane(attr.GetFloat("NearClipPlane", 0.1f));
 
 			//Spot fall off
-			tString sSpotFalloffMap = GetAttributeString(apElement, "SpotFalloffMap");
+			tString sSpotFalloffMap = attr.GetStr("SpotFalloffMap");
 			if(sSpotFalloffMap != "")
 			{
 				Image *pFalloff = apResources->GetTextureManager()->Create1DImage(sSpotFalloffMap,true).Release();
@@ -303,10 +431,7 @@ namespace hpl {
 		// Point Light
 		else
 		{
-			if(bOverdriveClass)
-				pLight = apWorld->CreateLightPoint(asNamePrefix+sName,"", bStatic);
-			else
-				pLight = apWorld->CreateLightPointLegacy(asNamePrefix+sName,"", bStatic);
+			pLight = apWorld->CreateLightPoint(asNamePrefix+sName,"", bStatic);
 		}
 
 		//////////////////////////
@@ -318,7 +443,7 @@ namespace hpl {
 		if(lightType == eLightType_Point || bSpotLight)
 		{
 			//Falloff
-			tString sFalloffMap = GetAttributeString(apElement, "FalloffMap");
+			tString sFalloffMap = attr.GetStr("FalloffMap");
 			if(sFalloffMap != "")
 			{
 				Image *pFalloff = apResources->GetTextureManager()->Create1DImage(sFalloffMap,true).Release();
@@ -326,11 +451,11 @@ namespace hpl {
 			}
 
 			//Gobo
-			tString sGobo = GetAttributeString(apElement, "Gobo","");
+			tString sGobo = attr.GetStr("Gobo","");
 			if(sGobo  != "")
 			{
-				eTextureAnimMode animMode = ToTextureAnimMode(GetAttributeString(apElement, "GoboAnimMode",""));
-				float fAnimFrameTime = GetAttributeFloat(apElement, "GoboAnimFrameTime", 1);
+				eTextureAnimMode animMode = ToTextureAnimMode(attr.GetStr("GoboAnimMode",""));
+				float fAnimFrameTime = attr.GetFloat("GoboAnimFrameTime", 1);
 
 				Image *pGoboTex=NULL;
 				if(bSpotLight)
@@ -358,73 +483,118 @@ namespace hpl {
 		}
 
 		//All types
-		pLight->SetCastShadows(GetAttributeBool(apElement, "CastShadows", false));
-		pLight->SetDiffuseColor(GetAttributeColor(apElement, "DiffuseColor", cColor(1)));
-		pLight->SetDefaultDiffuseColor(pLight->GetDiffuseColor());
-		const cColor diffuseColor = pLight->GetDiffuseColor();
 		const bool bHasRendererMask = apElement->Attribute("RendererMask") != NULL;
 		const unsigned int lAuthoredMask = static_cast<unsigned int>(GetAttributeInt(apElement, "RendererMask", 0));
-		float fFlickerOffValue = 0.0f;
-		if(info.mbOverdrive)
-		{
-			cOverdriveLightInput input;
-			input.mbHasIntensity = apElement->Attribute("Intensity") != NULL;
-			input.mfIntensity = GetAttributeFloat(apElement, "Intensity", 1.0f);
-			input.mbHasRadius = apElement->Attribute("Radius") != NULL;
-			input.mfRadius = GetAttributeFloat(apElement, "Radius", 0.0f);
-			input.mbHasSourceRadius = apElement->Attribute("SourceRadius") != NULL;
-			input.mfSourceRadius = GetAttributeFloat(apElement, "SourceRadius", 0.0f);
-			input.mbHasFlickerOffIntensity = apElement->Attribute("FlickerOffIntensity") != NULL;
-			input.mfFlickerOffIntensity = GetAttributeFloat(apElement, "FlickerOffIntensity", 0.0f);
-			input.mfRed = diffuseColor.r;
-			input.mfGreen = diffuseColor.g;
-			input.mfBlue = diffuseColor.b;
-			input.mbHasRendererMask = bHasRendererMask;
-			input.mlRendererMask = lAuthoredMask;
-			const cOverdriveLightParameters params = ResolveOverdriveLightParameters(input);
-			if(params.mbStrippedStandardBit)
-				Warning("Overdrive light '%s' sets the Standard renderer bit; it only loads on Overdrive\n", sName.c_str());
-			pLight->SetIntensity(params.mfIntensity);
-			pLight->SetRadius(params.mfRadius);
-			pLight->SetSourceRadius(params.mfSourceRadius);
-			pLight->SetReachFollowsIntensity(input.mbHasRadius==false);
-			pLight->SetRendererMask(params.mlRendererMask);
-			fFlickerOffValue = params.mfFlickerOffIntensity;
-		}
-		else
+
+		if(info.mbRayTracedOnly && bHasRendererMask && (lAuthoredMask & kRendererMaskStandard))
+			Warning("Light '%s' has no Standard class but sets the Standard renderer bit;"
+					" it only loads on the ray-traced backend\n", sName.c_str());
+
+		// The mask now gates rendering rather than creation; GetElementRendererMask
+		// already clamps the ray-traced-only shape to its own bit.
+		pLight->SetRendererMask(lElementMask);
+
+		////////////////////////////////////////////////////////////////////
+		// Both backends' tuning, from the one element. The Standard tuning
+		// reads the retail attributes, the ray-traced one prefers Re_ and
+		// otherwise promotes the retail values -- so a light with no Re_*
+		// resolves exactly as it always did on either backend.
+		const bool bPhotometryIsUnprefixed = info.mbRayTracedOnly;
+		const auto HasPhotometry = [&](const char *apName) {
+			return bPhotometryIsUnprefixed ? reduxAttr.Has(apName) : reduxAttr.HasOverride(apName);
+		};
+		const auto GetPhotometry = [&](const char *apName, float afDefault) {
+			return bPhotometryIsUnprefixed ? reduxAttr.GetFloat(apName, afDefault)
+										   : reduxAttr.GetOverrideFloat(apName, afDefault);
+		};
+
+		cLightTuningState standard;
+		standard.mbPresent = !info.mbRayTracedOnly;
+		standard.mbAuthored = standard.mbPresent;
+		standard.mDiffuseColor = legacyAttr.GetColor("DiffuseColor", cColor(1));
+		standard.mDefaultDiffuseColor = standard.mDiffuseColor;
+		standard.mbCastShadows = legacyAttr.GetBool("CastShadows", false);
 		{
 			cLegacyLightInput input;
-			input.mbHasRadius = apElement->Attribute("Radius") != NULL;
-			input.mfRadius = GetAttributeFloat(apElement, "Radius", 1.0f);
-			input.mbHasFlickerOffRadius = apElement->Attribute("FlickerOffRadius") != NULL;
-			input.mfFlickerOffRadius = GetAttributeFloat(apElement, "FlickerOffRadius", 0.0f);
-			input.mbHasRendererMask = bHasRendererMask;
-			input.mlRendererMask = lAuthoredMask;
+			input.mbHasRadius = legacyAttr.Has("Radius");
+			input.mfRadius = legacyAttr.GetFloat("Radius", 1.0f);
+			input.mbHasFlickerOffRadius = legacyAttr.Has("FlickerOffRadius");
+			input.mfFlickerOffRadius = legacyAttr.GetFloat("FlickerOffRadius", 0.0f);
 			const cLegacyLightParameters legacy = ResolveLegacyLightParameters(input);
-			if(bOverdriveClass)
+			// The retail radius is both the reach and the animated value.
+			standard.mfReach = legacy.mfRadius;
+			standard.mfOnValue = legacy.mfRadius;
+			standard.mfOffValue = legacy.mfFlickerOffRadius;
+			standard.mfIntensity = legacy.mfRadius;
+			standard.mfSourceRadius = 0.0f;
+			standard.mbReachFollowsIntensity = false;
+		}
+
+		cLightTuningState rayTraced;
+		rayTraced.mbPresent = info.mShape != eLightElementShape_Box;
+		// Re_DiffuseColor is read before the photometry: a Re_Intensity with no
+		// Re_Radius derives its reach from this colour.
+		rayTraced.mDiffuseColor = reduxAttr.GetColor("DiffuseColor", cColor(1));
+		rayTraced.mDefaultDiffuseColor = rayTraced.mDiffuseColor;
+		// Shared with the retail half: the ray-traced backend has no cast-shadow
+		// override of its own.
+		rayTraced.mbCastShadows = legacyAttr.GetBool("CastShadows", false);
+		if(rayTraced.mbPresent)
+		{
+			const bool bAuthored =
+				HasPhotometry("Intensity") || HasPhotometry("Radius") ||
+				HasPhotometry("SourceRadius") || HasPhotometry("FlickerOffIntensity");
+			rayTraced.mbAuthored = bAuthored;
+
+			cRayTracedLightParameters params;
+			if(bAuthored)
 			{
-				const cOverdriveLightParameters promoted =
-					PromoteLegacyLightParameters(legacy, diffuseColor.r, diffuseColor.g, diffuseColor.b);
-				pLight->SetIntensity(promoted.mfIntensity);
-				pLight->SetRadius(promoted.mfRadius);
-				pLight->SetSourceRadius(promoted.mfSourceRadius);
-				// Scripts fade retail lights by radius; the promoted reach follows.
-				pLight->SetReachFollowsIntensity(true);
-				pLight->SetRendererMask(promoted.mlRendererMask);
-				fFlickerOffValue = promoted.mfFlickerOffIntensity;
+				cRayTracedLightInput input;
+				input.mbHasIntensity = HasPhotometry("Intensity");
+				input.mfIntensity = GetPhotometry("Intensity", 1.0f);
+				input.mbHasRadius = HasPhotometry("Radius");
+				input.mfRadius = GetPhotometry("Radius", 0.0f);
+				input.mbHasSourceRadius = HasPhotometry("SourceRadius");
+				input.mfSourceRadius = GetPhotometry("SourceRadius", 0.0f);
+				input.mbHasFlickerOffIntensity = HasPhotometry("FlickerOffIntensity");
+				input.mfFlickerOffIntensity = GetPhotometry("FlickerOffIntensity", 0.0f);
+				input.mfRed = rayTraced.mDiffuseColor.r;
+				input.mfGreen = rayTraced.mDiffuseColor.g;
+				input.mfBlue = rayTraced.mDiffuseColor.b;
+				params = ResolveRayTracedLightParameters(input);
+				rayTraced.mbReachFollowsIntensity = input.mbHasRadius==false;
 			}
 			else
 			{
-				pLight->SetRadius(legacy.mfRadius);
-				pLight->SetRendererMask(legacy.mlRendererMask);
-				fFlickerOffValue = legacy.mfFlickerOffRadius;
+				// No authored ray-traced tuning: derive it from the retail
+				// radius, exactly as a retail light did before the merge.
+				cLegacyLightParameters legacy;
+				legacy.mfRadius = standard.mfReach;
+				legacy.mfFlickerOffRadius = standard.mfOffValue;
+				params = PromoteLegacyLightParameters(legacy, rayTraced.mDiffuseColor.r,
+														rayTraced.mDiffuseColor.g,
+														rayTraced.mDiffuseColor.b);
+				// Scripts fade retail lights by radius; the promoted reach follows.
+				rayTraced.mbReachFollowsIntensity = true;
 			}
+			// The intensity is the animated value on this backend.
+			rayTraced.mfIntensity = params.mfIntensity;
+			rayTraced.mfOnValue = params.mfIntensity;
+			rayTraced.mfOffValue = params.mfFlickerOffIntensity;
+			rayTraced.mfReach = params.mfRadius;
+			rayTraced.mfSourceRadius = params.mfSourceRadius;
 		}
 
-		pLight->SetShadowMapResolution( ToShadowMapResolution(GetAttributeString(apElement, "ShadowResolution", "High")) );
+		pLight->SetTuning(eLightModel_Legacy, standard);
+		pLight->SetTuning(eLightModel_RayTraced, rayTraced);
 
-		bool bShadowsAffectDynamic = GetAttributeBool(apElement, "ShadowsAffectDynamic", true);
-		bool bShadowsAffectStatic = GetAttributeBool(apElement, "ShadowsAffectStatic", true);
+		const float fFlickerOffValue =
+			pLight->GetTuning(pLight->GetActiveLightModel()).mfOffValue;
+
+		pLight->SetShadowMapResolution( ToShadowMapResolution(attr.GetStr("ShadowResolution", "High")) );
+
+		bool bShadowsAffectDynamic = attr.GetBool("ShadowsAffectDynamic", true);
+		bool bShadowsAffectStatic = attr.GetBool("ShadowsAffectStatic", true);
 		tObjectVariabilityFlag lFlags =0;
 		if(bShadowsAffectDynamic)	lFlags |= eObjectVariabilityFlag_Dynamic;
 		if(bShadowsAffectStatic)	lFlags |= eObjectVariabilityFlag_Static;
@@ -432,30 +602,30 @@ namespace hpl {
 
 		//////////////////////
 		// Backwards compitabilty:
-		float fDefaultFadeOn = GetAttributeFloat(apElement, "FlickerOnFadeLength",0);
-		float fDefaultFadeOff = GetAttributeFloat(apElement, "FlickerOffFadeLength",0);
+		float fDefaultFadeOn = attr.GetFloat("FlickerOnFadeLength",0);
+		float fDefaultFadeOff = attr.GetFloat("FlickerOffFadeLength",0);
 
-		pLight->SetFlickerActive(GetAttributeBool(apElement, "FlickerActive", false));
+		pLight->SetFlickerActive(attr.GetBool("FlickerActive", false));
 		pLight->SetFlicker(
-			GetAttributeColor(apElement, "FlickerOffColor"),
+			attr.GetColor("FlickerOffColor"),
 			fFlickerOffValue,
 
-			GetAttributeFloat(apElement, "FlickerOnMinLength"),
-			GetAttributeFloat(apElement, "FlickerOnMaxLength"),
-			GetAttributeString(apElement, "FlickerOnSound"),
-			GetAttributeString(apElement, "FlickerOnPS"),
+			attr.GetFloat("FlickerOnMinLength"),
+			attr.GetFloat("FlickerOnMaxLength"),
+			attr.GetStr("FlickerOnSound"),
+			attr.GetStr("FlickerOnPS"),
 
-			GetAttributeFloat(apElement, "FlickerOffMaxLength"),
-			GetAttributeFloat(apElement, "FlickerOffMinLength"),
-			GetAttributeString(apElement, "FlickerOffSound"),
-			GetAttributeString(apElement, "FlickerOffPS"),
+			attr.GetFloat("FlickerOffMaxLength"),
+			attr.GetFloat("FlickerOffMinLength"),
+			attr.GetStr("FlickerOffSound"),
+			attr.GetStr("FlickerOffPS"),
 
-			GetAttributeBool(apElement, "FlickerFade"),
-			GetAttributeFloat(apElement, "FlickerOnFadeMinLength", fDefaultFadeOn),
-			GetAttributeFloat(apElement, "FlickerOnFadeMaxLength", fDefaultFadeOn),
+			attr.GetBool("FlickerFade"),
+			attr.GetFloat("FlickerOnFadeMinLength", fDefaultFadeOn),
+			attr.GetFloat("FlickerOnFadeMaxLength", fDefaultFadeOn),
 
-			GetAttributeFloat(apElement, "FlickerOffFadeMinLength", fDefaultFadeOff),
-			GetAttributeFloat(apElement, "FlickerOffFadeMaxLength", fDefaultFadeOff)
+			attr.GetFloat("FlickerOffFadeMinLength", fDefaultFadeOff),
+			attr.GetFloat("FlickerOffFadeMaxLength", fDefaultFadeOff)
 			);
  
 

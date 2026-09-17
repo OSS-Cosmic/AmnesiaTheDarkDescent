@@ -48,8 +48,7 @@ protected:
 	// Layout stuff
 	cWidgetGroup* mpSelectionGroup;
 	cEditorInputEnum* mpInpLightType;
-	cEditorInputBool* mpInpShowLegacyLights;
-	cEditorInputBool* mpInpShowOverdriveLights;
+	cEditorInputBool* mpInpShowLights;
 };
 
 //----------------------------------------------------------

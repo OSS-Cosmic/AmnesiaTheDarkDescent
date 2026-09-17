@@ -201,8 +201,7 @@ iEditorBase::iEditorBase(const tWString& asFileCategoryName, const tWString& asF
 	mbVisibilityTypes[eEditorVisibilityType_Areas] = true;
 	mbVisibilityTypes[eEditorVisibilityType_Blockers] = true;
 	mbVisibilityTypes[eEditorVisibilityType_GlobalFog] = true;
-	mbVisibilityTypes[eEditorVisibilityType_LegacyLights] = true;
-	mbVisibilityTypes[eEditorVisibilityType_OverdriveLights] = true;
+	mbVisibilityTypes[eEditorVisibilityType_Lights] = true;
 
 	msFileCategoryName = asFileCategoryName;
 	msFileCategoryString = asFileCategoryString;
@@ -759,8 +758,11 @@ void iEditorBase::Init(cEngine* apEngine, const char* asName, const char* asBuil
 									   cString::ToInt(GetSetting("ScreenHeight").c_str(), 768));
 		vars.mGraphics.mbFullscreen = cString::ToBool(GetSetting("FullScreen").c_str(), false);
 		// Graphics still falls back to Standard on a GPU without ray tracing.
-		vars.mGraphics.mRendererBackend = GetSetting("RendererBackend")=="overdrive" ?
-											eRendererBackend_Overdrive : eRendererBackend_Standard;
+		vars.mGraphics.mRendererBackend = GetSetting("RendererBackend")=="raytraced" ?
+											eRendererBackend_RayTraced : eRendererBackend_Standard;
+		// Editors switch the lit backend live from View > Render mode, which
+		// needs an RT-capable device and both renderers built up front.
+		vars.mGraphics.mbAllowRuntimeBackendSwitch = true;
 		vars.mGraphics.msWindowCaption = msCaption;
 
 		// (Legacy GL global shadow-quality hint; the static iRenderer setter was
@@ -1051,6 +1053,81 @@ void iEditorBase::SetViewportBGColor(const cColor& aX)
 		cEditorWindowViewport* pViewport = vViewports[i];
 		pViewport->SetClearColor(aX);
 	}
+}
+
+//-----------------------------------------------------------------------
+
+void iEditorBase::RequestLitRendererBackend(eRendererBackend aBackend)
+{
+	mbLitBackendRequested = true;
+	mRequestedLitBackend = aBackend;
+}
+
+//-----------------------------------------------------------------------
+
+eRendererBackend iEditorBase::GetLitRendererBackend()
+{
+	return mpEngine->GetGraphics()->GetRendererBackend();
+}
+
+//-----------------------------------------------------------------------
+
+bool iEditorBase::CanSwitchLitRendererBackend()
+{
+	return mpEngine->GetGraphics()->CanSwitchRendererBackend();
+}
+
+//-----------------------------------------------------------------------
+
+void iEditorBase::ApplyLitRendererBackendRequest()
+{
+	mbLitBackendRequested = false;
+
+	cGraphics* pGfx = mpEngine->GetGraphics();
+	if(pGfx->GetRendererBackend()==mRequestedLitBackend)
+		return;
+
+	if(pGfx->SetRendererBackend(mRequestedLitBackend)==false)
+	{
+		Warning("Renderer backend switch to %s refused: that renderer was not built\n",
+				mRequestedLitBackend==eRendererBackend_RayTraced ? "Ray Traced" : "Standard");
+		return;
+	}
+
+	// Every light re-resolves its own backend tuning off the world's stamp
+	// (iLight::GetActiveLightModel), so no light or entity is rebuilt here.
+	mpEngine->GetScene()->SetRendererBackend(mRequestedLitBackend);
+
+	// The GUI viewport cached eRenderer_Main when cScene created it.
+	if(mpViewport)
+		mpViewport->SetRenderer(pGfx->GetRenderer(eRenderer_Main));
+
+	tEditorViewportVec& vViewports = GetViewports();
+	for(int i=0;i<(int)vViewports.size();++i)
+	{
+		cEditorWindowViewport* pViewport = vViewports[i];
+		// Re-fetch eRenderer_Main, which now points at the other renderer, and
+		// re-gate the tonemap.
+		if(pViewport->GetRenderMode()==eRenderer_Main)
+			pViewport->SetRenderMode(eRenderer_Main);
+		// Backend is shared, so every viewport's check marks moved.
+		pViewport->UpdateMenu();
+	}
+
+	// Icon tints and other-renderer object visibility key off the world's
+	// renderer mask bit.
+	if(mpEditorWorld)
+	{
+		mpEditorWorld->SetVisibilityUpdated();
+		mpEditorWorld->UpdateVisibility();
+	}
+
+	// Makes the live pick the next launch's startup backend.
+	SetSettingValue("RendererBackend",
+					mRequestedLitBackend==eRendererBackend_RayTraced ? "raytraced" : "standard");
+
+	Log("[Editor] Renderer backend switched to %s\n",
+		mRequestedLitBackend==eRendererBackend_RayTraced ? "Ray Traced" : "Standard");
 }
 
 //-----------------------------------------------------------------------
@@ -1362,6 +1439,12 @@ void iEditorBase::Update(float afTimeStep)
 	// Run world update routines, if any
 	if(mpEditorWorld)
 		mpEditorWorld->OnEditorUpdate(afTimeStep);
+
+	////////////////////////////////////////////////////////////////////
+	// Apply a pending lit backend pick. Same phase the file watcher rebuilds
+	// entities in, and off the widget callback stack that queued it.
+	if(mbLitBackendRequested)
+		ApplyLitRendererBackendRequest();
 
 
 	////////////////////////////////////////////////////////////////////

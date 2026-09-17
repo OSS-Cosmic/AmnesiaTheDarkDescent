@@ -45,6 +45,10 @@ protected:
 	void AddPropertyRadius(cWidgetTab* apParentTab);
 	void AddPropertyIntensity(cWidgetTab* apParentTab);
 	void AddPropertySourceRadius(cWidgetTab* apParentTab);
+	// The Raytraced group box; returns the position below it.
+	cVector3f AddPropertyRayTracedGroup(cWidgetTab* apParentTab, cVector3f avPos);
+	// Greys the group's fields while the override is off.
+	void UpdateRayTracedGroupState();
 	cVector3f AddPropertyLightValues(cWidgetTab* apParentTab, cVector3f avPos);
 	void AddPropertyDiffuseColor(cWidgetTab* apParentTab);
 	void AddPropertyCastShadows(cWidgetTab* apParentTab);
@@ -88,6 +92,17 @@ protected:
 	cEditorInputNumber* mpInpIntensity;
 	cWidgetDummy* mpGroupSourceRadius;
 	cEditorInputNumber* mpInpSourceRadius;
+
+	// "Raytraced": what this light becomes under the ray-traced renderer. Empty
+	// until the override is enabled, at which point the fields start out at the
+	// values the light would have been promoted to anyway.
+	cWidgetGroup* mpGroupRayTraced;
+	cEditorInputBool* mpInpReduxEnabled;
+	cEditorInputNumber* mpInpReduxIntensity;
+	cEditorInputNumber* mpInpReduxReach;
+	cEditorInputBool* mpInpReduxReachDerived;
+	cEditorInputNumber* mpInpReduxSourceRadius;
+	cEditorInputNumber* mpInpReduxFlickerOff;
 
 	cWidgetDummy* mpGroupGobo;
 	cEditorInputFile* mpInpGobo;

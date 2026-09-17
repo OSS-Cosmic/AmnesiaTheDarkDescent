@@ -44,6 +44,50 @@ namespace hpl {
 
 	//----------------------------
 
+	//----------------------------
+
+	// One light element read through the renderer the world is running.
+	// Every attribute cEngineFileLoading::LoadLight reads goes through this: on
+	// the ray-traced backend "Re_<Name>" wins over "<Name>" when the element
+	// authors it, so a single element carries both backends' tuning.
+	//
+	// Transform attributes are read by SetupWorldEntity and are NOT overridable,
+	// and neither are ID, Name and RendererMask. The four photometric names
+	// (Intensity, Radius, SourceRadius, FlickerOffIntensity) mean different
+	// quantities in the two schemas and are reached through the Override*
+	// accessors only -- see LightParameters.h.
+	class cLightElementAttributes
+	{
+	public:
+		cLightElementAttributes(tinyxml2::XMLElement* apElement, bool abUseOverrides);
+
+		// "Re_<name>" when authored, else "<name>". Named Get* so none of them
+		// collide with the Bool / Color macros X11 headers drag in.
+		bool		Has(const tString& asName) const;
+		tString		GetStr(const tString& asName, const tString& asDefault="") const;
+		float		GetFloat(const tString& asName, float afDefault=0) const;
+		int			GetInt(const tString& asName, int alDefault=0) const;
+		bool		GetBool(const tString& asName, bool abDefault=false) const;
+		cColor		GetColor(const tString& asName, const cColor& aDefault=cColor(0,0)) const;
+		cVector3f	GetVec3(const tString& asName, const cVector3f& avDefault=cVector3f(0)) const;
+
+		// "Re_<name>" only, never falling back to the unprefixed spelling.
+		bool	HasOverride(const tString& asName) const;
+		float	GetOverrideFloat(const tString& asName, float afDefault=0) const;
+
+		// Warns about Re_ attributes that name something this loader will never
+		// read: a typo, or an attempt to override transform / identity.
+		void	WarnAboutUnusableOverrides(const tString& asLightName) const;
+
+	private:
+		tString Resolve(const tString& asName) const;
+
+		tinyxml2::XMLElement* mpElement;
+		bool mbUseOverrides;
+	};
+
+	//----------------------------
+
 	class cEngineFileLoading
 	{
 	public:
@@ -56,7 +100,7 @@ namespace hpl {
 
 		// RendererMask for a map/entity element: the attribute when present,
 		// otherwise the light element's default (legacy lights both backends,
-		// Overdrive lights Overdrive only), otherwise all backends.
+		// ray-traced lights that backend only), otherwise all backends.
 		static unsigned GetElementRendererMask(tinyxml2::XMLElement* apElement);
 		// False when the renderer mask filter is on and the element excludes the
 		// world's backend; such objects are not created at all.

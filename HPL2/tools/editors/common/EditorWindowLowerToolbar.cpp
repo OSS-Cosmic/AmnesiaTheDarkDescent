@@ -345,6 +345,17 @@ void iEditorWindowLowerToolbar::OnUpdate(float afTimeStep)
 		mpBEnlargeViewport->SetPressed(mpEditor->GetFlags(eEditorFlag_ViewportEnlarged), false);
 	}
 
+	if(mpBShadowFlag)
+	{
+		// The overlay is a ray-traced renderer feature. The backend can change
+		// at runtime (View > Render mode), so re-gate every frame and re-push
+		// the pressed state when it comes back.
+		const bool bRayTraced = mpEditor->GetLitRendererBackend()!=eRendererBackend_Standard;
+		if(bRayTraced && mpBShadowFlag->IsEnabled()==false)
+			ApplyShadowFlagOverlay();
+		mpBShadowFlag->SetEnabled(bRayTraced);
+	}
+
 	if(mpHandleCamera)
 	{
 		mpBCameraLockToGrid->SetEnabled(bCameraIsOrtho==false);
@@ -434,6 +445,24 @@ bool iEditorWindowLowerToolbar::WindowSpecificInputCallback(iEditorInput* apInpu
 	return pAction!=NULL;
 }
 
+void iEditorWindowLowerToolbar::ApplyShadowFlagOverlay()
+{
+	if(mpBShadowFlag==NULL)
+		return;
+
+	// NULL under Standard, which has no such overlay.
+	cHybridRenderer* pHybridRenderer = dynamic_cast<cHybridRenderer*>(
+		mpEditor->GetEngine()->GetGraphics()->GetRenderer(eRenderer_Main));
+	if(pHybridRenderer)
+	{
+		pHybridRenderer->SetOverlay(mpBShadowFlag->IsPressed()
+			? (int)kOverlayModeShadowFlag
+			: (int)kOverlayModeIndirectLighting);
+	}
+}
+
+//----------------------------------------------------------------------
+
 bool iEditorWindowLowerToolbar::InputCallback(iWidget* apWidget, const cGuiMessageData& aData)
 {
 	iEditorWorld* pWorld = mpEditor->GetEditorWorld();
@@ -519,14 +548,7 @@ bool iEditorWindowLowerToolbar::InputCallback(iWidget* apWidget, const cGuiMessa
 	}
 	else if(apWidget==mpBShadowFlag)
 	{
-		cHybridRenderer* pHybridRenderer = dynamic_cast<cHybridRenderer*>(
-			mpEditor->GetEngine()->GetGraphics()->GetRenderer(eRenderer_Main));
-		if(pHybridRenderer)
-		{
-			pHybridRenderer->SetOverlay(mpBShadowFlag->IsPressed()
-				? (int)kOverlayModeShadowFlag
-				: (int)kOverlayModeIndirectLighting);
-		}
+		ApplyShadowFlagOverlay();
 	}
 	///////////////////////////
 	// Camera lock to grid button

@@ -106,6 +106,39 @@ public:
   cWindow *GetWindow() { return mpWindow; }
 
   iRenderer *GetRenderer(eRenderer aType);
+  // The lit renderer for one specific backend, or NULL when it was not built.
+  // Only ever non-NULL for both backends when the editor asked for a runtime
+  // switch and the device came up ray-tracing-capable.
+  iRenderer *GetLitRenderer(eRendererBackend aBackend);
+  // True when both lit renderers exist, i.e. SetRendererBackend can succeed.
+  bool CanSwitchRendererBackend() const;
+  // Repoints eRenderer_Main (and GetRendererBackend) at the other lit
+  // renderer. No GPU work and nothing destroyed: the per-viewport target sets
+  // swap themselves on the next Draw (cViewport::PrepareToRender). Returns
+  // false, changing nothing, when that renderer was not built.
+  bool SetRendererBackend(eRendererBackend aBackend);
+
+  // Ask for a different lit renderer. Applied at the next frame boundary, not
+  // here: callers are typically inside a frame with the primary command buffer
+  // open, and the switch destroys a renderer. Same request/apply split as
+  // SetVsync. Repeated requests in one frame collapse to the last one.
+  void RequestRendererBackend(eRendererBackend aBackend);
+  // Whether the DEVICE could host the other lit renderer. The device's
+  // capability mode is fixed for the session, so this is what decides if a
+  // switch is offered at all.
+  bool CanHostRendererBackend(eRendererBackend aBackend) const;
+
+  // cScene registers these: viewports must let go of the outgoing renderer
+  // before it is destroyed, and pick the incoming one up after it is built.
+  // cGraphics owns the timing; the scene owns what is attached to what.
+  void SetRendererBackendHandlers(std::function<void(iRenderer*)> aDetach,
+                                  std::function<void(eRendererBackend)> aAdopt);
+
+private:
+  // Applies a pending RequestRendererBackend at a frame boundary.
+  void ApplyPendingBackendSwitch();
+
+public:
   void ReloadRendererData();
 
   cPostEffectComposite *CreatePostEffectComposite();
@@ -132,9 +165,9 @@ public:
   bool GetScreenIsSetUp() { return mbScreenIsSetup; }
 
   eRendererBackend GetRendererBackend() const;
-  // True when the selected adapter can run the ray-traced Overdrive backend,
+  // True when the selected adapter can run the ray-traced backend,
   // whichever backend this session actually started.
-  bool IsOverdriveSupported() const { return mbOverdriveSupported; }
+  bool IsRayTracedSupported() const { return mbRayTracedSupported; }
 
   // The window/screen size is owned by cWindow — query it via
   // Interface<cWindow>::Get()->GetSize() / GetSizeF(). The swapchain follows
@@ -401,9 +434,26 @@ private:
   cDecalCreator *mpDecalCreator = nullptr;
   DebugDraw *mpDebugDraw = nullptr;
   cResources *mpResources = nullptr;
-  eRendererBackend mRendererBackend = eRendererBackend_Overdrive;
-  bool mbOverdriveSupported = false;
+  eRendererBackend mRendererBackend = eRendererBackend_RayTraced;
+  bool mbRayTracedSupported = false;
+  // Editors only: bring the device up ray-tracing-capable whenever the adapter
+  // allows it and build BOTH lit renderers, so the backend can change without
+  // a restart. The game leaves this false and builds exactly one.
+  bool mbRuntimeBackendSwitchAllowed = false;
 
+  // Pending backend switch, applied at the top of BeginActiveSet.
+  eRendererBackend mRequestedBackend = eRendererBackend_Standard;
+  bool mbBackendSwitchPending = false;
+  std::function<void(iRenderer*)> mBackendDetachHandler;
+  std::function<void(eRendererBackend)> mBackendAdoptHandler;
+
+  // Owning: one entry per backend, NULL when that renderer was not built.
+  iRenderer *mLitRenderers[eRendererBackend_LastEnum] = {};
+  // Owning: every renderer built, in creation order. Update/ReloadRendererData/
+  // teardown walk this, never mvRenderers — mvRenderers[eRenderer_Main] is an
+  // alias of one mLitRenderers entry and would double-free.
+  std::vector<iRenderer *> mvOwnedRenderers;
+  // Non-owning eRenderer lookup table.
   std::vector<iRenderer *> mvRenderers;
   std::vector<iPostEffectType *> mvPostEffectTypes;
 
