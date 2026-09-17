@@ -107,6 +107,11 @@ public:
 
 	void AddEntity(iLuxEntity *apEntity);
 
+	// Entities authored for the other renderer stay loaded but inert. Refreshed
+	// when the renderer backend changes, so a switch needs no map reload.
+	void UpdateEntityBackendDormancy(iLuxEntity *apEntity);
+	void UpdateBackendDormancy();
+
 	/**
 	 * Do not call this when IsDeletingAllWorldEntities is true!
 	 */

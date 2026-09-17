@@ -135,8 +135,8 @@ static hpl::eRendererBackend GetSelectedRendererBackend(cWidgetComboBox* apCombo
 		return hpl::eRendererBackend_Standard;
 
 	cWidgetItem* pItem = apCombo->GetItem(lSelectedItem);
-	if(pItem && pItem->GetUserValue() == (int)hpl::eRendererBackend_Overdrive)
-		return hpl::eRendererBackend_Overdrive;
+	if(pItem && pItem->GetUserValue() == (int)hpl::eRendererBackend_RayTraced)
+		return hpl::eRendererBackend_RayTraced;
 	return hpl::eRendererBackend_Standard;
 }
 
@@ -156,11 +156,13 @@ static void SelectRendererBackend(cWidgetComboBox* apCombo, hpl::eRendererBacken
 	}
 }
 
-static tWString RendererBackendTip(bool abOverdriveSupported)
+static tWString RendererBackendTip(bool abRayTracedSupported)
 {
-	if(abOverdriveSupported)
-		return TranslateOrDefault("OptionsMenu", "RendererTip",
-			_W("Ray traced lighting needs a GPU with hardware ray tracing. Changes take effect after restarting the game."));
+	if(abRayTracedSupported)
+		// New key: an old translation file would otherwise keep promising a
+		// restart that no longer happens.
+		return TranslateOrDefault("OptionsMenu", "RendererLiveTip",
+			_W("Ray traced lighting needs a GPU with hardware ray tracing. The change is applied immediately; the game pauses briefly while the renderer is rebuilt."));
 	return TranslateOrDefault("OptionsMenu", "RendererUnsupportedTip",
 		_W("This GPU does not support hardware ray tracing, so the Standard renderer is used."));
 }
@@ -613,8 +615,8 @@ void cLuxMainMenu_Options::AddBasicGfxOptions(cWidgetDummy* apDummy)
 	{
 		cWidgetItem* pItem = mpCBRendererBackend->AddItem(TranslateOrDefault("OptionsMenu", "RendererStandard", _W("Standard (original)")));
 		pItem->SetUserValue((int)hpl::eRendererBackend_Standard);
-		pItem = mpCBRendererBackend->AddItem(TranslateOrDefault("OptionsMenu", "RendererOverdrive", _W("Ray traced (Overdrive)")));
-		pItem->SetUserValue((int)hpl::eRendererBackend_Overdrive);
+		pItem = mpCBRendererBackend->AddItem(TranslateOrDefault("OptionsMenu", "RendererRayTraced", _W("Ray traced")));
+		pItem->SetUserValue((int)hpl::eRendererBackend_RayTraced);
 	}
 
 	// Shown by RefreshRendererBackendControl when the GPU cannot ray trace.
@@ -1863,26 +1865,28 @@ void cLuxMainMenu_Options::RefreshRendererBackendControl()
 
 	// The engine already started Standard on a GPU without ray tracing, so lock
 	// the choice there and say why instead of offering a backend that can't run.
-	bool bOverdriveSupported = gpBase->mpEngine->GetGraphics()->IsOverdriveSupported();
-	if(bOverdriveSupported == false)
+	bool bRayTracedSupported = gpBase->mpEngine->GetGraphics()->IsRayTracedSupported();
+	if(bRayTracedSupported == false)
 		SelectRendererBackend(mpCBRendererBackend, hpl::eRendererBackend_Standard, false);
-	mpCBRendererBackend->SetEnabled(bOverdriveSupported);
+	mpCBRendererBackend->SetEnabled(bRayTracedSupported);
 	if(mpLRendererBackendHelp)
-		mpLRendererBackendHelp->SetVisible(bOverdriveSupported == false);
+		mpLRendererBackendHelp->SetVisible(bRayTracedSupported == false);
 
 	cLuxOption_ExtData* pData = (cLuxOption_ExtData*)mpCBRendererBackend->GetUserData();
 	if(pData)
 	{
-		pData->msMessage = RendererBackendTip(bOverdriveSupported);
-		pData->mbNeedsRestart = bOverdriveSupported;
+		pData->msMessage = RendererBackendTip(bRayTracedSupported);
+		// The backend now applies live, so this control no longer asks for a
+		// restart. Resolution and display still do.
+		pData->mbNeedsRestart = false;
 	}
 
 	// A disabled widget cannot take focus, so route around it.
-	iWidget* pBelowScreen = bOverdriveSupported ? (iWidget*)mpCBRendererBackend : mpCBTextureSizeLevel;
+	iWidget* pBelowScreen = bRayTracedSupported ? (iWidget*)mpCBRendererBackend : mpCBTextureSizeLevel;
 	mpCBResolution->SetFocusNavigation(eUIArrow_Down, pBelowScreen);
 	mpChBVSync->SetFocusNavigation(eUIArrow_Down, pBelowScreen);
 	mpCBTextureSizeLevel->SetFocusNavigation(eUIArrow_Up,
-		bOverdriveSupported ? (iWidget*)mpCBRendererBackend : mpCBResolution);
+		bRayTracedSupported ? (iWidget*)mpCBRendererBackend : mpCBResolution);
 }
 
 //-----------------------------------------------------------------------
@@ -2026,6 +2030,11 @@ void cLuxMainMenu_Options::ApplyChanges()
 		pCfgHdr->mSuperSampling.provider = mSuperSamplingRequestedProvider;
 		pCfgHdr->mSuperSampling.quality = mSuperSamplingRequestedQuality;
 		pCfgHdr->mRendererBackend = GetSelectedRendererBackend(mpCBRendererBackend);
+		// Applied at the next frame boundary, for the same reason as the vsync
+		// call above: this runs inside OnDraw with the primary command buffer
+		// open, and the switch destroys a renderer. The stall is on that
+		// boundary, not here.
+		pGfx->RequestRendererBackend(pCfgHdr->mRendererBackend);
 		pCfgHdr->SetRenderScale(mfRenderScaleRequested);
 
 		//Update the viewport stuff

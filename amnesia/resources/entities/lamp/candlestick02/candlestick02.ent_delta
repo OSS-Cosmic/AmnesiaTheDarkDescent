@@ -34,7 +34,7 @@
         <RemoveAttr Name="Type" />
     </Modify>
     <Modify Category="Entities" ID="8" Name="PointLight_1">
-        <SetAttr CastShadows="true" RendererMask="1" ShadowResolution="High" ShadowsAffectDynamic="true" ShadowsAffectStatic="true" WorldPos="0 0.49 0" />
+        <SetAttr CastShadows="true" ShadowResolution="High" ShadowsAffectDynamic="true" ShadowsAffectStatic="true" WorldPos="0 0.49 0" Re_Intensity="5" Re_Radius="22" Re_SourceRadius="0.05" Re_FlickerOffIntensity="4.4" />
     </Modify>
     <Modify Category="Entities" ID="9" Name="Billboard_1">
         <RemoveAttr Name="Axis" />
@@ -42,7 +42,4 @@
         <RemoveAttr Name="Scale" />
         <RemoveAttr Name="Type" />
     </Modify>
-    <Add Category="Entities" After="8">
-        <Re_PointLight Active="true" CastShadows="true" DiffuseColor="0.850000 0.750000 0.300000 0.650000" FalloffMap="" FlickerActive="true" FlickerFade="true" FlickerOffColor="0.750000 0.650000 0.200000 0.500000" FlickerOffFadeMaxLength="2.000000" FlickerOffFadeMinLength="0.100000" FlickerOffMaxLength="0.000000" FlickerOffMinLength="0.000000" FlickerOffPS="" FlickerOffIntensity="4.4" FlickerOffSound="" FlickerOnFadeMaxLength="2.000000" FlickerOnFadeMinLength="0.100000" FlickerOnMaxLength="0.000000" FlickerOnMinLength="0.000000" FlickerOnPS="" FlickerOnSound="" Gobo="" GoboAnimFrameTime="0.000000" GoboAnimMode="None" Name="PointLight_1" Intensity="5" Radius="22" SourceRadius="0.05" Rotation="0.000000 0.000000 0.000000" Scale="1.000000 1.000000 1.000000" ShadowResolution="High" ShadowsAffectDynamic="true" ShadowsAffectStatic="true" Tag="" WorldPos="0 0.49 0" RendererMask="2" />
-    </Add>
 </EntDelta>

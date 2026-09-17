@@ -17,6 +17,7 @@
  * along with Amnesia: The Dark Descent.  If not, see <https://www.gnu.org/licenses/>.
  */
 
+#include "graphics/GraphicUtils.h"
 #include "LuxMap.h"
 
 #include "LuxConfigHandler.h"
@@ -74,6 +75,8 @@ cLuxMap::cLuxMap(const tString& asName)
 	msName = asName;
 
 	mpLatestAddedEntity = NULL;
+	mpWorld = NULL;
+	mpPhysicsWorld = NULL;
 
 	mpScript = {};
 
@@ -579,6 +582,34 @@ void cLuxMap::DestroyAllEntities()
 
 //-----------------------------------------------------------------------
 
+// An entity authored for the other renderer stays loaded but must not be solid,
+// audible or interactive. Called when it joins the map and again whenever the
+// backend changes.
+void cLuxMap::UpdateEntityBackendDormancy(iLuxEntity *apEntity)
+{
+	if(apEntity==NULL) return;
+
+	cMeshEntity *pMesh = apEntity->GetMeshEntity();
+	if(pMesh==NULL) return;   // nothing to mask; leave it alone
+
+	// The renderer that is actually drawing, NOT mpWorld: entities are added
+	// while cScene::LoadWorld is still running, so cLuxMap::mpWorld is not
+	// assigned yet. This is the same bit the render gate reads
+	// (rendering::IsObjectIsVisible), published by cWorld::SetRendererBackend.
+	const unsigned lMask = pMesh->GetRendererMask();
+	apEntity->SetBackendDormant((lMask & hpl::rendering::GetActiveRendererMaskBit()) == 0);
+}
+
+//-----------------------------------------------------------------------
+
+void cLuxMap::UpdateBackendDormancy()
+{
+	for(tLuxEntityListIt it=mlstEntities.begin(); it!=mlstEntities.end(); ++it)
+		UpdateEntityBackendDormancy(*it);
+}
+
+//-----------------------------------------------------------------------
+
 void cLuxMap::AddEntity(iLuxEntity *apEntity)
 {
 	tString sLowerName = cString::ToLowerCase(apEntity->GetName());
@@ -593,6 +624,8 @@ void cLuxMap::AddEntity(iLuxEntity *apEntity)
 	mlstEntities.push_back(apEntity);
 
 	mpLatestAddedEntity = apEntity;
+
+	UpdateEntityBackendDormancy(apEntity);
 
 	if(apEntity->GetEntityType() == eLuxEntityType_Enemy)
 	{

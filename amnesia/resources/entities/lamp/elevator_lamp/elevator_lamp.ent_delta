@@ -43,7 +43,7 @@
         <RemoveAttr Name="Type" />
     </Modify>
     <Modify Category="Entities" ID="9" Name="PointLight_1">
-        <SetAttr CastShadows="true" RendererMask="1" ShadowResolution="Low" ShadowsAffectDynamic="false" ShadowsAffectStatic="true" WorldPos="0.001197 0.549076 -0.001197" />
+        <SetAttr CastShadows="true" ShadowResolution="Low" ShadowsAffectDynamic="false" ShadowsAffectStatic="true" WorldPos="0.001197 0.549076 -0.001197" Re_Intensity="10" Re_Radius="29.9287" Re_SourceRadius="0.08" Re_FlickerOffIntensity="0.000000" />
     </Modify>
     <Modify Category="Entities" ID="10" Name="ParticleSystem_1">
         <RemoveAttr Name="GroupID" />
@@ -55,7 +55,4 @@
         <RemoveAttr Name="Scale" />
         <RemoveAttr Name="Type" />
     </Modify>
-    <Add Category="Entities" After="9">
-        <Re_PointLight Active="true" CastShadows="true" DiffuseColor="0.700000 0.450000 0.130000 1.000000" FalloffMap="" FlickerActive="false" FlickerFade="false" FlickerOffColor="0.000000 0.000000 0.000000 1.000000" FlickerOffFadeMaxLength="0.000000" FlickerOffFadeMinLength="0.000000" FlickerOffMaxLength="0.000000" FlickerOffMinLength="0.000000" FlickerOffPS="" FlickerOffIntensity="0.000000" FlickerOffSound="" FlickerOnFadeMaxLength="0.000000" FlickerOnFadeMinLength="0.000000" FlickerOnMaxLength="0.000000" FlickerOnMinLength="0.000000" FlickerOnPS="" FlickerOnSound="" Gobo="" GoboAnimFrameTime="0.000000" GoboAnimMode="None" Name="PointLight_1" Intensity="10" Radius="29.9287" SourceRadius="0.08" Rotation="0.000000 0.000000 0.000000" Scale="1.000000 1.000000 1.000000" ShadowResolution="Low" ShadowsAffectDynamic="false" ShadowsAffectStatic="true" Tag="" WorldPos="0.001197 0.549076 -0.001197" RendererMask="2" />
-    </Add>
 </EntDelta>

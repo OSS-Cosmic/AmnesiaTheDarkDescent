@@ -933,6 +933,19 @@ cEngineLight_SaveData::cEngineLight_SaveData()
 	mfFlickerOnIntensity = 0;
 	mfFlickerOnLegacyRadius = 0;
 	mfFlickerOnValue = 0;
+	mfLevel = 1;
+	mfFlickerOnLevel = 1;
+	mfStandardOnValue = 0;
+	mfStandardOffValue = 0;
+	mStandardDiffuseColor = cColor(1);
+	mbStandardCastShadows = false;
+	mfRayTracedOnValue = 0;
+	mfRayTracedOffValue = 0;
+	mfRayTracedReach = 0;
+	mfRayTracedSourceRadius = 0;
+	mbRayTracedReachFollowsIntensity = false;
+	mRayTracedDiffuseColor = cColor(1);
+	mbRayTracedCastShadows = false;
 	mbFlickerFade = false;
 	mfFlickerOnFadeMinLength = 0;
 	mfFlickerOnFadeMaxLength = 0;
@@ -952,7 +965,9 @@ void cEngineLight_SaveData::FromLight(iLight *apLight)
 
 	msName = apLight->GetName();
 	mlID = apLight->GetUniqueID();
-	mlVersion = 3;
+	mlVersion = 4;
+	// Diagnostics only from v4 on: the level and both tunings are backend
+	// independent, so a save no longer belongs to one renderer.
 	mlLightModel = apLight->GetLightModel() == eLightModel_Legacy ? 0 : 1;
 
 	mbActive = apLight->IsActive();
@@ -1001,6 +1016,26 @@ void cEngineLight_SaveData::FromLight(iLight *apLight)
 		mfFlickerOffLegacyRadius = mfFlickerOffRadius;
 		mfFlickerOnIntensity = mfFlickerOnValue;
 		mfFlickerOnLegacyRadius = mfFlickerOnValue;
+		// v4: the shared drive plus both authored tunings.
+		mfLevel = apLight->GetLevel();
+		mfFlickerOnLevel = apLight->GetFlickerOnLevel();
+		{
+			const cLightTuningState& standard = apLight->GetTuning(eLightModel_Legacy);
+			mfStandardOnValue = standard.mfOnValue;
+			mfStandardOffValue = standard.mfOffValue;
+			mStandardDiffuseColor = standard.mDiffuseColor;
+			mbStandardCastShadows = standard.mbCastShadows;
+
+			const cLightTuningState& rayTraced = apLight->GetTuning(eLightModel_RayTraced);
+			mfRayTracedOnValue = rayTraced.mfOnValue;
+			mfRayTracedOffValue = rayTraced.mfOffValue;
+			mfRayTracedReach = rayTraced.mfReach;
+			mfRayTracedSourceRadius = rayTraced.mfSourceRadius;
+			mbRayTracedReachFollowsIntensity = rayTraced.mbReachFollowsIntensity;
+			mRayTracedDiffuseColor = rayTraced.mDiffuseColor;
+			mbRayTracedCastShadows = rayTraced.mbCastShadows;
+		}
+
 		mbFlickerFade = apLight->GetFlickerFade();
 		mfFlickerOnFadeMinLength = apLight->GetFlickerOnFadeMinLength();
 		mfFlickerOnFadeMaxLength = apLight->GetFlickerOnFadeMaxLength();
@@ -1032,23 +1067,61 @@ void cEngineLight_SaveData::ToLight(iLight *apLight)
 		const bool bLegacy = apLight->GetLightModel() == eLightModel_Legacy;
 		float fOnValue = mfFarAttenuation;
 		float fOffValue = mfFlickerOffRadius;
-		if(mlVersion >= 3)
+		if(mlVersion >= 4)
 		{
-			const bool bSameModel = (mlLightModel == 0) == bLegacy;
-			if(bSameModel)
+			// Both tunings and the shared level round-trip, so a save made on
+			// one backend restores exactly on the other.
+			cLightTuningState standard = apLight->GetTuning(eLightModel_Legacy);
+			standard.mfOnValue = mfStandardOnValue;
+			standard.mfOffValue = mfStandardOffValue;
+			standard.mfReach = mfStandardOnValue;
+			standard.mDiffuseColor = mStandardDiffuseColor;
+			standard.mbCastShadows = mbStandardCastShadows;
+			apLight->SetTuning(eLightModel_Legacy, standard);
+
+			cLightTuningState rayTraced = apLight->GetTuning(eLightModel_RayTraced);
+			rayTraced.mfOnValue = mfRayTracedOnValue;
+			rayTraced.mfOffValue = mfRayTracedOffValue;
+			rayTraced.mfIntensity = mfRayTracedOnValue;
+			rayTraced.mfReach = mfRayTracedReach;
+			rayTraced.mfSourceRadius = mfRayTracedSourceRadius;
+			rayTraced.mbReachFollowsIntensity = mbRayTracedReachFollowsIntensity;
+			rayTraced.mDiffuseColor = mRayTracedDiffuseColor;
+			rayTraced.mbCastShadows = mbRayTracedCastShadows;
+			apLight->SetTuning(eLightModel_RayTraced, rayTraced);
+
+			apLight->SetLevel(mfLevel);
+			apLight->SetFlickerOnLevel(mfFlickerOnLevel);
+			fOnValue = apLight->GetFlickerOnValue();
+			fOffValue = apLight->GetFlickerOffValue();
+		}
+		else if(mlVersion == 3)
+		{
+			// The saved values belong to the backend mlLightModel names, so
+			// restore them into THAT tuning; the other one keeps what the map
+			// gave it. Before the tunings merged this branch had nowhere to put
+			// a cross-backend save and discarded it.
+			const eLightModel saved = mlLightModel == 0 ? eLightModel_Legacy
+														: eLightModel_RayTraced;
+			cLightTuningState tuning = apLight->GetTuning(saved);
+			const float fSavedOn = mbFlickering ? mfFlickerOnValue : mfFarAttenuation;
+			tuning.mfOnValue = fSavedOn;
+			tuning.mfOffValue = mfFlickerOffRadius;
+			if(saved==eLightModel_RayTraced)
 			{
-				apLight->SetRadius(mfRadius);
-				if(bLegacy==false) apLight->SetSourceRadius(mfSourceRadius);
-				fOnValue = mbFlickering ? mfFlickerOnValue : mfFarAttenuation;
+				tuning.mfIntensity = fSavedOn;
+				tuning.mfReach = mfRadius;
+				tuning.mfSourceRadius = mfSourceRadius;
 			}
 			else
 			{
-				// Saved on the other renderer backend: the values belong to the
-				// other light class, so keep the map-loaded ones. A light saved
-				// dark stays dark.
-				fOnValue = mfFarAttenuation > 0 ? apLight->GetAnimatedValue() : 0;
-				fOffValue = apLight->GetFlickerOffValue();
+				tuning.mfReach = mfRadius;
 			}
+			apLight->SetTuning(saved, tuning);
+
+			const bool bSameModel = (mlLightModel == 0) == bLegacy;
+			fOnValue = bSameModel ? fSavedOn : apLight->GetFlickerOnValue();
+			fOffValue = apLight->GetFlickerOffValue();
 		}
 		else if(mlVersion == 2)
 		{
@@ -1118,6 +1191,19 @@ kSerializeVar(mfFlickerOffLegacyRadius, eSerializeType_Float32)
 kSerializeVar(mfFlickerOnIntensity, eSerializeType_Float32)
 kSerializeVar(mfFlickerOnLegacyRadius, eSerializeType_Float32)
 kSerializeVar(mfFlickerOnValue, eSerializeType_Float32)
+kSerializeVar(mfLevel, eSerializeType_Float32)
+kSerializeVar(mfFlickerOnLevel, eSerializeType_Float32)
+kSerializeVar(mfStandardOnValue, eSerializeType_Float32)
+kSerializeVar(mfStandardOffValue, eSerializeType_Float32)
+kSerializeVar(mStandardDiffuseColor, eSerializeType_Color)
+kSerializeVar(mbStandardCastShadows, eSerializeType_Bool)
+kSerializeVar(mfRayTracedOnValue, eSerializeType_Float32)
+kSerializeVar(mfRayTracedOffValue, eSerializeType_Float32)
+kSerializeVar(mfRayTracedReach, eSerializeType_Float32)
+kSerializeVar(mfRayTracedSourceRadius, eSerializeType_Float32)
+kSerializeVar(mbRayTracedReachFollowsIntensity, eSerializeType_Bool)
+kSerializeVar(mRayTracedDiffuseColor, eSerializeType_Color)
+kSerializeVar(mbRayTracedCastShadows, eSerializeType_Bool)
 kSerializeVar(mbFlickerFade,eSerializeType_Bool)
 kSerializeVar(mfFlickerOnFadeMinLength, eSerializeType_Float32)
 kSerializeVar(mfFlickerOnFadeMaxLength, eSerializeType_Float32)

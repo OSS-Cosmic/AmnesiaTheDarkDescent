@@ -1,119 +1,17 @@
 <MapDelta Version="1" Target="maps/ptest/04_final.map">
     <Modify Category="Entities" ID="1121" Name="candle_floor_1">
-        <SetAttr RendererMask="1" />
+        <SetAttr Filename="entities/lamp/candle_floor/candle_floor.ent" />
     </Modify>
     <Modify Category="Entities" ID="1122" Name="candle_floor_2">
-        <SetAttr RendererMask="1" />
+        <SetAttr Filename="entities/lamp/candle_floor/candle_floor.ent" />
     </Modify>
     <Modify Category="Entities" ID="1123" Name="candle_floor_3">
-        <SetAttr RendererMask="1" />
+        <SetAttr Filename="entities/lamp/candle_floor/candle_floor.ent" />
     </Modify>
     <Modify Category="Entities" ID="1124" Name="candle_floor_4">
-        <SetAttr RendererMask="1" />
+        <SetAttr Filename="entities/lamp/candle_floor/candle_floor.ent" />
     </Modify>
     <Modify Category="Entities" ID="1129" Name="candle_floor_5">
-        <SetAttr RendererMask="1" />
+        <SetAttr Filename="entities/lamp/candle_floor/candle_floor.ent" />
     </Modify>
-    <Add Category="Entities">
-        <Entity Active="true" Group="0" Name="candle_floor_1" Rotation="-2.61404 1.13429 -2.74819" Scale="1 1 1" Tag="" WorldPos="-13.891 -0.00123824 20.1354" Filename="entities/lamp/candle_floor/candle_floor.ent" RendererMask="2">
-            <UserVariables>
-                <Var Name="CastShadows" Value="true" />
-                <Var Name="StaticPhysics" Value="false" />
-                <Var Name="IsAffectedByDecal" Value="false" />
-                <Var Name="CallbackFunc" Value="" />
-                <Var Name="ConnectedProps" Value="" />
-                <Var Name="ConnectionStateChangeCallback" Value="" />
-                <Var Name="FullGameSave" Value="false" />
-                <Var Name="PlayerLookAtCallback" Value="" />
-                <Var Name="PlayerLookAtCallbackAutoRemove" Value="false" />
-                <Var Name="PlayerInteractCallback" Value="" />
-                <Var Name="PlayerInteractCallbackAutoRemove" Value="false" />
-                <Var Name="Lit" Value="true" />
-                <Var Name="ConnectedLight" Value="" />
-                <Var Name="ConnectionLightAmount" Value="1" />
-                <Var Name="ConnectionLightUseOnColor" Value="true" />
-                <Var Name="ConnectionLightUseSpec" Value="false" />
-            </UserVariables>
-        </Entity>
-        <Entity Active="true" Group="0" Name="candle_floor_2" Rotation="2.72439 0.401936 3.0619" Scale="1 1 1" Tag="" WorldPos="-14.7525 0.0215817 19.6552" Filename="entities/lamp/candle_floor/candle_floor.ent" RendererMask="2">
-            <UserVariables>
-                <Var Name="CastShadows" Value="true" />
-                <Var Name="StaticPhysics" Value="false" />
-                <Var Name="IsAffectedByDecal" Value="false" />
-                <Var Name="CallbackFunc" Value="" />
-                <Var Name="ConnectedProps" Value="" />
-                <Var Name="ConnectionStateChangeCallback" Value="" />
-                <Var Name="FullGameSave" Value="false" />
-                <Var Name="PlayerLookAtCallback" Value="" />
-                <Var Name="PlayerLookAtCallbackAutoRemove" Value="false" />
-                <Var Name="PlayerInteractCallback" Value="" />
-                <Var Name="PlayerInteractCallbackAutoRemove" Value="false" />
-                <Var Name="Lit" Value="true" />
-                <Var Name="ConnectedLight" Value="" />
-                <Var Name="ConnectionLightAmount" Value="1" />
-                <Var Name="ConnectionLightUseOnColor" Value="true" />
-                <Var Name="ConnectionLightUseSpec" Value="false" />
-            </UserVariables>
-        </Entity>
-        <Entity Active="true" Group="0" Name="candle_floor_3" Rotation="-1.48827 -1.42701 1.4837" Scale="1 1 1" Tag="" WorldPos="-15.804 0.0718479 22.1901" Filename="entities/lamp/candle_floor/candle_floor.ent" RendererMask="2">
-            <UserVariables>
-                <Var Name="CastShadows" Value="true" />
-                <Var Name="StaticPhysics" Value="false" />
-                <Var Name="IsAffectedByDecal" Value="false" />
-                <Var Name="CallbackFunc" Value="" />
-                <Var Name="ConnectedProps" Value="" />
-                <Var Name="ConnectionStateChangeCallback" Value="" />
-                <Var Name="FullGameSave" Value="false" />
-                <Var Name="PlayerLookAtCallback" Value="" />
-                <Var Name="PlayerLookAtCallbackAutoRemove" Value="false" />
-                <Var Name="PlayerInteractCallback" Value="" />
-                <Var Name="PlayerInteractCallbackAutoRemove" Value="false" />
-                <Var Name="Lit" Value="true" />
-                <Var Name="ConnectedLight" Value="" />
-                <Var Name="ConnectionLightAmount" Value="1" />
-                <Var Name="ConnectionLightUseOnColor" Value="true" />
-                <Var Name="ConnectionLightUseSpec" Value="false" />
-            </UserVariables>
-        </Entity>
-        <Entity Active="true" Group="0" Name="candle_floor_4" Rotation="3.05366 -1.31019 2.95039" Scale="1 1 1" Tag="" WorldPos="-15.9969 0.0182243 19.798" Filename="entities/lamp/candle_floor/candle_floor.ent" RendererMask="2">
-            <UserVariables>
-                <Var Name="CastShadows" Value="true" />
-                <Var Name="StaticPhysics" Value="false" />
-                <Var Name="IsAffectedByDecal" Value="false" />
-                <Var Name="CallbackFunc" Value="" />
-                <Var Name="ConnectedProps" Value="" />
-                <Var Name="ConnectionStateChangeCallback" Value="" />
-                <Var Name="FullGameSave" Value="false" />
-                <Var Name="PlayerLookAtCallback" Value="" />
-                <Var Name="PlayerLookAtCallbackAutoRemove" Value="false" />
-                <Var Name="PlayerInteractCallback" Value="" />
-                <Var Name="PlayerInteractCallbackAutoRemove" Value="false" />
-                <Var Name="Lit" Value="true" />
-                <Var Name="ConnectedLight" Value="" />
-                <Var Name="ConnectionLightAmount" Value="1" />
-                <Var Name="ConnectionLightUseOnColor" Value="true" />
-                <Var Name="ConnectionLightUseSpec" Value="false" />
-            </UserVariables>
-        </Entity>
-        <Entity Active="true" Group="0" Name="candle_floor_5" Rotation="-0.109 0.667341 -0.138464" Scale="1 1 1" Tag="" WorldPos="-12.1266 0.0560159 23.507" Filename="entities/lamp/candle_floor/candle_floor.ent" RendererMask="2">
-            <UserVariables>
-                <Var Name="CastShadows" Value="true" />
-                <Var Name="StaticPhysics" Value="false" />
-                <Var Name="IsAffectedByDecal" Value="false" />
-                <Var Name="CallbackFunc" Value="" />
-                <Var Name="ConnectedProps" Value="" />
-                <Var Name="ConnectionStateChangeCallback" Value="" />
-                <Var Name="FullGameSave" Value="false" />
-                <Var Name="PlayerLookAtCallback" Value="" />
-                <Var Name="PlayerLookAtCallbackAutoRemove" Value="false" />
-                <Var Name="PlayerInteractCallback" Value="" />
-                <Var Name="PlayerInteractCallbackAutoRemove" Value="false" />
-                <Var Name="Lit" Value="true" />
-                <Var Name="ConnectedLight" Value="" />
-                <Var Name="ConnectionLightAmount" Value="1" />
-                <Var Name="ConnectionLightUseOnColor" Value="true" />
-                <Var Name="ConnectionLightUseSpec" Value="false" />
-            </UserVariables>
-        </Entity>
-    </Add>
 </MapDelta>

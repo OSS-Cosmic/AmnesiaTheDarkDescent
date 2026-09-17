@@ -269,6 +269,7 @@ void cLuxMapHandler::UpdateViewportRenderProperties()
 	pRenderSettings->mbSSAOActive = gpBase->mpConfigHandler->mbSSAOActive;
 	// The viewport resolves provider availability itself; unavailable providers fall back to native extent and are reported via cViewport::GetTemporalUpscalerStatus().
 	mpViewport->SetTemporalUpscalerSettings(gpBase->mpConfigHandler->mSuperSampling);
+
 }
 
 //-----------------------------------------------------------------------
@@ -292,6 +293,18 @@ void cLuxMapHandler::Update(float afTimeStep)
 {
 	//TODO: Bad placement! Moooove!
 	gpBase->mpEffectRenderer->ClearRenderLists();
+
+	// The renderer backend is applied at a frame boundary inside cGraphics, so
+	// notice it here rather than where the option was changed: entities
+	// authored for the other renderer go inert, or come back.
+	const eRendererBackend currentBackend =
+		gpBase->mpEngine->GetGraphics()->GetRendererBackend();
+	if(currentBackend != mLastRendererBackend)
+	{
+		mLastRendererBackend = currentBackend;
+		if(mpCurrentMap)
+			mpCurrentMap->UpdateBackendDormancy();
+	}
 
 	CheckMapChange(afTimeStep);
 

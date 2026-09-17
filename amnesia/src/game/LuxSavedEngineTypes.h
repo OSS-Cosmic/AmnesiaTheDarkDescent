@@ -319,10 +319,10 @@ public:
 	void ToLight(iLight *apLight);
 
 	// Version 1 is the historical save contract. Version 2 stored the dual
-	// legacy/Overdrive values of one light. Version 3 stores the light's model
-	// and its animated value (radius on legacy lights, intensity on Overdrive).
+	// legacy/ray-traced values of one light. Version 3 stores the light's model
+	// and its animated value (radius on legacy lights, intensity on ray-traced lights).
 	int mlVersion;
-	int mlLightModel; // 0 legacy, 1 Overdrive; -1 before version 3
+	int mlLightModel; // 0 legacy, 1 ray-traced; -1 before version 3
 	tString msName;
 	int mlID;
 	bool mbActive;
@@ -330,7 +330,7 @@ public:
 	bool mbOnlyAffectInSector;
 
 	cColor mDiffuseColor;
-	float mfFarAttenuation; // Animated value (v3), Overdrive intensity (v1/v2).
+	float mfFarAttenuation; // Animated value (v3), ray-traced intensity (v1/v2).
 	// Version 2 preserves authored reach/source size independently of Legacy.
 	float mfRadius;
 	float mfSourceRadius;
@@ -353,6 +353,25 @@ public:
 	float mfFlickerOnIntensity;
 	float mfFlickerOnLegacyRadius;
 	float mfFlickerOnValue; // v3
+
+	// v4: a light carries BOTH backends' tuning and one shared level, so a save
+	// restores exactly whichever backend it is loaded on.
+	float mfLevel;
+	float mfFlickerOnLevel;
+	// Standard tuning.
+	float mfStandardOnValue;
+	float mfStandardOffValue;
+	cColor mStandardDiffuseColor;
+	bool mbStandardCastShadows;
+	// Ray-traced tuning.
+	float mfRayTracedOnValue;
+	float mfRayTracedOffValue;
+	float mfRayTracedReach;
+	float mfRayTracedSourceRadius;
+	bool mbRayTracedReachFollowsIntensity;
+	cColor mRayTracedDiffuseColor;
+	bool mbRayTracedCastShadows;
+
 	bool mbFlickerFade;
 	float mfFlickerOnFadeMinLength;
 	float mfFlickerOnFadeMaxLength;

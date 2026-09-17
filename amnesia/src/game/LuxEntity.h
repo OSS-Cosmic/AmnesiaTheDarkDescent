@@ -153,6 +153,18 @@ public:
 	void SetActive(bool abX);
 	bool IsActive(){ return mbActive;}
 
+	// This entity is authored for the other renderer. It stays loaded -- so the
+	// world's contents do not depend on the backend the session started in, and
+	// a backend switch needs no reload -- but it must not be solid, audible or
+	// interactive while it is not being drawn.
+	//
+	// Kept separate from mbActive so the SAVED active state round-trips
+	// untouched; what drives the entity is the two composed.
+	void SetBackendDormant(bool abX);
+	bool IsBackendDormant() const { return mbBackendDormant; }
+	// What the entity actually behaves as.
+	bool IsEffectivelyActive() const { return mbActive && !mbBackendDormant; }
+
 	cLuxMap *GetMap(){ return mpMap;}
 
 	void SetFullGameSave(bool abX){ mbFullGameSave=abX;}
@@ -227,6 +239,8 @@ protected:
 	tString msName;
 	bool mbFullGameSave;
 	bool mbActive;
+	// Authored for the other renderer; see SetBackendDormant.
+	bool mbBackendDormant = false;
 	bool mbIsSaved;
 	int mlID;
 

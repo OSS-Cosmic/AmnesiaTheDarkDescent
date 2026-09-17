@@ -271,15 +271,15 @@ tString cLuxConfigHandler::RendererBackendToString(hpl::eRendererBackend aBacken
 	switch(aBackend)
 	{
 	case hpl::eRendererBackend_Standard: return "standard";
-	case hpl::eRendererBackend_Overdrive:
-	default: return "overdrive";
+	case hpl::eRendererBackend_RayTraced:
+	default: return "raytraced";
 	}
 }
 
 hpl::eRendererBackend cLuxConfigHandler::RendererBackendFromString(const tString& asValue)
 {
 	tString sValue = cString::ToLowerCase(asValue);
-	if(sValue=="overdrive") return hpl::eRendererBackend_Overdrive;
+	if(sValue=="raytraced") return hpl::eRendererBackend_RayTraced;
 	return hpl::eRendererBackend_Standard;
 }
 

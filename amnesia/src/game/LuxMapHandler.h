@@ -165,6 +165,8 @@ private:
 	cLuxModelCache *mpDataCache;
 
 	cLuxMap* mpCurrentMap;
+	// Last backend seen by Update, so a live switch is noticed once.
+	eRendererBackend mLastRendererBackend = eRendererBackend_Standard;
 
 	tLuxMapList mlstMaps;
 

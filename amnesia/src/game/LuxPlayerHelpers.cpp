@@ -1770,19 +1770,25 @@ void cLuxPlayerLantern::CreateWorldEntities(cLuxMap *apMap)
 	cCamera *pCam = mpPlayer->GetCamera();
 
 	// The lantern's Radius is the legacy light radius on Standard and both the
-	// reach and the intensity on Overdrive (a light with no reach is dropped by
-	// the Overdrive light grid).
-	if(pWorld->GetRendererBackend() == eRendererBackend_Standard)
+	// reach and the intensity on the ray-traced backend (a light with no reach
+	// is dropped by the ray-traced light grid). The light carries both tunings,
+	// so it no longer forks on the backend: authoring the radius promotes the
+	// ray-traced tuning to the same numbers the fork produced.
+	mpLight = pWorld->CreateLightPoint("PlayerLantern",msGobo,false);
 	{
-		mpLight = pWorld->CreateLightPointLegacy("PlayerLantern",msGobo,false);
+		cLightTuningState tuning;
+		tuning.mfReach = mfRadius;
+		tuning.mfOnValue = mfRadius;
+		// The retail radius doubles as the ray-traced intensity, as the
+		// backend-specific lantern did before the two tunings merged.
+		tuning.mfIntensity = mfRadius;
+		tuning.mbReachFollowsIntensity = false;
+		tuning.mDiffuseColor = cColor(0,0);
+		tuning.mDefaultDiffuseColor = tuning.mDiffuseColor;
+		tuning.mbAuthored = true;
+		mpLight->SetTuning(eLightModel_Legacy, tuning);
+		mpLight->SetTuning(eLightModel_RayTraced, tuning);
 	}
-	else
-	{
-		mpLight = pWorld->CreateLightPoint("PlayerLantern",msGobo,false);
-		mpLight->SetIntensity(mfRadius);
-	}
-	mpLight->SetRadius(mfRadius);
-	mpLight->SetDiffuseColor(cColor(0,0));
 	
 	mpLight->SetIsSaved(false);
 
@@ -2878,7 +2884,7 @@ void cLuxPlayerLightLevel::OnMapEnter(cLuxMap *apMap)
 {
 	Reset();
 	//Discard prior-map answers. The next update publishes a Legacy CPU reading
-	//or retains the fully-lit startup default until Overdrive probes complete.
+	//or retains the fully-lit startup default until ray-traced probes complete.
 	cGraphics *pGraphics = gpBase->mpEngine->GetGraphics();
 	if(pGraphics && pGraphics->lightProbe)
 		pGraphics->lightProbe->Reset();
@@ -3088,7 +3094,7 @@ void cLuxPlayerInDarkness::CreateWorldEntities(cLuxMap *apMap)
 		fReach = mfAmbientLightRadius*0.5f;
 
 	//AmbientLightRadius is an authored DISTANCE: the legacy light's radius and
-	//the Overdrive light's reach. On Overdrive the intensity is solved from it so
+	//the ray-traced light's reach. On that backend the intensity is solved from it so
 	//the inverse-square falloff reaches the cull floor exactly at that distance.
 	//The colour passed is the lit one - the light starts black and fades in, and
 	//a black colour has no brightness to solve against.

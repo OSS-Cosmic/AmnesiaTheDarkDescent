@@ -147,9 +147,26 @@ void iLuxEntity::SetActive(bool abX)
 {
 	if(mbActive == abX) return;
 
+	const bool bWasActive = IsEffectivelyActive();
 	mbActive = abX;
 
-    OnSetActive(abX);
+	// A dormant entity is already switched off; remember the wish and apply it
+	// when its backend comes back.
+	if(IsEffectivelyActive() != bWasActive)
+		OnSetActive(IsEffectivelyActive());
+}
+
+//-----------------------------------------------------------------------
+
+void iLuxEntity::SetBackendDormant(bool abX)
+{
+	if(mbBackendDormant == abX) return;
+
+	const bool bWasActive = IsEffectivelyActive();
+	mbBackendDormant = abX;
+
+	if(IsEffectivelyActive() != bWasActive)
+		OnSetActive(IsEffectivelyActive());
 }
 
 //-----------------------------------------------------------------------

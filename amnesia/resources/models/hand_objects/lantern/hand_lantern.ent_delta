@@ -1,11 +1,8 @@
 <EntDelta Version="1" Target="models/hand_objects/lantern/hand_lantern.ent">
     <Modify Category="Entities" ID="3" Name="PointLight_1">
-        <SetAttr CastShadows="true" RendererMask="1" ShadowResolution="High" ShadowsAffectDynamic="true" ShadowsAffectStatic="true" WorldPos="0.0027 -0.105 0.0054" />
+        <SetAttr CastShadows="true" ShadowResolution="High" ShadowsAffectDynamic="true" ShadowsAffectStatic="true" WorldPos="0.0027 -0.105 0.0054" Re_Intensity="10" Re_SourceRadius="0.002" Re_FlickerOffIntensity="9.5" />
     </Modify>
     <Modify Category="Entities" ID="2" Name="Billboard_1">
         <SetAttr WorldPos="0.0027 -0.125 0.0054" />
     </Modify>
-    <Add Category="Entities" After="3">
-        <Re_PointLight Active="true" CastShadows="true" DiffuseColor="0.845 0.69 0.155 0.689" FalloffMap="" FlickerActive="true" FlickerFade="true" FlickerOffColor="0.758 0.568 0.103 1" FlickerOffFadeMaxLength="0.65" FlickerOffFadeMinLength="0.35" FlickerOffMaxLength="0" FlickerOffMinLength="0" FlickerOffPS="" FlickerOffIntensity="9.5" FlickerOffSound="" FlickerOnFadeMaxLength="0.65" FlickerOnFadeMinLength="0.35" FlickerOnMaxLength="0" FlickerOnMinLength="0" FlickerOnPS="" FlickerOnSound="" Gobo="" GoboAnimFrameTime="0" GoboAnimMode="None" Name="PointLight_1" Intensity="10" SourceRadius="0.002" Rotation="0.045518 0.285148 0.672241" Scale="1 1 1" ShadowResolution="High" ShadowsAffectDynamic="true" ShadowsAffectStatic="true" Tag="" WorldPos="0.0027 -0.105 0.0054" RendererMask="2" />
-    </Add>
 </EntDelta>

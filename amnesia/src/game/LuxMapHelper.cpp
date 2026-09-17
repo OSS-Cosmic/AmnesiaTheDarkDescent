@@ -546,9 +546,11 @@ float cLuxMapHelper::GetLightLevelAtPos(const cVector3f& avPos, std::vector<iLig
 	while(lightIt.HasNext())
 	{
 		iLight *pLight = lightIt.Next();
-		if(pLight->GetLightModel() == eLightModel_Legacy && pLight->IsLegacyRendererEnabled()==false) continue;
+		// Every light exists on both backends now, so the mask is what says
+		// whether this one lights the player.
+		if(pLight->IsRendererEnabled(pWorld->GetRendererMaskBit())==false) continue;
 		if(pLight->IsVisible()==false) continue;
-		// Gameplay reach: the legacy radius, or the Overdrive intensity (the value
+		// Gameplay reach: the legacy radius, or the ray-traced intensity (the value
 		// retail maps authored as Radius), whichever the light animates.
 		const float fReach = pLight->GetAnimatedValue();
 

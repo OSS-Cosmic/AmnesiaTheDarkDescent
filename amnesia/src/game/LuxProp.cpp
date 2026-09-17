@@ -1070,7 +1070,7 @@ void iLuxProp::SetupEffectData()
 		cLuxProp_LightData lightData;
 
 		lightData.mOnColor = pLight->GetDiffuseColor();
-		// Legacy radius or Overdrive intensity, whichever the light animates.
+		// Legacy radius or ray-traced intensity, whichever the light animates.
 		lightData.mfOnRadius = pLight->GetAnimatedValue();
 		lightData.mbFlickering = pLight->GetFlickerActive();
 
