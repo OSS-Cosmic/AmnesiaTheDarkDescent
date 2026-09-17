@@ -355,7 +355,7 @@ namespace hpl {
 			Error("Unknown light type '%s'%s\n", apElement->Value(),
 				strncmp(apElement->Value(), kLightOverrideAttributePrefix,
 						strlen(kLightOverrideAttributePrefix))==0
-					? " (pre-merge twin element -- run scripts/merge_raytraced_lights.py)" : "");
+					? " (pre-merge twin element -- use one light element with Re_ tuning attributes)" : "");
 			return NULL;
 		}
 

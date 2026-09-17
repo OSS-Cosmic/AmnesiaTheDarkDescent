@@ -6,6 +6,9 @@ upstream license, source URLs, commit, and SHA-256 values are recorded in
 [`third_party/utest/README.md`](third_party/utest/README.md). No build-time
 network access or dependency download is required.
 
+The Python suite runs with `python3 scripts/run_python_tests.py`. Its
+source-resource checks do not require a retail installation.
+
 ## Test projects
 
 `premake/tests.lua` applies one local include helper to every C++ test project.

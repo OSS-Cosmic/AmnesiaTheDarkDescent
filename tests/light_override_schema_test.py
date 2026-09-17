@@ -6,7 +6,7 @@ element authors one. This test walks the shipped Redux resources and asserts
 the data keeps that contract:
 
   * no pre-merge Re_PointLight / Re_SpotLight / Re_AreaLight *elements* remain
-    (scripts/merge_raytraced_lights.py folded them into their retail partner);
+    (their tuning belongs on the corresponding light as Re_ attributes);
   * every Re_ attribute names something cEngineFileLoading::LoadLight actually
     reads, so a typo like Re_Castshadows cannot sit in the data doing nothing;
   * nothing tries to override transform or identity, which the loader reads
@@ -67,7 +67,7 @@ class LightOverrideSchemaTest(unittest.TestCase):
                 if elem.tag in TWIN_TAGS:
                     offenders.append('%s: <%s Name="%s">' % (path, elem.tag, elem.get('Name', '?')))
         self.assertEqual([], offenders,
-                         'pre-merge twin elements remain; run scripts/merge_raytraced_lights.py')
+                         'pre-merge twin elements remain; use one light element with Re_ tuning attributes')
 
     def test_override_attributes_are_readable_by_the_loader(self):
         offenders = []
