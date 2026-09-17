@@ -22,11 +22,3 @@ jobs:
     uses: ./.github/workflows/windows-build.yml
     with:
       config: release
-
-  windows-fsr-disabled:
-    uses: ./.github/workflows/windows-build.yml
-    with:
-      config: release
-      premake_args: --with-fsr=no
-      name_suffix: '-fsr-disabled'
-      with_fsr: false

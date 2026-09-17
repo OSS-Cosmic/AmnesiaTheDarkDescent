@@ -22,11 +22,6 @@ on:
         type: string
         default: 'V0000'
         required: false
-      with_fsr:
-        description: 'Whether FSR is enabled; controls setup of FSR-only tools'
-        type: boolean
-        default: true
-        required: false
 
 jobs:
   windows:
@@ -54,14 +49,12 @@ jobs:
       # cmake/fsr hard-fails without Python 3; pin the minor version rather than
       # depending on whichever interpreter the hosted runner happens to expose.
       - name: Install Python
-        if: ${{ inputs.with_fsr }}
         id: setup-python
         uses: actions/setup-python@v5
         with:
           python-version: "3.12"
 
       - name: Validate Python
-        if: ${{ inputs.with_fsr }}
         run: |
           $python = "${{ steps.setup-python.outputs.python-path }}"
           if (-not $python -or -not (Test-Path -LiteralPath $python)) {
@@ -77,7 +70,6 @@ jobs:
       # glslang >= 16 ships the binary as glslang.exe (glslangValidator.exe was
       # dropped); the command line is unchanged, and cmake/fsr looks for both names.
       - name: Install glslang
-        if: ${{ inputs.with_fsr }}
         run: |
           $archive = "$env:RUNNER_TEMP\glslang.zip"
           $root = "$env:RUNNER_TEMP\glslang"
@@ -111,9 +103,8 @@ jobs:
           key: slang-${{ runner.os }}-${{ hashFiles('premake/slang.lua') }}
 
       # The FSR archive is immutable and verified by this SHA-256 in premake;
-      # cache it with its extracted tree so enabled builds do not download it again.
+      # cache it with its extracted tree so builds do not download it again.
       - name: Cache FSR SDK
-        if: ${{ inputs.with_fsr }}
         uses: actions/cache@v4
         with:
           path: build-premake/_deps/fsr-sdk
@@ -121,7 +112,6 @@ jobs:
 
       # The XeSS archive is immutable and verified by this SHA-256 in premake;
       # cache it with its extracted tree so builds do not download it again.
-      # No FSR guard: XeSS is enabled for every Windows build.
       - name: Cache XeSS SDK
         uses: actions/cache@v4
         with:
@@ -131,24 +121,15 @@ jobs:
       # build-windows.ps1 uses vs2026 locally; hosted runners ship VS 2022 and
       # premake5.lua pins no _ACTION, so vs2022 generates the same projects.
       - name: Generate solution
-        if: ${{ inputs.with_fsr }}
         run: premake5 vs2022 "--build-version=$env:BUILD_VERSION" --python="${{ steps.setup-python.outputs.python-path }}" ${{ inputs.premake_args }}
 
-      # --with-fsr=no skips the SDK and cmake/fsr entirely, so it needs no
-      # FSR-specific tool setup or Python override.
-      - name: Generate solution (FSR disabled)
-        if: ${{ !inputs.with_fsr }}
-        run: premake5 vs2022 "--build-version=$env:BUILD_VERSION" ${{ inputs.premake_args }}
-
-      # PythonTests uses setup-python for FSR builds and the runner's PATH
-      # Python otherwise.
+      # PythonTests runs against the setup-python interpreter pinned above.
       - name: Build
         run: msbuild build-premake\Amnesia.sln /p:Configuration=$env:BUILD_FOLDER /p:Platform=x64 /m /v:m
 
       # Exercise the FSR copy_dir deploy on a warm tree; this is one incremental
       # external-target rerun, not a second full compile.
       - name: Rebuild FSR external (incremental)
-        if: ${{ inputs.with_fsr }}
         run: msbuild build-premake\Amnesia.sln /t:FsrSdkExternal /p:Configuration=$env:BUILD_FOLDER /p:Platform=x64 /v:m
 
       # Force the game deploy postbuilds, including XeSS; this costs one relink,
@@ -170,14 +151,12 @@ jobs:
           if (-not (Test-Path -LiteralPath $gameExe -PathType Leaf)) {
             throw "Game executable was not recreated by the relink: $gameExe"
           }
-          if ("${{ inputs.with_fsr }}" -eq "true") {
-            $fsrLicenses = Join-Path $outputDir "licenses"
-            if (-not (Test-Path -LiteralPath $fsrLicenses -PathType Container)) {
-              throw "Expected FSR deployment directory was not created: $fsrLicenses"
-            }
-            if (-not (Get-ChildItem -LiteralPath $fsrLicenses -Force -ErrorAction Stop | Select-Object -First 1)) {
-              throw "FSR deployment directory is empty: $fsrLicenses"
-            }
+          $fsrLicenses = Join-Path $outputDir "licenses"
+          if (-not (Test-Path -LiteralPath $fsrLicenses -PathType Container)) {
+            throw "Expected FSR deployment directory was not created: $fsrLicenses"
+          }
+          if (-not (Get-ChildItem -LiteralPath $fsrLicenses -Force -ErrorAction Stop | Select-Object -First 1)) {
+            throw "FSR deployment directory is empty: $fsrLicenses"
           }
           # link_xess() echoes and continues when a notice file is absent from the
           # SDK, so assert the deploy only for files the SDK actually ships --

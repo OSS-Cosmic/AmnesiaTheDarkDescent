@@ -22,11 +22,6 @@ on:
         type: string
         default: 'V0000'
         required: false
-      with_fsr:
-        description: 'Whether FSR is enabled; controls setup of FSR-only tools'
-        type: boolean
-        default: true
-        required: false
 
 jobs:
   linux:
@@ -88,7 +83,6 @@ jobs:
       # a single cold build cannot catch that. Re-running this target costs
       # seconds instead of running a second full build.
       - name: Rebuild FSR external (incremental)
-        if: ${{ inputs.with_fsr }}
         run: make -C build-premake config=${{ inputs.config }} FsrSdkExternal
 
       - name: Package
