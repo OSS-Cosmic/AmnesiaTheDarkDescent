@@ -6,20 +6,28 @@
 // has no GPU, so this is where frustum-extraction and survivor-selection bugs
 // have to be caught.
 
+// MathLib's emulation.h macro-defines the AVX intrinsic names it emulates
+// (_mm256_loadu_si256 -> emu_mm256_loadu_si256), and with ML_NAMESPACE the
+// emu_* functions land in namespace ml while the macros stay global. Any
+// system header pulled in after ml.h that touches those intrinsics -- MSVC's
+// <wchar.h> does -- then fails to resolve the replacement. So: system and
+// third-party headers first, ml.h last.
+#include <algorithm>
+#include <cmath>
+#include <cstddef>
+#include <cstdint>
+#include <cstring>
+#include <limits>
+#include <random>
+#include <vector>
+
+#include "utest.h"
+
 #define ML_NAMESPACE
 #include "ml.h"
 
 #include "../../amnesia/slang/StandardCull.h"
 #include "graphics/StandardShadowCull.h"
-#include "utest.h"
-
-#include <algorithm>
-#include <cmath>
-#include <cstddef>
-#include <cstring>
-#include <limits>
-#include <random>
-#include <vector>
 
 namespace {
 
