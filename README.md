@@ -44,8 +44,6 @@ there, so the executable finds the game's data files.
 
 ## Building
 
-The build system is **premake5**. There is no CMake build in this tree any more.
-
 ### Prerequisites
 
 - **premake5 5.0.0-beta8** on your `PATH` ([releases](https://github.com/premake/premake-core/releases)).
@@ -59,6 +57,8 @@ The build system is **premake5**. There is no CMake build in this tree any more.
   ```
   git config --system core.longpaths true
   ```
+
+### Getting Started
 
 ```
 git clone --recurse-submodules git@github.com:flying-swallow/Redux-AmnesiaTheDarkDescent.git
