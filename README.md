@@ -46,7 +46,7 @@ there, so the executable finds the game's data files.
 
 ### Prerequisites
 
-- **premake5 5.0.0-beta8** on your `PATH` ([releases](https://github.com/premake/premake-core/releases)).
+- **premake5 5.0.0-beta8** on your `PATH` for manual and native Linux builds ([releases](https://github.com/premake/premake-core/releases)). The Windows wrapper downloads this pinned version when it is unavailable or incompatible.
 - **CMake** — not for this project, but SDL2 and openal-soft are built by driving their own CMake
   (`premake/external.lua`).
 - Linux: GCC or Clang with C++20, plus the X11/Wayland/GL/audio development packages. The exact apt list is
@@ -139,6 +139,10 @@ holding the game's `config/`, `entities/`, `maps/`, `core/`, and so on. Two ways
 - Stage your install's assets and the Redux resources next to the build output:
   ```
   ./deploy.sh --game-dir "$HOME/.steam/steam/steamapps/common/Amnesia The Dark Descent"
+  ```
+  On Windows, use the native PowerShell wrapper:
+  ```powershell
+  .\deploy.ps1 -GameDir "C:\Program Files (x86)\Steam\steamapps\common\Amnesia The Dark Descent"
   ```
   This copies everything except the original binaries, DLLs, and archives into
   `build-premake/amnesia/<Config>/`, then adds `amnesia/resources` (`--resources copy`,

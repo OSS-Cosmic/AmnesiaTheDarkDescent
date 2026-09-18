@@ -29,9 +29,9 @@ For an existing checkout:
 git submodule update --init --recursive
 ```
 
-## 2. Game assets (`deploy.sh`)
+## 2. Game assets (`deploy.sh` / `deploy.ps1`)
 
-[`deploy.sh`](deploy.sh) stages a self-contained run directory after a build: it copies the installed Amnesia: The Dark Descent assets into `build-premake/amnesia/Debug/` and `build-premake/amnesia/Release/` (whichever exist), then brings in the Redux resources from `amnesia/resources`. You need a legitimate copy of **Amnesia: The Dark Descent** (e.g. via Steam).
+[`deploy.sh`](deploy.sh) and [`deploy.ps1`](deploy.ps1) stage a self-contained run directory after a build: they copy the installed Amnesia: The Dark Descent assets into `build-premake/amnesia/Debug/` and `build-premake/amnesia/Release/` (whichever exist), then bring in the Redux resources from `amnesia/resources`. You need a legitimate copy of **Amnesia: The Dark Descent** (e.g. via Steam).
 
 ```bash
 ./deploy.sh --game-dir "/path/to/Amnesia The Dark Descent"
@@ -39,7 +39,15 @@ git submodule update --init --recursive
 ./deploy.sh --config debug --no-game-assets
 ```
 
-- `--game-dir <path>` — installed game (fallback: `AMNESIA_GAME_DIRECTORY`, then the default Steam library path)
+The native Windows equivalents are:
+
+```powershell
+.\deploy.ps1 -GameDir "C:\Program Files (x86)\Steam\steamapps\common\Amnesia The Dark Descent"
+.\deploy.ps1 -Resources merge
+.\deploy.ps1 -Config debug -NoGameAssets
+```
+
+- `--game-dir <path>` — installed game (fallback: `AMNESIA_GAME_DIRECTORY`, then the default Steam library path; `deploy.ps1` also accepts `ATDD_DIR`)
 - `--config release|debug|all` — output directories to stage (default: all that exist)
 - `--resources copy|merge|none` — `copy` (default) places the `.map_delta` / `.ent_delta` overlay next to the retail files and the engine applies it at load; `merge` bakes the deltas into the deployed `.map` / `.ent` files with `scripts/mapdelta.py` (originals kept as `<file>.mapdelta-orig`) and copies only the non-delta assets
 - `--no-game-assets` — skip the install copy and refresh only the Redux resources
@@ -145,7 +153,7 @@ podman unshare rm -rf build-premake/
 
 ## 4. `build-windows.ps1`
 
-Requires `premake5.exe` on `PATH` and a Visual Studio 2026 installation. MSBuild is auto-located with `vswhere`, so any PowerShell works — not just a Developer PowerShell:
+Requires a Visual Studio 2026 installation. The wrapper uses Premake `5.0.0-beta8` from `PATH` when available; otherwise it downloads and verifies the pinned release under `build-premake\_deps\premake`. MSBuild is auto-located with `vswhere`, so any PowerShell works — not just a Developer PowerShell:
 
 ```powershell
 .\build-windows.ps1                                  # release
@@ -155,7 +163,7 @@ Requires `premake5.exe` on `PATH` and a Visual Studio 2026 installation. MSBuild
 .\build-windows.ps1 release -- --with-tools=no
 ```
 
-The script generates a Visual Studio solution under `build-premake\` with `premake5 vs2026`, then runs `msbuild` for `x64`. Stage assets with `deploy.sh` (for example from Git Bash or WSL). Extra arguments after `--` are forwarded to `premake5 vs2026` as Premake options, not to MSBuild. Generated project files and runtime output stay under `build-premake\`; runtime output is `build-premake\amnesia\<Config>\`.
+The script generates a Visual Studio solution under `build-premake\` with `premake5 vs2026`, then runs `msbuild` for `x64`. Premake currently names the VS 2026 solution `Amnesia.slnx`; the wrapper also accepts `Amnesia.sln` for compatible generators. Stage assets with `.\deploy.ps1` (or `deploy.sh` from Git Bash/WSL). Extra arguments after `--` are forwarded to `premake5 vs2026` as Premake options, not to MSBuild. Generated project files and runtime output stay under `build-premake\`; runtime output is `build-premake\amnesia\<Config>\`.
 
 The Windows CI workflow ([`.github/workflows/windows-build.yml`](.github/workflows/windows-build.yml)) uses `premake5 vs2022` because its hosted runner provides Visual Studio 2022. Both `vs2022` and `vs2026` are valid here: [`premake5.lua`](premake5.lua) does not pin `_ACTION`, so they generate the same projects. CI builds with `msbuild` targeting `x64` as well.
 

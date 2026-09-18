@@ -609,6 +609,17 @@ static size_t mmgrMaxAlignment(void)
 {
 #if defined(__cplusplus)
     return alignof(max_align_t);
+#elif defined(_MSC_VER)
+    // MSVC supports C11 _Alignof but its C headers do not define max_align_t.
+    // A union of the widest fundamental scalar types provides the equivalent
+    // alignment floor required for ordinary malloc-compatible allocations.
+    typedef union mmgr_max_align_t
+    {
+        long double longDoubleValue;
+        long long longLongValue;
+        void* pointerValue;
+    } mmgr_max_align_t;
+    return _Alignof(mmgr_max_align_t);
 #else
     return _Alignof(max_align_t);
 #endif

@@ -122,7 +122,12 @@ function link_sdl2()
     filter { "system:linux", "configurations:Debug" }
         links { "SDL2-2.0d" }
     filter "system:windows"
-        libdirs { EXT_ROOT .. "/" .. SDL2_PROJECT .. "/%{cfg.buildcfg}/%{cfg.buildcfg}" }
+        -- Support both single-config generators (Ninja, archive in the build
+        -- root) and multi-config generators (Visual Studio, config subdir).
+        libdirs {
+            EXT_ROOT .. "/" .. SDL2_PROJECT .. "/%{cfg.buildcfg}",
+            EXT_ROOT .. "/" .. SDL2_PROJECT .. "/%{cfg.buildcfg}/%{cfg.buildcfg}",
+        }
     -- SDL2's CMake build applies the debug postfix 'd', so the Debug static
     -- library on disk is SDL2-staticd.lib.
     filter { "system:windows", "configurations:Debug" }
@@ -159,7 +164,10 @@ function link_openal()
         libdirs { EXT_ROOT .. "/" .. OPENAL_PROJECT .. "/%{cfg.buildcfg}" }
         links { "openal" }
     filter "system:windows"
-        libdirs { EXT_ROOT .. "/" .. OPENAL_PROJECT .. "/%{cfg.buildcfg}/%{cfg.buildcfg}" }
+        libdirs {
+            EXT_ROOT .. "/" .. OPENAL_PROJECT .. "/%{cfg.buildcfg}",
+            EXT_ROOT .. "/" .. OPENAL_PROJECT .. "/%{cfg.buildcfg}/%{cfg.buildcfg}",
+        }
         links { "OpenAL32" }
     filter {}
 end

@@ -45,7 +45,14 @@ class FastRayTest
 
 	void Reset (dgFloat32 t) 
 	{
-		m_dpInv = m_dpBaseInv.Scale (dgFloat32 (1.0f) / t);
+		// A ray that starts on a surface can legitimately hit at t == 0.
+		// Dividing by that value produces infinity, which trips dgVector's
+		// finite-value assertion in Debug and poisons subsequent slab tests.
+		// The constructor already treats direction components within 1e-8 as
+		// parallel, so use the same lower bound for the shortened ray interval.
+		const dgFloat32 minParam = dgFloat32 (1.0e-8f);
+		const dgFloat32 finiteParam = (t > minParam) ? t : minParam;
+		m_dpInv = m_dpBaseInv.Scale (dgFloat32 (1.0f) / finiteParam);
 	}
 
 	dgVector m_p0;

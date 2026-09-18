@@ -32,6 +32,7 @@
 #include <functional>
 #include <limits>
 #include <memory>
+#include <new>
 #include <string>
 #include <utility>
 #include <vector>
@@ -541,7 +542,13 @@ struct cFsrUpscaler::Impl {
         !prepared.reconstructedPrevNearestDepth.texture)
       return;
     DeferPrepared(std::move(prepared));
-    prepared = {};
+    // FfxFsr3UpscalerContext alone is 512 KiB. Aggregate assignment from {}
+    // creates a full PreparedState temporary on the stack; when this is called
+    // while PrepareContext also has a candidate alive, Windows' default 1 MiB
+    // stack overflows in __chkstk. Reconstruct the heap-resident Impl member
+    // directly instead.
+    prepared.~PreparedState();
+    ::new (static_cast<void *>(&prepared)) PreparedState();
   }
 
 #else
@@ -718,16 +725,19 @@ bool cFsrUpscaler::PrepareContext(const TemporalUpscalerSettings &settings,
       m_impl->prepared.quality == settings.quality)
     return true;
 
-  Impl::PreparedState candidate = {};
-  candidate.render = render;
-  candidate.outputExtent = output;
-  candidate.quality = settings.quality;
+  // The opaque SDK context embedded in PreparedState is 512 KiB. Keep
+  // replacement state off the thread stack, particularly because context
+  // preparation runs within the render call chain on Windows.
+  auto candidate = std::make_unique<Impl::PreparedState>();
+  candidate->render = render;
+  candidate->outputExtent = output;
+  candidate->quality = settings.quality;
 
   FfxFsr3UpscalerQualityMode mappedQuality =
       FFX_FSR3UPSCALER_QUALITY_MODE_QUALITY;
   if (!MapQuality(settings.quality, &mappedQuality)) {
     Log("FSR: PrepareContext failed: quality has no SDK mapping\n");
-    m_impl->DeferPrepared(std::move(candidate));
+    m_impl->DeferPrepared(std::move(*candidate));
     return false;
   }
 
@@ -738,10 +748,10 @@ bool cFsrUpscaler::PrepareContext(const TemporalUpscalerSettings &settings,
   if (!GetFsrCapabilities(m_impl->graphics, &backend, &scratch,
                           &capabilities, &reason)) {
     Log("FSR: PrepareContext failed: %s\n", reason.c_str());
-    m_impl->DeferPrepared(std::move(candidate));
+    m_impl->DeferPrepared(std::move(*candidate));
     return false;
   }
-  candidate.scratch = std::move(scratch);
+  candidate->scratch = std::move(scratch);
 
   FfxFsr3UpscalerContextDescription description = {};
   description.flags = FFX_FSR3UPSCALER_ENABLE_HIGH_DYNAMIC_RANGE |
@@ -761,86 +771,86 @@ bool cFsrUpscaler::PrepareContext(const TemporalUpscalerSettings &settings,
 #endif
   description.backendInterface = backend;
   const FfxErrorCode contextResult = ffxFsr3UpscalerContextCreate(
-      &candidate.context, &description);
+      &candidate->context, &description);
   if (contextResult != FFX_OK) {
     Log("FSR: PrepareContext failed: SDK context creation error %d\n",
         static_cast<int>(contextResult));
-    m_impl->DeferPrepared(std::move(candidate));
+    m_impl->DeferPrepared(std::move(*candidate));
     return false;
   }
-  candidate.contextCreated = true;
+  candidate->contextCreated = true;
 
   FfxFsr3UpscalerSharedResourceDescriptions shared = {};
-  if (ffxFsr3UpscalerGetSharedResourceDescriptions(&candidate.context,
+  if (ffxFsr3UpscalerGetSharedResourceDescriptions(&candidate->context,
                                                   &shared) != FFX_OK ||
-      !CreateImageFromDescription(m_impl->graphics, &candidate.dilatedDepth,
+      !CreateImageFromDescription(m_impl->graphics, &candidate->dilatedDepth,
                                   shared.dilatedDepth,
                                   "FSR.dilatedDepth") ||
       !CreateImageFromDescription(
-          m_impl->graphics, &candidate.dilatedMotionVectors,
+          m_impl->graphics, &candidate->dilatedMotionVectors,
           shared.dilatedMotionVectors, "FSR.dilatedMotionVectors") ||
       !CreateImageFromDescription(
-          m_impl->graphics, &candidate.reconstructedPrevNearestDepth,
+          m_impl->graphics, &candidate->reconstructedPrevNearestDepth,
           shared.reconstructedPrevNearestDepth,
           "FSR.reconstructedPrevNearestDepth")) {
     Log("FSR: PrepareContext failed: shared resources were not created\n");
-    m_impl->DeferPrepared(std::move(candidate));
+    m_impl->DeferPrepared(std::move(*candidate));
     return false;
   }
 
   // The automatic path writes this temporary reactive mask. Explicit caller
   // masks never use or overwrite it.
-  if (!CreateImage(m_impl->graphics, &candidate.reactiveMask, RI_FORMAT_R8_UNORM,
+  if (!CreateImage(m_impl->graphics, &candidate->reactiveMask, RI_FORMAT_R8_UNORM,
                    render,
                    RI_USAGE_SHADER_RESOURCE_STORAGE | RI_USAGE_SHADER_RESOURCE |
                        RI_USAGE_TRANSFER_SRC | RI_USAGE_TRANSFER_DST,
                    RI_VIEWTYPE_SHADER_RESOURCE_STORAGE_2D,
                    "FSR.reactiveMask")) {
     Log("FSR: PrepareContext failed: automatic reactive resource was not created\n");
-    m_impl->DeferPrepared(std::move(candidate));
+    m_impl->DeferPrepared(std::move(*candidate));
     return false;
   }
 
   // Combined depth/stencil images cannot be registered with the SDK as its
   // R32_FLOAT surface format. Keep a plain R32 copy at render resolution for
   // that path; the direct D32_SFLOAT path does not use this target.
-  if (!CreateImage(m_impl->graphics, &candidate.deviceDepth,
+  if (!CreateImage(m_impl->graphics, &candidate->deviceDepth,
                    RI_FORMAT_R32_SFLOAT, render,
                    RI_USAGE_SHADER_RESOURCE_STORAGE | RI_USAGE_SHADER_RESOURCE |
                        RI_USAGE_TRANSFER_SRC | RI_USAGE_TRANSFER_DST,
                    RI_VIEWTYPE_SHADER_RESOURCE_STORAGE_2D,
                    "FSR.deviceDepth")) {
     Log("FSR: PrepareContext failed: device-depth copy resource was not created\n");
-    m_impl->DeferPrepared(std::move(candidate));
+    m_impl->DeferPrepared(std::move(*candidate));
     return false;
   }
-  candidate.deviceDepth.ffxDescription = {};
-  candidate.deviceDepth.ffxDescription.type = FFX_RESOURCE_TYPE_TEXTURE2D;
-  candidate.deviceDepth.ffxDescription.format = FFX_SURFACE_FORMAT_R32_FLOAT;
-  candidate.deviceDepth.ffxDescription.width = render.width;
-  candidate.deviceDepth.ffxDescription.height = render.height;
-  candidate.deviceDepth.ffxDescription.depth = 1;
-  candidate.deviceDepth.ffxDescription.mipCount = 1;
-  candidate.deviceDepth.ffxDescription.flags = FFX_RESOURCE_FLAGS_NONE;
-  candidate.deviceDepth.ffxDescription.usage = FFX_RESOURCE_USAGE_READ_ONLY;
-  candidate.deviceDepth.ffxState = FFX_RESOURCE_STATE_COMPUTE_READ;
+  candidate->deviceDepth.ffxDescription = {};
+  candidate->deviceDepth.ffxDescription.type = FFX_RESOURCE_TYPE_TEXTURE2D;
+  candidate->deviceDepth.ffxDescription.format = FFX_SURFACE_FORMAT_R32_FLOAT;
+  candidate->deviceDepth.ffxDescription.width = render.width;
+  candidate->deviceDepth.ffxDescription.height = render.height;
+  candidate->deviceDepth.ffxDescription.depth = 1;
+  candidate->deviceDepth.ffxDescription.mipCount = 1;
+  candidate->deviceDepth.ffxDescription.flags = FFX_RESOURCE_FLAGS_NONE;
+  candidate->deviceDepth.ffxDescription.usage = FFX_RESOURCE_USAGE_READ_ONLY;
+  candidate->deviceDepth.ffxState = FFX_RESOURCE_STATE_COMPUTE_READ;
 
-  candidate.reactiveMask.ffxDescription = {};
-  candidate.reactiveMask.ffxDescription.type = FFX_RESOURCE_TYPE_TEXTURE2D;
-  candidate.reactiveMask.ffxDescription.format = FFX_SURFACE_FORMAT_R8_UNORM;
-  candidate.reactiveMask.ffxDescription.width = render.width;
-  candidate.reactiveMask.ffxDescription.height = render.height;
-  candidate.reactiveMask.ffxDescription.depth = 1;
-  candidate.reactiveMask.ffxDescription.mipCount = 1;
-  candidate.reactiveMask.ffxDescription.flags = FFX_RESOURCE_FLAGS_NONE;
-  candidate.reactiveMask.ffxDescription.usage = FFX_RESOURCE_USAGE_UAV;
-  candidate.reactiveMask.ffxState = FFX_RESOURCE_STATE_UNORDERED_ACCESS;
+  candidate->reactiveMask.ffxDescription = {};
+  candidate->reactiveMask.ffxDescription.type = FFX_RESOURCE_TYPE_TEXTURE2D;
+  candidate->reactiveMask.ffxDescription.format = FFX_SURFACE_FORMAT_R8_UNORM;
+  candidate->reactiveMask.ffxDescription.width = render.width;
+  candidate->reactiveMask.ffxDescription.height = render.height;
+  candidate->reactiveMask.ffxDescription.depth = 1;
+  candidate->reactiveMask.ffxDescription.mipCount = 1;
+  candidate->reactiveMask.ffxDescription.flags = FFX_RESOURCE_FLAGS_NONE;
+  candidate->reactiveMask.ffxDescription.usage = FFX_RESOURCE_USAGE_UAV;
+  candidate->reactiveMask.ffxState = FFX_RESOURCE_STATE_UNORDERED_ACCESS;
 
   // The candidate is not published until every context and image exists, so
   // a later RecordResolve can never observe a half-initialized replacement.
   m_impl->ReleasePrepared();
-  candidate.valid = true;
-  m_impl->prepared = std::move(candidate);
+  candidate->valid = true;
+  m_impl->prepared = std::move(*candidate);
   return true;
 #else
   (void)settings;

@@ -261,7 +261,7 @@ target_include_directories(ffx_fsr3upscaler_vk PRIVATE
 if(MSVC)
     target_compile_options(ffx_fsr3upscaler_vk PRIVATE
         /W3
-        "/FI\"${FSR_VOLK_HEADERS}/volk.h\"")
+        "/FI${FSR_VOLK_HEADERS}/volk.h")
     target_compile_definitions(ffx_fsr3upscaler_vk PRIVATE _CRT_SECURE_NO_WARNINGS)
 else()
     target_compile_options(ffx_fsr3upscaler_vk PRIVATE

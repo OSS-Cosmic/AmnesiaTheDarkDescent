@@ -66,8 +66,8 @@ CaseScope::~CaseScope() {
 } // namespace hpl_memory_test
 
 namespace {
-bool fileContains(const char *path, const char *needle) {
-    std::FILE *file = std::fopen(path, "rb"); if (!file) return false;
+bool fileContains(std::FILE *file, const char *needle) {
+    if (!file) return false;
     char buffer[4096]; std::size_t used = 0; bool found = false;
     while (!found && !std::feof(file)) {
         used += std::fread(buffer + used, 1, sizeof(buffer) - used - 1, file); buffer[used] = '\0';
@@ -76,6 +76,14 @@ bool fileContains(const char *path, const char *needle) {
     }
     std::fclose(file); return found;
 }
+bool fileContains(const char *path, const char *needle) {
+    return fileContains(std::fopen(path, "rb"), needle);
+}
+#if defined(_WIN32)
+bool fileContains(const wchar_t *path, const char *needle) {
+    return fileContains(_wfopen(path, L"rb"), needle);
+}
+#endif
 struct Annotated { int value; Annotated() : value(7) {} };
 struct Nested { Annotated *inner; Nested() : inner(hplNew(Annotated, ())) {} ~Nested() { hplDelete(inner); } };
 struct Throwing { Throwing() { throw 17; } };
@@ -196,22 +204,30 @@ void testSingleEvaluationAndConcurrency(int *utest_result) {
     for (unsigned worker = 0; worker != 4; ++worker) threads.workers[worker] = std::thread([&failed, worker] { for (unsigned i = 0; i != 100; ++i) { BufferOwner owner(hplMalloc(19 + ((worker + i) % 17))); if (!owner.pointer) { failed = true; continue; } void *replacement = hplRealloc(owner.pointer, 61 + i); if (!replacement) { failed = true; continue; } owner.pointer = replacement; } });
     threads.joinAll(); HPL_EXPECT(!failed.load() && mmgrValidateAllAllocUnits(), "concurrent HPL allocation corrupted backend");
 }
+void *allocateRepeatedReportFixture() {
+    return hplMalloc(211);
+}
 void testWideReportPathAndRepeatedReports(int *utest_result, const char *root) {
 	const std::wstring report = std::wstring(root, root + std::strlen(root)) + L"/wide space-\u00E9-\U0001F642.memreport";
 	const std::wstring failed = std::wstring(root, root + std::strlen(root)) + L"/missing \u00E9-\U0001F642/report.memreport";
 	const std::string reportUtf8 = std::string(root) + "/wide space-\xC3\xA9-\xF0\x9F\x99\x82.memreport";
 	hpl::cMemoryManager::SetReportPath(failed);
 	hpl::cMemoryManager::LogResults();
-	BufferOwner liveOwner(hplMalloc(211)); void *live = liveOwner.pointer;
+	BufferOwner liveOwner(allocateRepeatedReportFixture()); void *live = liveOwner.pointer;
     HPL_EXPECT(live && hpl::cMemoryManager::IsValid(live), "wide report fixture allocation failed"); if (!live) return;
 	hpl::cMemoryManager::SetReportPath(report);
 	hpl::cMemoryManager::LogResults();
-    HPL_EXPECT(fileContains(reportUtf8.c_str(), "Actual total memory in use") && fileContains(reportUtf8.c_str(), "Allocation unit count:"), "wide report path or live snapshot was not written");
-    HPL_EXPECT(fileContains(reportUtf8.c_str(), "testWideReportPathAndRepeatedReports"), "deliberate outstanding allocation omitted its site");
+#if defined(_WIN32)
+    const wchar_t *reportReadPath = report.c_str();
+#else
+    const char *reportReadPath = reportUtf8.c_str();
+#endif
+    HPL_EXPECT(fileContains(reportReadPath, "Actual total memory in use") && fileContains(reportReadPath, "Allocation unit count:"), "wide report path or live snapshot was not written");
+    HPL_EXPECT(fileContains(reportReadPath, "allocateRepeatedReportFixture"), "deliberate outstanding allocation omitted its site");
 	hpl::cMemoryManager::LogResults();
 	liveOwner.reset();
 	hpl::cMemoryManager::LogResults();
-    HPL_EXPECT(!fileContains(reportUtf8.c_str(), "testWideReportPathAndRepeatedReports"), "freed allocation remained in the repeated report");
+	HPL_EXPECT(!fileContains(reportReadPath, "allocateRepeatedReportFixture"), "freed allocation remained in the repeated report");
     HPL_EXPECT(hplTestLogCallbackAllocated() && hplTestLogContains("outstanding snapshot") && hplTestLogContains("peak snapshot"), "log callback did not capture the post-report summary");
 }
 }

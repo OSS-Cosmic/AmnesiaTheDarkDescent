@@ -8,6 +8,7 @@
 #include "system/String.h"
 
 namespace hpl {
+void Log(const char *, ...) {}
 void Error(const char *, ...) {}
 
 cColor::cColor() : r(0), g(0), b(0), a(0) {}

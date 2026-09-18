@@ -178,12 +178,10 @@ project "StandardWaterReflectionTests"
     includedirs {
         ROOT .. "/HPL2/core/include",
         ROOT .. "/HPL2/include",
-        ROOT .. "/HPL2/extern/volk",
-        ROOT .. "/HPL2/extern/Vulkan-Headers/include",
-        ROOT .. "/HPL2/extern/VulkanMemoryAllocator/include",
         ROOT .. "/premake/config/common",
     }
-    defines { "USE_SDL2", "VK_USE_PLATFORM_XLIB_KHR" }
+    defines { "USE_SDL2" }
+    vulkan_includes()
     mathlib_use()
     add_utest()
     add_test_postbuild()

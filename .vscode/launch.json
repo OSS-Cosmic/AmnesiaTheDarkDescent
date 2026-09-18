@@ -5,8 +5,18 @@
       "name": "Launch Amnesia (Debug)",
       "type": "cppvsdbg",
       "request": "launch",
-      "program": "${workspaceFolder}/build/amnesia/Debug/Amnesia.exe",
-      "cwd": "${workspaceFolder}/build/amnesia/Debug",
+      "program": "${workspaceFolder}/build-premake/amnesia/Debug/Amnesia.exe",
+      "cwd": "${workspaceFolder}/build-premake/amnesia/Debug",
+      "args": [],
+      "stopAtEntry": false,
+      "console": "integratedTerminal"
+    },
+    {
+      "name": "Launch Amnesia (Release)",
+      "type": "cppvsdbg",
+      "request": "launch",
+      "program": "${workspaceFolder}/build-premake/amnesia/Release/Amnesia.exe",
+      "cwd": "${workspaceFolder}/build-premake/amnesia/Release",
       "args": [],
       "stopAtEntry": false,
       "console": "integratedTerminal"

@@ -132,6 +132,15 @@ void release(void *p, unsigned int type = m_alloc_free)
 	if (p && !mmgrValidateAddress(p)) AllocationScope::current->forget(p);
 }
 
+// Concurrent tests know these allocations have valid guards and matching free
+// types. Remove the local tracking entry before freeing: checking the address
+// afterward races with another thread reusing the same address.
+void releaseKnown(void *p, unsigned int type = m_alloc_free)
+{
+	AllocationScope::current->forget(p);
+	mmgrDeallocator(__FILE__, __LINE__, __FUNCTION__, type, p);
+}
+
 void *reallocate(void *p, size_t size, unsigned int type = m_alloc_realloc)
 {
 	void *q = mmgrReallocator(__FILE__, __LINE__, __FUNCTION__, type, size, p);
@@ -167,7 +176,7 @@ bool testFirstUseConcurrency(int *utest_result)
 			if (!p) { failed = true; continue; }
 			fill(p, size, static_cast<unsigned char>(worker + i));
 			if (!checkFill(p, size, static_cast<unsigned char>(worker + i), "first-use payload")) failed = true;
-			release(p);
+			releaseKnown(p);
 		}
 		} catch (...) { failed = true; }
 	});
@@ -434,7 +443,7 @@ void testConcurrentUse(const fs::path &root, int *utest_result)
 			fill(p, size, static_cast<unsigned char>(worker * 19 + i));
 			const size_t grownSize = size + 23;
 			void *q = reallocate(p, grownSize);
-			if (!q) { failed = true; release(p); continue; }
+			if (!q) { failed = true; releaseKnown(p); continue; }
 			if (!checkFill(q, size, static_cast<unsigned char>(worker * 19 + i), "concurrent realloc lost payload")) failed = true;
 			fill(q, grownSize, static_cast<unsigned char>(worker * 19 + i + 1));
 			if ((i & 1) == 0) {
@@ -442,7 +451,7 @@ void testConcurrentUse(const fs::path &root, int *utest_result)
 				if (!q) { failed = true; continue; }
 				if (!checkFill(q, 9 + (i % 11), static_cast<unsigned char>(worker * 19 + i + 1), "concurrent shrink lost payload")) failed = true;
 			}
-			release(q);
+			releaseKnown(q);
 		}
 		} catch (...) { failed = true; }
 	});

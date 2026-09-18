@@ -53,22 +53,29 @@ public:
 // to private constructors and exact constructor argument semantics. Accessible
 // class-specific allocation functions are deliberately unannotated because
 // they may bypass the global allocator; global allocations remain tracked.
+// MSVC rejects __FUNCTION__ at namespace scope; its source-location intrinsic
+// is valid there and still reports the surrounding function at block scope.
+#if defined(_MSC_VER)
+#define HPL_CURRENT_FUNCTION __builtin_FUNCTION()
+#else
+#define HPL_CURRENT_FUNCTION __FUNCTION__
+#endif
 #if defined(__cpp_aligned_new)
 #define hplNew(classType, constructor) \
-	(hpl::memory::ScopedAllocationSite(__FILE__, __LINE__, __FUNCTION__, !(hpl::memory::HasApplicableClassSpecificScalarNew<classType>([](auto *hplProbe) -> decltype(hplProbe->operator new(std::size_t{})) { return nullptr; }) || hpl::memory::HasApplicableClassSpecificAlignedScalarNew<classType>([](auto *hplProbe) -> decltype(hplProbe->operator new(std::size_t{}, std::align_val_t{})) { return nullptr; }))) << new classType constructor)
+	(hpl::memory::ScopedAllocationSite(__FILE__, __LINE__, HPL_CURRENT_FUNCTION, !(hpl::memory::HasApplicableClassSpecificScalarNew<classType>([](auto *hplProbe) -> decltype(hplProbe->operator new(std::size_t{})) { return nullptr; }) || hpl::memory::HasApplicableClassSpecificAlignedScalarNew<classType>([](auto *hplProbe) -> decltype(hplProbe->operator new(std::size_t{}, std::align_val_t{})) { return nullptr; }))) << new classType constructor)
 #define hplNewArray(classType, amount) \
-	[](auto hplArrayCount, const char *hplFile, unsigned int hplLine, const char *hplFunction) { return hpl::memory::ScopedAllocationSite(hplFile, hplLine, hplFunction, !(hpl::memory::HasApplicableClassSpecificArrayNew<classType>([](auto *hplProbe) -> decltype(hplProbe->operator new[](std::size_t{})) { return nullptr; }) || hpl::memory::HasApplicableClassSpecificAlignedArrayNew<classType>([](auto *hplProbe) -> decltype(hplProbe->operator new[](std::size_t{}, std::align_val_t{})) { return nullptr; }))) << new classType[hplArrayCount]; }(amount, __FILE__, __LINE__, __FUNCTION__)
+	[](auto hplArrayCount, const char *hplFile, unsigned int hplLine, const char *hplFunction) { return hpl::memory::ScopedAllocationSite(hplFile, hplLine, hplFunction, !(hpl::memory::HasApplicableClassSpecificArrayNew<classType>([](auto *hplProbe) -> decltype(hplProbe->operator new[](std::size_t{})) { return nullptr; }) || hpl::memory::HasApplicableClassSpecificAlignedArrayNew<classType>([](auto *hplProbe) -> decltype(hplProbe->operator new[](std::size_t{}, std::align_val_t{})) { return nullptr; }))) << new classType[hplArrayCount]; }(amount, __FILE__, __LINE__, HPL_CURRENT_FUNCTION)
 #else
 #define hplNew(classType, constructor) \
-	(hpl::memory::ScopedAllocationSite(__FILE__, __LINE__, __FUNCTION__, !hpl::memory::HasApplicableClassSpecificScalarNew<classType>([](auto *hplProbe) -> decltype(hplProbe->operator new(std::size_t{})) { return nullptr; })) << new classType constructor)
+	(hpl::memory::ScopedAllocationSite(__FILE__, __LINE__, HPL_CURRENT_FUNCTION, !hpl::memory::HasApplicableClassSpecificScalarNew<classType>([](auto *hplProbe) -> decltype(hplProbe->operator new(std::size_t{})) { return nullptr; })) << new classType constructor)
 #define hplNewArray(classType, amount) \
-	[](auto hplArrayCount, const char *hplFile, unsigned int hplLine, const char *hplFunction) { return hpl::memory::ScopedAllocationSite(hplFile, hplLine, hplFunction, !hpl::memory::HasApplicableClassSpecificArrayNew<classType>([](auto *hplProbe) -> decltype(hplProbe->operator new[](std::size_t{})) { return nullptr; })) << new classType[hplArrayCount]; }(amount, __FILE__, __LINE__, __FUNCTION__)
+	[](auto hplArrayCount, const char *hplFile, unsigned int hplLine, const char *hplFunction) { return hpl::memory::ScopedAllocationSite(hplFile, hplLine, hplFunction, !hpl::memory::HasApplicableClassSpecificArrayNew<classType>([](auto *hplProbe) -> decltype(hplProbe->operator new[](std::size_t{})) { return nullptr; })) << new classType[hplArrayCount]; }(amount, __FILE__, __LINE__, HPL_CURRENT_FUNCTION)
 #endif
-#define hplMalloc(amount) hpl::memory::AllocateBuffer((amount), __FILE__, __LINE__, __FUNCTION__)
-#define hplRealloc(data, amount) hpl::memory::ReallocateBuffer((data), (amount), __FILE__, __LINE__, __FUNCTION__)
+#define hplMalloc(amount) hpl::memory::AllocateBuffer((amount), __FILE__, __LINE__, HPL_CURRENT_FUNCTION)
+#define hplRealloc(data, amount) hpl::memory::ReallocateBuffer((data), (amount), __FILE__, __LINE__, HPL_CURRENT_FUNCTION)
 #define hplDelete(data) delete (data)
 #define hplDeleteArray(data) delete [] (data)
-#define hplFree(data) hpl::memory::FreeBuffer((data), __FILE__, __LINE__, __FUNCTION__)
+#define hplFree(data) hpl::memory::FreeBuffer((data), __FILE__, __LINE__, HPL_CURRENT_FUNCTION)
 #else
 #define hplNew(classType, constructor) new classType constructor
 #define hplNewArray(classType, amount) new classType [ amount ]

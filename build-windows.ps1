@@ -1,8 +1,8 @@
 # Windows build wrapper for Amnesia64 (Premake + MSBuild).
 # This is a convenience path for command-line builds; developers can still open
 # build-premake\Amnesia.sln directly after running `premake5 vs2026`.
-# Requires premake5.exe on PATH and a VS 2026 install. MSBuild is auto-located
-# via vswhere, so a regular PowerShell is enough.
+# Uses the repository's pinned Premake release, downloading it when necessary.
+# MSBuild is auto-located via vswhere, so a regular PowerShell is enough.
 
 $ErrorActionPreference = 'Stop'
 
@@ -114,10 +114,53 @@ if ($gameDir) {
     Write-Host "==> ATDD_DIR=$gameDir"
 }
 
-$premake = (Get-Command premake5 -ErrorAction SilentlyContinue).Source
-if (-not $premake) {
-    throw "premake5.exe was not found on PATH."
+$premakeVersion = '5.0.0-beta8'
+$premakeSha256 = 'e64ce2ed8778e0098f63674cca61fe33941b5f0c8d9a4afd651152bdea3758ab'
+$premakeCommand = Get-Command premake5 -ErrorAction SilentlyContinue
+$premake = $null
+
+if ($premakeCommand) {
+    $previousLocation = Get-Location
+    try {
+        Set-Location ([System.IO.Path]::GetTempPath())
+        $detectedVersion = (& $premakeCommand.Source --version 2>&1 | Out-String).Trim()
+        $versionExitCode = $LASTEXITCODE
+    } finally {
+        Set-Location $previousLocation
+    }
+
+    if ($versionExitCode -eq 0 -and $detectedVersion -match [regex]::Escape($premakeVersion)) {
+        $premake = $premakeCommand.Source
+    } else {
+        Write-Host "==> Ignoring incompatible Premake on PATH: $detectedVersion"
+    }
 }
+
+if (-not $premake) {
+    $premakeDir = Join-Path $buildDir "_deps\premake\$premakeVersion"
+    $premake = Join-Path $premakeDir 'premake5.exe'
+
+    if (-not (Test-Path -LiteralPath $premake -PathType Leaf)) {
+        $premakeArchive = Join-Path $premakeDir "premake-$premakeVersion-windows.zip"
+        $premakeUrl = "https://github.com/premake/premake-core/releases/download/v$premakeVersion/premake-$premakeVersion-windows.zip"
+
+        Write-Host "==> Downloading Premake $premakeVersion"
+        New-Item -ItemType Directory -Path $premakeDir -Force | Out-Null
+        Invoke-WebRequest -UseBasicParsing -Uri $premakeUrl -OutFile $premakeArchive
+
+        $actualHash = (Get-FileHash -LiteralPath $premakeArchive -Algorithm SHA256).Hash.ToLowerInvariant()
+        if ($actualHash -ne $premakeSha256) {
+            throw "Premake archive checksum mismatch: expected $premakeSha256, got $actualHash"
+        }
+
+        Expand-Archive -LiteralPath $premakeArchive -DestinationPath $premakeDir -Force
+        if (-not (Test-Path -LiteralPath $premake -PathType Leaf)) {
+            throw "premake5.exe was not found after extracting $premakeArchive"
+        }
+    }
+}
+
+Write-Host "==> Using Premake $premakeVersion from $premake"
 
 $premakeArgs = @('vs2026')
 if ($extraArgs) {
@@ -128,9 +171,13 @@ Write-Host "==> Generating Visual Studio 2026 solution"
 & $premake @premakeArgs
 if ($LASTEXITCODE -ne 0) { throw "premake5 vs2026 failed" }
 
-$sln = Join-Path $buildDir 'Amnesia.sln'
-if (-not (Test-Path -LiteralPath $sln)) {
-    throw "Expected solution was not generated: $sln"
+$solutionCandidates = @(
+    (Join-Path $buildDir 'Amnesia.slnx'),
+    (Join-Path $buildDir 'Amnesia.sln')
+)
+$sln = $solutionCandidates | Where-Object { Test-Path -LiteralPath $_ -PathType Leaf } | Select-Object -First 1
+if (-not $sln) {
+    throw "Expected solution was not generated: $($solutionCandidates -join ' or ')"
 }
 
 $msbuild = (Get-Command msbuild -ErrorAction SilentlyContinue).Source
