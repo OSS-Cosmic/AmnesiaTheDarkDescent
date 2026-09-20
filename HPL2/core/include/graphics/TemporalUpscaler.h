@@ -30,6 +30,8 @@ struct TemporalUpscalerTextureBinding {
   uint32_t layerCount = 1;
   enum RIResourceState_e entryState = RI_RESOURCE_STATE_UNDEFINED;
   enum RIResourceState_e exitState = RI_RESOURCE_STATE_UNDEFINED;
+  uint32_t entryStage = RI_STAGE_NONE;
+  uint32_t exitStage = RI_STAGE_NONE;
 
   bool IsValid() const {
     return texture != nullptr && view != nullptr &&
@@ -113,6 +115,7 @@ struct TemporalUpscalerOutput {
   // subsequent blit or other consumer; implementations should normally make
   // it equal to result.exitState.
   enum RIResourceState_e resultState = RI_RESOURCE_STATE_UNDEFINED;
+  uint32_t resultStage = RI_STAGE_NONE;
 };
 
 // Shared contract for FSR/XeSS temporal upscaling on Windows and Linux.

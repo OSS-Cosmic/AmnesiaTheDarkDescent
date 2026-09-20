@@ -65,20 +65,23 @@ project "TemporalCameraTests"
         ROOT .. "/HPL2/core/sources/graphics/CubeMipGen.cpp",
         ROOT .. "/HPL2/core/sources/graphics/BlockCompressionDecode.cpp",
         ROOT .. "/HPL2/core/sources/graphics/RIFormat.c",
+        ROOT .. "/HPL2/core/sources/graphics/RIPipelineDesc.cpp",
         ROOT .. "/HPL2/core/sources/graphics/StandardShadowCull.cpp",
         ROOT .. "/HPL2/core/sources/graphics/RendererBackendSwitch.cpp",
     }
     -- StandardShadowCull.cpp shares its predicates with the cull compute shader
     -- through amnesia/slang/StandardCull.h, and the frustum test compares itself
     -- against MathLib's MvpToPlanes, so both include paths are required here.
+    removefiles { ROOT .. "/tests/graphics/ri_descriptor_builders.cpp" }
     includedirs { ROOT .. "/HPL2/core/include", ROOT .. "/amnesia/slang" }
+    vulkan_includes()
     mathlib_use()
     add_utest()
     add_test_postbuild()
     -- gmake2 drops postbuildcommands on kind "Utility" projects, so the python
     -- suite rides on the first test project instead of getting its own.
     --
-    -- That suite reads COMPILED shaders out of <runtime>/compiled_shaders, which
+    -- That suite reads COMPILED shaders out of <runtime>/compiled_shaders/vk, which
     -- only the Amnesia project produces (slang_prebuild() in premake/amnesia.lua).
     -- Without an explicit order dependency a parallel make can link this project
     -- and fire the postbuild while Amnesia is still compiling, and the shader
@@ -184,6 +187,22 @@ project "StandardWaterReflectionTests"
     vulkan_includes()
     mathlib_use()
     add_utest()
+    add_test_postbuild()
+
+-- Device-free coverage for the RIDescriptor builders.  It links the engine so
+-- the test calls the production builders, but uses fake backend handles and
+-- never initializes a graphics device.
+project "RIDescriptorBuilderTests"
+    kind "ConsoleApp"
+    language "C++"
+    cppdialect "C++17"
+    objdir (BUILD_OUT .. "/obj/%{prj.name}/%{cfg.buildcfg}")
+    targetdir (BUILD_OUT .. "/tests/%{cfg.buildcfg}")
+    files { ROOT .. "/tests/graphics/ri_descriptor_builders.cpp" }
+    includedirs { ROOT .. "/HPL2/core/include" }
+    defines { "USE_SDL2", "WIN32_LEAN_AND_MEAN", "IGNORE_HPL_MAIN" }
+    vulkan_includes()
+    link_engine('tests')
     add_test_postbuild()
 
 -- The bindless slot pools are pure CPU data structures (IndexPool + ObjectPool),
@@ -383,4 +402,378 @@ if _OPTIONS["with-fsr"] ~= "no" then
         filter {}
         add_utest()
         add_test_postbuild()
+end
+
+-- Always-available Windows Vulkan mapped-buffer flush check. This stays outside
+-- the D3D12 option block so it remains usable in the default Vulkan build.
+if os.target() == "windows" then
+    project "RIVulkanMappedBufferFlushSmoke"
+        kind "ConsoleApp"
+        language "C++"
+        objdir (BUILD_OUT .. "/obj/%{prj.name}/%{cfg.buildcfg}")
+        targetdir (BUILD_OUT .. "/tests/%{cfg.buildcfg}")
+        files { ROOT .. "/tests/graphics/ri_vulkan/mapped_buffer_flush_smoke.cpp" }
+        includedirs { ROOT .. "/HPL2/core/include" }
+        defines { "USE_SDL2", "WIN32_LEAN_AND_MEAN", "IGNORE_HPL_MAIN" }
+        vulkan_includes()
+        link_engine('tests')
+        -- No add_test_postbuild(): GPU smoke tests run manually.
+end
+
+-- RID3D12 device bring-up smoke check. Opt-in build (requires DEVICE_SUPPORT_D3D12);
+-- opt-in run because it touches real GPU state — NOT attached to the ordinary
+-- test postbuild hook. Invoke manually from build-premake/tests/<config>/RID3D12DeviceSmoke.exe.
+if os.target() == "windows" and _OPTIONS["with-d3d12"] == "yes" then
+    project "RID3D12PushConstantShaderFixture"
+        kind "StaticLib"
+        language "C++"
+        objdir (BUILD_OUT .. "/obj/%{prj.name}/%{cfg.buildcfg}")
+        targetdir (BUILD_OUT .. "/tests/%{cfg.buildcfg}")
+        local push_constant_fixture_dir = ROOT .. "/tests/graphics/ri_d3d12/shaders"
+        files { push_constant_fixture_dir .. "/_dxil_target.cpp" }
+        slang_dxil_prebuild {
+            sources = {
+                { path = push_constant_fixture_dir .. "/push_constant.slang", entry = "VSMain", stage = "vertex", output = "push_constant.vert.dxil", reflection = true },
+                { path = push_constant_fixture_dir .. "/push_constant.slang", entry = "PSMain", stage = "fragment", output = "push_constant.frag.dxil", reflection = true },
+                { path = push_constant_fixture_dir .. "/push_constant.slang", entry = "CSMain", stage = "compute", output = "push_constant.comp.dxil", reflection = true },
+            },
+            include_dirs = { push_constant_fixture_dir },
+            output_dir = BUILD_OUT .. "/tests/%{cfg.buildcfg}/compiled_shaders/d3d12",
+        }
+
+    project "RID3D12PushConstantSmoke"
+        kind "ConsoleApp"
+        language "C++"
+        cppdialect "C++20"
+        objdir (BUILD_OUT .. "/obj/%{prj.name}/%{cfg.buildcfg}")
+        targetdir (BUILD_OUT .. "/tests/%{cfg.buildcfg}")
+        files { ROOT .. "/tests/graphics/ri_d3d12/push_constant_smoke.cpp" }
+        includedirs { ROOT .. "/HPL2/core/include", ROOT .. "/amnesia/slang" }
+        defines { "USE_SDL2", "WIN32_LEAN_AND_MEAN", "IGNORE_HPL_MAIN" }
+        vulkan_includes()
+        link_engine('tests')
+        dependson { "RID3D12PushConstantShaderFixture" }
+        -- Manual: requires a real D3D12 device.
+end
+
+if os.target() == "windows" and _OPTIONS["with-d3d12"] == "yes" then
+    project "RID3D12PSOSmoke"
+        kind "ConsoleApp"
+        language "C++"
+        cppdialect "C++20"
+        objdir (BUILD_OUT .. "/obj/%{prj.name}/%{cfg.buildcfg}")
+        targetdir (BUILD_OUT .. "/tests/%{cfg.buildcfg}")
+        files { ROOT .. "/tests/graphics/ri_d3d12/pso_smoke.cpp" }
+        includedirs { ROOT .. "/HPL2/core/include" }
+        -- Exercise RIProgram's descriptor-binding contract in the smoke path:
+        -- the test must bind the output through DescriptorBinding, not a
+        -- private shader-visible UAV heap.
+        defines { "USE_SDL2", "WIN32_LEAN_AND_MEAN", "IGNORE_HPL_MAIN", "RI_D3D12_DESCRIPTOR_BINDING_CONTRACT" }
+        vulkan_includes()
+        link_engine('tests')
+        dependson { "RID3D12ShaderFixtures" }
+        -- No add_test_postbuild(): this smoke requires a real D3D12 device.
+end
+
+if os.target() == "windows" and _OPTIONS["with-d3d12"] == "yes" then
+    project "RID3D12RenderScopeSmoke"
+        kind "ConsoleApp"
+        language "C++"
+        objdir (BUILD_OUT .. "/obj/%{prj.name}/%{cfg.buildcfg}")
+        targetdir (BUILD_OUT .. "/tests/%{cfg.buildcfg}")
+        files {
+            ROOT .. "/tests/graphics/ri_d3d12/render_scope_smoke.cpp",
+        }
+        includedirs {
+            ROOT .. "/HPL2/core/include",
+        }
+        defines { "USE_SDL2", "WIN32_LEAN_AND_MEAN", "IGNORE_HPL_MAIN" }
+        vulkan_includes()
+        link_engine('tests')
+        -- No add_test_postbuild(): GPU smoke tests run manually.
+end
+
+if os.target() == "windows" and _OPTIONS["with-d3d12"] == "yes" then
+    project "RID3D12GlobalManagedSetsSmoke"
+        kind "ConsoleApp"
+        language "C++"
+        cppdialect "C++20"
+        objdir (BUILD_OUT .. "/obj/%{prj.name}/%{cfg.buildcfg}")
+        targetdir (BUILD_OUT .. "/tests/%{cfg.buildcfg}")
+        files { ROOT .. "/tests/graphics/ri_d3d12/global_managed_sets_smoke.cpp" }
+        includedirs { ROOT .. "/HPL2/core/include", ROOT .. "/amnesia/slang" }
+        defines { "USE_SDL2", "WIN32_LEAN_AND_MEAN", "IGNORE_HPL_MAIN" }
+        vulkan_includes()
+        link_engine('tests')
+        -- No add_test_postbuild(): this smoke requires a real D3D12 device.
+end
+
+if os.target() == "windows" and _OPTIONS["with-d3d12"] == "yes" then
+    project "RID3D12DeviceSmoke"
+        kind "ConsoleApp"
+        language "C++"
+        objdir (BUILD_OUT .. "/obj/%{prj.name}/%{cfg.buildcfg}")
+        targetdir (BUILD_OUT .. "/tests/%{cfg.buildcfg}")
+        files {
+            ROOT .. "/tests/graphics/ri_d3d12/device_smoke.cpp",
+        }
+        includedirs {
+            ROOT .. "/HPL2/core/include",
+        }
+        -- IGNORE_HPL_MAIN keeps LowLevelSystemSDL from providing its own WinMain
+        -- (which expects hplMain) so this test can use a plain main().
+        defines { "USE_SDL2", "WIN32_LEAN_AND_MEAN", "IGNORE_HPL_MAIN" }
+        vulkan_includes()   -- RIPreamble.h still pulls in volk.h under DEVICE_SUPPORT_VULKAN
+        link_engine('tests')       -- HPL2 + full dep set; carries d3d12/dxgi/dxguid via link_engine
+        -- No add_test_postbuild(): GPU smoke tests run manually.
+end
+
+if os.target() == "windows" and _OPTIONS["with-d3d12"] == "yes" then
+    project "RID3D12BufferSmoke"
+        kind "ConsoleApp"
+        language "C++"
+        objdir (BUILD_OUT .. "/obj/%{prj.name}/%{cfg.buildcfg}")
+        targetdir (BUILD_OUT .. "/tests/%{cfg.buildcfg}")
+        files {
+            ROOT .. "/tests/graphics/ri_d3d12/buffer_smoke.cpp",
+        }
+        includedirs {
+            ROOT .. "/HPL2/core/include",
+        }
+        defines { "USE_SDL2", "WIN32_LEAN_AND_MEAN", "IGNORE_HPL_MAIN" }
+        vulkan_includes()
+        link_engine('tests')
+        -- No add_test_postbuild(): GPU smoke tests run manually.
+end
+
+if os.target() == "windows" and _OPTIONS["with-d3d12"] == "yes" then
+    project "RID3D12QueueSmoke"
+        kind "ConsoleApp"
+        language "C++"
+        objdir (BUILD_OUT .. "/obj/%{prj.name}/%{cfg.buildcfg}")
+        targetdir (BUILD_OUT .. "/tests/%{cfg.buildcfg}")
+        files {
+            ROOT .. "/tests/graphics/ri_d3d12/queue_smoke.cpp",
+        }
+        includedirs {
+            ROOT .. "/HPL2/core/include",
+        }
+        defines { "USE_SDL2", "WIN32_LEAN_AND_MEAN", "IGNORE_HPL_MAIN" }
+        vulkan_includes()
+        link_engine('tests')
+        -- No add_test_postbuild(): GPU smoke tests run manually.
+end
+
+if os.target() == "windows" and _OPTIONS["with-d3d12"] == "yes" then
+    project "RID3D12BarrierSmoke"
+        kind "ConsoleApp"
+        language "C++"
+        objdir (BUILD_OUT .. "/obj/%{prj.name}/%{cfg.buildcfg}")
+        targetdir (BUILD_OUT .. "/tests/%{cfg.buildcfg}")
+        files {
+            ROOT .. "/tests/graphics/ri_d3d12/barrier_smoke.cpp",
+        }
+        includedirs {
+            ROOT .. "/HPL2/core/include",
+        }
+        defines { "USE_SDL2", "WIN32_LEAN_AND_MEAN", "IGNORE_HPL_MAIN" }
+        vulkan_includes()
+        link_engine('tests')
+        -- No add_test_postbuild(): GPU smoke tests run manually.
+end
+
+-- DXR acceleration-structure bring-up. Skips itself when the adapter reports
+-- rayTracingTier == 0, so it is safe to run anywhere, but it still needs a real
+-- device and so stays off the automatic postbuild hook.
+if os.target() == "windows" and _OPTIONS["with-d3d12"] == "yes" then
+    project "RID3D12AccelStructureSmoke"
+        kind "ConsoleApp"
+        language "C++"
+        cppdialect "C++20"
+        objdir (BUILD_OUT .. "/obj/%{prj.name}/%{cfg.buildcfg}")
+        targetdir (BUILD_OUT .. "/tests/%{cfg.buildcfg}")
+        files {
+            ROOT .. "/tests/graphics/ri_d3d12/accel_structure_smoke.cpp",
+        }
+        includedirs {
+            ROOT .. "/HPL2/core/include",
+        }
+        defines { "USE_SDL2", "WIN32_LEAN_AND_MEAN", "IGNORE_HPL_MAIN" }
+        vulkan_includes()
+        link_engine('tests')
+        -- No add_test_postbuild(): GPU smoke tests run manually.
+end
+
+if os.target() == "windows" and _OPTIONS["with-d3d12"] == "yes" then
+    project "RID3D12UploaderSmoke"
+        kind "ConsoleApp"
+        language "C++"
+        objdir (BUILD_OUT .. "/obj/%{prj.name}/%{cfg.buildcfg}")
+        targetdir (BUILD_OUT .. "/tests/%{cfg.buildcfg}")
+        files {
+            ROOT .. "/tests/graphics/ri_d3d12/uploader_smoke.cpp",
+        }
+        includedirs {
+            ROOT .. "/HPL2/core/include",
+        }
+        defines { "USE_SDL2", "WIN32_LEAN_AND_MEAN", "IGNORE_HPL_MAIN" }
+        vulkan_includes()
+        link_engine('tests')
+        -- No add_test_postbuild(): GPU smoke tests run manually.
+end
+
+-- Image-region copies require a real D3D12 device and are intentionally
+-- opt-in; run manually from build-premake/tests/<config>.
+if os.target() == "windows" and _OPTIONS["with-d3d12"] == "yes" then
+    project "RID3D12ImageCopySmoke"
+        kind "ConsoleApp"
+        language "C++"
+        objdir (BUILD_OUT .. "/obj/%{prj.name}/%{cfg.buildcfg}")
+        targetdir (BUILD_OUT .. "/tests/%{cfg.buildcfg}")
+        files { ROOT .. "/tests/graphics/ri_d3d12/image_copy_smoke.cpp" }
+        includedirs { ROOT .. "/HPL2/core/include" }
+        defines { "USE_SDL2", "WIN32_LEAN_AND_MEAN", "IGNORE_HPL_MAIN" }
+        vulkan_includes()
+        link_engine('tests')
+        -- No add_test_postbuild(): GPU smoke tests run manually.
+end
+
+-- Mip generation requires a real D3D12 device and is intentionally opt-in;
+-- run manually from build-premake/tests/<config>.
+if os.target() == "windows" and _OPTIONS["with-d3d12"] == "yes" then
+    project "RID3D12MipGenerationSmoke"
+        kind "ConsoleApp"
+        language "C++"
+        objdir (BUILD_OUT .. "/obj/%{prj.name}/%{cfg.buildcfg}")
+        targetdir (BUILD_OUT .. "/tests/%{cfg.buildcfg}")
+        files { ROOT .. "/tests/graphics/ri_d3d12/mip_generation_smoke.cpp" }
+        includedirs { ROOT .. "/HPL2/core/include" }
+        d3d12ma_includes()
+        defines { "USE_SDL2", "WIN32_LEAN_AND_MEAN", "IGNORE_HPL_MAIN" }
+        vulkan_includes()
+        link_engine('tests')
+        -- No add_test_postbuild(): GPU smoke tests run manually.
+end
+
+if os.target() == "windows" and _OPTIONS["with-d3d12"] == "yes" then
+    project "RID3D12SwapchainSmoke"
+        kind "ConsoleApp"
+        language "C++"
+        objdir (BUILD_OUT .. "/obj/%{prj.name}/%{cfg.buildcfg}")
+        targetdir (BUILD_OUT .. "/tests/%{cfg.buildcfg}")
+        files {
+            ROOT .. "/tests/graphics/ri_d3d12/swapchain_smoke.cpp",
+        }
+        includedirs {
+            ROOT .. "/HPL2/core/include",
+        }
+        defines { "USE_SDL2", "WIN32_LEAN_AND_MEAN", "IGNORE_HPL_MAIN" }
+        vulkan_includes()
+        link_engine('tests')
+        -- No add_test_postbuild(): GPU smoke tests run manually.
+end
+
+if os.target() == "windows" and _OPTIONS["with-d3d12"] == "yes" then
+    project "RID3D12DescriptorComputeShaderFixture"
+        kind "StaticLib"
+        language "C++"
+        objdir (BUILD_OUT .. "/obj/%{prj.name}/%{cfg.buildcfg}")
+        targetdir (BUILD_OUT .. "/tests/%{cfg.buildcfg}")
+        local descriptor_fixture_dir = ROOT .. "/tests/graphics/ri_d3d12/shaders"
+        files { descriptor_fixture_dir .. "/_dxil_target.cpp" }
+        slang_dxil_prebuild {
+            sources = {
+                { path = descriptor_fixture_dir .. "/descriptor_compute.slang", entry = "CSMain", stage = "compute", output = "descriptor_compute.comp.dxil", reflection = true },
+            },
+            include_dirs = { descriptor_fixture_dir, ROOT .. "/amnesia/slang" },
+            output_dir = BUILD_OUT .. "/tests/%{cfg.buildcfg}/compiled_shaders/d3d12",
+        }
+end
+
+if os.target() == "windows" and _OPTIONS["with-d3d12"] == "yes" then
+    project "RID3D12DescriptorComputeFixture"
+        kind "ConsoleApp"
+        language "C++"
+        cppdialect "C++20"
+        objdir (BUILD_OUT .. "/obj/%{prj.name}/%{cfg.buildcfg}")
+        targetdir (BUILD_OUT .. "/tests/%{cfg.buildcfg}")
+        files {
+            ROOT .. "/tests/graphics/ri_d3d12/descriptor_compute_fixture.cpp",
+        }
+        includedirs {
+            ROOT .. "/HPL2/core/include",
+        }
+        defines { "USE_SDL2", "WIN32_LEAN_AND_MEAN", "IGNORE_HPL_MAIN" }
+        vulkan_includes()
+        link_engine('tests')
+        dependson { "RID3D12DescriptorComputeShaderFixture" }
+        -- No add_test_postbuild(): this fixture requires a real D3D12 device.
+end
+
+if os.target() == "windows" and _OPTIONS["with-d3d12"] == "yes" then
+    project "RID3D12ExternalBindlessComputeSmoke"
+        kind "ConsoleApp"
+        language "C++"
+        cppdialect "C++20"
+        objdir (BUILD_OUT .. "/obj/%{prj.name}/%{cfg.buildcfg}")
+        targetdir (BUILD_OUT .. "/tests/%{cfg.buildcfg}")
+        files { ROOT .. "/tests/graphics/ri_d3d12/external_bindless_compute_smoke.cpp" }
+        includedirs { ROOT .. "/HPL2/core/include" }
+        defines { "USE_SDL2", "WIN32_LEAN_AND_MEAN", "IGNORE_HPL_MAIN" }
+        vulkan_includes()
+        link_engine('tests')
+        dependson { "RID3D12ShaderFixtures" }
+        -- Deliberately manual: this requires a real D3D12 device.
+end
+
+if os.target() == "windows" and _OPTIONS["with-d3d12"] == "yes" then
+    project "RID3D12RIProgramImageDescriptorsSmoke"
+        kind "ConsoleApp"
+        language "C++"
+        cppdialect "C++20"
+        objdir (BUILD_OUT .. "/obj/%{prj.name}/%{cfg.buildcfg}")
+        targetdir (BUILD_OUT .. "/tests/%{cfg.buildcfg}")
+        files { ROOT .. "/tests/graphics/ri_d3d12/ri_program_image_descriptors_smoke.cpp" }
+        includedirs { ROOT .. "/HPL2/core/include" }
+        defines { "USE_SDL2", "WIN32_LEAN_AND_MEAN", "IGNORE_HPL_MAIN" }
+        vulkan_includes()
+        link_engine('tests')
+        dependson { "RID3D12ShaderFixtures" }
+        -- Manual opt-in: requires a real D3D12 device and debug layer.
+end
+
+if os.target() == "windows" and _OPTIONS["with-d3d12"] == "yes" then
+    project "RID3D12ShaderFixtures"
+        kind "StaticLib"
+        language "C++"
+        objdir (BUILD_OUT .. "/obj/%{prj.name}/%{cfg.buildcfg}")
+        targetdir (BUILD_OUT .. "/tests/%{cfg.buildcfg}")
+        local fixture_dir = ROOT .. "/tests/graphics/ri_d3d12/shaders"
+        files { fixture_dir .. "/_dxil_target.cpp" }
+        slang_dxil_prebuild {
+            sources = {
+                { path = fixture_dir .. "/triangle.slang", entry = "VSMain", stage = "vertex", output = "triangle.vert.dxil", reflection = true },
+                { path = fixture_dir .. "/triangle.slang", entry = "PSMain", stage = "fragment", output = "triangle.frag.dxil", reflection = true },
+                { path = fixture_dir .. "/compute.slang", entry = "CSMain", stage = "compute", output = "compute.comp.dxil", reflection = true },
+                { path = fixture_dir .. "/descriptor_compute.slang", entry = "CSMain", stage = "compute", output = "descriptor_compute.comp.dxil", reflection = true },
+                { path = fixture_dir .. "/geometry_stream.slang", entry = "CSMain", stage = "compute", output = "geometry_stream.comp.dxil", reflection = true },
+                { path = fixture_dir .. "/ri_program_geometry_stream.slang", entry = "CSMain", stage = "compute", output = "ri_program_geometry_stream.comp.dxil", reflection = true },
+                { path = ROOT .. "/amnesia/slang/UI/gui.vert.slang", entry = "vsMain", stage = "vertex", output = "gui.vert.dxil", reflection = true },
+                { path = ROOT .. "/amnesia/slang/UI/gui.frag.slang", entry = "psMain", stage = "fragment", output = "gui.frag.dxil", reflection = true },
+                { path = fixture_dir .. "/external_bindless_compute.slang", entry = "CSMain", stage = "compute", output = "external_bindless_compute.comp.dxil", reflection = true },
+                { path = fixture_dir .. "/ri_program_image_descriptors.slang", entry = "CSMain", stage = "compute", output = "ri_program_image_descriptors.comp.dxil", reflection = true },
+            },
+            include_dirs = { fixture_dir, ROOT .. "/amnesia/slang" },
+            shared_deps = {
+                fixture_dir .. "/shared.slang",
+                ROOT .. "/amnesia/slang/BindlessTriangle.slang",
+                ROOT .. "/amnesia/slang/bindless.slang",
+                ROOT .. "/amnesia/slang/GeometryStream.slang",
+                ROOT .. "/amnesia/slang/SceneTypes.slang",
+                ROOT .. "/amnesia/slang/Constants.h",
+                ROOT .. "/amnesia/slang/PerFrame/resource.slang",
+                ROOT .. "/amnesia/slang/HostDefinitions.h",
+            },
+            output_dir = BUILD_OUT .. "/tests/%{cfg.buildcfg}/compiled_shaders/d3d12",
+        }
 end

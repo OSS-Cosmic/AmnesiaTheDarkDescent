@@ -65,13 +65,16 @@ private:
 
 // Per-effect render context. The composite builds one of these per draw
 // and hands it to iPostEffect::RenderEffect. inputSrv is the just-written
-// pogo half (sampled image); the effect writes either to outputView
-// (color attachment) or to its own owned target before copying back.
+// pogo half (sampled image); outputTexture and outputView refer to the
+// composite-owned attachment and are borrowed for the duration of the call.
+// Effects must not dispose, retain, or otherwise take ownership of either
+// resource. outputView is a value copy so its complete RI view metadata is
+// available to attachment consumers.
 struct PostEffectRenderCtx {
     struct RICmd        *cmd;
     struct RIDescriptor  inputSrv;
-    VkImage                outputImage;
-    VkImageView            outputView;
+    struct RITexture     *outputTexture; // Borrowed; valid only during RenderEffect.
+    struct RITextureView  outputView;
     uint32_t               width;
     uint32_t               height;
     uint32_t               frameIndex;

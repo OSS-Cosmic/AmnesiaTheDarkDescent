@@ -32,13 +32,13 @@ Texture2D<float4> diffuseMap;
 
 struct PSIn
 {
-    [vk::location(0)] float2 v_uv;
-    [vk::location(1)] float4 v_color;
+    [vk::location(0)] float2 v_uv : TEXCOORD0;
+    [vk::location(1)] float4 v_color : TEXCOORD1;
 };
 
 struct PSOut
 {
-    [vk::location(0)] float4 out_color;
+    [vk::location(0)] float4 out_color : SV_Target0;
 };
 
 [shader("fragment")]

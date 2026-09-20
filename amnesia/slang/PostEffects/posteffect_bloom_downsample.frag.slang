@@ -30,11 +30,11 @@ struct BloomDownsamplePC
 };
 
 [vk::push_constant]
-BloomDownsamplePC pc;
+BloomDownsamplePC gPushConstants;
 
 struct PSIn
 {
-    [vk::location(0)] float2 v_uv;
+    [vk::location(0)] float2 v_uv : TEXCOORD0;
 };
 
 float luma(float3 c)
@@ -52,9 +52,9 @@ float karisWeight(float3 c)
 float3 prefilter(float3 c)
 {
     float br = max(c.r, max(c.g, c.b));
-    float rq = clamp(br - pc.threshold + pc.knee, 0.0f, 2.0f * pc.knee);
-    rq = (rq * rq) / (4.0f * pc.knee + 1e-4f);
-    float contrib = max(rq, br - pc.threshold) / max(br, 1e-5f);
+    float rq = clamp(br - gPushConstants.threshold + gPushConstants.knee, 0.0f, 2.0f * gPushConstants.knee);
+    rq = (rq * rq) / (4.0f * gPushConstants.knee + 1e-4f);
+    float contrib = max(rq, br - gPushConstants.threshold) / max(br, 1e-5f);
     return c * contrib;
 }
 
@@ -82,7 +82,7 @@ float4 psMain(PSIn pin) : SV_Target
     float3 m = sourceInput.Sample(inputSampler, uv + float2( 1,  1) * t).rgb;
 
     float3 result;
-    if (pc.applyThreshold != 0u)
+    if (gPushConstants.applyThreshold != 0u)
     {
         // 5 overlapping 2x2 boxes, Karis-averaged to suppress fireflies.
         float3 b0 = (a + b + d + e) * 0.25f; // top-left

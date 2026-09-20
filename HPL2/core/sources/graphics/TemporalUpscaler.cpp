@@ -2,6 +2,7 @@
 
 #include "engine/Interface.h"
 #include "graphics/FsrUpscaler.h"
+#include "graphics/RIDevice.h"
 #include "graphics/XessUpscaler.h"
 #include "graphics/XessVulkanSupport.h"
 
@@ -19,6 +20,8 @@ constexpr const char *kFsrUnsupportedPlatform =
 #if defined(HPL2_FSR_AVAILABLE) && HPL2_FSR_AVAILABLE
 constexpr const char *kFsrGraphicsUnavailable =
     "FSR Vulkan device is unavailable";
+constexpr const char *kFsrRequiresVulkan =
+    "FSR requires the Vulkan renderer";
 constexpr const char *kFsrRequirementsUnavailable =
     "FSR Vulkan requirements are not satisfied";
 #endif
@@ -161,6 +164,8 @@ const char *ProviderUnavailableReason(TemporalUpscalerProvider provider,
       return kFsrUnsupportedPlatform;
     if (!graphics)
       return kFsrGraphicsUnavailable;
+    if (!RIIsTargetSelected(RI_DEVICE_API_VK))
+      return kFsrRequiresVulkan;
     return kFsrRequirementsUnavailable;
 #endif
   case TemporalUpscalerProvider::XeSS:
@@ -211,6 +216,14 @@ bool ProviderAvailable(TemporalUpscalerProvider provider, cGraphics *graphics,
       *outReason = kFsrUnsupportedPlatform;
     return false;
   }
+#if defined(HPL2_FSR_AVAILABLE) && HPL2_FSR_AVAILABLE
+  if (provider == TemporalUpscalerProvider::Fsr && graphics &&
+      !RIIsTargetSelected(RI_DEVICE_API_VK)) {
+    if (outReason)
+      *outReason = kFsrRequiresVulkan;
+    return false;
+  }
+#endif
   if (provider == TemporalUpscalerProvider::XeSS &&
       !IsXessWindowsPlatform()) {
     if (outReason)

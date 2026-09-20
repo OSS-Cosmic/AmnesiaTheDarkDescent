@@ -29,15 +29,15 @@ ConstantBuffer<SimplePass> pass;
 
 struct VSIn
 {
-    [vk::location(0)] float3 a_position;
-    [vk::location(1)] float4 a_color;
-    [vk::location(2)] float2 a_uv;
+    [vk::location(0)] float3 a_position : TEXCOORD0;
+    [vk::location(1)] float4 a_color : TEXCOORD1;
+    [vk::location(2)] float2 a_uv : TEXCOORD2;
 };
 
 struct VSOut
 {
-    [vk::location(0)] float2 v_uv;
-    [vk::location(1)] float4 v_color;
+    [vk::location(0)] float2 v_uv : TEXCOORD0;
+    [vk::location(1)] float4 v_color : TEXCOORD1;
     float4 posH : SV_Position;
 };
 

@@ -9,11 +9,11 @@ struct PresentConstants
 {
     float4 quantizationStep;
 };
-[[vk::push_constant]] ConstantBuffer<PresentConstants> pc;
+[[vk::push_constant]] ConstantBuffer<PresentConstants> gPushConstants;
 
 struct PSIn
 {
-    [vk::location(0)] float2 v_uv;
+    [vk::location(0)] float2 v_uv : TEXCOORD0;
     float4 position : SV_Position;
 };
 
@@ -28,5 +28,5 @@ float4 psMain(PSIn pin) : SV_Target
                                           float2(0.06711056, 0.00583715)))) - 0.5;
     // Stay just inside half a step so exact black/white cannot round away
     // from their endpoint under round-to-even conversion.
-    return float4(color + (noise * 0.999) * pc.quantizationStep.rgb, 1.0f);
+    return float4(color + (noise * 0.999) * gPushConstants.quantizationStep.rgb, 1.0f);
 }

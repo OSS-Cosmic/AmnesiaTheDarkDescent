@@ -174,6 +174,37 @@ static inline VkImageLayout ri_vk_RIResourceStateToImageLayout(uint32_t state) {
   return VK_IMAGE_LAYOUT_UNDEFINED;
 }
 
+// Map a resource state for one image aspect. The legacy overload above keeps
+// the color/default mapping used by existing callers; depth/stencil barriers
+// can select Vulkan's separate stencil layouts when the aspects are split.
+static inline VkImageLayout
+ri_vk_RIResourceStateToImageLayout(uint32_t state,
+                                   enum RIBarrierAspect_e aspect) {
+  if (aspect == RI_BARRIER_ASPECT_STENCIL) {
+    if (state == RI_RESOURCE_STATE_UNDEFINED)
+      return VK_IMAGE_LAYOUT_UNDEFINED;
+    if (state & (RI_RESOURCE_STATE_GENERAL | RI_RESOURCE_STATE_STORAGE_READ |
+                 RI_RESOURCE_STATE_STORAGE_WRITE | RI_RESOURCE_STATE_CLEAR_STORAGE))
+      return VK_IMAGE_LAYOUT_GENERAL;
+    if (state & RI_RESOURCE_STATE_DEPTH_WRITE)
+      return VK_IMAGE_LAYOUT_STENCIL_ATTACHMENT_OPTIMAL;
+    if (state & RI_RESOURCE_STATE_DEPTH_READ)
+      return VK_IMAGE_LAYOUT_STENCIL_READ_ONLY_OPTIMAL;
+  }
+  if (aspect == RI_BARRIER_ASPECT_DEPTH_STENCIL) {
+    if (state == RI_RESOURCE_STATE_UNDEFINED)
+      return VK_IMAGE_LAYOUT_UNDEFINED;
+    if (state & (RI_RESOURCE_STATE_GENERAL | RI_RESOURCE_STATE_STORAGE_READ |
+                 RI_RESOURCE_STATE_STORAGE_WRITE | RI_RESOURCE_STATE_CLEAR_STORAGE))
+      return VK_IMAGE_LAYOUT_GENERAL;
+    if (state & RI_RESOURCE_STATE_DEPTH_WRITE)
+      return VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+    if (state & RI_RESOURCE_STATE_DEPTH_READ)
+      return VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL;
+  }
+  return ri_vk_RIResourceStateToImageLayout(state);
+}
+
 static inline VkAccessFlags2 ri_vk_RIResourceStateToAccess(uint32_t state) {
   VkAccessFlags2 access = VK_ACCESS_2_NONE;
   if (state & RI_RESOURCE_STATE_GENERAL)
@@ -363,6 +394,205 @@ ri_vk_RIBarrierAspectToVK(enum RIBarrierAspect_e aspect) {
   }
   assert(false);
   return VK_IMAGE_ASPECT_COLOR_BIT;
+}
+
+#endif
+
+#if (DEVICE_IMPL_D3D12)
+
+// Translate each RI resource-state bit to its corresponding D3D12 state.
+static inline D3D12_RESOURCE_STATES
+ri_d3d12_RIResourceStateToStates(uint32_t state) {
+  if (state == RI_RESOURCE_STATE_UNDEFINED)
+    return D3D12_RESOURCE_STATE_COMMON;
+
+  D3D12_RESOURCE_STATES states = D3D12_RESOURCE_STATE_COMMON;
+  if (state & RI_RESOURCE_STATE_GENERAL)
+    states |= D3D12_RESOURCE_STATE_UNORDERED_ACCESS;
+  if (state & (RI_RESOURCE_STATE_RENDER_TARGET |
+               RI_RESOURCE_STATE_RENDER_TARGET_READ))
+    states |= D3D12_RESOURCE_STATE_RENDER_TARGET;
+  if (state & RI_RESOURCE_STATE_DEPTH_WRITE)
+    states |= D3D12_RESOURCE_STATE_DEPTH_WRITE;
+  if (state & RI_RESOURCE_STATE_DEPTH_READ)
+    states |= D3D12_RESOURCE_STATE_DEPTH_READ;
+  if (state & RI_RESOURCE_STATE_SHADER_RESOURCE)
+    states |= D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE |
+              D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE;
+  if (state & (RI_RESOURCE_STATE_STORAGE_READ |
+               RI_RESOURCE_STATE_STORAGE_WRITE |
+               RI_RESOURCE_STATE_UNORDERED_ACCESS |
+               RI_RESOURCE_STATE_CLEAR_STORAGE))
+    states |= D3D12_RESOURCE_STATE_UNORDERED_ACCESS;
+  if (state & RI_RESOURCE_STATE_COPY_SRC)
+    states |= D3D12_RESOURCE_STATE_COPY_SOURCE;
+  if (state & RI_RESOURCE_STATE_COPY_DST)
+    states |= D3D12_RESOURCE_STATE_COPY_DEST;
+  if (state & RI_RESOURCE_STATE_PRESENT)
+    states |= D3D12_RESOURCE_STATE_PRESENT;
+  if (state & RI_RESOURCE_STATE_INDIRECT_ARGUMENT)
+    states |= D3D12_RESOURCE_STATE_INDIRECT_ARGUMENT;
+  if (state & (RI_RESOURCE_STATE_VERTEX_BUFFER |
+               RI_RESOURCE_STATE_CONSTANT_BUFFER))
+    states |= D3D12_RESOURCE_STATE_VERTEX_AND_CONSTANT_BUFFER;
+  if (state & RI_RESOURCE_STATE_INDEX_BUFFER)
+    states |= D3D12_RESOURCE_STATE_INDEX_BUFFER;
+  if (state & (RI_RESOURCE_STATE_ACCEL_READ |
+               RI_RESOURCE_STATE_ACCEL_WRITE))
+    states |= D3D12_RESOURCE_STATE_RAYTRACING_ACCELERATION_STRUCTURE;
+  return states;
+}
+
+static inline D3D12_BARRIER_ACCESS
+ri_d3d12_RIResourceStateToBarrierAccess(uint32_t state) {
+  if (state == RI_RESOURCE_STATE_UNDEFINED)
+    return D3D12_BARRIER_ACCESS_NO_ACCESS;
+  // D3D12_BARRIER_ACCESS_NO_ACCESS (0x80000000) is mutually exclusive with
+  // every real access bit; the fallback must be COMMON (0) so the OR below
+  // does not smuggle NO_ACCESS into a valid access mask.
+  D3D12_BARRIER_ACCESS access = D3D12_BARRIER_ACCESS_COMMON;
+  if (state & (RI_RESOURCE_STATE_RENDER_TARGET | RI_RESOURCE_STATE_RENDER_TARGET_READ))
+    access |= D3D12_BARRIER_ACCESS_RENDER_TARGET;
+  if (state & RI_RESOURCE_STATE_DEPTH_WRITE)
+    access |= D3D12_BARRIER_ACCESS_DEPTH_STENCIL_WRITE;
+  if (state & RI_RESOURCE_STATE_DEPTH_READ)
+    access |= D3D12_BARRIER_ACCESS_DEPTH_STENCIL_READ;
+  if (state & RI_RESOURCE_STATE_SHADER_RESOURCE)
+    access |= D3D12_BARRIER_ACCESS_SHADER_RESOURCE;
+  if (state & (RI_RESOURCE_STATE_STORAGE_READ | RI_RESOURCE_STATE_STORAGE_WRITE |
+               RI_RESOURCE_STATE_UNORDERED_ACCESS | RI_RESOURCE_STATE_CLEAR_STORAGE |
+               RI_RESOURCE_STATE_GENERAL))
+    access |= D3D12_BARRIER_ACCESS_UNORDERED_ACCESS;
+  if (state & RI_RESOURCE_STATE_COPY_SRC)
+    access |= D3D12_BARRIER_ACCESS_COPY_SOURCE;
+  if (state & RI_RESOURCE_STATE_COPY_DST)
+    access |= D3D12_BARRIER_ACCESS_COPY_DEST;
+  if (state & RI_RESOURCE_STATE_INDIRECT_ARGUMENT)
+    access |= D3D12_BARRIER_ACCESS_INDIRECT_ARGUMENT;
+  if (state & RI_RESOURCE_STATE_VERTEX_BUFFER)
+    access |= D3D12_BARRIER_ACCESS_VERTEX_BUFFER;
+  if (state & RI_RESOURCE_STATE_INDEX_BUFFER)
+    access |= D3D12_BARRIER_ACCESS_INDEX_BUFFER;
+  if (state & RI_RESOURCE_STATE_CONSTANT_BUFFER)
+    access |= D3D12_BARRIER_ACCESS_CONSTANT_BUFFER;
+  if (state & RI_RESOURCE_STATE_ACCEL_READ)
+    access |= D3D12_BARRIER_ACCESS_RAYTRACING_ACCELERATION_STRUCTURE_READ;
+  if (state & RI_RESOURCE_STATE_ACCEL_WRITE)
+    access |= D3D12_BARRIER_ACCESS_RAYTRACING_ACCELERATION_STRUCTURE_WRITE;
+  return access ? access : D3D12_BARRIER_ACCESS_COMMON;
+}
+
+static inline D3D12_BARRIER_LAYOUT
+ri_d3d12_RIResourceStateToBarrierLayout(uint32_t state) {
+  if (state == RI_RESOURCE_STATE_UNDEFINED)
+    return D3D12_BARRIER_LAYOUT_UNDEFINED;
+  if (state & (RI_RESOURCE_STATE_GENERAL | RI_RESOURCE_STATE_STORAGE_READ |
+               RI_RESOURCE_STATE_STORAGE_WRITE | RI_RESOURCE_STATE_UNORDERED_ACCESS |
+               RI_RESOURCE_STATE_CLEAR_STORAGE))
+    return D3D12_BARRIER_LAYOUT_UNORDERED_ACCESS;
+  if (state & (RI_RESOURCE_STATE_RENDER_TARGET | RI_RESOURCE_STATE_RENDER_TARGET_READ))
+    return D3D12_BARRIER_LAYOUT_RENDER_TARGET;
+  if (state & RI_RESOURCE_STATE_DEPTH_WRITE)
+    return D3D12_BARRIER_LAYOUT_DEPTH_STENCIL_WRITE;
+  // Each specific read layout admits exactly one access kind
+  // (DEPTH_STENCIL_READ -> depth read only, SHADER_RESOURCE -> SRV only).
+  // Combined read states need a generic read layout: the direct-queue variant
+  // is the only one that also admits depth-stencil read, which is what a
+  // read-only depth attachment sampled in the same pass requires.
+  const uint32_t readStates = state & (RI_RESOURCE_STATE_DEPTH_READ |
+                                       RI_RESOURCE_STATE_SHADER_RESOURCE |
+                                       RI_RESOURCE_STATE_COPY_SRC);
+  if ((state & RI_RESOURCE_STATE_DEPTH_READ) &&
+      readStates != RI_RESOURCE_STATE_DEPTH_READ)
+    return D3D12_BARRIER_LAYOUT_DIRECT_QUEUE_GENERIC_READ;
+  if (state & RI_RESOURCE_STATE_DEPTH_READ)
+    return D3D12_BARRIER_LAYOUT_DEPTH_STENCIL_READ;
+  if ((state & RI_RESOURCE_STATE_SHADER_RESOURCE) &&
+      (state & RI_RESOURCE_STATE_COPY_SRC))
+    return D3D12_BARRIER_LAYOUT_GENERIC_READ;
+  if (state & RI_RESOURCE_STATE_SHADER_RESOURCE)
+    return D3D12_BARRIER_LAYOUT_SHADER_RESOURCE;
+  if (state & RI_RESOURCE_STATE_COPY_SRC)
+    return D3D12_BARRIER_LAYOUT_COPY_SOURCE;
+  if (state & RI_RESOURCE_STATE_COPY_DST)
+    return D3D12_BARRIER_LAYOUT_COPY_DEST;
+  if (state & RI_RESOURCE_STATE_PRESENT)
+    return D3D12_BARRIER_LAYOUT_PRESENT;
+  return D3D12_BARRIER_LAYOUT_UNDEFINED;
+}
+
+static inline D3D12_BARRIER_SYNC
+ri_d3d12_RIStageMaskFromStateBarrier(uint32_t state) {
+  D3D12_BARRIER_SYNC sync = D3D12_BARRIER_SYNC_NONE;
+  if (state & (RI_RESOURCE_STATE_SHADER_RESOURCE | RI_RESOURCE_STATE_STORAGE_READ |
+               RI_RESOURCE_STATE_STORAGE_WRITE | RI_RESOURCE_STATE_CONSTANT_BUFFER |
+               RI_RESOURCE_STATE_GENERAL))
+    sync |= D3D12_BARRIER_SYNC_VERTEX_SHADING | D3D12_BARRIER_SYNC_PIXEL_SHADING |
+            D3D12_BARRIER_SYNC_COMPUTE_SHADING | D3D12_BARRIER_SYNC_RAYTRACING;
+  if (state & (RI_RESOURCE_STATE_RENDER_TARGET | RI_RESOURCE_STATE_RENDER_TARGET_READ))
+    sync |= D3D12_BARRIER_SYNC_RENDER_TARGET;
+  if (state & (RI_RESOURCE_STATE_DEPTH_WRITE | RI_RESOURCE_STATE_DEPTH_READ))
+    sync |= D3D12_BARRIER_SYNC_DEPTH_STENCIL;
+  if (state & (RI_RESOURCE_STATE_COPY_SRC | RI_RESOURCE_STATE_COPY_DST))
+    sync |= D3D12_BARRIER_SYNC_COPY;
+  if (state & RI_RESOURCE_STATE_INDIRECT_ARGUMENT)
+    sync |= D3D12_BARRIER_SYNC_EXECUTE_INDIRECT;
+  if (state & (RI_RESOURCE_STATE_VERTEX_BUFFER | RI_RESOURCE_STATE_INDEX_BUFFER))
+    sync |= D3D12_BARRIER_SYNC_INDEX_INPUT;
+  if (state & (RI_RESOURCE_STATE_ACCEL_READ | RI_RESOURCE_STATE_ACCEL_WRITE))
+    sync |= D3D12_BARRIER_SYNC_BUILD_RAYTRACING_ACCELERATION_STRUCTURE;
+  if (state & RI_RESOURCE_STATE_CLEAR_STORAGE)
+    sync |= D3D12_BARRIER_SYNC_CLEAR_UNORDERED_ACCESS_VIEW;
+  return sync ? sync : (state == RI_RESOURCE_STATE_UNDEFINED ?
+                         D3D12_BARRIER_SYNC_NONE : D3D12_BARRIER_SYNC_ALL);
+}
+
+static inline D3D12_BARRIER_SYNC
+ri_d3d12_RIStageBitsToBarrierSync(uint32_t stageBits, uint32_t stateFallback) {
+  if (stageBits == RI_STAGE_NONE)
+    return ri_d3d12_RIStageMaskFromStateBarrier(stateFallback);
+  D3D12_BARRIER_SYNC sync = D3D12_BARRIER_SYNC_NONE;
+  if (stateFallback & (RI_RESOURCE_STATE_RENDER_TARGET | RI_RESOURCE_STATE_RENDER_TARGET_READ))
+    sync |= D3D12_BARRIER_SYNC_RENDER_TARGET;
+  if (stateFallback & (RI_RESOURCE_STATE_DEPTH_WRITE | RI_RESOURCE_STATE_DEPTH_READ))
+    sync |= D3D12_BARRIER_SYNC_DEPTH_STENCIL;
+  // Callers pass Vulkan-style stages (FRAGMENT for depth/colour attachments),
+  // but D3D12 rejects sync bits incompatible with the access: an
+  // attachment-only state is touched solely by the output merger / depth
+  // test, so PIXEL_SHADING etc. alongside DEPTH_STENCIL_WRITE is an invalid
+  // barrier. Without the debug layer that removes the device (INVALID_CALL).
+  const uint32_t attachmentStates =
+      RI_RESOURCE_STATE_RENDER_TARGET | RI_RESOURCE_STATE_RENDER_TARGET_READ |
+      RI_RESOURCE_STATE_DEPTH_WRITE | RI_RESOURCE_STATE_DEPTH_READ;
+  if (stateFallback != RI_RESOURCE_STATE_UNDEFINED &&
+      (stateFallback & ~attachmentStates) == 0)
+    return sync;
+  if (stageBits & RI_STAGE_VERTEX) sync |= D3D12_BARRIER_SYNC_VERTEX_SHADING;
+  if (stageBits & RI_STAGE_FRAGMENT) sync |= D3D12_BARRIER_SYNC_PIXEL_SHADING;
+  if (stageBits & RI_STAGE_COMPUTE) sync |= D3D12_BARRIER_SYNC_COMPUTE_SHADING;
+  if (stageBits & RI_STAGE_RAY_TRACING) sync |= D3D12_BARRIER_SYNC_RAYTRACING;
+  if (stageBits & RI_STAGE_DRAW_INDIRECT) sync |= D3D12_BARRIER_SYNC_EXECUTE_INDIRECT;
+  if (stageBits & RI_STAGE_COPY) sync |= D3D12_BARRIER_SYNC_COPY;
+  if (stageBits & RI_STAGE_BLIT) sync |= D3D12_BARRIER_SYNC_COPY;
+  if (stageBits & RI_STAGE_CLEAR) sync |= D3D12_BARRIER_SYNC_CLEAR_UNORDERED_ACCESS_VIEW;
+  if (stageBits & RI_STAGE_ACCEL_BUILD)
+    sync |= D3D12_BARRIER_SYNC_BUILD_RAYTRACING_ACCELERATION_STRUCTURE;
+  return sync;
+}
+
+// Return the plane index used for typed depth-stencil subresource transitions.
+static inline UINT
+ri_d3d12_RIBarrierAspectToPlane(enum RIBarrierAspect_e aspect) {
+  switch (aspect) {
+  case RI_BARRIER_ASPECT_COLOR:
+  case RI_BARRIER_ASPECT_DEPTH:
+  case RI_BARRIER_ASPECT_DEPTH_STENCIL:
+    return 0;
+  case RI_BARRIER_ASPECT_STENCIL:
+    return 1;
+  }
+  assert(false);
+  return 0;
 }
 
 #endif

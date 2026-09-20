@@ -3,12 +3,15 @@
 #include "graphics/RIProgram.h"
 #include "graphics/RITypes.h"
 #include "graphics/RIVK.h"
+#include "graphics/RID3D12.h"
+#include "graphics/RITimeline.h"
 #include "graphics/XessVulkanSupport.h"
-#include "graphics/RendererCapabilityPolicy.h"
 #include "system/Hasher.h"
+#include "system/LowLevelSystem.h"
 #include "system/QStr.h"
 #include "system/Types.h"
 #include "system/stb_ds.h"
+#include <cmath>
 #include <stddef.h>
 #include <optional>
 #include <vector>
@@ -129,8 +132,9 @@ const static char *DefaultDeviceExtension[] = {
     VK_KHR_FRAGMENT_SHADER_BARYCENTRIC_EXTENSION_NAME,
 };
 
-// Only enabled in RENDERER_CAPABILITY_RAYTRACED. Also the definition of a
-// "ray tracing extension" when screening XeSS requirements in raster mode.
+// Only enabled when RIDeviceDesc::requestRayTracing is set. Also the
+// definition of a "ray tracing extension" when screening XeSS requirements in
+// raster mode.
 const static char *RayTracingDeviceExtension[] = {
     VK_KHR_RAY_QUERY_EXTENSION_NAME,
     VK_KHR_RAY_TRACING_PIPELINE_EXTENSION_NAME,
@@ -351,8 +355,18 @@ static bool __VK_ValidateXessFeatureChain(
 
 int EnumerateRIAdapters(struct RIPhysicalAdapter *adapters,
                         uint32_t *numAdapters) {
+  // Return RI_FAIL if the renderer was never (or unsuccessfully) initialized,
+  // rather than dereferencing an unpublished native handle. The single-backend
+  // RIIsTargetSelected fold-to-true masks this otherwise.
+  if (g_renderer.api == RI_DEVICE_API_UNKNOWN)
+    return RI_FAIL;
+#if (DEVICE_IMPL_D3D12)
+  if (RIIsTargetSelected(RI_DEVICE_API_D3D12)) {
+    return RID3D12_EnumerateAdapters(g_renderer, adapters, numAdapters);
+  }
+#endif
 #if (DEVICE_IMPL_VULKAN)
-  {
+  if (RIIsTargetSelected(RI_DEVICE_API_VK)) {
     uint32_t deviceGroupNum = 0;
     if (!VK_WrapResult(vkEnumeratePhysicalDeviceGroups(
             g_renderer.vk.instance, &deviceGroupNum, NULL))) {
@@ -523,13 +537,13 @@ int EnumerateRIAdapters(struct RIPhysicalAdapter *adapters,
           break;
         }
 
-        physicalAdapter->vk.isSwapChainSupported =
+        physicalAdapter->isSwapChainSupported =
             __VK_SupportExtension(extensionProperties, extensionNum,
                                   qCToStrRef(VK_KHR_SWAPCHAIN_EXTENSION_NAME));
 
         physicalAdapter->vk.isPresentIDSupported =
             presentIdFeatures.presentId > 0;
-        physicalAdapter->vk.isBufferDeviceAddressSupported =
+        physicalAdapter->isBufferDeviceAddressSupported =
             physicalAdapter->vk.apiVersion >= VK_API_VERSION_1_2 ||
             __VK_SupportExtension(
                 extensionProperties, extensionNum,
@@ -813,33 +827,33 @@ int EnumerateRIAdapters(struct RIPhysicalAdapter *adapters,
              hasDeferredHostOpsExt &&
              (properties.properties.apiVersion >= VK_API_VERSION_1_2 ||
               (hasSpirv14Ext && hasShaderFloatControlsExt)) &&
-             physicalAdapter->vk.isBufferDeviceAddressSupported)
+             physicalAdapter->isBufferDeviceAddressSupported)
                 ? 1
                 : 0;
 
-        RendererCapabilitySet tierCapabilities = {};
-        tierCapabilities.accelerationStructureExtension = hasAccelStructExt;
-        tierCapabilities.accelerationStructure =
-            accelStructFeatures.accelerationStructure != VK_FALSE;
-        tierCapabilities.rayQueryExtension = hasRayQueryExt;
-        tierCapabilities.rayQuery = rayQueryFeatures.rayQuery != VK_FALSE;
-        tierCapabilities.rayTracingPipelineExtension = hasRayTracingPipelineExt;
-        tierCapabilities.rayTracingPipeline =
-            rayTracingFeatures.rayTracingPipeline != VK_FALSE;
-        tierCapabilities.bufferDeviceAddress =
-            features12.bufferDeviceAddress != VK_FALSE;
-        tierCapabilities.deferredHostOperationsExtension = hasDeferredHostOpsExt;
-        tierCapabilities.deferredHostOperations = hasDeferredHostOpsExt;
-        tierCapabilities.spirv14 =
-            properties.properties.apiVersion >= VK_API_VERSION_1_2 ||
-            hasSpirv14Ext;
-        tierCapabilities.shaderFloatControls =
-            properties.properties.apiVersion >= VK_API_VERSION_1_2 ||
-            hasShaderFloatControlsExt;
-        tierCapabilities.rayTracingPipelineTraceRaysIndirect =
-            rayTracingFeatures.rayTracingPipelineTraceRaysIndirect != VK_FALSE;
+        // Ray tracing needs its extension and feature, the buffer device
+        // addresses acceleration structures are built from, deferred host
+        // operations, and the SPIR-V 1.4 / shader float controls that
+        // VK_KHR_ray_tracing_pipeline requires. Folding all of that into one
+        // backend-neutral bit is what lets the capability policy stay free of
+        // Vulkan vocabulary.
+        physicalAdapter->isRayTracingSupported =
+            (hasAccelStructExt && accelStructFeatures.accelerationStructure &&
+             hasRayTracingPipelineExt &&
+             rayTracingFeatures.rayTracingPipeline && hasDeferredHostOpsExt &&
+             features12.bufferDeviceAddress &&
+             (properties.properties.apiVersion >= VK_API_VERSION_1_2 ||
+              (hasSpirv14Ext && hasShaderFloatControlsExt)))
+                ? 1
+                : 0;
+        // Tier 2 mirrors DXR 1.1: the tier-1 foundation plus inline ray query
+        // and indirect trace dispatch.
         physicalAdapter->rayTracingTier =
-            RendererEvaluateRayTracingTier(tierCapabilities);
+            !physicalAdapter->isRayTracingSupported ? 0
+            : (hasRayQueryExt && rayQueryFeatures.rayQuery &&
+               rayTracingFeatures.rayTracingPipelineTraceRaysIndirect)
+                ? 2
+                : 1;
 
         // if (physicalAdapter->shadingRateTier) {
         //     physicalAdapter->isAdditionalShadingRatesSupported =
@@ -850,7 +864,20 @@ int EnumerateRIAdapters(struct RIPhysicalAdapter *adapters,
         //         physicalAdapter->shadingRateTier = 2;
         // }
 
-        physicalAdapter->bindlessTier = features12.descriptorIndexing ? 1 : 0;
+        // Descriptor indexing alone is not enough to run the bindless set: the
+        // renderer leaves slots unwritten, indexes them non-uniformly, and
+        // rewrites them while they are bound.
+        physicalAdapter->bindlessTier =
+            (features12.descriptorIndexing &&
+             features12.descriptorBindingPartiallyBound &&
+             features12.shaderSampledImageArrayNonUniformIndexing &&
+             features12.descriptorBindingSampledImageUpdateAfterBind)
+                ? 1
+                : 0;
+        physicalAdapter->isShaderStorageScalarLayoutSupported =
+            features12.scalarBlockLayout ? 1 : 0;
+        physicalAdapter->isDynamicRenderingSupported =
+            features13.dynamicRendering ? 1 : 0;
 
         physicalAdapter->isTextureFilterMinMaxSupported =
             features12.samplerFilterMinmax;
@@ -924,14 +951,28 @@ __VK_findQueueCreateInfo(VkDeviceQueueCreateInfo *queues, size_t numQueues,
 
 int RIDevice::init(struct RIDeviceDesc *init) {
   assert(init->physicalAdapter);
+  // Ray query traces the structures ray tracing provides, so asking for it
+  // without the foundation is a caller error rather than an adapter shortfall.
+  assert(!init->requestRayQuery || init->requestRayTracing);
+  // Whether the adapter can service a request is deliberately NOT asserted:
+  // this builds whatever the adapter can give and publishes what it actually
+  // enabled below. Deciding an adapter is unfit for a particular renderer
+  // belongs to the caller (see cGraphics::Init).
   memset(this, 0, sizeof(*this));
   struct RIDevice *device = this; // body below predates the method form
 
   int riResult = RI_SUCCESS;
   struct RIPhysicalAdapter *physicalAdapter = init->physicalAdapter;
-  const RendererCapabilityMode_e capabilityMode =
-      init->requestRayTracing ? RENDERER_CAPABILITY_RAYTRACED
-                              : RENDERER_CAPABILITY_RASTER;
+  device->physicalAdapter = *init->physicalAdapter;
+  // Physical support is not the same thing as a feature enabled on this device.
+  device->rayTracingEnabled = false;
+#if (DEVICE_IMPL_D3D12)
+  if (RIIsTargetSelected(RI_DEVICE_API_D3D12)) {
+    return RID3D12_InitDevice(*this, init);
+  }
+#endif
+
+#if (DEVICE_IMPL_VULKAN)
   hpl::cXessVulkanSupport &xessSupport =
       hpl::XessVulkanSupportInstance();
   auto setXessUnavailable = [&](const char *reason) {
@@ -948,11 +989,6 @@ int RIDevice::init(struct RIDeviceDesc *init) {
              device->xessUnavailableReason);
   }
 
-  device->physicalAdapter = *init->physicalAdapter;
-  // Physical support is not the same thing as a feature enabled on this device.
-  device->rayTracingEnabled = false;
-
-#if (DEVICE_IMPL_VULKAN)
   {
     const char **enabledExtensionNames = NULL;
 #if defined(HPL2_XESS_AVAILABLE) && HPL2_XESS_AVAILABLE
@@ -1240,7 +1276,7 @@ int RIDevice::init(struct RIDeviceDesc *init) {
         arrpush(enabledExtensionNames, DefaultDeviceExtension[idx]);
       }
     }
-    if (capabilityMode == RENDERER_CAPABILITY_RAYTRACED) {
+    if (init->requestRayTracing) {
       for (size_t idx = 0; idx < ARRAY_COUNT(RayTracingDeviceExtension); idx++) {
         if (__VK_SupportExtension(extensionProperties, extensionNum,
                                   qCToStrRef(RayTracingDeviceExtension[idx]))) {
@@ -1411,64 +1447,9 @@ int RIDevice::init(struct RIDeviceDesc *init) {
 
     vkGetPhysicalDeviceFeatures2(physicalAdapter->vk.physicalDevice, &features);
 
-    RendererCapabilitySet capabilitySet = {};
-    capabilitySet.swapchain = physicalAdapter->vk.isSwapChainSupported;
-    capabilitySet.descriptorIndexing = features12.descriptorIndexing != 0;
-    capabilitySet.bufferDeviceAddress = features12.bufferDeviceAddress != 0;
-    capabilitySet.scalarBlockLayout = features12.scalarBlockLayout != 0;
-    capabilitySet.shaderInt64 = features.features.shaderInt64 != 0;
-    capabilitySet.shaderBufferInt64Atomics =
-        features12.shaderBufferInt64Atomics != 0;
-    capabilitySet.fragmentShaderBarycentric = __VK_isExtensionNamesSupported(
-        qCToStrRef(VK_KHR_FRAGMENT_SHADER_BARYCENTRIC_EXTENSION_NAME),
-        enabledExtensionNames, arrlen(enabledExtensionNames));
-    capabilitySet.fragmentShaderInterlock = __VK_isExtensionNamesSupported(
-        qCToStrRef(VK_EXT_FRAGMENT_SHADER_INTERLOCK_EXTENSION_NAME),
-        enabledExtensionNames, arrlen(enabledExtensionNames));
-    capabilitySet.dynamicRendering = features13.dynamicRendering != 0;
-    capabilitySet.accelerationStructure = accelerationStructureFeatures.accelerationStructure != 0;
-    capabilitySet.rayQuery = rayQueryFeatures.rayQuery != 0;
-    capabilitySet.rayTracingPipeline = rayTracingPipelineFeatures.rayTracingPipeline != 0;
-    capabilitySet.spirv14 = physicalAdapter->vk.apiVersion >= VK_API_VERSION_1_2 ||
-                            __VK_isExtensionNamesSupported(
-        qCToStrRef(VK_KHR_SPIRV_1_4_EXTENSION_NAME), enabledExtensionNames,
-        arrlen(enabledExtensionNames));
-    capabilitySet.shaderFloatControls =
-        physicalAdapter->vk.apiVersion >= VK_API_VERSION_1_2 ||
-        hasShaderFloatControlsExt;
-    capabilitySet.deferredHostOperations =
-        hasDeferredHostOpsExt;
-    capabilitySet.accelerationStructureExtension = hasAccelStructExt;
-    capabilitySet.rayQueryExtension = hasRayQueryExt;
-    capabilitySet.rayTracingPipelineExtension = hasRayTracingPipelineExt;
-    capabilitySet.deferredHostOperationsExtension = hasDeferredHostOpsExt;
-    capabilitySet.spirv14Extension = __VK_isExtensionSupported(
-        VK_KHR_SPIRV_1_4_EXTENSION_NAME, extensionProperties, extensionNum);
-    capabilitySet.shaderFloatControlsExtension = __VK_isExtensionSupported(
-        VK_KHR_SHADER_FLOAT_CONTROLS_EXTENSION_NAME, extensionProperties,
-        extensionNum);
-    capabilitySet.descriptorBindingPartiallyBound = features12.descriptorBindingPartiallyBound;
-    capabilitySet.shaderSampledImageArrayNonUniformIndexing =
-        features12.shaderSampledImageArrayNonUniformIndexing;
-    capabilitySet.descriptorBindingSampledImageUpdateAfterBind =
-        features12.descriptorBindingSampledImageUpdateAfterBind;
-    capabilitySet.descriptorBindingStorageBufferUpdateAfterBind =
-        features12.descriptorBindingStorageBufferUpdateAfterBind;
-    capabilitySet.descriptorBindingStorageImageUpdateAfterBind =
-        features12.descriptorBindingStorageImageUpdateAfterBind;
-    capabilitySet.rayTracingPipelineTraceRaysIndirect =
-        rayTracingPipelineFeatures.rayTracingPipelineTraceRaysIndirect;
-    const RendererCapabilityDecision capabilityDecision =
-        RendererEvaluateCapabilityPolicy(capabilityMode, capabilitySet);
-    if (!capabilityDecision.supported) {
-      hpl::Log("ERROR: renderer capability policy rejected adapter: %s\n",
-               capabilityDecision.missingRequirement);
-      riResult = RI_UNSUPPORTED;
-      free(queueFamilyProps);
-      free(extensionProperties);
-      arrfree(enabledExtensionNames);
-      return riResult;
-    }
+    // Nothing is re-derived from the feature structs here: what this device
+    // actually enables is published after vkCreateDevice below, and the
+    // adapter's backend-neutral capability bits were set during enumeration.
 
 #if defined(HPL2_XESS_AVAILABLE) && HPL2_XESS_AVAILABLE
     // Keep copies of every engine-owned feature structure. XeSS may patch
@@ -1560,7 +1541,7 @@ int RIDevice::init(struct RIDeviceDesc *init) {
         for (uint32_t extensionIdx = 0; extensionIdx < requiredExtensionCount;
              extensionIdx++) {
           const char *requiredName = requiredExtensionNames[extensionIdx];
-          if (capabilityMode == RENDERER_CAPABILITY_RASTER && requiredName &&
+          if (!init->requestRayTracing && requiredName &&
               __VK_isExtensionNamesSupported(
                   qCToStrRef(requiredName), RayTracingDeviceExtension,
                   ARRAY_COUNT(RayTracingDeviceExtension))) {
@@ -1759,14 +1740,13 @@ int RIDevice::init(struct RIDeviceDesc *init) {
     // These flags describe the feature bits actually submitted to Vulkan,
     // rather than physical-adapter advertisements or a failed attempt.
     device->accelerationStructureEnabled =
-        capabilityMode == RENDERER_CAPABILITY_RAYTRACED &&
+        init->requestRayTracing &&
         accelerationStructureFeatures.accelerationStructure != VK_FALSE;
     device->rayTracingPipelineEnabled =
-        capabilityMode == RENDERER_CAPABILITY_RAYTRACED &&
+        init->requestRayTracing &&
         rayTracingPipelineFeatures.rayTracingPipeline != VK_FALSE;
     device->rayQueryEnabled =
-        capabilityMode == RENDERER_CAPABILITY_RAYTRACED &&
-        rayQueryFeatures.rayQuery != VK_FALSE;
+        init->requestRayQuery && rayQueryFeatures.rayQuery != VK_FALSE;
     device->fragmentShaderBarycentricEnabled =
         __VK_isExtensionNamesSupported(
             qCToStrRef(VK_KHR_FRAGMENT_SHADER_BARYCENTRIC_EXTENSION_NAME),
@@ -1898,7 +1878,7 @@ int RIDevice::init(struct RIDeviceDesc *init) {
       createInfo.pVulkanFunctions = &vulkanFunctions;
       createInfo.vulkanApiVersion = VK_API_VERSION_1_3;
 
-      if (device->physicalAdapter.vk.isBufferDeviceAddressSupported) {
+      if (device->physicalAdapter.isBufferDeviceAddressSupported) {
         createInfo.flags |= VMA_ALLOCATOR_CREATE_BUFFER_DEVICE_ADDRESS_BIT;
       }
 
@@ -1924,9 +1904,19 @@ int RIDevice::init(struct RIDeviceDesc *init) {
 
 int InitRIRenderer(const struct RIBackendInit *init) {
   memset(&g_renderer, 0, sizeof(g_renderer));
-  g_renderer.api = init->api;
+#if (DEVICE_IMPL_D3D12)
+  if (init->api == RI_DEVICE_API_D3D12) {
+    int rc = RID3D12_InitRenderer(g_renderer, init);
+    if (rc != RI_SUCCESS) {
+      memset(&g_renderer, 0, sizeof(g_renderer));
+      return rc;
+    }
+    g_renderer.api = RI_DEVICE_API_D3D12;
+    return RI_SUCCESS;
+  }
+#endif
 #if (DEVICE_IMPL_VULKAN)
-  {
+  if (init->api == RI_DEVICE_API_VK) {
     volkInitialize();
 
     VkApplicationInfo appInfo = {};
@@ -2164,6 +2154,7 @@ int InitRIRenderer(const struct RIBackendInit *init) {
     free(extProperties);
     arrfree(enabledExtensionNames);
     if (!VK_WrapResult(result)) {
+      memset(&g_renderer, 0, sizeof(g_renderer));
       return RI_FAIL;
     }
     volkLoadInstance(g_renderer.vk.instance);
@@ -2186,13 +2177,21 @@ int InitRIRenderer(const struct RIBackendInit *init) {
       vkCreateDebugUtilsMessengerEXT(g_renderer.vk.instance, &createInfo, NULL,
                                      &g_renderer.vk.debugMessageUtils);
     }
+    g_renderer.api = RI_DEVICE_API_VK;
+    return RI_SUCCESS;
   }
 #endif
-  return RI_SUCCESS;
+  return RI_FAIL;
 }
 
 // ---- Owned sampler --------------------------------------------------------
 void RISampler::dispose(struct RIDevice *device) {
+#if (DEVICE_IMPL_D3D12)
+  if (RIIsTargetSelected(RI_DEVICE_API_D3D12)) {
+    RID3D12_DisposeSampler(*device, *this);
+    return;
+  }
+#endif
 #if (DEVICE_IMPL_VULKAN)
   if (RIIsTargetSelected(RI_DEVICE_API_VK)) {
     if (vk.sampler)
@@ -2224,10 +2223,9 @@ VkImageLayout RIDescriptor::vkLayout() const { return vk.image.imageLayout; }
 #endif
 
 // ---- Idiomatic descriptor builders ----------------------------------------
-// Each references the RI object + sets the binding params, then assigns the
-// caller-fed `cookie` 1:1. No resolution / ownership: the bind paths pull the
-// backend handle from the referenced RI object via the accessors above. The
-// `device` param is unused (kept for call-site stability).
+// Each snapshots value data and resolves backend handles while the source
+// object is available. D3D12 handles in the payload are borrowed only; the
+// descriptor does not retain or release COM resources or allocator wrappers.
 // Fold a resource's identity cookie with the binding parameters into the
 // descriptor's cache key. A zero resource cookie (uncreated) stays zero so the
 // descriptor reads as empty.
@@ -2237,29 +2235,79 @@ static inline hash_t ri_descriptor_cookie(hash_t resourceCookie, uint8_t type) {
   return hash_u64(resourceCookie, type);
 }
 
+static inline hash_t ri_buffer_descriptor_cookie(hash_t resourceCookie,
+                                                 uint8_t type, uint64_t offset,
+                                                 uint64_t range, uint32_t stride,
+                                                 bool raw, bool structured) {
+  if (resourceCookie == 0)
+    return 0;
+  hash_t h = hash_u64(hash_u64(hash_u64(resourceCookie, type), offset), range);
+  h = hash_u64(h, stride);
+  h = hash_u64(h, raw ? 1u : 0u);
+  return hash_u64(h, structured ? 1u : 0u);
+}
+
 RIDescriptor RIDescriptor::uniformBuffer(struct RIDevice *device,
                                          struct RIBuffer *buffer,
-                                         uint64_t offset, uint64_t range) {
+                                         uint64_t offset, uint64_t range,
+                                         uint32_t stride, bool raw,
+                                         bool structured) {
   (void)device;
   RIDescriptor d{};
   d.type = RI_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-  d.vk.buffer = {buffer ? buffer->vk.buffer : VK_NULL_HANDLE, offset, range};
+  d.payload.buffer.resource = buffer;
+  d.payload.buffer.offset = offset;
+  d.payload.buffer.range = range;
+  d.payload.buffer.stride = stride;
+  d.payload.buffer.raw = (uint8_t)raw;
+  d.payload.buffer.structured = (uint8_t)structured;
+#if (DEVICE_IMPL_D3D12)
+  if (!device || RIIsTargetSelected(RI_DEVICE_API_D3D12)) {
+    d.payload.buffer.nativeResource = buffer ? buffer->d3d12.resource : nullptr;
+    d.payload.buffer.allocation = buffer ? buffer->d3d12.allocation : nullptr;
+    d.payload.buffer.size = buffer ? buffer->d3d12.requestedSize : 0;
+  }
+#endif
+#if (DEVICE_IMPL_VULKAN)
+  if (!device || RIIsTargetSelected(RI_DEVICE_API_VK))
+    d.vk.buffer = {buffer ? buffer->vk.buffer : VK_NULL_HANDLE, offset, range};
+#endif
   if (buffer && buffer->cookie)
     d.cookie =
-        hash_u64(hash_u64(hash_u64(buffer->cookie, d.type), offset), range);
+        ri_buffer_descriptor_cookie(buffer->cookie, d.type, offset, range,
+                                    stride, raw, structured);
   return d;
 }
 
 RIDescriptor RIDescriptor::storageBuffer(struct RIDevice *device,
                                          struct RIBuffer *buffer,
-                                         uint64_t offset, uint64_t range) {
+                                         uint64_t offset, uint64_t range,
+                                         uint32_t stride, bool raw,
+                                         bool structured) {
   (void)device;
   RIDescriptor d{};
   d.type = RI_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-  d.vk.buffer = {buffer ? buffer->vk.buffer : VK_NULL_HANDLE, offset, range};
+  d.payload.buffer.resource = buffer;
+  d.payload.buffer.offset = offset;
+  d.payload.buffer.range = range;
+  d.payload.buffer.stride = stride;
+  d.payload.buffer.raw = (uint8_t)raw;
+  d.payload.buffer.structured = (uint8_t)structured;
+#if (DEVICE_IMPL_D3D12)
+  if (!device || RIIsTargetSelected(RI_DEVICE_API_D3D12)) {
+    d.payload.buffer.nativeResource = buffer ? buffer->d3d12.resource : nullptr;
+    d.payload.buffer.allocation = buffer ? buffer->d3d12.allocation : nullptr;
+    d.payload.buffer.size = buffer ? buffer->d3d12.requestedSize : 0;
+  }
+#endif
+#if (DEVICE_IMPL_VULKAN)
+  if (!device || RIIsTargetSelected(RI_DEVICE_API_VK))
+    d.vk.buffer = {buffer ? buffer->vk.buffer : VK_NULL_HANDLE, offset, range};
+#endif
   if (buffer && buffer->cookie)
     d.cookie =
-        hash_u64(hash_u64(hash_u64(buffer->cookie, d.type), offset), range);
+        ri_buffer_descriptor_cookie(buffer->cookie, d.type, offset, range,
+                                    stride, raw, structured);
   return d;
 }
 
@@ -2269,8 +2317,29 @@ RIDescriptor RIDescriptor::sampledImage(struct RIDevice *device,
   (void)device;
   RIDescriptor d{};
   d.type = RI_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
-  d.vk.image = {VK_NULL_HANDLE, view ? view->vk.image : VK_NULL_HANDLE,
-                ri_vk_RIResourceStateToImageLayout(state)};
+  d.payload.texture.resource = view ? view->resource : nullptr;
+  d.payload.texture.dimension = view ? view->dimension : 0;
+  d.payload.texture.viewType = view ? view->viewType : 0;
+  d.payload.texture.format = view ? view->format : 0;
+  d.payload.texture.baseMip = view ? view->baseMip : 0;
+  d.payload.texture.mipNum = view ? view->mipNum : 0;
+  d.payload.texture.baseLayer = view ? view->baseLayer : 0;
+  d.payload.texture.layerNum = view ? view->layerNum : 0;
+#if (DEVICE_IMPL_D3D12)
+  if (!device || RIIsTargetSelected(RI_DEVICE_API_D3D12)) {
+    // Copy the complete view snapshot. The native resource is borrowed; the
+    // descriptor owns neither it nor the texture's D3D12MA allocation.
+    d.payload.texture.nativeResource = view ? view->d3d12.resource : nullptr;
+    d.payload.texture.allocation = view ? view->d3d12.allocation : nullptr;
+    d.payload.texture.nativeFormat = view ? view->d3d12.format : 0;
+  }
+#endif
+  d.payload.texture.state = state;
+#if (DEVICE_IMPL_VULKAN)
+  if (!device || RIIsTargetSelected(RI_DEVICE_API_VK))
+    d.vk.image = {VK_NULL_HANDLE, view ? view->vk.image : VK_NULL_HANDLE,
+                  ri_vk_RIResourceStateToImageLayout(state)};
+#endif
   if (view && view->cookie)
     d.cookie = hash_u64(hash_u64(view->cookie, d.type), (uint64_t)state);
   return d;
@@ -2281,8 +2350,27 @@ RIDescriptor RIDescriptor::storageImage(struct RIDevice *device,
   (void)device;
   RIDescriptor d{};
   d.type = RI_DESCRIPTOR_TYPE_STORAGE_IMAGE;
-  d.vk.image = {VK_NULL_HANDLE, view ? view->vk.image : VK_NULL_HANDLE,
-                VK_IMAGE_LAYOUT_GENERAL};
+  d.payload.texture.resource = view ? view->resource : nullptr;
+  d.payload.texture.dimension = view ? view->dimension : 0;
+  d.payload.texture.viewType = view ? view->viewType : 0;
+  d.payload.texture.format = view ? view->format : 0;
+  d.payload.texture.baseMip = view ? view->baseMip : 0;
+  d.payload.texture.mipNum = view ? view->mipNum : 0;
+  d.payload.texture.baseLayer = view ? view->baseLayer : 0;
+  d.payload.texture.layerNum = view ? view->layerNum : 0;
+#if (DEVICE_IMPL_D3D12)
+  if (!device || RIIsTargetSelected(RI_DEVICE_API_D3D12)) {
+    d.payload.texture.nativeResource = view ? view->d3d12.resource : nullptr;
+    d.payload.texture.allocation = view ? view->d3d12.allocation : nullptr;
+    d.payload.texture.nativeFormat = view ? view->d3d12.format : 0;
+  }
+#endif
+  d.payload.texture.state = RI_RESOURCE_STATE_UNORDERED_ACCESS;
+#if (DEVICE_IMPL_VULKAN)
+  if (!device || RIIsTargetSelected(RI_DEVICE_API_VK))
+    d.vk.image = {VK_NULL_HANDLE, view ? view->vk.image : VK_NULL_HANDLE,
+                  VK_IMAGE_LAYOUT_GENERAL};
+#endif
   d.cookie = ri_descriptor_cookie(view ? view->cookie : 0, d.type);
   return d;
 }
@@ -2292,7 +2380,17 @@ RIDescriptor RIDescriptor::accelerationStructure(struct RIDevice *device,
   (void)device;
   RIDescriptor d{};
   d.type = RI_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE;
-  d.vk.accelStructure = as ? as->vk.handle : VK_NULL_HANDLE;
+  d.payload.accel.gpuVA = as ? as->getDeviceAddress(device) : 0;
+#if (DEVICE_IMPL_VULKAN)
+  if (!device || RIIsTargetSelected(RI_DEVICE_API_VK))
+    d.vk.accelStructure = as ? as->vk.handle : VK_NULL_HANDLE;
+#endif
+#if (DEVICE_IMPL_D3D12)
+  if (!device || RIIsTargetSelected(RI_DEVICE_API_D3D12)) {
+    d.payload.accel.nativeResource = as ? as->d3d12.resource : nullptr;
+    d.payload.accel.allocation = as ? as->d3d12.allocation : nullptr;
+  }
+#endif
   d.cookie = ri_descriptor_cookie(as ? as->cookie : 0, d.type);
   return d;
 }
@@ -2302,12 +2400,31 @@ RIDescriptor RIDescriptor::sampler(struct RIDevice *device,
   (void)device;
   RIDescriptor d{};
   d.type = RI_DESCRIPTOR_TYPE_SAMPLER;
-  d.vk.image.sampler = sampler ? sampler->vk.sampler : VK_NULL_HANDLE;
+  d.payload.sampler.wrapS = sampler ? sampler->wrapS : 0;
+  d.payload.sampler.wrapT = sampler ? sampler->wrapT : 0;
+  d.payload.sampler.wrapR = sampler ? sampler->wrapR : 0;
+  d.payload.sampler.filter = sampler ? sampler->filter : 0;
+#if (DEVICE_IMPL_D3D12)
+  if ((!device || RIIsTargetSelected(RI_DEVICE_API_D3D12)) && sampler) {
+    d.payload.sampler.d3d12Desc = sampler->d3d12.desc;
+    d.payload.sampler.initialized = sampler->d3d12.initialized;
+  }
+#endif
+#if (DEVICE_IMPL_VULKAN)
+  if (!device || RIIsTargetSelected(RI_DEVICE_API_VK))
+    d.vk.image.sampler = sampler ? sampler->vk.sampler : VK_NULL_HANDLE;
+#endif
   d.cookie = ri_descriptor_cookie(sampler ? sampler->cookie : 0, d.type);
   return d;
 }
 
 void RITexture::dispose(struct RIDevice *device) {
+#if (DEVICE_IMPL_D3D12)
+  if (RIIsTargetSelected(RI_DEVICE_API_D3D12)) {
+    RID3D12_DisposeTexture(*device, *this);
+    return;
+  }
+#endif
 #if (DEVICE_IMPL_VULKAN)
   if (RIIsTargetSelected(RI_DEVICE_API_VK)) {
     if (vk.image) {
@@ -2323,9 +2440,41 @@ void RITexture::dispose(struct RIDevice *device) {
 #endif
 }
 
+void RITexture::setDebugObjectName(struct RIDevice *device, const char *name) {
+#if (DEVICE_IMPL_VULKAN)
+  if (RIIsTargetSelected(RI_DEVICE_API_VK)) {
+    if (vkSetDebugUtilsObjectNameEXT && vk.image && name) {
+      VkDebugUtilsObjectNameInfoEXT nameInfo = {
+          VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT, NULL,
+          VK_OBJECT_TYPE_IMAGE, (uint64_t)vk.image, name};
+      VK_WrapResult(vkSetDebugUtilsObjectNameEXT(device->vk.device, &nameInfo));
+    }
+    return;
+  }
+#endif
+#if (DEVICE_IMPL_D3D12)
+  if (RIIsTargetSelected(RI_DEVICE_API_D3D12)) {
+    RID3D12_SetTextureDebugName(*device, *this, name);
+    return;
+  }
+#endif
+  assert(false && "unhandled backend");
+}
+
 struct RITexture RITexture::create(struct RIDevice *device,
                                    const struct RITextureDesc &desc,
                                    std::optional<hash_t> hash) {
+#if (DEVICE_IMPL_D3D12)
+  RITexture tex = {};
+  if (RIIsTargetSelected(RI_DEVICE_API_D3D12)) {
+    if (RID3D12_CreateTexture(*device, desc, tex) != RI_SUCCESS)
+      return RITexture{};
+    tex.format = desc.format;
+    tex.type = desc.type;
+    tex.cookie = hash.value_or(hash_random());
+    return tex;
+  }
+#endif
 #if (DEVICE_IMPL_VULKAN)
   if (RIIsTargetSelected(RI_DEVICE_API_VK)) {
     uint32_t queueFamilies[RI_QUEUE_LEN] = {0};
@@ -2354,6 +2503,8 @@ struct RITexture RITexture::create(struct RIDevice *device,
     RITexture tex = {};
     VK_WrapResult(vmaCreateImage(device->vk.vmaAllocator, &info, &memReqs,
                                  &tex.vk.image, &tex.vk.allocation, NULL));
+    tex.type = desc.type;
+    tex.format = desc.format;
     tex.cookie = hash.value_or(hash_random());
     return tex;
   }
@@ -2366,6 +2517,26 @@ struct RITextureView RITextureView::create(struct RIDevice *device,
                                            const struct RITexture *tex,
                                            const struct RITextureViewDesc &desc,
                                            std::optional<hash_t> hash) {
+  const auto fillNeutral = [&](RITextureView &view) {
+    view.resource = tex;
+    view.dimension = tex ? tex->type : 0;
+    view.format = desc.format;
+    view.viewType = desc.viewType;
+    view.baseMip = desc.baseMip;
+    view.mipNum = desc.mipNum;
+    view.baseLayer = desc.baseLayer;
+    view.layerNum = desc.layerNum;
+  };
+#if (DEVICE_IMPL_D3D12)
+  RITextureView view = {};
+  if (RIIsTargetSelected(RI_DEVICE_API_D3D12)) {
+    if (RID3D12_CreateTextureView(*device, *tex, desc, view) != RI_SUCCESS)
+      return RITextureView{};
+    fillNeutral(view);
+    view.cookie = hash.value_or(hash_random());
+    return view;
+  }
+#endif
 #if (DEVICE_IMPL_VULKAN)
   if (RIIsTargetSelected(RI_DEVICE_API_VK)) {
     const struct RIFormatProps *props = GetRIFormatProps(desc.format);
@@ -2398,6 +2569,7 @@ struct RITextureView RITextureView::create(struct RIDevice *device,
     RITextureView view = {};
     VK_WrapResult(
         vkCreateImageView(device->vk.device, &ci, NULL, &view.vk.image));
+    fillNeutral(view);
     view.cookie = hash.value_or(hash_random());
     return view;
   }
@@ -2407,6 +2579,10 @@ struct RITextureView RITextureView::create(struct RIDevice *device,
 }
 
 void RITextureView::dispose(struct RIDevice *device) {
+#if (DEVICE_IMPL_D3D12)
+  if (RIIsTargetSelected(RI_DEVICE_API_D3D12))
+    RID3D12_DisposeTextureView(*device, *this);
+#endif
 #if (DEVICE_IMPL_VULKAN)
   if (RIIsTargetSelected(RI_DEVICE_API_VK)) {
     if (vk.image) {
@@ -2419,6 +2595,12 @@ void RITextureView::dispose(struct RIDevice *device) {
 }
 
 void RIPool::init(struct RIDevice *device, struct RIQueue *queue) {
+#if (DEVICE_IMPL_D3D12)
+  if (RIIsTargetSelected(RI_DEVICE_API_D3D12)) {
+    RID3D12_PoolInit(*device, *this, *queue);
+    return;
+  }
+#endif
 #if (DEVICE_IMPL_VULKAN)
   {
     VkCommandPoolCreateInfo cmdPoolCreateInfo = {
@@ -2435,6 +2617,12 @@ void RIPool::init(struct RIDevice *device, struct RIQueue *queue) {
 }
 
 void RIPool::dispose(struct RIDevice *device) {
+#if (DEVICE_IMPL_D3D12)
+  if (RIIsTargetSelected(RI_DEVICE_API_D3D12)) {
+    RID3D12_PoolDispose(*device, *this);
+    return;
+  }
+#endif
 #if (DEVICE_IMPL_VULKAN)
   if (RIIsTargetSelected(RI_DEVICE_API_VK)) {
     vkDestroyCommandPool(device->vk.device, vk.pool, NULL);
@@ -2446,6 +2634,12 @@ void RIPool::dispose(struct RIDevice *device) {
 }
 
 void RIPool::reset(struct RIDevice *device) {
+#if (DEVICE_IMPL_D3D12)
+  if (RIIsTargetSelected(RI_DEVICE_API_D3D12)) {
+    RID3D12_PoolReset(*device, *this);
+    return;
+  }
+#endif
 #if (DEVICE_IMPL_VULKAN)
   {
     VK_WrapResult(vkResetCommandPool(device->vk.device, vk.pool, 0));
@@ -2458,6 +2652,12 @@ void RICmd::init(struct RIDevice *device, struct RIPool *pool) {
       device->rayTracingPipelineEnabled;
   barrierCapabilities.accelerationStructureEnabled =
       device->accelerationStructureEnabled;
+#if (DEVICE_IMPL_D3D12)
+  if (RIIsTargetSelected(RI_DEVICE_API_D3D12)) {
+    RID3D12_CmdInit(*device, *this, *pool);
+    return;
+  }
+#endif
 #if (DEVICE_IMPL_VULKAN)
   {
     VkCommandBufferAllocateInfo command_allocate_info = {
@@ -2474,6 +2674,12 @@ void RICmd::init(struct RIDevice *device, struct RIPool *pool) {
 }
 
 void RICmd::begin(struct RIDevice *device) {
+#if (DEVICE_IMPL_D3D12)
+  if (RIIsTargetSelected(RI_DEVICE_API_D3D12)) {
+    RID3D12_CmdBegin(*device, *this);
+    return;
+  }
+#endif
 #if (DEVICE_IMPL_VULKAN)
   {
     VkCommandBufferBeginInfo info = {
@@ -2486,6 +2692,12 @@ void RICmd::begin(struct RIDevice *device) {
 }
 
 void RICmd::end(struct RIDevice *device) {
+#if (DEVICE_IMPL_D3D12)
+  if (RIIsTargetSelected(RI_DEVICE_API_D3D12)) {
+    RID3D12_CmdEnd(*device, *this);
+    return;
+  }
+#endif
 #if (DEVICE_IMPL_VULKAN)
   {
     VK_WrapResult(vkEndCommandBuffer(vk.cmd));
@@ -2495,15 +2707,56 @@ void RICmd::end(struct RIDevice *device) {
 }
 
 void RICommandRingElement::wait(struct RIDevice *device) {
-#if (DEVICE_IMPL_VULKAN)
-  if (vk.fence) {
-    VK_WrapResult(
-        vkWaitForFences(device->vk.device, 1, &vk.fence, VK_TRUE, UINT64_MAX));
+#if (DEVICE_IMPL_D3D12)
+  if (RIIsTargetSelected(RI_DEVICE_API_D3D12)) {
+    // The ring may expose persistent per-pool storage alongside the copied
+    // element fields. Read the aggregate token once, so a reused element
+    // covers every successful submit made through its pool before reset.
+    ID3D12Fence *fence = d3d12.backingFence ? *d3d12.backingFence
+                                           : d3d12.fence;
+    uint64_t value = d3d12.backingValue ? *d3d12.backingValue
+                                        : d3d12.value;
+    if (!fence || value == 0)
+      return;
+    if (fence->GetCompletedValue() < value) {
+      HANDLE ev = CreateEventEx(nullptr, nullptr, 0,
+                                EVENT_MODIFY_STATE | SYNCHRONIZE);
+      if (!ev)
+        return;
+      const bool armed = D3D12_WrapResult(fence->SetEventOnCompletion(value, ev));
+      if (armed)
+        WaitForSingleObject(ev, INFINITE);
+      CloseHandle(ev);
+      if (!armed || fence->GetCompletedValue() < value)
+        return;
+    }
+    // The pool is reusable once its aggregate token completes.  Clear both
+    // this view and the shared token so the next acquisition is unsubmitted.
+    d3d12.value = 0;
+    if (d3d12.backingValue && *d3d12.backingValue == value)
+      *d3d12.backingValue = 0;
+    return;
   }
 #endif
+#if (DEVICE_IMPL_VULKAN)
+  if (RIIsTargetSelected(RI_DEVICE_API_VK)) {
+    if (vk.fence) {
+      VK_WrapResult(vkWaitForFences(device->vk.device, 1, &vk.fence, VK_TRUE,
+                                    UINT64_MAX));
+    }
+    return;
+  }
+#endif
+  (void)device;
 }
 
 void RICmd::dispose(struct RIDevice *device) {
+#if (DEVICE_IMPL_D3D12)
+  if (RIIsTargetSelected(RI_DEVICE_API_D3D12)) {
+    RID3D12_CmdDispose(*device, *this);
+    return;
+  }
+#endif
 #if (DEVICE_IMPL_VULKAN)
   if (RIIsTargetSelected(RI_DEVICE_API_VK)) {
     if (vk.cmd) {
@@ -2517,23 +2770,218 @@ void RICmd::dispose(struct RIDevice *device) {
 }
 
 void ShutdownRIRenderer() {
+#if (DEVICE_IMPL_D3D12)
+  if (RIIsTargetSelected(RI_DEVICE_API_D3D12)) {
+    RID3D12_ShutdownRenderer(g_renderer);
+    memset(&g_renderer, 0, sizeof(g_renderer));
+    return;
+  }
+#endif
 #if (DEVICE_IMPL_VULKAN)
-  if (g_renderer.vk.debugMessageUtils)
-    vkDestroyDebugUtilsMessengerEXT(g_renderer.vk.instance,
-                                    g_renderer.vk.debugMessageUtils, NULL);
-  vkDestroyInstance(g_renderer.vk.instance, NULL);
-  volkFinalize();
+  if (RIIsTargetSelected(RI_DEVICE_API_VK)) {
+    if (g_renderer.vk.debugMessageUtils)
+      vkDestroyDebugUtilsMessengerEXT(g_renderer.vk.instance,
+                                      g_renderer.vk.debugMessageUtils, NULL);
+    vkDestroyInstance(g_renderer.vk.instance, NULL);
+    volkFinalize();
+    memset(&g_renderer, 0, sizeof(g_renderer));
+    return;
+  }
 #endif
 }
 
+bool RIDeviceIsValid(const struct RIDevice *device) {
+  if (!device)
+    return false;
+#if (DEVICE_IMPL_D3D12)
+  if (RIIsTargetSelected(RI_DEVICE_API_D3D12))
+    return RID3D12_DeviceIsValid(*device);
+#endif
+#if (DEVICE_IMPL_VULKAN)
+  if (RIIsTargetSelected(RI_DEVICE_API_VK))
+    return device->vk.device != NULL;
+#endif
+  return false;
+}
+
 void RIQueue::waitIdle(struct RIDevice *device) {
+#if (DEVICE_IMPL_D3D12)
+  if (RIIsTargetSelected(RI_DEVICE_API_D3D12)) {
+    RID3D12_QueueWaitIdle(*device, *this);
+    return;
+  }
+#endif
 #if (DEVICE_IMPL_VULKAN)
   VK_WrapResult(vkQueueWaitIdle(vk.queue));
 #endif
 }
 
-void RIDevice::dispose() {
+enum RIResult_e RIQueue::submit(struct RIDevice *device,
+                                const struct RISubmitDesc &desc) {
+#if (DEVICE_IMPL_D3D12)
+  if (RIIsTargetSelected(RI_DEVICE_API_D3D12)) {
+    // Marshal RICmd/RITimelineOp arrays into raw DX12 pointers on the stack
+    // for small counts; heap-fallback via std::vector otherwise.
+    ID3D12CommandList *stackLists[16];
+    RID3D12FenceOp stackWaits[8];
+    RID3D12FenceOp stackSignals[8];
+
+    std::vector<ID3D12CommandList *> heapLists;
+    std::vector<RID3D12FenceOp> heapWaits;
+    std::vector<RID3D12FenceOp> heapSignals;
+
+    ID3D12CommandList *const *lists = stackLists;
+    const RID3D12FenceOp *waits = stackWaits;
+    const RID3D12FenceOp *signals = stackSignals;
+
+    if (desc.cmdCount > (sizeof(stackLists) / sizeof(stackLists[0]))) {
+      heapLists.resize(desc.cmdCount);
+      lists = heapLists.data();
+    }
+    for (uint32_t i = 0; i < desc.cmdCount; ++i)
+      const_cast<ID3D12CommandList **>(lists)[i] =
+          desc.cmds[i] ? desc.cmds[i]->d3d12.cmdList : nullptr;
+
+    auto fillOps = [&](const RITimelineOp *src, uint32_t count,
+                       RID3D12FenceOp *stack, std::vector<RID3D12FenceOp> &heap,
+                       const RID3D12FenceOp *&out) {
+      out = stack;
+      if (count > 8) {
+        heap.resize(count);
+        out = heap.data();
+      }
+      RID3D12FenceOp *w = const_cast<RID3D12FenceOp *>(out);
+      for (uint32_t i = 0; i < count; ++i) {
+        w[i].fence = src[i].timeline ? src[i].timeline->d3d12.fence : nullptr;
+        w[i].value = src[i].value;
+      }
+    };
+    fillOps(desc.waits, desc.waitCount, stackWaits, heapWaits, waits);
+    fillOps(desc.signals, desc.signalCount, stackSignals, heapSignals, signals);
+
+    RID3D12SubmitDesc dxDesc = {};
+    dxDesc.lists = lists;
+    dxDesc.listCount = desc.cmdCount;
+    dxDesc.waits = waits;
+    dxDesc.waitCount = desc.waitCount;
+    dxDesc.signals = signals;
+    dxDesc.signalCount = desc.signalCount;
+    dxDesc.completionFence = nullptr;
+    dxDesc.completionValue = 0;
+    uint64_t stampedValue = 0;
+    if (desc.completion) {
+      // Reserve a fresh monotonic value on the queue's fence for this submit.
+      stampedValue = ++d3d12.nextFenceValue;
+      dxDesc.completionFence = d3d12.fence;
+      dxDesc.completionValue = stampedValue;
+    }
+    RIResult_e rc = RID3D12_QueueSubmit(*device, *this, dxDesc);
+    if (rc == RI_SUCCESS && desc.completion) {
+      // Keep the queue fence/value write strictly post-submit: an unsuccessful
+      // submit must leave an acquired or previously completed pool token
+      // unchanged. The ring-side element points at the pool's aggregate token;
+      // acquired elements only carry a view of that token.
+      desc.completion->d3d12.fence = d3d12.fence;
+      desc.completion->d3d12.value = stampedValue;
+      if (desc.completion->d3d12.backingFence)
+        *desc.completion->d3d12.backingFence = d3d12.fence;
+      if (desc.completion->d3d12.backingValue)
+        *desc.completion->d3d12.backingValue = stampedValue;
+    }
+    return rc;
+  }
+#endif
 #if (DEVICE_IMPL_VULKAN)
+  if (RIIsTargetSelected(RI_DEVICE_API_VK)) {
+    // Small stack scratch; heap fallback for large batches.
+    VkCommandBufferSubmitInfo stackCmds[16];
+    VkSemaphoreSubmitInfo stackWaits[8];
+    VkSemaphoreSubmitInfo stackSignals[8];
+
+    std::vector<VkCommandBufferSubmitInfo> heapCmds;
+    std::vector<VkSemaphoreSubmitInfo> heapWaits;
+    std::vector<VkSemaphoreSubmitInfo> heapSignals;
+
+    VkCommandBufferSubmitInfo *cmds = stackCmds;
+    VkSemaphoreSubmitInfo *waits = stackWaits;
+    VkSemaphoreSubmitInfo *signals = stackSignals;
+
+    if (desc.cmdCount > (sizeof(stackCmds) / sizeof(stackCmds[0]))) {
+      heapCmds.resize(desc.cmdCount);
+      cmds = heapCmds.data();
+    }
+    if (desc.waitCount > (sizeof(stackWaits) / sizeof(stackWaits[0]))) {
+      heapWaits.resize(desc.waitCount);
+      waits = heapWaits.data();
+    }
+    if (desc.signalCount > (sizeof(stackSignals) / sizeof(stackSignals[0]))) {
+      heapSignals.resize(desc.signalCount);
+      signals = heapSignals.data();
+    }
+
+    for (uint32_t i = 0; i < desc.cmdCount; ++i) {
+      cmds[i] = {VK_STRUCTURE_TYPE_COMMAND_BUFFER_SUBMIT_INFO};
+      cmds[i].commandBuffer = desc.cmds[i] ? desc.cmds[i]->vk.cmd : VK_NULL_HANDLE;
+    }
+    auto stageFor = [device](uint32_t stageBits) -> VkPipelineStageFlags2 {
+      if (stageBits == RI_STAGE_NONE)
+        return VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT;
+      const RIBarrierCapabilities capabilities = {
+          device->rayTracingPipelineEnabled,
+          device->accelerationStructureEnabled,
+      };
+      return ri_vk_RIStageBitsToVK(stageBits, 0, capabilities, nullptr);
+    };
+    for (uint32_t i = 0; i < desc.waitCount; ++i) {
+      waits[i] = {VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO};
+      waits[i].semaphore = desc.waits[i].timeline
+                               ? desc.waits[i].timeline->vk.semaphore
+                               : VK_NULL_HANDLE;
+      waits[i].value = desc.waits[i].value;
+      waits[i].stageMask = stageFor(desc.waits[i].stages);
+    }
+    for (uint32_t i = 0; i < desc.signalCount; ++i) {
+      signals[i] = {VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO};
+      signals[i].semaphore = desc.signals[i].timeline
+                                 ? desc.signals[i].timeline->vk.semaphore
+                                 : VK_NULL_HANDLE;
+      signals[i].value = desc.signals[i].value;
+      signals[i].stageMask = stageFor(desc.signals[i].stages);
+    }
+
+    VkSubmitInfo2 submitInfo = {VK_STRUCTURE_TYPE_SUBMIT_INFO_2};
+    submitInfo.commandBufferInfoCount = desc.cmdCount;
+    submitInfo.pCommandBufferInfos = cmds;
+    submitInfo.waitSemaphoreInfoCount = desc.waitCount;
+    submitInfo.pWaitSemaphoreInfos = waits;
+    submitInfo.signalSemaphoreInfoCount = desc.signalCount;
+    submitInfo.pSignalSemaphoreInfos = signals;
+
+    VkFence completionFence = VK_NULL_HANDLE;
+    if (desc.completion) {
+      completionFence = desc.completion->vk.fence;
+      if (completionFence != VK_NULL_HANDLE)
+        VK_WrapResult(vkResetFences(device->vk.device, 1, &completionFence));
+    }
+    return VK_WrapResult(vkQueueSubmit2(vk.queue, 1, &submitInfo, completionFence))
+               ? RI_SUCCESS
+               : RI_FAIL;
+  }
+#endif
+  (void)device;
+  (void)desc;
+  return RI_FAIL;
+}
+
+void RIDevice::dispose() {
+#if (DEVICE_IMPL_D3D12)
+  if (RIIsTargetSelected(RI_DEVICE_API_D3D12)) {
+    RID3D12_DisposeDevice(*this);
+    return;
+  }
+#endif
+#if (DEVICE_IMPL_VULKAN)
+  if (RIIsTargetSelected(RI_DEVICE_API_VK)) {
   if (vk.vmaAllocator) {
     // Leak diagnostic: vmaDestroyAllocator asserts if any allocation survives.
     // Dump what is still live (count/bytes + the detailed per-block JSON, whose
@@ -2561,6 +3009,7 @@ void RIDevice::dispose() {
 
   vk.device = NULL;
   vk.vmaAllocator = NULL;
+  }
 #endif
 }
 
@@ -2654,6 +3103,15 @@ void RIAccelStructureDesc::getMemoryReqs(struct RIDevice *dev,
                                          uint64_t *outStorageSize,
                                          uint64_t *outBuildScratchSize,
                                          uint64_t *outUpdateScratchSize) const {
+#if (DEVICE_IMPL_D3D12)
+  if (RIIsTargetSelected(RI_DEVICE_API_D3D12)) {
+    assert(dev);
+    RID3D12_AccelStructureGetMemoryReqs(*dev, this, outStorageSize,
+                                        outBuildScratchSize,
+                                        outUpdateScratchSize);
+    return;
+  }
+#endif
 #if (DEVICE_IMPL_VULKAN)
   assert(dev);
   const struct RIAccelStructureDesc *desc = this;
@@ -2719,6 +3177,10 @@ void RIAccelStructureDesc::getMemoryReqs(struct RIDevice *dev,
 
 int RIAccelStructure::init(struct RIDevice *device,
                            const struct RIAccelStructureDesc *desc) {
+#if (DEVICE_IMPL_D3D12)
+  if (RIIsTargetSelected(RI_DEVICE_API_D3D12))
+    return RID3D12_InitAccelStructure(*device, *this, desc);
+#endif
 #if (DEVICE_IMPL_VULKAN)
   assert(device);
   assert(desc);
@@ -2759,16 +3221,29 @@ int RIAccelStructure::init(struct RIDevice *device,
 
 uint64_t RIAccelStructure::getDeviceAddress(struct RIDevice *device) const {
 #if (DEVICE_IMPL_VULKAN)
-  (void)device;
-  return vk.deviceAddress;
-#else
-  return 0;
+  if (!device || RIIsTargetSelected(RI_DEVICE_API_VK)) {
+    (void)device;
+    return vk.deviceAddress;
+  }
 #endif
+#if (DEVICE_IMPL_D3D12)
+  if (RIIsTargetSelected(RI_DEVICE_API_D3D12))
+    return d3d12.deviceAddress;
+#endif
+  (void)device;
+  return 0;
 }
 
 void RICmd::buildBlas(struct RIDevice *device,
                       const struct RIBuildBlasDesc *descs, uint32_t numDescs) {
   struct RIDevice *dev = device;
+#if (DEVICE_IMPL_D3D12)
+  if (RIIsTargetSelected(RI_DEVICE_API_D3D12)) {
+    assert(dev);
+    RID3D12_BuildBlas(*dev, *this, descs, numDescs);
+    return;
+  }
+#endif
 #if (DEVICE_IMPL_VULKAN)
   if (RIIsTargetSelected(RI_DEVICE_API_VK)) {
     if (numDescs == 0)
@@ -2888,6 +3363,13 @@ void RICmd::buildBlas(struct RIDevice *device,
 void RICmd::buildTlas(struct RIDevice *device,
                       const struct RIBuildTlasDesc *descs, uint32_t numDescs) {
   struct RIDevice *dev = device;
+#if (DEVICE_IMPL_D3D12)
+  if (RIIsTargetSelected(RI_DEVICE_API_D3D12)) {
+    assert(dev);
+    RID3D12_BuildTlas(*dev, *this, descs, numDescs);
+    return;
+  }
+#endif
 #if (DEVICE_IMPL_VULKAN)
   if (RIIsTargetSelected(RI_DEVICE_API_VK)) {
     if (numDescs == 0)
@@ -3023,6 +3505,14 @@ void RICmd::dispatch(struct RIDevice *device, uint32_t groupCountX,
     return;
   }
 #endif
+#if (DEVICE_IMPL_D3D12)
+  if (RIIsTargetSelected(RI_DEVICE_API_D3D12)) {
+    assert(d3d12.cmdList);
+    RID3D12_CheckRootArguments(*this, "dispatch");
+    d3d12.cmdList->Dispatch(groupCountX, groupCountY, groupCountZ);
+    return;
+  }
+#endif
 #if (DEVICE_IMPL_MTL)
   if (RIIsTargetSelected(RI_DEVICE_API_MTL)) {
     assert(mtl.compute);
@@ -3050,6 +3540,18 @@ void RICmd::dispatchIndirect(struct RIDevice *device, struct RIBuffer *buffer,
 #if (DEVICE_IMPL_VULKAN)
   if (RIIsTargetSelected(RI_DEVICE_API_VK)) {
     vkCmdDispatchIndirect(vk.cmd, buffer->vk.buffer, offset);
+    return;
+  }
+#endif
+#if (DEVICE_IMPL_D3D12)
+  if (RIIsTargetSelected(RI_DEVICE_API_D3D12)) {
+    // TODO: D3D12 dispatchIndirect requires an ID3D12CommandSignature built
+    // from D3D12_INDIRECT_ARGUMENT_TYPE_DISPATCH. The signature builder is
+    // not yet in the backend; deferred until pipeline/root-signature plumbing
+    // lands.
+    (void)buffer;
+    (void)offset;
+    assert(false && "d3d12 dispatchIndirect not implemented");
     return;
   }
 #endif
@@ -3083,6 +3585,16 @@ void RICmd::draw(struct RIDevice *device, uint32_t vertexCount,
     return;
   }
 #endif
+#if (DEVICE_IMPL_D3D12)
+  if (RIIsTargetSelected(RI_DEVICE_API_D3D12)) {
+    RID3D12_CheckRootArguments(*this, "draw");
+    if (!d3d12.cmdList || (!d3d12.activeColorCount && !d3d12.activeDepth))
+      return;
+    d3d12.cmdList->DrawInstanced(vertexCount, instanceCount, firstVertex,
+                                 firstInstance);
+    return;
+  }
+#endif
 #if (DEVICE_IMPL_MTL)
   if (RIIsTargetSelected(RI_DEVICE_API_MTL)) {
     // Goes through the open render encoder; primitiveType is set by
@@ -3104,6 +3616,16 @@ void RICmd::drawIndexed(struct RIDevice *device, uint32_t indexCount,
   if (RIIsTargetSelected(RI_DEVICE_API_VK)) {
     vkCmdDrawIndexed(vk.cmd, indexCount, instanceCount, firstIndex,
                      vertexOffset, firstInstance);
+    return;
+  }
+#endif
+#if (DEVICE_IMPL_D3D12)
+  if (RIIsTargetSelected(RI_DEVICE_API_D3D12)) {
+    RID3D12_CheckRootArguments(*this, "drawIndexed");
+    if (!d3d12.cmdList || (!d3d12.activeColorCount && !d3d12.activeDepth))
+      return;
+    d3d12.cmdList->DrawIndexedInstanced(indexCount, instanceCount, firstIndex,
+                                        vertexOffset, firstInstance);
     return;
   }
 #endif
@@ -3132,6 +3654,31 @@ void RICmd::drawIndirect(struct RIDevice *device, struct RIBuffer *buffer,
 #if (DEVICE_IMPL_VULKAN)
   if (RIIsTargetSelected(RI_DEVICE_API_VK)) {
     vkCmdDrawIndirect(vk.cmd, buffer->vk.buffer, offset, drawCount, stride);
+    return;
+  }
+#endif
+#if (DEVICE_IMPL_D3D12)
+  if (RIIsTargetSelected(RI_DEVICE_API_D3D12)) {
+    if (!d3d12.cmdList || !buffer || !buffer->d3d12.resource ||
+        (!d3d12.activeColorCount && !d3d12.activeDepth) || drawCount == 0)
+      return;
+    ID3D12CommandSignature *signature =
+        stride == sizeof(D3D12_DRAW_ARGUMENTS)
+            ? device->d3d12.drawIndirectSignature
+            : stride == sizeof(D3D12_DRAW_INDEXED_ARGUMENTS)
+                  ? device->d3d12.drawIndirectPaddedSignature
+                  : nullptr;
+    const uint64_t required = uint64_t(drawCount - 1u) * stride +
+                              sizeof(D3D12_DRAW_ARGUMENTS);
+    if (!signature || offset > buffer->d3d12.requestedSize ||
+        required > buffer->d3d12.requestedSize - offset)
+      return;
+    hpl::Log("D3D12 indirect verification: ExecuteIndirect draw count=%u stride=%u\n",
+             drawCount, stride);
+    RID3D12_CheckRootArguments(*this, "drawIndirect");
+    d3d12.cmdList->ExecuteIndirect(signature, drawCount,
+                                   buffer->d3d12.resource, offset, nullptr, 0);
+    hpl::Log("D3D12 indirect verification: ExecuteIndirect recorded\n");
     return;
   }
 #endif
@@ -3164,6 +3711,33 @@ void RICmd::drawIndirectCount(struct RIDevice *device, struct RIBuffer *buffer,
     return;
   }
 #endif
+#if (DEVICE_IMPL_D3D12)
+  if (RIIsTargetSelected(RI_DEVICE_API_D3D12)) {
+    if (!d3d12.cmdList || !buffer || !countBuffer ||
+        !buffer->d3d12.resource || !countBuffer->d3d12.resource ||
+        (!d3d12.activeColorCount && !d3d12.activeDepth) ||
+        maxDrawCount == 0)
+      return;
+    ID3D12CommandSignature *signature =
+        stride == sizeof(D3D12_DRAW_ARGUMENTS)
+            ? device->d3d12.drawIndirectSignature
+            : stride == sizeof(D3D12_DRAW_INDEXED_ARGUMENTS)
+                  ? device->d3d12.drawIndirectPaddedSignature
+                  : nullptr;
+    const uint64_t required = uint64_t(maxDrawCount - 1u) * stride +
+                              sizeof(D3D12_DRAW_ARGUMENTS);
+    if (!signature || offset > buffer->d3d12.requestedSize ||
+        required > buffer->d3d12.requestedSize - offset ||
+        countOffset > countBuffer->d3d12.requestedSize ||
+        sizeof(uint32_t) > countBuffer->d3d12.requestedSize - countOffset)
+      return;
+    RID3D12_CheckRootArguments(*this, "drawIndirectCount");
+    d3d12.cmdList->ExecuteIndirect(
+        signature, maxDrawCount, buffer->d3d12.resource, offset,
+        countBuffer->d3d12.resource, countOffset);
+    return;
+  }
+#endif
   // Deliberately no Metal path: a GPU-sourced draw count needs an indirect
   // command buffer there, which this layer does not model. The capability bit
   // is only ever set on the Vulkan path, so a caller that honours it never
@@ -3184,6 +3758,26 @@ void RICmd::drawIndexedIndirect(struct RIDevice *device,
   if (RIIsTargetSelected(RI_DEVICE_API_VK)) {
     vkCmdDrawIndexedIndirect(vk.cmd, buffer->vk.buffer, offset, drawCount,
                              stride);
+    return;
+  }
+#endif
+#if (DEVICE_IMPL_D3D12)
+  if (RIIsTargetSelected(RI_DEVICE_API_D3D12)) {
+    if (!d3d12.cmdList || !buffer || !buffer->d3d12.resource ||
+        (!d3d12.activeColorCount && !d3d12.activeDepth) || drawCount == 0)
+      return;
+    if (stride != sizeof(D3D12_DRAW_INDEXED_ARGUMENTS) ||
+        !device->d3d12.drawIndexedIndirectSignature)
+      return;
+    const uint64_t required = uint64_t(drawCount - 1u) * stride +
+                              sizeof(D3D12_DRAW_INDEXED_ARGUMENTS);
+    if (offset > buffer->d3d12.requestedSize ||
+        required > buffer->d3d12.requestedSize - offset)
+      return;
+    RID3D12_CheckRootArguments(*this, "drawIndexedIndirect");
+    d3d12.cmdList->ExecuteIndirect(
+        device->d3d12.drawIndexedIndirectSignature, drawCount,
+        buffer->d3d12.resource, offset, nullptr, 0);
     return;
   }
 #endif
@@ -3210,6 +3804,24 @@ void RICmd::bindIndexBuffer(struct RIDevice *device, struct RIBuffer *buffer,
     return;
   }
 #endif
+#if (DEVICE_IMPL_D3D12)
+  if (RIIsTargetSelected(RI_DEVICE_API_D3D12)) {
+    if (!d3d12.cmdList || !buffer || !buffer->d3d12.resource)
+      return;
+    const uint64_t indexSize = indexType == RI_INDEX_TYPE_16 ? 2u :
+                               indexType == RI_INDEX_TYPE_32 ? 4u : 0u;
+    if (!indexSize || offset % indexSize || offset > buffer->d3d12.requestedSize ||
+        buffer->d3d12.requestedSize - offset == 0 ||
+        buffer->d3d12.requestedSize - offset > UINT_MAX)
+      return;
+    D3D12_INDEX_BUFFER_VIEW view = {};
+    view.BufferLocation = buffer->GetDeviceHandle(device) + offset;
+    view.SizeInBytes = static_cast<UINT>(buffer->d3d12.requestedSize - offset);
+    view.Format = indexSize == 2 ? DXGI_FORMAT_R16_UINT : DXGI_FORMAT_R32_UINT;
+    d3d12.cmdList->IASetIndexBuffer(&view);
+    return;
+  }
+#endif
 #if (DEVICE_IMPL_MTL)
   if (RIIsTargetSelected(RI_DEVICE_API_MTL)) {
     // No Metal bind call; stash for the next drawIndexed/drawIndexedIndirect.
@@ -3232,6 +3844,14 @@ void RICmd::copyBuffer(struct RIDevice *device, struct RIBuffer *src,
     region.dstOffset = dstOffset;
     region.size = size;
     vkCmdCopyBuffer(vk.cmd, src->vk.buffer, dst->vk.buffer, 1, &region);
+    return;
+  }
+#endif
+#if (DEVICE_IMPL_D3D12)
+  if (RIIsTargetSelected(RI_DEVICE_API_D3D12)) {
+    assert(d3d12.cmdList && src && dst && src->d3d12.resource && dst->d3d12.resource);
+    d3d12.cmdList->CopyBufferRegion(dst->d3d12.resource, dstOffset,
+                                    src->d3d12.resource, srcOffset, size);
     return;
   }
 #endif
@@ -3271,6 +3891,73 @@ void RICmd::copyBufferToTexture(struct RIDevice *device, struct RIBuffer *src,
     return;
   }
 #endif
+#if (DEVICE_IMPL_D3D12)
+  if (RIIsTargetSelected(RI_DEVICE_API_D3D12)) {
+    assert(d3d12.cmdList && src && dst && src->d3d12.resource &&
+           dst->d3d12.resource);
+
+    uint32_t rowPitch = desc.bytesPerRow;
+    if (rowPitch == 0) {
+      uint32_t riFormat = RI_FORMAT_UNKNOWN;
+      switch (DXGI_FORMAT(dst->d3d12.format)) {
+      case DXGI_FORMAT_B8G8R8A8_UNORM:
+        riFormat = RI_FORMAT_BGRA8_UNORM;
+        break;
+      case DXGI_FORMAT_R8G8B8A8_UNORM:
+        riFormat = RI_FORMAT_RGBA8_UNORM;
+        break;
+      case DXGI_FORMAT_R16G16B16A16_FLOAT:
+        riFormat = RI_FORMAT_RGBA16_SFLOAT;
+        break;
+      case DXGI_FORMAT_R32_FLOAT:
+        riFormat = RI_FORMAT_R32_SFLOAT;
+        break;
+      case DXGI_FORMAT_R8_UNORM:
+        riFormat = RI_FORMAT_R8_UNORM;
+        break;
+      case DXGI_FORMAT_D32_FLOAT:
+        riFormat = RI_FORMAT_D32_SFLOAT;
+        break;
+      case DXGI_FORMAT_D24_UNORM_S8_UINT:
+        riFormat = RI_FORMAT_D24_UNORM_S8_UINT;
+        break;
+      default:
+        break;
+      }
+      const struct RIFormatProps *props = GetRIFormatProps(riFormat);
+      const uint32_t rowLength = desc.bufferRowLength ? desc.bufferRowLength
+                                                       : desc.width;
+      rowPitch = RIFormatBlockCount(rowLength, props->blockWidth) *
+                 props->stride;
+    }
+    assert(rowPitch != 0 &&
+           rowPitch % D3D12_TEXTURE_DATA_PITCH_ALIGNMENT == 0);
+    assert(desc.bufferOffset % D3D12_TEXTURE_DATA_PLACEMENT_ALIGNMENT == 0);
+
+    D3D12_TEXTURE_COPY_LOCATION srcLoc = {};
+    srcLoc.pResource = src->d3d12.resource;
+    srcLoc.Type = D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT;
+    srcLoc.PlacedFootprint.Offset = desc.bufferOffset;
+    srcLoc.PlacedFootprint.Footprint.Format =
+        DXGI_FORMAT(dst->d3d12.format);
+    srcLoc.PlacedFootprint.Footprint.Width = desc.width;
+    srcLoc.PlacedFootprint.Footprint.Height = desc.height;
+    srcLoc.PlacedFootprint.Footprint.Depth = desc.depth;
+    srcLoc.PlacedFootprint.Footprint.RowPitch = rowPitch;
+
+    D3D12_TEXTURE_COPY_LOCATION dstLoc = {};
+    dstLoc.pResource = dst->d3d12.resource;
+    dstLoc.Type = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
+    // D3D12CalcSubresource is provided by d3dx12.h, not by the Windows SDK's
+    // d3d12.h included by this project. Plane 0 has this equivalent formula.
+    dstLoc.SubresourceIndex = desc.mipLevel +
+                              desc.arrayLayer * dst->d3d12.mipNum;
+    d3d12.cmdList->CopyTextureRegion(&dstLoc, uint32_t(desc.x),
+                                     uint32_t(desc.y), uint32_t(desc.z),
+                                     &srcLoc, nullptr);
+    return;
+  }
+#endif
 #if (DEVICE_IMPL_MTL)
   if (RIIsTargetSelected(RI_DEVICE_API_MTL)) {
     mtl_encoderBlit();
@@ -3286,7 +3973,7 @@ void RICmd::copyBufferToTexture(struct RIDevice *device, struct RIBuffer *src,
   assert(false && "unhandled backend");
 }
 
-// [vk/mtl] Image-to-image 1:1 region copy. On Metal the caller must have closed
+// [vk/d3d12/mtl] Image-to-image 1:1 region copy. On Metal the caller must have closed
 // any conflicting render/compute encoder via mtl_encoderEnd() first.
 void RICmd::copyImage(struct RIDevice *device, struct RITexture *src,
                       struct RITexture *dst,
@@ -3304,6 +3991,203 @@ void RICmd::copyImage(struct RIDevice *device, struct RITexture *src,
     vkCmdCopyImage(vk.cmd, src->vk.image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
                    dst->vk.image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1,
                    &region);
+    return;
+  }
+#endif
+#if (DEVICE_IMPL_D3D12)
+  if (RIIsTargetSelected(RI_DEVICE_API_D3D12)) {
+    (void)device;
+    auto reject = [](const char *reason) {
+      hpl::Warning("RI D3D12: copyImage rejected: %s\n", reason);
+    };
+
+    if (!d3d12.cmdList || !src || !dst || !src->d3d12.resource ||
+        !dst->d3d12.resource) {
+      reject("missing command list or texture resource");
+      return;
+    }
+
+    const D3D12_RESOURCE_DESC srcResourceDesc = src->d3d12.resource->GetDesc();
+    const D3D12_RESOURCE_DESC dstResourceDesc = dst->d3d12.resource->GetDesc();
+    if (srcResourceDesc.Dimension != D3D12_RESOURCE_DIMENSION_TEXTURE2D &&
+        srcResourceDesc.Dimension != D3D12_RESOURCE_DIMENSION_TEXTURE3D) {
+      reject("only 2D and 3D texture resources are supported");
+      return;
+    }
+    if (srcResourceDesc.Format == DXGI_FORMAT_UNKNOWN ||
+        srcResourceDesc.Format != dstResourceDesc.Format ||
+        src->d3d12.format != uint32_t(srcResourceDesc.Format) ||
+        dst->d3d12.format != uint32_t(dstResourceDesc.Format)) {
+      reject("source and destination formats are not identical or supported");
+      return;
+    }
+    if (srcResourceDesc.Dimension != dstResourceDesc.Dimension ||
+        src->d3d12.width != srcResourceDesc.Width ||
+        dst->d3d12.width != dstResourceDesc.Width ||
+        src->d3d12.height != srcResourceDesc.Height ||
+        dst->d3d12.height != dstResourceDesc.Height) {
+      reject("source and destination resource dimensions differ");
+      return;
+    }
+    if (srcResourceDesc.SampleDesc.Count != 1 ||
+        dstResourceDesc.SampleDesc.Count != 1 ||
+        src->d3d12.sampleCount != srcResourceDesc.SampleDesc.Count ||
+        dst->d3d12.sampleCount != dstResourceDesc.SampleDesc.Count) {
+      reject("multisampled textures are unsupported");
+      return;
+    }
+
+    const bool is3D = srcResourceDesc.Dimension == D3D12_RESOURCE_DIMENSION_TEXTURE3D;
+    const uint32_t srcMipCount = srcResourceDesc.MipLevels;
+    const uint32_t dstMipCount = dstResourceDesc.MipLevels;
+    const uint32_t srcLayerCount = is3D ? 1u : srcResourceDesc.DepthOrArraySize;
+    const uint32_t dstLayerCount = is3D ? 1u : dstResourceDesc.DepthOrArraySize;
+    if (srcMipCount == 0 || dstMipCount == 0 ||
+        src->d3d12.mipNum != srcMipCount || dst->d3d12.mipNum != dstMipCount ||
+        (!is3D && (src->d3d12.layerNum != srcLayerCount ||
+                   dst->d3d12.layerNum != dstLayerCount)) ||
+        (is3D && (src->d3d12.depth != srcResourceDesc.DepthOrArraySize ||
+                  dst->d3d12.depth != dstResourceDesc.DepthOrArraySize))) {
+      reject("texture metadata does not match the D3D12 resource descriptor");
+      return;
+    }
+    if (srcMipCount == 0 || dstMipCount == 0 ||
+        desc.srcMipLevel >= srcMipCount || desc.dstMipLevel >= dstMipCount ||
+        desc.srcArrayLayer >= srcLayerCount ||
+        desc.dstArrayLayer >= dstLayerCount ||
+        (is3D && (desc.srcArrayLayer != 0 || desc.dstArrayLayer != 0))) {
+      reject("mip or array layer is out of range");
+      return;
+    }
+    if (desc.width == 0 || desc.height == 0 || desc.depth == 0 ||
+        desc.srcX < 0 || desc.srcY < 0 || desc.srcZ < 0 || desc.dstX < 0 ||
+        desc.dstY < 0 || desc.dstZ < 0) {
+      reject("copy region has zero extent or negative coordinates");
+      return;
+    }
+
+    auto mipExtent = [](const D3D12_RESOURCE_DESC &resourceDesc,
+                        uint32_t mip) {
+      struct Extent {
+        uint64_t width, height, depth;
+      } extent = {resourceDesc.Width, resourceDesc.Height,
+                  resourceDesc.Dimension == D3D12_RESOURCE_DIMENSION_TEXTURE3D
+                      ? resourceDesc.DepthOrArraySize
+                      : 1u};
+      for (uint32_t i = 0; i < mip; ++i) {
+        extent.width = extent.width > 1 ? extent.width / 2 : 1;
+        extent.height = extent.height > 1 ? extent.height / 2 : 1;
+        extent.depth = extent.depth > 1 ? extent.depth / 2 : 1;
+      }
+      return extent;
+    };
+    const auto srcExtent = mipExtent(srcResourceDesc, desc.srcMipLevel);
+    const auto dstExtent = mipExtent(dstResourceDesc, desc.dstMipLevel);
+    if (!is3D && (desc.srcZ != 0 || desc.dstZ != 0 || desc.depth != 1)) {
+      reject("array copies must address exactly one 2D slice");
+      return;
+    }
+    auto regionFits = [](int32_t x, int32_t y, int32_t z, uint32_t width,
+                         uint32_t height, uint32_t depth,
+                         const auto &extent) {
+      return uint64_t(x) + uint64_t(width) <= extent.width &&
+             uint64_t(y) + uint64_t(height) <= extent.height &&
+             uint64_t(z) + uint64_t(depth) <= extent.depth;
+    };
+    if (!regionFits(desc.srcX, desc.srcY, desc.srcZ, desc.width, desc.height,
+                    desc.depth, srcExtent) ||
+        !regionFits(desc.dstX, desc.dstY, desc.dstZ, desc.width, desc.height,
+                    desc.depth, dstExtent)) {
+      reject("copy region is outside the selected mip bounds");
+      return;
+    }
+
+    const uint64_t srcSubresource =
+        uint64_t(desc.srcMipLevel) +
+        uint64_t(is3D ? 0u : desc.srcArrayLayer) * srcMipCount;
+    const uint64_t dstSubresource =
+        uint64_t(desc.dstMipLevel) +
+        uint64_t(is3D ? 0u : desc.dstArrayLayer) * dstMipCount;
+    if (src->d3d12.resource == dst->d3d12.resource &&
+        srcSubresource == dstSubresource) {
+      reject("source and destination subresources must differ");
+      return;
+    }
+    // RIImageCopyDesc is deliberately a single color-region contract. Plane
+    // selection is not represented, so depth/stencil resources are rejected
+    // instead of silently treating them as color or whole-subresource copies.
+    if ((srcResourceDesc.Flags & D3D12_RESOURCE_FLAG_ALLOW_DEPTH_STENCIL) != 0 ||
+        (dstResourceDesc.Flags & D3D12_RESOURCE_FLAG_ALLOW_DEPTH_STENCIL) != 0) {
+      reject("depth-stencil image copies are unsupported");
+      return;
+    }
+
+    // BC boxes operate on 4x4 blocks. Starts must be block aligned; an
+    // unaligned end is valid only when that end is the subresource edge.
+    const uint64_t srcRight = uint64_t(desc.srcX) + desc.width;
+    const uint64_t srcBottom = uint64_t(desc.srcY) + desc.height;
+    const uint64_t dstRight = uint64_t(desc.dstX) + desc.width;
+    const uint64_t dstBottom = uint64_t(desc.dstY) + desc.height;
+    if (srcRight > UINT_MAX || srcBottom > UINT_MAX ||
+        uint64_t(desc.srcZ) + desc.depth > UINT_MAX || dstRight > UINT_MAX ||
+        dstBottom > UINT_MAX || uint64_t(desc.dstZ) + desc.depth > UINT_MAX) {
+      reject("copy coordinates cannot be represented by D3D12");
+      return;
+    }
+    if (srcSubresource > UINT_MAX || dstSubresource > UINT_MAX) {
+      reject("subresource index cannot be represented by D3D12");
+      return;
+    }
+    const bool isBC =
+        srcResourceDesc.Format == DXGI_FORMAT_BC1_UNORM ||
+        srcResourceDesc.Format == DXGI_FORMAT_BC1_UNORM_SRGB ||
+        srcResourceDesc.Format == DXGI_FORMAT_BC2_UNORM ||
+        srcResourceDesc.Format == DXGI_FORMAT_BC2_UNORM_SRGB ||
+        srcResourceDesc.Format == DXGI_FORMAT_BC3_UNORM ||
+        srcResourceDesc.Format == DXGI_FORMAT_BC3_UNORM_SRGB ||
+        srcResourceDesc.Format == DXGI_FORMAT_BC4_UNORM ||
+        srcResourceDesc.Format == DXGI_FORMAT_BC4_SNORM ||
+        srcResourceDesc.Format == DXGI_FORMAT_BC5_UNORM ||
+        srcResourceDesc.Format == DXGI_FORMAT_BC5_SNORM ||
+        srcResourceDesc.Format == DXGI_FORMAT_BC6H_UF16 ||
+        srcResourceDesc.Format == DXGI_FORMAT_BC6H_SF16 ||
+        srcResourceDesc.Format == DXGI_FORMAT_BC7_UNORM ||
+        srcResourceDesc.Format == DXGI_FORMAT_BC7_UNORM_SRGB;
+    if (isBC) {
+      const auto alignedOrEdge = [](int32_t start, uint64_t end,
+                                    uint64_t resourceExtent) {
+        return (uint32_t(start) % 4u == 0) &&
+               (end % 4u == 0 || end == resourceExtent);
+      };
+      if (!alignedOrEdge(desc.srcX, srcRight, srcExtent.width) ||
+          !alignedOrEdge(desc.srcY, srcBottom, srcExtent.height) ||
+          !alignedOrEdge(desc.dstX, dstRight, dstExtent.width) ||
+          !alignedOrEdge(desc.dstY, dstBottom, dstExtent.height)) {
+        reject("BC copy coordinates and extents must be block aligned");
+        return;
+      }
+    }
+
+    D3D12_TEXTURE_COPY_LOCATION srcLoc = {};
+    srcLoc.pResource = src->d3d12.resource;
+    srcLoc.Type = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
+    srcLoc.SubresourceIndex = static_cast<UINT>(srcSubresource);
+
+    D3D12_TEXTURE_COPY_LOCATION dstLoc = {};
+    dstLoc.pResource = dst->d3d12.resource;
+    dstLoc.Type = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
+    dstLoc.SubresourceIndex = static_cast<UINT>(dstSubresource);
+
+    D3D12_BOX sourceBox = {static_cast<UINT>(desc.srcX),
+                           static_cast<UINT>(desc.srcY),
+                           static_cast<UINT>(desc.srcZ),
+                           static_cast<UINT>(srcRight),
+                           static_cast<UINT>(srcBottom),
+                           static_cast<UINT>(uint64_t(desc.srcZ) + desc.depth)};
+    d3d12.cmdList->CopyTextureRegion(&dstLoc, static_cast<UINT>(desc.dstX),
+                                     static_cast<UINT>(desc.dstY),
+                                     static_cast<UINT>(desc.dstZ), &srcLoc,
+                                     &sourceBox);
     return;
   }
 #endif
@@ -3333,6 +4217,18 @@ void RICmd::clearStorageImage(struct RIDevice *device, struct RITexture *image,
     VkImageSubresourceRange range = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
     vkCmdClearColorImage(vk.cmd, image->vk.image, VK_IMAGE_LAYOUT_GENERAL, &clr,
                          1, &range);
+    return;
+  }
+#endif
+#if (DEVICE_IMPL_D3D12)
+  if (RIIsTargetSelected(RI_DEVICE_API_D3D12)) {
+    // TODO: D3D12 clearStorageImage uses
+    // ClearUnorderedAccessViewFloat/Uint through a bound UAV in a shader-
+    // visible descriptor heap. Requires the descriptor heap/UAV plumbing
+    // that lands with the texture-view descriptor work.
+    (void)image;
+    (void)color;
+    assert(false && "d3d12 clearStorageImage not implemented");
     return;
   }
 #endif
@@ -3420,6 +4316,224 @@ static inline MTL::StoreAction ri_mtl_StoreOp(uint8_t op) {
 }
 #endif
 
+#if (DEVICE_IMPL_D3D12)
+static bool ri_d3d12_attachmentRange(const RITextureView &view,
+                                     D3D12_RESOURCE_DESC &resourceDesc,
+                                     uint32_t &mipCount, uint32_t &layerCount) {
+  if (!view.d3d12.resource || view.d3d12.viewType < RI_VIEWTYPE_COLOR_ATTACHMENT ||
+      view.d3d12.viewType > RI_VIEWTYPE_DEPTH_STENCIL_READONLY)
+    return false;
+  resourceDesc = view.d3d12.resource->GetDesc();
+  if (resourceDesc.Dimension == D3D12_RESOURCE_DIMENSION_BUFFER ||
+      view.d3d12.baseMip >= resourceDesc.MipLevels)
+    return false;
+  mipCount = view.d3d12.mipNum ? view.d3d12.mipNum : resourceDesc.MipLevels - view.d3d12.baseMip;
+  if (!mipCount || mipCount != 1 || view.d3d12.baseMip + mipCount > resourceDesc.MipLevels)
+    return false; // an attachment view is a single mip in D3D12
+  const uint32_t resourceLayers = resourceDesc.Dimension == D3D12_RESOURCE_DIMENSION_TEXTURE3D
+                                       ? ((uint32_t(resourceDesc.DepthOrArraySize) >> view.d3d12.baseMip) ?
+                                          (uint32_t(resourceDesc.DepthOrArraySize) >> view.d3d12.baseMip) : 1)
+                                       : resourceDesc.DepthOrArraySize;
+  if (!resourceLayers || view.d3d12.baseLayer >= resourceLayers)
+    return false;
+  layerCount = view.d3d12.layerNum ? view.d3d12.layerNum : resourceLayers - view.d3d12.baseLayer;
+  return layerCount && view.d3d12.baseLayer + layerCount <= resourceLayers;
+}
+
+static bool ri_d3d12_renderAreaValid(const RITextureView &view,
+                                     const RIRect &area) {
+  D3D12_RESOURCE_DESC resourceDesc = view.d3d12.resource->GetDesc();
+  const uint64_t mipWidth = resourceDesc.Width >> view.d3d12.baseMip;
+  const uint32_t mipHeight = resourceDesc.Height >> view.d3d12.baseMip;
+  const uint64_t width = mipWidth ? mipWidth : 1;
+  const uint32_t height = mipHeight ? mipHeight : 1;
+  const uint64_t right = uint64_t(area.x) + uint64_t(area.width);
+  const uint64_t bottom = uint64_t(area.y) + uint64_t(area.height);
+  return area.x >= 0 && area.y >= 0 && area.width > 0 && area.height > 0 &&
+         right <= width && bottom <= height && right <= uint64_t(LONG_MAX) &&
+         bottom <= uint64_t(LONG_MAX);
+}
+
+static bool ri_d3d12_renderAreaCoversView(const RITextureView &view,
+                                          const RIRect &area) {
+  const D3D12_RESOURCE_DESC resourceDesc = view.d3d12.resource->GetDesc();
+  const uint64_t width = std::max<uint64_t>(1, resourceDesc.Width >> view.d3d12.baseMip);
+  const uint32_t height = std::max<uint32_t>(1, resourceDesc.Height >> view.d3d12.baseMip);
+  return area.x == 0 && area.y == 0 && uint64_t(area.width) == width &&
+         area.height == height;
+}
+
+static bool ri_d3d12_formatHasStencil(DXGI_FORMAT format) {
+  return format == DXGI_FORMAT_D24_UNORM_S8_UINT ||
+         format == DXGI_FORMAT_D32_FLOAT_S8X24_UINT ||
+         format == DXGI_FORMAT_X24_TYPELESS_G8_UINT ||
+         format == DXGI_FORMAT_X32_TYPELESS_G8X24_UINT;
+}
+
+static bool ri_d3d12_makeRTV(RICmd &cmd, RIDevice &device,
+                             const RIRenderingAttachment &attachment,
+                             D3D12_CPU_DESCRIPTOR_HANDLE &handle) {
+  if (!cmd.d3d12.rtvHeap || cmd.d3d12.rtvCount >= RI_D3D12_RTV_DESCRIPTOR_CAPACITY ||
+      attachment.view.d3d12.viewType != RI_VIEWTYPE_COLOR_ATTACHMENT)
+    return false;
+  D3D12_RESOURCE_DESC resourceDesc = {};
+  uint32_t mipCount = 0, layerCount = 0;
+  if (!ri_d3d12_attachmentRange(attachment.view, resourceDesc, mipCount, layerCount))
+    return false;
+  if (!(resourceDesc.Flags & D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET))
+    return false;
+  D3D12_RENDER_TARGET_VIEW_DESC desc = {};
+  desc.Format = (DXGI_FORMAT)attachment.view.d3d12.format;
+  const bool msaa = resourceDesc.SampleDesc.Count > 1;
+  const bool arrayResource = resourceDesc.DepthOrArraySize > 1;
+  if (resourceDesc.Dimension == D3D12_RESOURCE_DIMENSION_TEXTURE1D) {
+    if (!arrayResource) { desc.ViewDimension = D3D12_RTV_DIMENSION_TEXTURE1D; desc.Texture1D.MipSlice = attachment.view.d3d12.baseMip; }
+    else { desc.ViewDimension = D3D12_RTV_DIMENSION_TEXTURE1DARRAY; desc.Texture1DArray = {attachment.view.d3d12.baseMip, attachment.view.d3d12.baseLayer, layerCount}; }
+  } else if (resourceDesc.Dimension == D3D12_RESOURCE_DIMENSION_TEXTURE3D) {
+    desc.ViewDimension = D3D12_RTV_DIMENSION_TEXTURE3D;
+    desc.Texture3D = {attachment.view.d3d12.baseMip, attachment.view.d3d12.baseLayer, layerCount};
+  } else if (msaa) {
+    if (!arrayResource) desc.ViewDimension = D3D12_RTV_DIMENSION_TEXTURE2DMS;
+    else { desc.ViewDimension = D3D12_RTV_DIMENSION_TEXTURE2DMSARRAY; desc.Texture2DMSArray = {attachment.view.d3d12.baseLayer, layerCount}; }
+  } else if (!arrayResource) {
+    desc.ViewDimension = D3D12_RTV_DIMENSION_TEXTURE2D;
+    desc.Texture2D.MipSlice = attachment.view.d3d12.baseMip;
+  } else {
+    desc.ViewDimension = D3D12_RTV_DIMENSION_TEXTURE2DARRAY;
+    desc.Texture2DArray = {attachment.view.d3d12.baseMip, attachment.view.d3d12.baseLayer, layerCount, 0};
+  }
+  handle = cmd.d3d12.rtvStart;
+  handle.ptr += SIZE_T(cmd.d3d12.rtvCount++) * cmd.d3d12.rtvDescriptorSize;
+  device.d3d12.device->CreateRenderTargetView(attachment.view.d3d12.resource, &desc, handle);
+  return true;
+}
+
+static bool ri_d3d12_makeDSV(RICmd &cmd, RIDevice &device,
+                             const RIRenderingAttachment &attachment,
+                             D3D12_CPU_DESCRIPTOR_HANDLE &handle) {
+  if (!cmd.d3d12.dsvHeap || cmd.d3d12.dsvCount >= RI_D3D12_DSV_DESCRIPTOR_CAPACITY ||
+      attachment.view.d3d12.viewType < RI_VIEWTYPE_DEPTH_STENCIL_ATTACHMENT ||
+      attachment.view.d3d12.viewType > RI_VIEWTYPE_DEPTH_STENCIL_READONLY)
+    return false;
+  D3D12_RESOURCE_DESC resourceDesc = {};
+  uint32_t mipCount = 0, layerCount = 0;
+  if (!ri_d3d12_attachmentRange(attachment.view, resourceDesc, mipCount, layerCount) ||
+      cmd.d3d12.dsvDescriptorSize == 0 || resourceDesc.Dimension == D3D12_RESOURCE_DIMENSION_TEXTURE3D ||
+      !(resourceDesc.Flags & D3D12_RESOURCE_FLAG_ALLOW_DEPTH_STENCIL))
+    return false;
+  const DXGI_FORMAT format = (DXGI_FORMAT)attachment.view.d3d12.format;
+  if ((attachment.hasStencil || attachment.view.d3d12.viewType == RI_VIEWTYPE_DEPTH_READONLY_STENCIL_ATTACHMENT ||
+       attachment.view.d3d12.viewType == RI_VIEWTYPE_DEPTH_ATTACHMENT_STENCIL_READONLY ||
+       attachment.view.d3d12.viewType == RI_VIEWTYPE_DEPTH_STENCIL_READONLY) &&
+      !ri_d3d12_formatHasStencil(format))
+    return false;
+  D3D12_DEPTH_STENCIL_VIEW_DESC desc = {};
+  desc.Format = format;
+  const bool readOnlyDepth = attachment.readOnly || attachment.view.d3d12.viewType == RI_VIEWTYPE_DEPTH_READONLY_STENCIL_ATTACHMENT ||
+                             attachment.view.d3d12.viewType == RI_VIEWTYPE_DEPTH_STENCIL_READONLY;
+  const bool readOnlyStencil = ri_d3d12_formatHasStencil(format) &&
+                               (!attachment.hasStencil || attachment.readOnly ||
+                                attachment.view.d3d12.viewType == RI_VIEWTYPE_DEPTH_ATTACHMENT_STENCIL_READONLY ||
+                                attachment.view.d3d12.viewType == RI_VIEWTYPE_DEPTH_STENCIL_READONLY);
+  if (readOnlyDepth) desc.Flags |= D3D12_DSV_FLAG_READ_ONLY_DEPTH;
+  if (readOnlyStencil) desc.Flags |= D3D12_DSV_FLAG_READ_ONLY_STENCIL;
+  const bool msaa = resourceDesc.SampleDesc.Count > 1;
+  const bool arrayResource = resourceDesc.DepthOrArraySize > 1;
+  if (msaa) {
+    if (!arrayResource) desc.ViewDimension = D3D12_DSV_DIMENSION_TEXTURE2DMS;
+    else { desc.ViewDimension = D3D12_DSV_DIMENSION_TEXTURE2DMSARRAY; desc.Texture2DMSArray = {attachment.view.d3d12.baseLayer, layerCount}; }
+  } else if (!arrayResource) {
+    desc.ViewDimension = D3D12_DSV_DIMENSION_TEXTURE2D;
+    desc.Texture2D.MipSlice = attachment.view.d3d12.baseMip;
+  } else {
+    desc.ViewDimension = D3D12_DSV_DIMENSION_TEXTURE2DARRAY;
+    desc.Texture2DArray = {attachment.view.d3d12.baseMip, attachment.view.d3d12.baseLayer, layerCount};
+  }
+  handle = cmd.d3d12.dsvStart;
+  handle.ptr += SIZE_T(cmd.d3d12.dsvCount++) * cmd.d3d12.dsvDescriptorSize;
+  device.d3d12.device->CreateDepthStencilView(attachment.view.d3d12.resource, &desc, handle);
+  return true;
+}
+
+static bool ri_d3d12_depthWritable(const RIRenderingAttachment &a) {
+  return !a.readOnly && a.view.d3d12.viewType != RI_VIEWTYPE_DEPTH_READONLY_STENCIL_ATTACHMENT &&
+         a.view.d3d12.viewType != RI_VIEWTYPE_DEPTH_STENCIL_READONLY;
+}
+
+static bool ri_d3d12_stencilWritable(const RIRenderingAttachment &a) {
+  return a.hasStencil && !a.readOnly &&
+         a.view.d3d12.viewType != RI_VIEWTYPE_DEPTH_ATTACHMENT_STENCIL_READONLY &&
+         a.view.d3d12.viewType != RI_VIEWTYPE_DEPTH_STENCIL_READONLY;
+}
+
+static bool ri_d3d12_validOp(uint8_t loadOp, uint8_t storeOp) {
+  return loadOp <= RI_ATTACHMENT_LOAD_OP_DONT_CARE &&
+         storeOp <= RI_ATTACHMENT_STORE_OP_DONT_CARE;
+}
+
+static void ri_d3d12_reject(const char *reason) {
+  hpl::Error("D3D12 beginRendering rejected: %s\n", reason);
+  assert(false && "D3D12 beginRendering rejected");
+}
+
+// A positive RIViewport height is Vulkan's Y-down mapping, which D3D12 cannot
+// express: RSSetViewports takes a positive extent and always maps NDC y=+1 to
+// the top, so both signs collapse to the same D3D12_VIEWPORT. Shared draws must
+// use the engine's {0, H, W, -H} form. Warn once instead of per frame; the
+// viewport is still programmed, because skipping it would leave the previous
+// one bound, which is harder to diagnose than a flipped image.
+static void ri_d3d12_WarnViewportConvention() {
+  static bool warned = false;
+  if (warned)
+    return;
+  warned = true;
+  hpl::Error("D3D12 setViewport: positive-height viewport has no D3D12 "
+             "equivalent; expected the engine's {0, H, W, -H} form. Image will "
+             "be Y-flipped.\n");
+}
+
+static void ri_d3d12_discard(RICmd &cmd,
+                             const RID3D12ActiveAttachment &a,
+                             bool discardDepth, bool discardStencil) {
+  if (!a.resource || (!discardDepth && !discardStencil)) return;
+  // D3D12 discard is subresource-wide; never discard a depth/stencil
+  // subresource when either aspect is read-only or must be preserved.
+  if (a.hasStencil && (!a.depthWritable || !a.stencilWritable ||
+                       discardDepth != discardStencil)) return;
+  D3D12_RESOURCE_DESC rd = a.resource->GetDesc();
+  const uint32_t mipLevels = rd.MipLevels;
+  const uint32_t arraySize = rd.Dimension == D3D12_RESOURCE_DIMENSION_TEXTURE3D
+                                 ? 1u : rd.DepthOrArraySize;
+  const uint32_t count = rd.Dimension == D3D12_RESOURCE_DIMENSION_TEXTURE3D
+                             ? 1u : (a.layerNum ? a.layerNum : arraySize - a.baseLayer);
+  // Only a whole-subresource discard (no rects) counts as initialization of a
+  // not-zeroed render target / depth resource; a rect-limited discard on a
+  // freshly allocated one is itself an invalid use (debug layer id 1422).
+  const uint64_t mipWidth = std::max<uint64_t>(1, rd.Width >> a.baseMip);
+  const uint32_t mipHeight = std::max<uint32_t>(1, rd.Height >> a.baseMip);
+  const bool wholeSubresource = a.x == 0 && a.y == 0 &&
+                                uint64_t(a.width) >= mipWidth &&
+                                a.height >= mipHeight;
+  for (uint32_t i = 0; i < count; ++i) {
+    UINT subresource = a.baseMip +
+                       (rd.Dimension == D3D12_RESOURCE_DIMENSION_TEXTURE3D
+                            ? 0u : (a.baseLayer + i) * mipLevels);
+    D3D12_DISCARD_REGION region = {};
+    const int64_t right = static_cast<int64_t>(a.x) +
+                          static_cast<int64_t>(a.width);
+    const int64_t bottom = static_cast<int64_t>(a.y) +
+                           static_cast<int64_t>(a.height);
+    D3D12_RECT rect = {a.x, a.y, static_cast<LONG>(right),
+                       static_cast<LONG>(bottom)};
+    region.NumRects = wholeSubresource ? 0u : 1u;
+    region.pRects = wholeSubresource ? nullptr : &rect;
+    region.NumSubresources = 1;
+    region.FirstSubresource = subresource;
+    cmd.d3d12.cmdList->DiscardResource(a.resource, &region);
+  }
+}
+#endif
+
 // [vk/d3d12] Dynamic-rendering scope. Metal uses mtl_encoderDraw /
 // mtl_encoderEnd.
 void RICmd::vk_d3d12_beginRendering(struct RIDevice *device,
@@ -3470,15 +4584,156 @@ void RICmd::vk_d3d12_beginRendering(struct RIDevice *device,
       }
     }
     VkRenderingInfo render = {VK_STRUCTURE_TYPE_RENDERING_INFO};
-    render.renderArea.offset = {desc.renderArea.x, desc.renderArea.y};
-    render.renderArea.extent = {(uint32_t)desc.renderArea.width,
-                                (uint32_t)desc.renderArea.height};
+    const VkRect2D renderArea = RIToVKRect2D(&desc.renderArea);
+    render.renderArea = renderArea;
     render.layerCount = 1;
     render.colorAttachmentCount = desc.colorCount;
     render.pColorAttachments = desc.colorCount ? colors : NULL;
     render.pDepthAttachment = desc.depthStencil ? &depth : NULL;
     render.pStencilAttachment = hasStencil ? &stencil : NULL;
     vkCmdBeginRendering(vk.cmd, &render);
+    return;
+  }
+#endif
+#if (DEVICE_IMPL_D3D12)
+  if (RIIsTargetSelected(RI_DEVICE_API_D3D12)) {
+    if (!d3d12.cmdList || !device->d3d12.device)
+      return ri_d3d12_reject("command list or device is unavailable");
+    if (d3d12.activeColorCount || d3d12.activeDepth)
+      return ri_d3d12_reject("nested rendering scopes are not supported");
+    if (desc.colorCount > RI_D3D12_MAX_COLOR_ATTACHMENTS ||
+        (desc.colorCount && !desc.colors))
+      return ri_d3d12_reject("invalid color attachment count or array");
+    if (desc.renderArea.x < 0 || desc.renderArea.y < 0 ||
+        desc.renderArea.width <= 0 || desc.renderArea.height <= 0)
+      return ri_d3d12_reject("render area is invalid");
+    if (d3d12.rtvCount + desc.colorCount > RI_D3D12_RTV_DESCRIPTOR_CAPACITY ||
+        d3d12.dsvCount + (desc.depthStencil ? 1u : 0u) > RI_D3D12_DSV_DESCRIPTOR_CAPACITY)
+      return ri_d3d12_reject("dynamic rendering descriptor arena exhausted");
+    for (uint32_t i = 0; i < desc.colorCount; ++i) {
+      if (!ri_d3d12_validOp(desc.colors[i].loadOp, desc.colors[i].storeOp))
+        return ri_d3d12_reject("invalid color load/store operation");
+      // Three distinct failures; keep them apart, because "wrong view type"
+      // (a sampled view bound as a render target) and "render area overruns
+      // the mip" are diagnosed very differently.
+      const RITextureView &view = desc.colors[i].view;
+      if (view.d3d12.viewType != RI_VIEWTYPE_COLOR_ATTACHMENT) {
+        hpl::Error("D3D12 beginRendering: color attachment %u has view type %u, "
+                   "expected RI_VIEWTYPE_COLOR_ATTACHMENT (%u); a sampled view "
+                   "cannot be bound as a render target\n",
+                   i, view.d3d12.viewType,
+                   unsigned(RI_VIEWTYPE_COLOR_ATTACHMENT));
+        return ri_d3d12_reject("color attachment view is not a color-attachment view");
+      }
+      if (!view.d3d12.resource) {
+        hpl::Error("D3D12 beginRendering: color attachment %u has no native "
+                   "resource (texture creation failed?)\n", i);
+        return ri_d3d12_reject("color attachment has no native resource");
+      }
+      if (!ri_d3d12_renderAreaValid(view, desc.renderArea)) {
+        const D3D12_RESOURCE_DESC rd = view.d3d12.resource->GetDesc();
+        hpl::Error("D3D12 beginRendering: color attachment %u render area "
+                   "(%d,%d %dx%d) does not fit mip %u of the %llux%u resource\n",
+                   i, desc.renderArea.x, desc.renderArea.y, desc.renderArea.width,
+                   desc.renderArea.height, view.d3d12.baseMip,
+                   (unsigned long long)rd.Width, rd.Height);
+        return ri_d3d12_reject("color attachment render area is invalid");
+      }
+    }
+    if (desc.depthStencil) {
+      const RIRenderingAttachment &a = *desc.depthStencil;
+      if (!ri_d3d12_validOp(a.loadOp, a.storeOp) ||
+          (a.hasStencil &&
+           !ri_d3d12_validOp(a.stencilLoadOp, a.stencilStoreOp)))
+        return ri_d3d12_reject("invalid depth/stencil load/store operation");
+      const bool depthWritable = ri_d3d12_depthWritable(a);
+      const bool stencilWritable = ri_d3d12_stencilWritable(a);
+      if ((!depthWritable && a.loadOp == RI_ATTACHMENT_LOAD_OP_CLEAR) ||
+          (a.hasStencil && !stencilWritable &&
+           a.stencilLoadOp == RI_ATTACHMENT_LOAD_OP_CLEAR) ||
+          !ri_d3d12_renderAreaValid(a.view, desc.renderArea))
+        return ri_d3d12_reject("clear or render area targets a read-only/invalid aspect");
+      D3D12_RESOURCE_DESC rd = {};
+      uint32_t mips = 0, layers = 0;
+      if (!ri_d3d12_attachmentRange(a.view, rd, mips, layers) ||
+          (a.hasStencil &&
+           !ri_d3d12_formatHasStencil((DXGI_FORMAT)a.view.d3d12.format)))
+        return ri_d3d12_reject("invalid depth/stencil attachment view");
+    }
+    D3D12_CPU_DESCRIPTOR_HANDLE colors[RI_D3D12_MAX_COLOR_ATTACHMENTS] = {};
+    for (uint32_t i = 0; i < desc.colorCount; ++i) {
+      if (!ri_d3d12_makeRTV(*this, *device, desc.colors[i], colors[i]))
+        return ri_d3d12_reject("failed to allocate RTV descriptor");
+    }
+    D3D12_CPU_DESCRIPTOR_HANDLE depth = {};
+    if (desc.depthStencil && !ri_d3d12_makeDSV(*this, *device, *desc.depthStencil, depth))
+      return ri_d3d12_reject("failed to allocate DSV descriptor");
+    const int64_t right = static_cast<int64_t>(desc.renderArea.x) +
+                          static_cast<int64_t>(desc.renderArea.width);
+    const int64_t bottom = static_cast<int64_t>(desc.renderArea.y) +
+                           static_cast<int64_t>(desc.renderArea.height);
+    D3D12_RECT clearRect = {desc.renderArea.x, desc.renderArea.y,
+                            static_cast<LONG>(right), static_cast<LONG>(bottom)};
+    for (uint32_t i = 0; i < desc.colorCount; ++i) {
+      RID3D12ActiveAttachment &active = d3d12.activeColors[i];
+      active.resource = desc.colors[i].view.d3d12.resource;
+      active.x = desc.renderArea.x; active.y = desc.renderArea.y;
+      active.width = desc.renderArea.width; active.height = desc.renderArea.height;
+      active.baseMip = desc.colors[i].view.d3d12.baseMip;
+      active.baseLayer = desc.colors[i].view.d3d12.baseLayer;
+      active.layerNum = desc.colors[i].view.d3d12.layerNum;
+      active.loadOp = desc.colors[i].loadOp;
+      active.storeOp = desc.colors[i].storeOp;
+      active.hasStencil = false;
+      ri_d3d12_discard(*this, active, active.loadOp == RI_ATTACHMENT_LOAD_OP_DONT_CARE, false);
+      if (active.loadOp == RI_ATTACHMENT_LOAD_OP_CLEAR) {
+        const bool clearWholeView =
+            ri_d3d12_renderAreaCoversView(desc.colors[i].view, desc.renderArea);
+        d3d12.cmdList->ClearRenderTargetView(
+            colors[i], desc.colors[i].clearValue.color,
+            clearWholeView ? 0u : 1u, clearWholeView ? nullptr : &clearRect);
+      }
+    }
+    d3d12.activeColorCount = desc.colorCount;
+    if (desc.depthStencil) {
+      const RIRenderingAttachment &a = *desc.depthStencil;
+      RID3D12ActiveAttachment &active = d3d12.activeDepthAttachment;
+      active.resource = a.view.d3d12.resource;
+      active.x = desc.renderArea.x; active.y = desc.renderArea.y;
+      active.width = desc.renderArea.width; active.height = desc.renderArea.height;
+      active.baseMip = a.view.d3d12.baseMip;
+      active.baseLayer = a.view.d3d12.baseLayer;
+      active.layerNum = a.view.d3d12.layerNum;
+      active.loadOp = a.loadOp;
+      active.storeOp = a.storeOp;
+      active.stencilLoadOp = a.stencilLoadOp;
+      active.stencilStoreOp = a.stencilStoreOp;
+      // A DSV for a stencil-capable format is read-only for stencil even
+      // when the RI caller did not expose that aspect. DiscardResource is
+      // whole-subresource, so retain that fact in the command snapshot.
+      active.hasStencil = a.hasStencil ||
+                          ri_d3d12_formatHasStencil((DXGI_FORMAT)a.view.d3d12.format);
+      active.depthWritable = ri_d3d12_depthWritable(a);
+      active.stencilWritable = ri_d3d12_stencilWritable(a);
+      ri_d3d12_discard(*this, active,
+                       active.depthWritable && active.loadOp == RI_ATTACHMENT_LOAD_OP_DONT_CARE,
+                       active.stencilWritable && active.stencilLoadOp == RI_ATTACHMENT_LOAD_OP_DONT_CARE);
+      const bool clearDepth = active.depthWritable && a.loadOp == RI_ATTACHMENT_LOAD_OP_CLEAR;
+      const bool clearStencil = active.stencilWritable && a.stencilLoadOp == RI_ATTACHMENT_LOAD_OP_CLEAR;
+      if (clearDepth || clearStencil) {
+        D3D12_CLEAR_FLAGS flags = D3D12_CLEAR_FLAGS(0);
+        if (clearDepth) flags |= D3D12_CLEAR_FLAG_DEPTH;
+        if (clearStencil) flags |= D3D12_CLEAR_FLAG_STENCIL;
+        const bool clearWholeView =
+            ri_d3d12_renderAreaCoversView(a.view, desc.renderArea);
+        d3d12.cmdList->ClearDepthStencilView(
+            depth, flags, a.clearValue.depth, (UINT8)a.clearValue.stencil,
+            clearWholeView ? 0u : 1u, clearWholeView ? nullptr : &clearRect);
+      }
+      d3d12.activeDepth = true;
+    }
+    d3d12.cmdList->OMSetRenderTargets(desc.colorCount, desc.colorCount ? colors : nullptr,
+                                      FALSE, desc.depthStencil ? &depth : nullptr);
     return;
   }
 #endif
@@ -3494,6 +4749,27 @@ void RICmd::vk_d3d12_endRendering(struct RIDevice *device) {
 #if (DEVICE_IMPL_VULKAN)
   if (RIIsTargetSelected(RI_DEVICE_API_VK)) {
     vkCmdEndRendering(vk.cmd);
+    return;
+  }
+#endif
+#if (DEVICE_IMPL_D3D12)
+  if (RIIsTargetSelected(RI_DEVICE_API_D3D12)) {
+    if (!d3d12.cmdList)
+      return ri_d3d12_reject("endRendering called without a command list");
+    if (!d3d12.activeColorCount && !d3d12.activeDepth)
+      return ri_d3d12_reject("endRendering called without an active scope");
+    for (uint32_t i = 0; i < d3d12.activeColorCount; ++i) {
+      const RID3D12ActiveAttachment &a = d3d12.activeColors[i];
+      ri_d3d12_discard(*this, a, a.storeOp == RI_ATTACHMENT_STORE_OP_DONT_CARE, false);
+    }
+    if (d3d12.activeDepth) {
+      const RID3D12ActiveAttachment &a = d3d12.activeDepthAttachment;
+      ri_d3d12_discard(*this, a,
+                       a.depthWritable && a.storeOp == RI_ATTACHMENT_STORE_OP_DONT_CARE,
+                       a.stencilWritable && a.stencilStoreOp == RI_ATTACHMENT_STORE_OP_DONT_CARE);
+    }
+    d3d12.activeColorCount = 0;
+    d3d12.activeDepth = false;
     return;
   }
 #endif
@@ -3515,11 +4791,53 @@ void RICmd::setViewport(struct RIDevice *device,
     return;
   }
 #endif
+#if (DEVICE_IMPL_D3D12)
+  if (RIIsTargetSelected(RI_DEVICE_API_D3D12)) {
+    // D3D12 accepts only positive viewport extents. RI's signed height is
+    // converted by moving TopLeftY to the lower endpoint for the Y-flipped
+    // form; this is equivalent to Vulkan's {y, -height} mapping used by all
+    // current raster passes. A bottom-left-origin viewport has no D3D12
+    // viewport equivalent, so it is rejected above instead of losing parity.
+    if (!d3d12.cmdList || viewport.originBottomLeft ||
+        !std::isfinite(viewport.x) || !std::isfinite(viewport.y) ||
+        !std::isfinite(viewport.width) || !std::isfinite(viewport.height) ||
+        !std::isfinite(viewport.depthMin) || !std::isfinite(viewport.depthMax) ||
+        viewport.width <= 0.0f || viewport.height == 0.0f ||
+        viewport.depthMin < 0.0f || viewport.depthMax > 1.0f ||
+        viewport.depthMin > viewport.depthMax)
+      return;
+    if (viewport.height > 0.0f)
+      ri_d3d12_WarnViewportConvention();
+    const float topLeftY = viewport.height < 0.0f
+                               ? viewport.y + viewport.height
+                               : viewport.y;
+    const float positiveHeight = std::fabs(viewport.height);
+    if (!std::isfinite(topLeftY) || !std::isfinite(positiveHeight) ||
+        positiveHeight <= 0.0f)
+      return;
+    D3D12_VIEWPORT vp = {};
+    vp.TopLeftX = viewport.x;
+    vp.TopLeftY = topLeftY;
+    vp.Width = viewport.width;
+    vp.Height = positiveHeight;
+    vp.MinDepth = viewport.depthMin;
+    vp.MaxDepth = viewport.depthMax;
+    d3d12.cmdList->RSSetViewports(1, &vp);
+    return;
+  }
+#endif
 #if (DEVICE_IMPL_MTL)
   if (RIIsTargetSelected(RI_DEVICE_API_MTL)) {
     assert(mtl.render);
-    MTL::Viewport vp = {viewport.x,      viewport.y,        viewport.width,
-                        viewport.height, viewport.depthMin, viewport.depthMax};
+    // Metal requires a positive viewport height. Preserve RI/Vulkan's
+    // signed-height mapping by moving a negative-height viewport to its lower
+    // endpoint before taking the absolute extent.
+    const float topLeftY = viewport.height < 0.0f
+                               ? viewport.y + viewport.height
+                               : viewport.y;
+    const float positiveHeight = std::fabs(viewport.height);
+    MTL::Viewport vp = {viewport.x,      topLeftY,       viewport.width,
+                        positiveHeight, viewport.depthMin, viewport.depthMax};
     mtl.render->setViewport(vp);
     return;
   }
@@ -3530,18 +4848,36 @@ void RICmd::setViewport(struct RIDevice *device,
 void RICmd::setScissor(struct RIDevice *device, const struct RIRect &scissor) {
 #if (DEVICE_IMPL_VULKAN)
   if (RIIsTargetSelected(RI_DEVICE_API_VK)) {
-    VkRect2D rect = {{scissor.x, scissor.y},
-                     {(uint32_t)scissor.width, (uint32_t)scissor.height}};
+    if (!scissor.width || !scissor.height)
+      return;
+    const VkRect2D rect = RIToVKRect2D(&scissor);
     vkCmdSetScissor(vk.cmd, 0, 1, &rect);
+    return;
+  }
+#endif
+#if (DEVICE_IMPL_D3D12)
+  if (RIIsTargetSelected(RI_DEVICE_API_D3D12)) {
+    if (!d3d12.cmdList || !scissor.width || !scissor.height)
+      return;
+    const int64_t right = static_cast<int64_t>(scissor.x) + scissor.width;
+    const int64_t bottom = static_cast<int64_t>(scissor.y) + scissor.height;
+    if (right > LONG_MAX || bottom > LONG_MAX)
+      return;
+    D3D12_RECT rect = {scissor.x, scissor.y, static_cast<LONG>(right),
+                       static_cast<LONG>(bottom)};
+    d3d12.cmdList->RSSetScissorRects(1, &rect);
     return;
   }
 #endif
 #if (DEVICE_IMPL_MTL)
   if (RIIsTargetSelected(RI_DEVICE_API_MTL)) {
     assert(mtl.render);
-    MTL::ScissorRect rect = {(NS::UInteger)scissor.x, (NS::UInteger)scissor.y,
-                             (NS::UInteger)scissor.width,
-                             (NS::UInteger)scissor.height};
+    if (scissor.x < 0 || scissor.y < 0 || !scissor.width || !scissor.height)
+      return;
+    MTL::ScissorRect rect = {static_cast<NS::UInteger>(scissor.x),
+                             static_cast<NS::UInteger>(scissor.y),
+                             static_cast<NS::UInteger>(scissor.width),
+                             static_cast<NS::UInteger>(scissor.height)};
     mtl.render->setScissorRect(rect);
     return;
   }
@@ -3556,6 +4892,37 @@ void RICmd::vk_d3d12_setPushConstants(struct RIDevice *device,
   if (RIIsTargetSelected(RI_DEVICE_API_VK)) {
     vkCmdPushConstants(vk.cmd, program.getPipelineLayout(),
                        program.getPushConstantStageFlags(), offset, size, data);
+    return;
+  }
+#endif
+#if (DEVICE_IMPL_D3D12)
+  if (RIIsTargetSelected(RI_DEVICE_API_D3D12)) {
+    // The pipeline/root-signature bind must precede this call. D3D12 resets
+    // root parameters whenever the root signature changes.
+    (void)device;
+    const uint32_t rootParameter = program.getD3D12PushConstantRootParameter();
+    const uint32_t rangeOffset = program.getD3D12PushConstantOffset();
+    const uint32_t rangeSize = program.getD3D12PushConstantSize();
+    if (size == 0)
+      return;
+    if (!d3d12.cmdList || !program.getD3D12RootSignature() ||
+        rootParameter == UINT32_MAX || rangeSize == 0) {
+      hpl::Error("D3D12 push-constant write requested for a program with no push-constant range\n");
+      return;
+    }
+    if (!data || (offset & 3u) || (size & 3u) || offset < rangeOffset ||
+        offset > UINT32_MAX - size || size > rangeSize - (offset - rangeOffset)) {
+      hpl::Error("D3D12 push-constant write is not DWORD-aligned or is outside the reflected range\n");
+      return;
+    }
+    const UINT dwordOffset = offset / 4;
+    const UINT dwordCount = size / 4;
+    if (d3d12.computePipelineBound)
+      RID3D12_SetComputeRoot32BitConstants(*this, rootParameter, dwordCount,
+                                           data, dwordOffset);
+    else
+      RID3D12_SetGraphicsRoot32BitConstants(*this, rootParameter, dwordCount,
+                                            data, dwordOffset);
     return;
   }
 #endif

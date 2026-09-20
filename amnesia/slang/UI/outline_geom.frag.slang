@@ -24,15 +24,15 @@ struct OutlinePC
 };
 
 [vk::push_constant]
-OutlinePC pc;
+OutlinePC gPushConstants;
 
 struct PSIn
 {
-    [vk::location(0)] float3 v_viewNormal;
+    [vk::location(0)] float3 v_viewNormal : TEXCOORD0;
 };
 
 [shader("fragment")]
 float4 psMain(PSIn pin) : SV_Target
 {
-    return float4(pc.color.rgb * pc.color.a, 0.0f);
+    return float4(gPushConstants.color.rgb * gPushConstants.color.a, 0.0f);
 }

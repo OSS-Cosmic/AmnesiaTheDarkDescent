@@ -32,16 +32,16 @@ struct InvPostPC
 };
 
 [vk::push_constant]
-InvPostPC pc;
+InvPostPC gPushConstants;
 
 struct PSIn
 {
-    [vk::location(0)] float2 v_uv;
+    [vk::location(0)] float2 v_uv : TEXCOORD0;
 };
 
 struct PSOut
 {
-    [vk::location(0)] float4 out_color;
+    [vk::location(0)] float4 out_color : SV_Target0;
 };
 
 [shader("fragment")]
@@ -60,6 +60,6 @@ PSOut psMain(PSIn pin)
     float3 desat = pow(mixed, float3(1.5f));
 
     PSOut o;
-    o.out_color = float4(lerp(color, desat, saturate(pc.strength)), 1.0f);
+    o.out_color = float4(lerp(color, desat, saturate(gPushConstants.strength)), 1.0f);
     return o;
 }

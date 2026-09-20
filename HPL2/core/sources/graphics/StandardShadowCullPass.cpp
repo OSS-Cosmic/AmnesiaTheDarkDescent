@@ -23,12 +23,12 @@ bool cStandardShadowCullPass::LoadData() {
   if (!mpGraphics || !mpResources || !mpGraphics->globalset)
     return false;
 
-  const VkDescriptorSetLayout external[] = {
-      mpGraphics->globalset->m_bindlessSet.vk.m_bindlessSetLayout};
+  const RIBindlessLayout external[] = {
+      mpGraphics->globalset->m_bindlessSet.layout()};
 
   auto load = [&](std::shared_ptr<RIProgram> *slot, const char *entryPoint) {
     auto bin = RIProgram::loadShaderStage(mpResources->GetFileSearcher(),
-                                          "Standard.cull.cs.spv");
+                                          "Standard.cull.cs", entryPoint);
     if (bin.empty())
       return false;
     auto program = std::make_shared<RIProgram>();
@@ -179,11 +179,8 @@ bool cStandardShadowCullPass::Dispatch(RICmd *cmd, uint32_t frameIndex,
 
   const auto record = [&](const std::shared_ptr<RIProgram> &program,
                           const char *debugName, uint32_t groups) {
-    VkComputePipelineCreateInfo computeCreate = {
-        VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO};
     const hash_t hash = hash_u32(HASH_INITIAL_VALUE, /*variant=*/0u);
-    program->bindComputePipeline(&mpGraphics->device, cmd, hash, debugName,
-                                 &computeCreate);
+    program->bindComputePipeline(&mpGraphics->device, cmd, hash, debugName);
     program->bindBindlessDescriptorSet(cmd, &mpGraphics->globalset->m_bindlessSet,
                                        0, VK_PIPELINE_BIND_POINT_COMPUTE);
     program->bindDescriptors(&mpGraphics->device, cmd, frameIndex,

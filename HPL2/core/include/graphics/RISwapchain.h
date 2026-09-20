@@ -1,11 +1,10 @@
 #ifndef RI_SWAPCHAIN_H
 #define RI_SWAPCHAIN_H
 
-// Swapchain types + acquire/present API, grouped by use case (mirrors
-// ref_nri/ri_swapchain.h). The inline dispose() dereferences RIDevice and calls
-// RIGetVkInstance / RIIsTargetSelected, so this header includes the full
-// RIDevice.h — RIDevice does not reference RISwapchain, so the dependency is
-// one-way (no cycle).
+// Swapchain types + acquire/present API. The inline dispose() dereferences
+// RIDevice and calls RIGetVkInstance / RIIsTargetSelected, so the full
+// RIDevice.h is included here; RIDevice never references RISwapchain, so the
+// dependency stays one-way.
 #include "graphics/RIPreamble.h"
 #include "graphics/RITexture.h"      // RITexture textures[]
 #include "graphics/RITextureView.h" // RITextureView views[]
@@ -61,6 +60,8 @@ struct RISwapchain {
   uint16_t width;
   uint16_t height;
   uint32_t format; // RI_Format_e
+  // Borrowed aliases for images[]. They carry metadata for barriers/views but
+  // never own or release the ID3D12Resource references.
   struct RITexture textures[RI_MAX_SWAPCHAIN_IMAGES];
   // Per-image color-attachment views (owned by the swapchain). RITextureView is
   // cross-backend so this lives outside the vk union.
@@ -80,29 +81,24 @@ struct RISwapchain {
       VkSemaphore finishSem[RI_MAX_SWAPCHAIN_IMAGES];
     } vk;
 #endif
+#if (DEVICE_IMPL_D3D12)
+    struct {
+      IDXGISwapChain4 *swapchain;                         // owned; on successful recreate ownership transfers to the new swapchain
+      ID3D12Resource *images[RI_MAX_SWAPCHAIN_IMAGES];    // sole COM owners; on successful recreate ownership transfers to the new swapchain
+      void *hwnd;                                         // Kept from first create so the RISwapchain* recreate branch can reuse the same HWND
+      uint32_t bufferIndex;                               // last DXGI back-buffer index acquired
+      uint32_t frameIndex;                                // monotonic frame counter (for fence values)
+      uint32_t allowTearing;                              // DXGI tearing capability (0/1)
+      uint32_t syncInterval;                              // Present() sync interval (1 = vsync, 0 = tearing)
+      // Per-image fence values written by the caller after each submit; the
+      // presentQueue's d3d12.fence signals these. dispose() waits on the last
+      // frame value before releasing the swapchain images to avoid tearing
+      // down GPU-in-flight resources.
+      uint64_t frameFenceValues[RI_MAX_SWAPCHAIN_IMAGES];
+    } d3d12;
+#endif
   };
 };
-
-inline void RISwapchain::dispose(struct RIDevice *device) {
-#if (DEVICE_IMPL_VULKAN)
-  if (RIIsTargetSelected(RI_DEVICE_API_VK)) {
-    for (uint32_t p = 0; p < RI_MAX_SWAPCHAIN_IMAGES; p++) {
-      views[p].dispose(device);
-      if (vk.imageAcquireSem[p])
-        vkDestroySemaphore(device->vk.device, vk.imageAcquireSem[p], NULL);
-      if (vk.finishSem[p])
-        vkDestroySemaphore(device->vk.device, vk.finishSem[p], NULL);
-    }
-    if (vk.swapchain)
-      vkDestroySwapchainKHR(device->vk.device, vk.swapchain, NULL);
-    // The surface (needs the instance, not the device) is owned by the
-    // swapchain. Retired swapchains have already transferred it (NULL), so only
-    // the last live swapchain frees it here — after its VkSwapchainKHR is gone.
-    if (vk.surface)
-      vkDestroySurfaceKHR(RIGetVkInstance(), vk.surface, NULL);
-  }
-#endif
-}
 
 struct RIWindowHandle {
 	uint8_t type; // RIWindowType_e

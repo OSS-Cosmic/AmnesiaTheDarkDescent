@@ -98,7 +98,10 @@ cStandardHaloPass::CollectHalos(std::span<iRenderable *> translucents) const {
 void cStandardHaloPass::Resolve(StandardHaloQueryState &state,
                                 std::span<iRenderable *> translucents,
                                 cFrustum *frustum) {
-  if (!mpGraphics || !frustum)
+  // The halo query implementation below is Vulkan-native. D3D12 needs its
+  // own query heap/readback path; never dereference the inactive Vulkan
+  // device while that backend is selected.
+  if (!RIIsTargetSelected(RI_DEVICE_API_VK) || !mpGraphics || !frustum)
     return;
   const VkDevice vkDevice = mpGraphics->device.vk.device;
   ResolveStandardHaloQueries(
@@ -127,7 +130,8 @@ void cStandardHaloPass::Record(cGraphics::FrameContext *frame,
                                uint32_t height,
                                RIProgram::DescriptorBinding frameBinding,
                                uint32_t paneSalt) {
-  if (!mpGraphics || !depthTexture || !depthView || width == 0 || height == 0)
+  if (!RIIsTargetSelected(RI_DEVICE_API_VK) || !mpGraphics || !depthTexture ||
+      !depthView || width == 0 || height == 0)
     return;
   // One recording per frame: a second render of the same viewport state must
   // not reset queries the first render is still waiting on.
@@ -176,8 +180,7 @@ void cStandardHaloPass::Record(cGraphics::FrameContext *frame,
   if (!m_box)
     return;
 
-  m_box->SubmitToGPU(&mpGraphics->blasSubmit.cmds[0], &mpGraphics->device,
-                     frame);
+  m_box->SubmitToGPU(&mpGraphics->device);
   std::vector<uint64_t> cookies;
   std::vector<uint32_t> objectSlots;
   cookies.reserve(halos.size());
@@ -259,25 +262,23 @@ void cStandardHaloPass::Record(cGraphics::FrameContext *frame,
     // Depth-only variants of the decal pipeline: no colour output, no depth
     // write; LEQUAL counts the texels that pass the scene depth, ALWAYS every
     // texel the box covers.
-    DecalPipelineDesc visiblePipeline(
-        cGraphics::PogoColorFormat, cGraphics::DepthFormat,
-        DecalPipelineDesc::BLEND_ADD, presentMask);
-    DecalPipelineDesc maxPipeline(cGraphics::PogoColorFormat,
-                                  cGraphics::DepthFormat,
-                                  DecalPipelineDesc::BLEND_ADD, presentMask);
-    DecalPipelineDesc *pipelines[2] = {&visiblePipeline, &maxPipeline};
+    RIGraphicsPipelineDesc pipelines[2] = {
+        MakeDecalPipelineDesc(cGraphics::PogoColorFormat, cGraphics::DepthFormat,
+                              DecalPipelineDesc::BLEND_ADD, presentMask),
+        MakeDecalPipelineDesc(cGraphics::PogoColorFormat, cGraphics::DepthFormat,
+                              DecalPipelineDesc::BLEND_ADD, presentMask)};
     for (uint32_t variant = 0; variant < 2; ++variant) {
-      DecalPipelineDesc &pd = variant ? maxPipeline : visiblePipeline;
-      pd.pipelineRendering.colorAttachmentCount = 0;
-      pd.pipelineRendering.pColorAttachmentFormats = nullptr;
-      pd.colorBlendState.attachmentCount = 0;
-      pd.colorBlendState.pAttachments = nullptr;
-      pd.depthStencilState.depthCompareOp =
-          variant ? VK_COMPARE_OP_ALWAYS : VK_COMPARE_OP_LESS_OR_EQUAL;
+      RIGraphicsPipelineDesc &pd = pipelines[variant];
+      // Depth-only: blendCount must track colorCount, both drop to zero.
+      pd.renderTarget.colorCount = 0;
+      pd.blendCount = 0;
+      pd.depthStencil.depthCompare =
+          variant ? RI_COMPARE_ALWAYS : RI_COMPARE_LESS_EQUAL;
     }
-    const hash_t pipelineHashes[2] = {
-        hash_u32(hash_u32(visiblePipeline.hash, 0x48414c4fu), 0u),
-        hash_u32(hash_u32(maxPipeline.hash, 0x48414c4fu), 1u)};
+    // The two variants differ only by depthCompare, which the structural hash
+    // already covers; the discriminator is kept for readability.
+    const hash_t pipelineHashes[2] = {hash_u32(HASH_INITIAL_VALUE, 0u),
+                                      hash_u32(HASH_INITIAL_VALUE, 1u)};
     const char *pipelineNames[2] = {"Standard.haloVisible", "Standard.haloMax"};
 
     // Precise queries count samples; without them any passing sample reports
@@ -290,7 +291,7 @@ void cStandardHaloPass::Record(cGraphics::FrameContext *frame,
       for (uint32_t variant = 0; variant < 2; ++variant) {
         meshDecal->bindPipeline(&mpGraphics->device, cmd,
                                 pipelineHashes[variant], pipelineNames[variant],
-                                &pipelines[variant]->createInfo);
+                                pipelines[variant]);
         const uint32_t queryIndex = static_cast<uint32_t>(h * 2 + variant);
         vkCmdBeginQuery(cmd->vk.cmd, slot.pool, queryIndex, queryControl);
         cmd->drawIndexed(&mpGraphics->device, indexCount, 1u, 0u, 0,

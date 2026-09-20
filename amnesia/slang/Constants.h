@@ -43,8 +43,13 @@ HOST_NAMESPACE_BEGIN
 SHARED_CONST uint kBindingTextures2D                 = 0u;
 SHARED_CONST uint kBindingTexturesCube               = 1u;
 SHARED_CONST uint kBindingTextures2DArray           = 2u;  // Texture2DArray[] — animated images (one slot, frame = layer)
+// DXIL geometry pull table. Vulkan uses the same logical stream handles as
+// buffer device addresses; D3D12 uses the registered raw-SRV descriptor index.
+SHARED_CONST uint kBindingGeometryBuffers            = 4u;
+SHARED_CONST uint kGeometryBufferCapacity            = 32768u;
 // Bindings 3..8 were the gOpaque*Handles BDA arrays, folded into UniformObject.
-// Slot 3 is reused for the animated-texture record table; 4..8 stay free.
+// Slot 3 is reused for the animated-texture record table; slot 4 is the HLSL
+// geometry ByteAddressBuffer[] stream boundary; 5..8 stay free.
 SHARED_CONST uint kBindingAnimTex                    = 3u;  // StructuredBuffer<AnimTexRec> — per-2D-array-slot animation params
 SHARED_CONST uint kBindingMaterialSampler            = 9u;
 // Slots 10..19 held the retired surfel-cache SSBOs (counter, surfel, geometry,

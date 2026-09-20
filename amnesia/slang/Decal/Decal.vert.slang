@@ -42,9 +42,9 @@ struct DecalVSIn
 
 struct DecalVSOut
 {
-    float2 uv                      : TEXCRD;
-    float4 color                   : COLOR;
-    nointerpolation uint objectId  : OBJECTID;
+    [vk::location(0)] float2 uv                      : TEXCOORD0;
+    [vk::location(1)] float4 color                   : TEXCOORD1;
+    [vk::location(2)] nointerpolation uint objectId  : TEXCOORD2;
     float4 posH                    : SV_POSITION;
 };
 
@@ -53,7 +53,8 @@ DecalVSOut vsMain(DecalVSIn vin,
                   uint drawInst : SV_InstanceID,
                   uint baseInst : SV_StartInstanceLocation)
 {
-    uint instanceId = drawInst + baseInst;
+    uint instanceId = drawInst;
+    instanceId += baseInst;
 
     UniformObject obj     = gSceneObjects[instanceId];
     float4x4 modelViewPrj = mul(gPerFrame.projMat,

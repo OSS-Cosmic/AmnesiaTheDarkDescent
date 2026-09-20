@@ -40,11 +40,11 @@ struct InsanityPC
 };
 
 [vk::push_constant]
-InsanityPC pc;
+InsanityPC gPushConstants;
 
 struct PSIn
 {
-    [vk::location(0)] float2 v_uv;
+    [vk::location(0)] float2 v_uv : TEXCOORD0;
 };
 
 [shader("fragment")]
@@ -59,18 +59,18 @@ float4 psMain(PSIn pin) : SV_Target
     // amplitude (the 0.04 * screenHeight factor matches the legacy .fsl).
     float3 a0 = ampMap0.Sample(inputSampler, uv01).rgb;
     float3 a1 = ampMap1.Sample(inputSampler, uv01).rgb;
-    float3 amp = a0 * (1.0f - pc.amplitude) + a1 * pc.amplitude;
-    float2 ampDir = (pc.waveAlpha * 0.04f * size.y) * amp.xy;
+    float3 amp = a0 * (1.0f - gPushConstants.amplitude) + a1 * gPushConstants.amplitude;
+    float2 ampDir = (gPushConstants.waveAlpha * 0.04f * size.y) * amp.xy;
 
     // Radial zoom warp: zoom.xy is a direction from center (0.5), zoom.z magnitude.
     float3 zoom = zoomMap.Sample(inputSampler, uv01).rgb;
     float2 pix = uv01 * size;
-    pix += (zoom.xy - 0.5f) * 2.0f * 0.6f * zoom.z * size.y * pc.zoomAlpha;
+    pix += (zoom.xy - 0.5f) * 2.0f * 0.6f * zoom.z * size.y * gPushConstants.zoomAlpha;
 
     // Animated sine distortion, phase offset per axis (1.83 matches the legacy).
     float2 s = (pix / size.y) * 0.6f;
-    pix.x += sin(pc.time + s.y) * ampDir.x;
-    pix.y += sin(pc.time + s.x * 1.83f) * ampDir.y;
+    pix.x += sin(gPushConstants.time + s.y) * ampDir.x;
+    pix.y += sin(gPushConstants.time + s.x * 1.83f) * ampDir.y;
 
     return float4(sourceInput.Sample(inputSampler, pix / size).rgb, 1.0f);
 }

@@ -69,16 +69,18 @@ bool cStandardWaterPass::LoadData() {
     return true;
   if (!mpGraphics || !mpResources || !mpGraphics->globalset)
     return false;
-  auto bin = RIProgram::loadShaderStage(mpResources->GetFileSearcher(),
-                                        "Standard.water.3d.spv");
-  if (bin.empty())
+  auto vertBin = RIProgram::loadShaderStage(mpResources->GetFileSearcher(),
+                                            "Standard.water.3d", "vsMain");
+  auto fragBin = RIProgram::loadShaderStage(mpResources->GetFileSearcher(),
+                                            "Standard.water.3d", "psMain");
+  if (vertBin.empty() || fragBin.empty())
     return false;
   auto p = std::make_shared<RIProgram>();
   std::array<RIProgram::ModuleStage, 2> stages = {
-      RIProgram::ModuleStage{RIProgram::PROGRAM_STAGE_VERTEX, bin, "vsMain"},
-      RIProgram::ModuleStage{RIProgram::PROGRAM_STAGE_FRAGMENT, bin, "psMain"}};
-  const VkDescriptorSetLayout ext[] = {
-      mpGraphics->globalset->m_bindlessSet.vk.m_bindlessSetLayout};
+      RIProgram::ModuleStage{RIProgram::PROGRAM_STAGE_VERTEX, vertBin, "vsMain"},
+      RIProgram::ModuleStage{RIProgram::PROGRAM_STAGE_FRAGMENT, fragBin, "psMain"}};
+  const RIBindlessLayout ext[] = {
+      mpGraphics->globalset->m_bindlessSet.layout()};
   p->initialize(&mpGraphics->device, stages, ext, "Standard.water");
   m_program = std::move(p);
   if (!m_reflection || !m_reflection->LoadData())
@@ -112,7 +114,7 @@ bool cStandardWaterPass::RecordSurface(
       !frustum || !world || !frameBinding || !fogBinding ||
       image >= RI_MAX_SWAPCHAIN_IMAGES ||
       state->renderTarget[image].isEmpty() ||
-      state->renderTargetView[image].isEmpty() ||
+      state->renderTargetAttachmentView[image].isEmpty() ||
       state->depthTextures[image].isEmpty() ||
       state->depthView[image].isEmpty() ||
       state->depthSampleView[image].isEmpty() ||
@@ -161,9 +163,13 @@ bool cStandardWaterPass::RecordSurface(
   }
   bindings.emplace_back(
       "sceneDepthInput",
-      RIDescriptor::sampledImage(&mpGraphics->device,
-                                 state->depthSampleView[image].Get(),
-                                 RI_RESOURCE_STATE_DEPTH_READ));
+      // Matches the DEPTH_READ | SHADER_RESOURCE state the barriers below put
+      // the depth in. D3D12 only allows sampling with the shader-resource bit;
+      // Vulkan still picks DEPTH_READ_ONLY_OPTIMAL because DEPTH_READ wins.
+      RIDescriptor::sampledImage(
+          &mpGraphics->device, state->depthSampleView[image].Get(),
+          static_cast<RIResourceState_e>(RI_RESOURCE_STATE_DEPTH_READ |
+                                         RI_RESOURCE_STATE_SHADER_RESOURCE)));
   bindings.emplace_back(
       "waterReflectionInput",
       RIDescriptor::sampledImage(&mpGraphics->device,
@@ -181,8 +187,7 @@ bool cStandardWaterPass::RecordSurface(
   uint32_t slot = UINT32_MAX;
   {
     auto *vb = static_cast<cVertexBuffer *>(o->GetVertexBuffer());
-    vb->SubmitToGPU(&mpGraphics->blasSubmit.cmds[0], &mpGraphics->device,
-                    frame);
+    vb->SubmitToGPU(&mpGraphics->device);
     o->UpdateGraphicsForViewport(frustum, 0.0f);
     ObjectSubmitDesc od{};
     od.modelMatrix = o->GetModelMatrix(frustum);
@@ -233,7 +238,7 @@ bool cStandardWaterPass::RecordSurface(
           RI_RESOURCE_STATE_DEPTH_READ | RI_RESOURCE_STATE_SHADER_RESOURCE,
           RI_STAGE_FRAGMENT, RI_STAGE_ALL_GRAPHICS, RI_BARRIER_ASPECT_DEPTH);
   RIRenderingAttachment color{};
-  color.view = *state->renderTargetView[image];
+  color.view = *state->renderTargetAttachmentView[image];
   color.loadOp = RI_ATTACHMENT_LOAD_OP_LOAD;
   color.storeOp = RI_ATTACHMENT_STORE_OP_STORE;
   RIRenderingAttachment depth{};
@@ -277,11 +282,11 @@ bool cStandardWaterPass::RecordSurface(
               RI_STAGE_FRAGMENT);
       return false;
     }
-    TranslucentMeshPipelineDesc pipe(
-        cGraphics::PogoColorFormat, cGraphics::DepthFormat,
-        TranslucentMeshPipelineDesc::BLEND_ALPHA, mask, true);
-    m_program->bindPipeline(&mpGraphics->device, cmd, pipe.hash,
-                            "Standard.water", &pipe.createInfo);
+    m_program->bindPipeline(
+        &mpGraphics->device, cmd, HASH_INITIAL_VALUE, "Standard.water",
+        MakeTranslucentMeshPipelineDesc(
+            cGraphics::PogoColorFormat, cGraphics::DepthFormat,
+            TranslucentMeshPipelineDesc::BLEND_ALPHA, mask, true));
     struct Push {
       uint32_t reflectionAvailable;
       uint32_t refractionEnabled;

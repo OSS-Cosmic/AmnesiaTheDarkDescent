@@ -13,13 +13,6 @@ Texture2D<float4> positionTexture;
 [vk::binding(12, 2)]
 RWTexture2DArray<float> aoPreparedDepthTexture;
 
-struct AOPrepareDepthsPC {
-    uint2 quarterDim;
-};
-
-[vk::push_constant]
-AOPrepareDepthsPC pc;
-
 // NOTE: Device depth linearization is NOT applied here, unlike enhanced OpenGL.
 // The output is raw view-space linear depth.
 
@@ -27,8 +20,9 @@ AOPrepareDepthsPC pc;
 [numthreads(16, 16, 1)]
 void csMain(uint3 dtid : SV_DispatchThreadID)
 {
+    uint2 quarterDim = (uint2(gPerFrame.viewportSize) + uint2(3u, 3u)) / 4u;
     // Guard against out-of-bounds threads
-    if (dtid.x >= pc.quarterDim.x || dtid.y >= pc.quarterDim.y)
+    if (dtid.x >= quarterDim.x || dtid.y >= quarterDim.y)
         return;
 
     // Process each of the 16 slices in the 4x4 block

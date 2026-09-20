@@ -60,7 +60,7 @@ struct StandardCullPC {
 };
 
 [vk::push_constant]
-StandardCullPC pc;
+StandardCullPC gPushConstants;
 
 // VkDrawIndirectCommand is four consecutive uints under scalar layout, so a
 // uint4 is the command. firstInstance carries the object slot, which the vertex
@@ -125,10 +125,10 @@ uint4 makeDrawCommand(StandardCullCandidate candidate, uint instanceCount)
 void cullShadowResetCounts(uint3 dispatchThreadID : SV_DispatchThreadID)
 {
     uint local = dispatchThreadID.x;
-    if (local >= pc.gTileCount) {
+    if (local >= gPushConstants.gTileCount) {
         return;
     }
-    StandardCullTile tile = gShadowCullTiles[pc.gTileBase + local];
+    StandardCullTile tile = gShadowCullTiles[gPushConstants.gTileBase + local];
     gShadowDrawCounts[tile.countIndex] = 0u;
 }
 
@@ -144,11 +144,11 @@ void cullShadowResetCounts(uint3 dispatchThreadID : SV_DispatchThreadID)
 [numthreads(64, 1, 1)]
 void cullShadowTiles(uint3 groupID : SV_GroupID, uint3 groupThreadID : SV_GroupThreadID)
 {
-    if (groupID.x >= pc.gGroupCount) {
+    if (groupID.x >= gPushConstants.gGroupCount) {
         return;
     }
 
-    StandardCullGroup group = gShadowCullGroups[pc.gGroupBase + groupID.x];
+    StandardCullGroup group = gShadowCullGroups[gPushConstants.gGroupBase + groupID.x];
     StandardCullTile tile = gShadowCullTiles[group.tileIndex];
 
     uint local = group.candidateOffset + groupThreadID.x;
@@ -159,7 +159,7 @@ void cullShadowTiles(uint3 groupID : SV_GroupID, uint3 groupThreadID : SV_GroupT
     StandardCullCandidate candidate = gShadowCullCandidates[tile.candidateBase + local];
     bool frustumKeep = standardCullKeepCandidate(tile, candidate);
 
-    if (pc.gCullMode == kStandardCullModeVisibilityReplay) {
+    if (gPushConstants.gCullMode == kStandardCullModeVisibilityReplay) {
         // FRUSTUM ONLY, deliberately. The pyramid still holds the last frame
         // that used this image, and phase 2 subtracts `wasVisible` -- the
         // STORED bit, not what phase 1 actually drew. If an occlusion test
@@ -176,12 +176,12 @@ void cullShadowTiles(uint3 groupID : SV_GroupID, uint3 groupThreadID : SV_GroupT
 
     bool keep = frustumKeep && !cullOccludes(tile, candidate);
 
-    if (pc.gCullMode == kStandardCullModeVisibilityUpdate) {
+    if (gPushConstants.gCullMode == kStandardCullModeVisibilityUpdate) {
         // `keep` already carries the occlusion test against the pyramid phase 1
         // filled. Phase 2 draws what is visible now MINUS what phase 1 already
         // drew, so nothing is rasterized twice.
         uint wasVisible = gCullVisibility[candidate.visibilityKey];
-        gCullIndirectWords[candidate.commandWordOffset + pc.gCommandWordDelta] =
+        gCullIndirectWords[candidate.commandWordOffset + gPushConstants.gCommandWordDelta] =
             standardCullUpdateInstanceCount(keep, wasVisible);
         // The answer for next frame's phase 1. Written after the read above,
         // and each candidate owns its own key, so there is no ordering hazard
@@ -191,7 +191,7 @@ void cullShadowTiles(uint3 groupID : SV_GroupID, uint3 groupThreadID : SV_GroupT
         return;
     }
 
-    if (pc.gCullMode == kStandardCullModeInstanceMask) {
+    if (gPushConstants.gCullMode == kStandardCullModeInstanceMask) {
         // The host already wrote the whole command; only its instanceCount is
         // ours. Slot order is the host's sort order, untouched, which is what
         // the back-to-front translucent pass needs.
@@ -199,7 +199,7 @@ void cullShadowTiles(uint3 groupID : SV_GroupID, uint3 groupThreadID : SV_GroupT
         return;
     }
 
-    if (pc.gCullMode == kStandardCullModeInPlace) {
+    if (gPushConstants.gCullMode == kStandardCullModeInPlace) {
         // Every candidate owns a fixed slot and culled ones become a no-op
         // draw, which keeps the command count known to the host. Used when the
         // device has no vkCmdDrawIndirectCount.

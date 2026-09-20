@@ -11,6 +11,10 @@
 
 struct RIDevice;
 struct RIRenderer;
+#if (DEVICE_IMPL_D3D12)
+struct ID3D12Resource;
+namespace D3D12MA { class Allocation; }
+#endif
 
 enum RITextureType_e { RI_TEXTURE_1D, RI_TEXTURE_2D, RI_TEXTURE_3D };
 
@@ -59,14 +63,15 @@ struct RITextureDesc {
 
 struct RITexture {
   RITexture() { memset(this, 0, sizeof(*this)); }
-  // Backend-neutral image creation. VK: vmaCreateImage. The caller owns the
-  // returned texture and disposes it. `cookie` is stamped for use as a
-  // bindless/descriptor cache key.
+  // Backend-neutral image creation (VK: vmaCreateImage, D3D12:
+  // RID3D12_CreateTexture). The caller owns the returned texture and disposes
+  // it. `cookie` is stamped for use as a bindless/descriptor cache key.
   static struct RITexture create(struct RIDevice *device,
                                  const struct RITextureDesc &desc,
                                  std::optional<hash_t> hash = {});
   bool isEmpty() const;
   void dispose(struct RIDevice *device);
+  void setDebugObjectName(struct RIDevice *device, const char *name);
   union {
 #if (DEVICE_IMPL_VULKAN)
     struct {
@@ -74,7 +79,26 @@ struct RITexture {
       struct VmaAllocation_T *allocation;
     } vk;
 #endif
+#if (DEVICE_IMPL_D3D12)
+    struct {
+      // Normally owned and released by dispose. Swapchain textures are borrowed
+      // aliases whose single COM reference is owned by RISwapchain::d3d12.images.
+      ID3D12Resource *resource;
+      D3D12MA::Allocation *allocation; // owned; released after resource
+      uint32_t format;           // DXGI_FORMAT captured at creation
+      uint32_t width;
+      uint32_t height;
+      uint16_t depth;
+      uint16_t mipNum;
+      uint16_t layerNum;
+      uint16_t sampleCount;
+      uint32_t usage;            // RITextureUsageBits_e snapshot
+    } d3d12;
+#endif
   };
+  // Neutral resource metadata retained for descriptor payloads.
+  uint32_t format; // RI_Format_e of the backing image (not a view reinterpretation)
+  uint32_t type; // RITextureType_e
   hash_t cookie;
 };
 

@@ -29,7 +29,34 @@ struct RIDescriptorSetSlot {
 			VkDescriptorSet handle;
 		} vk;
 #endif
+#if ( DEVICE_IMPL_D3D12 )
+		struct {
+			uint32_t resourceOffset;
+			uint32_t samplerOffset;
+			uint32_t resourceCount;
+			uint32_t samplerCount;
+		} d3d12;
+#endif
 	};
+};
+
+// A range in the device-wide shader-visible heaps.  The offsets are relative
+// to the heap starts and are deliberately not GPU handles: callers can build
+// either a graphics or compute root table from the same allocation.
+struct RIDescriptorArenaAllocation {
+	uint32_t resourceOffset;
+	uint32_t samplerOffset;
+	uint32_t resourceCount;
+	uint32_t samplerCount;
+};
+
+struct RIDescriptorArenaFence {
+	#if ( DEVICE_IMPL_D3D12 )
+		ID3D12Fence *fence;
+	#else
+		void *fence;
+	#endif
+	uint64_t value;
 };
 
 struct RIDescriptorPoolAllocSlot {
@@ -70,6 +97,36 @@ struct RIDescriptorSetResult resolveDescriptorSetAlloc( struct RIDevice *device,
 													 hash_t hash);
 void freeDescriptorSetAlloc( struct RIDevice *device, struct RIDescriptorSetAlloc *alloc );
 
+// D3D12 uses one arena per RIDevice, shared by all programs.  Allocation is
+// ordinary range allocation from shader-visible CBV/SRV/UAV and sampler heaps;
+// it does not consume or replace a future externally-owned bindless table.
+// A release is not reusable until its fence has completed.  A null fence is
+// quarantined until arena teardown, because descriptor destruction does not
+// prove that all submitted command lists have stopped referring to the range.
+// freeDescriptorArena likewise leaves the heaps alive while fenced work is
+// pending.
+bool initDescriptorArena( struct RIDevice *device );
+void freeDescriptorArena( struct RIDevice *device );
+bool getDescriptorArenaHeaps( struct RIDevice *device,
+	#if ( DEVICE_IMPL_D3D12 )
+		ID3D12DescriptorHeap **resourceHeap, ID3D12DescriptorHeap **samplerHeap
+	#else
+		void **resourceHeap, void **samplerHeap
+	#endif
+);
+bool allocateDescriptorArena( struct RIDevice *device, uint32_t resourceCount,
+	uint32_t samplerCount, struct RIDescriptorArenaAllocation *out );
+// Geometry raw SRVs have their own fixed sub-range.  They must not consume
+// ordinary program-table slots: geometry handles are published as raw heap
+// indices and are therefore valid only while this sub-range remains stable.
+bool allocateGeometryDescriptorArena( struct RIDevice *device,
+	uint32_t resourceCount, struct RIDescriptorArenaAllocation *out );
+void releaseGeometryDescriptorArena( struct RIDevice *device,
+	const struct RIDescriptorArenaAllocation *allocation );
+void releaseDescriptorArena( struct RIDevice *device,
+	const struct RIDescriptorArenaAllocation *allocation,
+	const struct RIDescriptorArenaFence *fence );
+void reclaimDescriptorArena( struct RIDevice *device );
 // utility
 struct RIDescriptorSetSlot *allocDescriptorSetSlot( struct RIDescriptorSetAlloc *alloc );
 void attachDescriptorSlot( struct RIDescriptorSetAlloc *alloc, struct RIDescriptorSetSlot *slot );

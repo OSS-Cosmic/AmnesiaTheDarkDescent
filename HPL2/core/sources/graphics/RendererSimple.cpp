@@ -106,8 +106,8 @@ namespace hpl {
 		// Standalone program (no bindless set) — mirrors cRendererWireFrame;
 		// per-draw state arrives via a frame-scratch UBO ("pass") plus a
 		// per-draw diffuse texture + sampler (DebugDraw-style named bindings).
-		auto vert_stage = RIProgram::loadShaderStage(mpResources->GetFileSearcher(), "Simple.vert.spv");
-		auto frag_stage = RIProgram::loadShaderStage(mpResources->GetFileSearcher(), "Simple.frag.spv");
+		auto vert_stage = RIProgram::loadShaderStage(mpResources->GetFileSearcher(), "Simple.vert");
+		auto frag_stage = RIProgram::loadShaderStage(mpResources->GetFileSearcher(), "Simple.frag");
 		std::array<RIProgram::ModuleStage, 2> stages = {
 			RIProgram::ModuleStage{RIProgram::PROGRAM_STAGE_VERTEX, vert_stage, "vsMain"},
 			RIProgram::ModuleStage{RIProgram::PROGRAM_STAGE_FRAGMENT, frag_stage, "psMain"}
@@ -286,7 +286,7 @@ namespace hpl {
 				if(pVB == NULL) continue;
 
 				auto *vbri = static_cast<cVertexBuffer*>(pVB);
-				vbri->SubmitToGPU(&mpGraphics->blasSubmit.cmds[0], &mpGraphics->device, cntx);
+				vbri->SubmitToGPU(&mpGraphics->device);
 			}
 		}
 
@@ -353,12 +353,11 @@ namespace hpl {
 			depth.hasStencil = false;
 			depth.clearValue.depth = 1.0f;
 
-			// renderArea fields are int16_t; viewport sizes stay well under 32767.
 			RIBeginRenderingDesc beginDesc = {};
 			beginDesc.renderArea.x = 0;
 			beginDesc.renderArea.y = 0;
-			beginDesc.renderArea.width = (int16_t)renderWidth;
-			beginDesc.renderArea.height = (int16_t)renderHeight;
+			beginDesc.renderArea.width = renderWidth;
+			beginDesc.renderArea.height = renderHeight;
 			beginDesc.colorCount = 1;
 			beginDesc.colors = &color;
 			beginDesc.depthStencil = &depth;
@@ -377,8 +376,8 @@ namespace hpl {
 		RIRect scissor = {};
 		scissor.x = 0;
 		scissor.y = 0;
-		scissor.width = (int16_t)renderWidth;
-		scissor.height = (int16_t)renderHeight;
+		scissor.width = renderWidth;
+		scissor.height = renderHeight;
 		mpGraphics->primary.cmds[0].setViewport(&mpGraphics->device, viewportRi);
 		mpGraphics->primary.cmds[0].setScissor(&mpGraphics->device, scissor);
 
@@ -390,129 +389,88 @@ namespace hpl {
 		// RIProgram keeps one pipeline per combination.
 		auto bindSimplePipeline = [&](SimpleBlendVariant aVariant, uint32_t alVtxMask)
 		{
-			VkVertexInputBindingDescription vertexBindingDesc[3] = {
-				{ 0, 16, VK_VERTEX_INPUT_RATE_VERTEX }, // position (engine stream is float4, stride 16)
-				{ 1, (alVtxMask & eVertexElementFlag_Color0)   ? 16u : 0u, VK_VERTEX_INPUT_RATE_VERTEX }, // color
-				{ 2, (alVtxMask & eVertexElementFlag_Texture0) ? 12u : 0u, VK_VERTEX_INPUT_RATE_VERTEX }, // uv (float3 stream, .xy consumed)
-			};
-			VkVertexInputAttributeDescription vertexAttributeDesc[3] = {
-				{ 0, 0, VK_FORMAT_R32G32B32_SFLOAT,    0 }, // position
-				{ 1, 1, VK_FORMAT_R32G32B32A32_SFLOAT, 0 }, // color
-				{ 2, 2, VK_FORMAT_R32G32_SFLOAT,       0 }, // uv
-			};
-			VkPipelineVertexInputStateCreateInfo vertexInputState = { VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO };
-			vertexInputState.pVertexAttributeDescriptions = vertexAttributeDesc;
-			vertexInputState.vertexAttributeDescriptionCount = ARRAY_COUNT(vertexAttributeDesc);
-			vertexInputState.pVertexBindingDescriptions = vertexBindingDesc;
-			vertexInputState.vertexBindingDescriptionCount = ARRAY_COUNT(vertexBindingDesc);
+			RIGraphicsPipelineDesc desc = {};
 
-			VkPipelineInputAssemblyStateCreateInfo inputAssemblyState = { VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO };
-			inputAssemblyState.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+			desc.vertexInput.bindingCount = 3;
+			desc.vertexInput.bindings[0] = { 0, 16, RI_VERTEX_INPUT_RATE_VERTEX }; // position (engine stream is float4, stride 16)
+			desc.vertexInput.bindings[1] = { 1, (alVtxMask & eVertexElementFlag_Color0)   ? 16u : 0u, RI_VERTEX_INPUT_RATE_VERTEX }; // color
+			desc.vertexInput.bindings[2] = { 2, (alVtxMask & eVertexElementFlag_Texture0) ? 12u : 0u, RI_VERTEX_INPUT_RATE_VERTEX }; // uv (float3 stream, .xy consumed)
+			desc.vertexInput.attributeCount = 3;
+			desc.vertexInput.attributes[0] = { 0, 0, RI_FORMAT_RGB32_SFLOAT,  0 }; // position
+			desc.vertexInput.attributes[1] = { 1, 1, RI_FORMAT_RGBA32_SFLOAT, 0 }; // color
+			desc.vertexInput.attributes[2] = { 2, 2, RI_FORMAT_RG32_SFLOAT,   0 }; // uv
+
+			desc.topology = RI_TOPOLOGY_TRIANGLE_LIST;
 
 			// CLOCKWISE front face to match the opaque/translucent raster
 			// passes — all run under the same Y-flipped viewport.
-			VkPipelineRasterizationStateCreateInfo rasterizationState = { VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO };
-			rasterizationState.polygonMode = VK_POLYGON_MODE_FILL;
-			rasterizationState.cullMode = VK_CULL_MODE_BACK_BIT;
-			rasterizationState.frontFace = VK_FRONT_FACE_CLOCKWISE;
-			rasterizationState.lineWidth = 1.0f;
+			desc.raster.polygonMode = RI_POLYGON_MODE_FILL;
+			desc.raster.cullMode = RI_CULL_MODE_BACK;
+			desc.raster.frontFace = RI_FRONT_FACE_CLOCKWISE;
+			desc.raster.lineWidth = 1.0f;
 
-			VkDynamicState dynamicStates[] = { VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR };
-			VkPipelineDynamicStateCreateInfo dynamicState = { VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO };
-			dynamicState.dynamicStateCount = ARRAY_COUNT(dynamicStates);
-			dynamicState.pDynamicStates = dynamicStates;
-
-			VkPipelineRenderingCreateInfo pipelineRenderingCreateInfo = { VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO };
-			VkFormat colorFormats[1] = { RIFormatToVK(cGraphics::PogoColorFormat) };
-			pipelineRenderingCreateInfo.colorAttachmentCount = 1;
-			pipelineRenderingCreateInfo.pColorAttachmentFormats = colorFormats;
-			pipelineRenderingCreateInfo.depthAttachmentFormat = RIFormatToVK(cGraphics::DepthFormat);
-			pipelineRenderingCreateInfo.stencilAttachmentFormat = VK_FORMAT_UNDEFINED;
-
-			VkPipelineViewportStateCreateInfo viewportState = { VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO };
-			viewportState.viewportCount = 1;
-			viewportState.scissorCount = 1;
-
-			VkPipelineMultisampleStateCreateInfo multisampleState = { VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO };
-			multisampleState.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
+			desc.renderTarget.colorCount = 1;
+			desc.renderTarget.colorFormats[0] = cGraphics::PogoColorFormat;
+			desc.renderTarget.depthFormat = cGraphics::DepthFormat;
 
 			// Opaque writes depth; decals/translucents test against it only.
-			VkPipelineDepthStencilStateCreateInfo depthStencilState = { VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO };
-			depthStencilState.depthTestEnable = VK_TRUE;
-			depthStencilState.depthWriteEnable = (aVariant == SIMPLE_OPAQUE) ? VK_TRUE : VK_FALSE;
-			depthStencilState.depthCompareOp = VK_COMPARE_OP_LESS_OR_EQUAL;
-			depthStencilState.minDepthBounds = 0.0f;
-			depthStencilState.maxDepthBounds = 1.0f;
+			desc.depthStencil.depthTest = true;
+			desc.depthStencil.depthWrite = (aVariant == SIMPLE_OPAQUE);
+			desc.depthStencil.depthCompare = RI_COMPARE_LESS_EQUAL;
 
-			VkPipelineColorBlendAttachmentState blendAttachmentState = {};
-			blendAttachmentState.colorWriteMask =
-				VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT |
-				VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
-			blendAttachmentState.colorBlendOp = VK_BLEND_OP_ADD;
-			blendAttachmentState.alphaBlendOp = VK_BLEND_OP_ADD;
+			desc.blendCount = 1;
+			desc.blend[0].writeMask = RI_COLOR_WRITE_RGBA;
+			desc.blend[0].colorOp = RI_BLEND_OP_ADD;
+			desc.blend[0].alphaOp = RI_BLEND_OP_ADD;
 			switch(aVariant)
 			{
 			case SIMPLE_OPAQUE:
-				blendAttachmentState.blendEnable = VK_FALSE;
-				blendAttachmentState.srcColorBlendFactor = VK_BLEND_FACTOR_ONE;
-				blendAttachmentState.dstColorBlendFactor = VK_BLEND_FACTOR_ZERO;
-				blendAttachmentState.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
-				blendAttachmentState.dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO;
+				desc.blend[0].blendEnable = false;
+				desc.blend[0].srcColor = RI_BLEND_ONE;
+				desc.blend[0].dstColor = RI_BLEND_ZERO;
+				desc.blend[0].srcAlpha = RI_BLEND_ONE;
+				desc.blend[0].dstAlpha = RI_BLEND_ZERO;
 				break;
 			case SIMPLE_BLEND_ADD:
-				blendAttachmentState.blendEnable = VK_TRUE;
-				blendAttachmentState.srcColorBlendFactor = VK_BLEND_FACTOR_ONE;
-				blendAttachmentState.dstColorBlendFactor = VK_BLEND_FACTOR_ONE;
-				blendAttachmentState.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
-				blendAttachmentState.dstAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
+				desc.blend[0].blendEnable = true;
+				desc.blend[0].srcColor = RI_BLEND_ONE;
+				desc.blend[0].dstColor = RI_BLEND_ONE;
+				desc.blend[0].srcAlpha = RI_BLEND_ONE;
+				desc.blend[0].dstAlpha = RI_BLEND_ONE;
 				break;
 			case SIMPLE_BLEND_MUL:
-				blendAttachmentState.blendEnable = VK_TRUE;
-				blendAttachmentState.srcColorBlendFactor = VK_BLEND_FACTOR_ZERO;
-				blendAttachmentState.dstColorBlendFactor = VK_BLEND_FACTOR_SRC_COLOR;
-				blendAttachmentState.srcAlphaBlendFactor = VK_BLEND_FACTOR_ZERO;
-				blendAttachmentState.dstAlphaBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA;
+				desc.blend[0].blendEnable = true;
+				desc.blend[0].srcColor = RI_BLEND_ZERO;
+				desc.blend[0].dstColor = RI_BLEND_SRC_COLOR;
+				desc.blend[0].srcAlpha = RI_BLEND_ZERO;
+				desc.blend[0].dstAlpha = RI_BLEND_SRC_ALPHA;
 				break;
 			case SIMPLE_BLEND_MULX2:
-				blendAttachmentState.blendEnable = VK_TRUE;
-				blendAttachmentState.srcColorBlendFactor = VK_BLEND_FACTOR_DST_COLOR;
-				blendAttachmentState.dstColorBlendFactor = VK_BLEND_FACTOR_SRC_COLOR;
-				blendAttachmentState.srcAlphaBlendFactor = VK_BLEND_FACTOR_DST_ALPHA;
-				blendAttachmentState.dstAlphaBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA;
+				desc.blend[0].blendEnable = true;
+				desc.blend[0].srcColor = RI_BLEND_DST_COLOR;
+				desc.blend[0].dstColor = RI_BLEND_SRC_COLOR;
+				desc.blend[0].srcAlpha = RI_BLEND_DST_ALPHA;
+				desc.blend[0].dstAlpha = RI_BLEND_SRC_ALPHA;
 				break;
 			case SIMPLE_BLEND_ALPHA:
-				blendAttachmentState.blendEnable = VK_TRUE;
-				blendAttachmentState.srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA;
-				blendAttachmentState.dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
-				blendAttachmentState.srcAlphaBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA;
-				blendAttachmentState.dstAlphaBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
+				desc.blend[0].blendEnable = true;
+				desc.blend[0].srcColor = RI_BLEND_SRC_ALPHA;
+				desc.blend[0].dstColor = RI_BLEND_ONE_MINUS_SRC_ALPHA;
+				desc.blend[0].srcAlpha = RI_BLEND_SRC_ALPHA;
+				desc.blend[0].dstAlpha = RI_BLEND_ONE_MINUS_SRC_ALPHA;
 				break;
 			case SIMPLE_BLEND_PREMUL_ALPHA:
-				blendAttachmentState.blendEnable = VK_TRUE;
-				blendAttachmentState.srcColorBlendFactor = VK_BLEND_FACTOR_ONE;
-				blendAttachmentState.dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
-				blendAttachmentState.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
-				blendAttachmentState.dstAlphaBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
+				desc.blend[0].blendEnable = true;
+				desc.blend[0].srcColor = RI_BLEND_ONE;
+				desc.blend[0].dstColor = RI_BLEND_ONE_MINUS_SRC_ALPHA;
+				desc.blend[0].srcAlpha = RI_BLEND_ONE;
+				desc.blend[0].dstAlpha = RI_BLEND_ONE_MINUS_SRC_ALPHA;
 				break;
 			}
-			VkPipelineColorBlendStateCreateInfo colorBlendState = { VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO };
-			colorBlendState.attachmentCount = 1;
-			colorBlendState.pAttachments = &blendAttachmentState;
 
-			VkGraphicsPipelineCreateInfo pipelineCreateInfo = { VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO };
-			pipelineCreateInfo.pNext = &pipelineRenderingCreateInfo;
-			pipelineCreateInfo.pVertexInputState = &vertexInputState;
-			pipelineCreateInfo.pInputAssemblyState = &inputAssemblyState;
-			pipelineCreateInfo.pRasterizationState = &rasterizationState;
-			pipelineCreateInfo.pDynamicState = &dynamicState;
-			pipelineCreateInfo.pViewportState = &viewportState;
-			pipelineCreateInfo.pMultisampleState = &multisampleState;
-			pipelineCreateInfo.pDepthStencilState = &depthStencilState;
-			pipelineCreateInfo.pColorBlendState = &colorBlendState;
-
-			hash_t hash = hash_u32(HASH_INITIAL_VALUE, (uint32_t)aVariant);
-			hash = hash_u32(hash, alVtxMask);
-			m_simple->bindPipeline(&mpGraphics->device, &mpGraphics->primary.cmds[0], hash, "simple", &pipelineCreateInfo);
+			// Blend variant and stream-present mask are both structural now
+			// (blend factors / binding strides), so no variant salt is needed.
+			m_simple->bindPipeline(&mpGraphics->device, &mpGraphics->primary.cmds[0], HASH_INITIAL_VALUE, "simple", desc);
 		};
 
 		////////////////////////////////////////////

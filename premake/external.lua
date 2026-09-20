@@ -28,28 +28,66 @@ local NRD_BUILD_PROJECT = "NRDExternal"
 -- copy_glob: optional posix shared-lib glob copied next to the game (Linux, into libs/).
 -- win_glob: optional Windows DLL glob copied next to the .exe.
 -- copy_dir: optional directory copied next to the game on both platforms.
-local function cmake_makefile(name, srcdir, unix_args, win_args, copy_glob, win_glob, copy_dir)
+-- Makefile projects have no reliable output timestamp for MSBuild to use, so
+-- more than one top-level consumer can enter the same wrapper concurrently.
+-- A named mutex keeps a shared external build tree single-writer while still
+-- allowing unrelated configurations (and unrelated externals) to build in
+-- parallel. The commands are passed through cmd.exe so their existing quoting
+-- and generator-specific arguments remain unchanged.
+local function windows_serialized_commands(commands, mutex_name)
+    local body = {}
+    for _, command in ipairs(commands) do
+        table.insert(body, string.format("& cmd.exe /D /C '%s'; if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }", command))
+    end
+    -- The generated command is itself parsed by cmd.exe. Escape the quotes
+    -- belonging to the nested CMake commands so quoted executable/path names
+    -- survive both cmd.exe and powershell.exe argument parsing.
+    local script = string.format(
+        "& {$mutex = [System.Threading.Mutex]::new($false, 'Local\\%s'); $acquired = $false; try {try {$mutex.WaitOne(); $acquired = $true} catch [System.Threading.AbandonedMutexException] {$acquired = $true}; %s} finally {if ($acquired) {$mutex.ReleaseMutex()}; $mutex.Dispose()}}",
+        mutex_name, table.concat(body, " "))
+    script = script:gsub('"', '\\"')
+    return "powershell -NoProfile -ExecutionPolicy Bypass -Command \"" .. script .. "\""
+end
+
+local function cmake_makefile(name, srcdir, unix_args, win_args, copy_glob, win_glob, copy_dir, serialize_name)
     local bdir = EXT_ROOT .. "/" .. name .. "/%{cfg.buildcfg}"
+    local unix_configure = string.format('"%s" -Wno-deprecated -S "%s" -B "%s" -DCMAKE_BUILD_TYPE=%%{cfg.buildcfg} %s',
+        CMAKE, srcdir, bdir, unix_args)
+    local windows_configure = string.format('"%s" -Wno-deprecated -G "Visual Studio 17 2022" -A x64 -S "%s" -B "%s" -DCMAKE_BUILD_TYPE=%%{cfg.buildcfg} %s',
+        CMAKE, srcdir, bdir, win_args)
+    -- The outer solution already builds independent external projects in
+    -- parallel. Keep each nested CMake/MSBuild invocation single-project so
+    -- Debug PDB writers cannot multiply past mspdbsrv's practical limits.
+    local build = string.format('"%s" --build "%s" --config %%{cfg.buildcfg} --parallel 1', CMAKE, bdir)
     project(name)
         kind "Makefile"
         location (ROOT .. "/build-premake/projects")
 
         filter "system:not windows"
             buildcommands {
-                string.format('"%s" -Wno-deprecated -S "%s" -B "%s" -DCMAKE_BUILD_TYPE=%%{cfg.buildcfg} %s',
-                    CMAKE, srcdir, bdir, unix_args),
-                string.format('"%s" --build "%s" --config %%{cfg.buildcfg} -j', CMAKE, bdir),
+                unix_configure,
+                build,
             }
         filter "system:windows"
-            buildcommands {
-                string.format('"%s" -Wno-deprecated -S "%s" -B "%s" -DCMAKE_BUILD_TYPE=%%{cfg.buildcfg} %s',
-                    CMAKE, srcdir, bdir, win_args),
-                string.format('"%s" --build "%s" --config %%{cfg.buildcfg} -j', CMAKE, bdir),
+            -- Force the Visual Studio generator so the output layout matches the
+            -- multi-config libdirs below regardless of whether ninja is on PATH.
+            -- Without this, CMake picks Ninja when available and writes .lib into
+            -- <bdir>/ instead of <bdir>/<config>/, breaking the link stage.
+            if serialize_name then
+                buildcommands {
+                    windows_serialized_commands({ windows_configure, build }, serialize_name),
+                }
+            else
+                buildcommands { windows_configure, build }
+            end
+        filter {}
+        filter "system:not windows"
+            rebuildcommands { build }
+        filter "system:windows"
+            rebuildcommands {
+                serialize_name and windows_serialized_commands({ build }, serialize_name) or build,
             }
         filter {}
-        rebuildcommands {
-            string.format('"%s" --build "%s" --config %%{cfg.buildcfg} -j', CMAKE, bdir),
-        }
         cleancommands {
             string.format('{RMDIR} "%s"', bdir),
         }
@@ -89,11 +127,16 @@ local function cmake_makefile(name, srcdir, unix_args, win_args, copy_glob, win_
 end
 
 -- ---- SDL2 -----------------------------------------------------------------
+-- /FS on Windows: SDL2's CMake build enables /MP via CMake's Visual Studio
+-- generator defaults, so the compile PDB writes must be serialised or MSBuild
+-- fails with C1041 under parallel builds. Same reasoning applies to openal-soft
+-- and NRD below.
 cmake_makefile(SDL2_PROJECT,
     DEPS_EXTERN .. "/SDL",
     "-DSDL_SHARED=ON -DSDL_STATIC=OFF -DSDL_TEST=OFF -DSDL2_DISABLE_INSTALL=ON -DSDL_RPATH=OFF",
-    "-DSDL_SHARED=OFF -DSDL_STATIC=ON -DSDL_TEST=OFF -DSDL2_DISABLE_INSTALL=ON -DSDL_RPATH=OFF",
-    "libSDL2*.so*", nil)
+    "-DSDL_SHARED=OFF -DSDL_STATIC=ON -DSDL_TEST=OFF -DSDL2_DISABLE_INSTALL=ON -DSDL_RPATH=OFF "
+        .. "-DCMAKE_C_FLAGS=\"/FS\" -DCMAKE_CXX_FLAGS=\"/FS\"",
+    "libSDL2*.so*", nil, nil, "Redux-Amnesia-SDL2-%{cfg.buildcfg}")
 
 function link_sdl2()
     dependson { SDL2_PROJECT }
@@ -151,8 +194,8 @@ cmake_makefile(OPENAL_PROJECT,
     "-DLIBTYPE=STATIC -DALSOFT_ENABLE_MODULES=OFF -DALSOFT_UTILS=OFF -DALSOFT_EXAMPLES=OFF -DALSOFT_INSTALL=OFF "
         .. "-DALSOFT_INSTALL_CONFIG=OFF -DALSOFT_INSTALL_HRTF_DATA=OFF -DALSOFT_INSTALL_AMBDEC_PRESETS=OFF "
         .. "-DALSOFT_INSTALL_EXAMPLES=OFF -DALSOFT_INSTALL_UTILS=OFF -DALSOFT_UPDATE_BUILD_VERSION=OFF "
-        .. "-DCMAKE_CXX_FLAGS=\"/EHsc /wd4267 /wd4875\"",
-    "libopenal.so*", nil)
+        .. "-DCMAKE_C_FLAGS=\"/FS\" -DCMAKE_CXX_FLAGS=\"/FS /EHsc /wd4267 /wd4875\"",
+    "libopenal.so*", nil, nil, "Redux-Amnesia-OpenAL-%{cfg.buildcfg}")
 
 function link_openal()
     dependson { OPENAL_PROJECT }
@@ -200,11 +243,18 @@ local NRD_COMMON_ARGS =
         .. string.format('-DCMAKE_RUNTIME_OUTPUT_DIRECTORY="%s/_Bin" ', NRD_BUILD)
         .. string.format('-DCMAKE_LIBRARY_OUTPUT_DIRECTORY="%s/_Bin"', NRD_BUILD)
 
+-- /EHsc on Windows: MSVC 14.44's STL emits C4530 from `__msvc_ostream.hpp`
+-- when instantiating `std::operator<<` without unwind semantics, and NRD's
+-- FetchContent'd ShaderMakeBlob target compiles with /W4 /WX, so the missing
+-- /EHsc breaks the ShaderBlob.cpp build and prevents NRD.lib from linking.
+-- Setting CMAKE_CXX_FLAGS overrides CMake's implicit /EHsc default, so it has
+-- to be re-added explicitly here (same pattern as openal-soft above).
 cmake_makefile(NRD_BUILD_PROJECT,
     DEPS_EXTERN .. "/NRD",
     NRD_COMMON_ARGS,
-    NRD_COMMON_ARGS .. " -DNRD_EMBEDS_DXIL_SHADERS=OFF -DNRD_EMBEDS_DXBC_SHADERS=OFF",
-    nil, nil)
+    NRD_COMMON_ARGS .. " -DNRD_EMBEDS_DXIL_SHADERS=OFF -DNRD_EMBEDS_DXBC_SHADERS=OFF "
+        .. "-DCMAKE_C_FLAGS=\"/FS\" -DCMAKE_CXX_FLAGS=\"/FS /EHsc\"",
+    nil, nil, nil, "Redux-Amnesia-NRD-%{cfg.buildcfg}")
 
 function link_nrd()
     dependson { NRD_BUILD_PROJECT }
@@ -348,8 +398,8 @@ if FSR_ENABLED then
     cmake_makefile(FSR_BUILD_PROJECT,
         ROOT .. "/cmake/fsr",
         fsr_common_args,
-        fsr_common_args,
-        nil, nil, "licenses")
+        fsr_common_args .. " -DCMAKE_C_FLAGS=\"/FS\" -DCMAKE_CXX_FLAGS=\"/FS\"",
+        nil, nil, "licenses", "Redux-Amnesia-FSR-%{cfg.buildcfg}")
 end
 
 function link_fsr()
@@ -484,38 +534,53 @@ function xess_use()
     defines { "HPL2_XESS_AVAILABLE=1" }
 end
 
-function link_xess()
+-- Stage the shared XeSS runtime once for the whole game/tool output directory.
+-- Attaching these copies to every final executable makes a parallel solution
+-- build overwrite libxess.dll from several post-build events at once, which can
+-- intermittently fail with "Access is denied".
+function xess_declare_staging_projects()
+    if not XESS_ENABLED then return end
+
+    local runtime = runtime_dir("")
+    local license_dir = runtime_dir("licenses/xess")
+    local commands = {
+        string.format('if not exist "%s" mkdir "%s"', winpath(runtime), winpath(runtime)),
+        string.format('if exist "%s" (copy /Y "%s" "%s\\" >nul) else (echo XeSS: missing runtime DLL "%s")',
+            winpath(XESS_SDK_ROOT .. "/bin/libxess.dll"),
+            winpath(XESS_SDK_ROOT .. "/bin/libxess.dll"), winpath(runtime),
+            winpath(XESS_SDK_ROOT .. "/bin/libxess.dll")),
+        string.format('if not exist "%s" mkdir "%s"', winpath(license_dir), winpath(license_dir)),
+    }
+    for _, item in ipairs({
+        { filename = "LICENSE.txt", description = "license file" },
+        { filename = "third-party-programs.txt", description = "third-party notices" },
+    }) do
+        local source = winpath(XESS_SDK_ROOT .. "/" .. item.filename)
+        local destination = winpath(license_dir .. "/" .. item.filename)
+        table.insert(commands, string.format('if exist "%s" attrib -R "%s" >nul 2>&1',
+            destination, destination))
+        table.insert(commands, string.format('if exist "%s" (copy /Y "%s" "%s\\" >nul) else (echo XeSS: missing %s "%s")',
+            source, source, winpath(license_dir), item.description, source))
+    end
+
+    project "XeSSRuntimeGame"
+        kind "Makefile"
+        location (ROOT .. "/build-premake/projects")
+        filter "system:windows"
+            buildcommands(commands)
+            rebuildcommands(commands)
+        filter {}
+end
+
+function link_xess(target_layout)
     xess_use()
     if not XESS_ENABLED then
         return
     end
-
-    local runtime = runtime_dir("")
-    local license_dir = runtime_dir("licenses/xess")
-    local function license_commands(filename, description)
-        local source = winpath(XESS_SDK_ROOT .. "/" .. filename)
-        local destination = winpath(license_dir .. "/" .. filename)
-        local clear_readonly = string.format('if exist "%s" attrib -R "%s" >nul 2>&1',
-            destination, destination)
-        local copy = string.format('if exist "%s" (copy /Y "%s" "%s\\" >nul) else (echo XeSS: missing %s "%s")',
-            source, source, winpath(license_dir), description, source)
-        return clear_readonly, copy
+    -- Engine-linked test executables do not load XeSS. Deploying the same DLL
+    -- from every parallel smoke-test postbuild races on the shared game output.
+    if target_layout == "tests" then
+        return
     end
-    local license_clear, license_copy = license_commands("LICENSE.txt", "license file")
-    local notices_clear, notices_copy = license_commands("third-party-programs.txt", "third-party notices")
-    filter "system:windows"
-        postbuildcommands {
-            string.format('if not exist "%s" mkdir "%s"', winpath(runtime), winpath(runtime)),
-            string.format('if exist "%s" (copy /Y "%s" "%s\\") else (echo XeSS: missing runtime DLL "%s")',
-                winpath(XESS_SDK_ROOT .. "/bin/libxess.dll"),
-                winpath(XESS_SDK_ROOT .. "/bin/libxess.dll"), winpath(runtime),
-                winpath(XESS_SDK_ROOT .. "/bin/libxess.dll")),
-            string.format('if not exist "%s" mkdir "%s"', winpath(license_dir), winpath(license_dir)),
-            -- Keep attrib -R separate so cmd does not parse a nested if and & inside the copy block.
-            license_clear,
-            license_copy,
-            notices_clear,
-            notices_copy,
-        }
-    filter {}
+    dependson { "XeSSRuntimeGame" }
 end

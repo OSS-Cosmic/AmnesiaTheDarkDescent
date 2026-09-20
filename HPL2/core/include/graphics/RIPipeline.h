@@ -1,10 +1,14 @@
 #ifndef RI_PIPELINE_H
 #define RI_PIPELINE_H
 
-// Pipeline / draw-state enums, batched by use case (mirrors ref_nri/ri_pipeline.h).
-// Depends only on the prelude — no umbrella (RITypes.h) include, so this stays a
-// leaf header and the dependency runs one way (RITypes.h includes THIS).
-#include "graphics/RIPreamble.h"
+// Pipeline / draw-state enums, batched by use case.
+//
+// A leaf header by design: it includes neither RITypes.h (which includes THIS,
+// so the dependency runs one way) nor RIPreamble.h. Plain enums have no
+// layout/ODR exposure for the prelude to guard, and pulling it in would drag
+// volk/VMA/d3d12/dxgi along -- staying backend-header-free is what lets
+// RIPipelineDesc.h describe a pipeline in neither backend's vocabulary.
+#include <stdint.h>
 
 enum RITopology_e {
   RI_TOPOLOGY_POINT_LIST,
@@ -58,7 +62,7 @@ enum RIColorWriteMask_e {
 // S0 - source color 0
 // S1 - source color 1
 // D - destination color
-// C - blend constants, set by "CmdSetBlendConstants"
+// C - blend constants (RI exposes no setter for these yet)
 enum RIBlendFactor_e {          // RGB                               ALPHA
   RI_BLEND_ZERO,                // 0                                 0
   RI_BLEND_ONE,                 // 1                                 1
@@ -81,6 +85,45 @@ enum RIBlendFactor_e {          // RGB                               ALPHA
   RI_BLEND_ONE_MINUS_SRC1_COLOR, // 1 - S1.r, 1 - S1.g, 1 - S1.b      1 - S1.a
   RI_BLEND_SRC1_ALPHA,           // S1.a                              S1.a
   RI_BLEND_ONE_MINUS_SRC1_ALPHA  // 1 - S1.a                          1 - S1.a
+};
+
+// S - source color
+// D - destination color
+enum RIBlendOp_e {              // RGB / ALPHA
+  RI_BLEND_OP_ADD,              // S + D
+  RI_BLEND_OP_SUBTRACT,         // S - D
+  RI_BLEND_OP_REVERSE_SUBTRACT, // D - S
+  RI_BLEND_OP_MIN,              // min(S, D)
+  RI_BLEND_OP_MAX               // max(S, D)
+};
+
+// R - stencil reference, from RIDepthStencilDesc::stencilReference
+// D - stencil buffer
+enum RIStencilOp_e {
+  RI_STENCIL_OP_KEEP,                // D
+  RI_STENCIL_OP_ZERO,                // 0
+  RI_STENCIL_OP_REPLACE,             // R
+  RI_STENCIL_OP_INCREMENT_AND_CLAMP, // min(D + 1, maxValue)
+  RI_STENCIL_OP_DECREMENT_AND_CLAMP, // max(D - 1, 0)
+  RI_STENCIL_OP_INVERT,              // ~D
+  RI_STENCIL_OP_INCREMENT_AND_WRAP,  // D + 1, wrapping to 0
+  RI_STENCIL_OP_DECREMENT_AND_WRAP   // D - 1, wrapping to maxValue
+};
+
+// POINT is intentionally absent: D3D12 has no point fill mode
+// (D3D12_FILL_MODE is SOLID or WIREFRAME only).
+enum RIPolygonMode_e { RI_POLYGON_MODE_FILL, RI_POLYGON_MODE_LINE };
+
+// Winding order that identifies a front-facing triangle.
+enum RIFrontFace_e {
+  RI_FRONT_FACE_COUNTER_CLOCKWISE,
+  RI_FRONT_FACE_CLOCKWISE
+};
+
+// How often a vertex buffer binding advances.
+enum RIVertexInputRate_e {
+  RI_VERTEX_INPUT_RATE_VERTEX,  // once per vertex
+  RI_VERTEX_INPUT_RATE_INSTANCE // once per instance
 };
 
 #endif // RI_PIPELINE_H

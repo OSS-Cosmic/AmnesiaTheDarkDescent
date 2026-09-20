@@ -107,17 +107,19 @@ bool cStandardTranslucentPass::LoadData() {
     return true;
   if (!mpGraphics || !mpResources || !mpGraphics->globalset)
     return false;
-  auto binary = RIProgram::loadShaderStage(mpResources->GetFileSearcher(),
-                                           "Standard.translucent.3d.spv");
-  if (binary.empty())
+  auto vertBin = RIProgram::loadShaderStage(mpResources->GetFileSearcher(),
+                                            "Standard.translucent.3d", "vsMain");
+  auto fragBin = RIProgram::loadShaderStage(mpResources->GetFileSearcher(),
+                                            "Standard.translucent.3d", "psMain");
+  if (vertBin.empty() || fragBin.empty())
     return false;
   auto program = std::make_shared<RIProgram>();
   std::array<RIProgram::ModuleStage, 2> stages = {
-      RIProgram::ModuleStage{RIProgram::PROGRAM_STAGE_VERTEX, binary, "vsMain"},
-      RIProgram::ModuleStage{RIProgram::PROGRAM_STAGE_FRAGMENT, binary,
+      RIProgram::ModuleStage{RIProgram::PROGRAM_STAGE_VERTEX, vertBin, "vsMain"},
+      RIProgram::ModuleStage{RIProgram::PROGRAM_STAGE_FRAGMENT, fragBin,
                              "psMain"}};
-  const VkDescriptorSetLayout external[] = {
-      mpGraphics->globalset->m_bindlessSet.vk.m_bindlessSetLayout};
+  const RIBindlessLayout external[] = {
+      mpGraphics->globalset->m_bindlessSet.layout()};
   program->initialize(&mpGraphics->device, stages, external,
                       "Standard.translucent");
   auto old = std::move(m_program);
@@ -183,7 +185,7 @@ bool cStandardTranslucentPass::Draw(
     uint32_t spotLightCount, const OcclusionCull *cullInput) {
   if (!state || imageIndex >= RI_MAX_SWAPCHAIN_IMAGES ||
       state->renderTarget[imageIndex].isEmpty() ||
-      state->renderTargetView[imageIndex].isEmpty() ||
+      state->renderTargetAttachmentView[imageIndex].isEmpty() ||
       state->depthTextures[imageIndex].isEmpty() ||
       state->depthView[imageIndex].isEmpty() ||
       state->depthSampleView[imageIndex].isEmpty() ||
@@ -192,7 +194,8 @@ bool cStandardTranslucentPass::Draw(
     return false;
   Targets targets;
   targets.color = state->renderTarget[imageIndex].Get();
-  targets.colorAttachmentView = state->renderTargetView[imageIndex].Get();
+  targets.colorAttachmentView =
+      state->renderTargetAttachmentView[imageIndex].Get();
   targets.depth = state->depthTextures[imageIndex].Get();
   targets.depthAttachmentView = state->depthView[imageIndex].Get();
   targets.depthSampleView = state->depthSampleView[imageIndex].Get();
@@ -278,8 +281,7 @@ bool cStandardTranslucentPass::Draw(
   for (iRenderable *object : meshes) {
     auto *vb = static_cast<cVertexBuffer *>(object->GetVertexBuffer());
     if (vb)
-      vb->SubmitToGPU(&mpGraphics->blasSubmit.cmds[0], &mpGraphics->device,
-                      frame);
+      vb->SubmitToGPU(&mpGraphics->device);
   }
 
   struct DrawItem {
@@ -464,10 +466,17 @@ bool cStandardTranslucentPass::Draw(
       "sceneColorInput",
       RIDescriptor::sampledImage(&mpGraphics->device, copyView,
                                  RI_RESOURCE_STATE_SHADER_RESOURCE));
+  // The descriptor must declare the state the barrier below actually
+  // establishes (DEPTH_READ | SHADER_RESOURCE). DEPTH_READ alone still selects
+  // DEPTH_READ_ONLY_OPTIMAL on Vulkan, but on D3D12 a resource is only
+  // samplable with the shader-resource bit, so the bare state makes
+  // bindDescriptors reject this binding and skip the whole set.
   RIProgram::DescriptorBinding sceneDepthBinding(
       "sceneDepthInput",
-      RIDescriptor::sampledImage(&mpGraphics->device, targets.depthSampleView,
-                                 RI_RESOURCE_STATE_DEPTH_READ));
+      RIDescriptor::sampledImage(
+          &mpGraphics->device, targets.depthSampleView,
+          static_cast<RIResourceState_e>(RI_RESOURCE_STATE_DEPTH_READ |
+                                         RI_RESOURCE_STATE_SHADER_RESOURCE)));
   std::vector<RIProgram::DescriptorBinding> bindings;
   bindings.reserve(11);
   bindings.push_back(*frameBinding);
@@ -616,14 +625,14 @@ bool cStandardTranslucentPass::Draw(
     auto drawWith = [&](eMaterialBlendMode blendMode, bool reflectionOnly) {
       // Refractive surfaces blend in the shader against the scene copy, as
       // the legacy renderer's eMaterialBlendMode_None refraction draw did.
-      TranslucentMeshPipelineDesc pipeline(
-          cGraphics::PogoColorFormat, cGraphics::DepthFormat,
-          refractive && !reflectionOnly
-              ? TranslucentMeshPipelineDesc::BLEND_REPLACE
-              : remapBlend(blendMode),
-          vertexMask, material->GetDepthTest());
-      m_program->bindPipeline(&mpGraphics->device, cmd, pipeline.hash,
-                              "Standard.translucent", &pipeline.createInfo);
+      m_program->bindPipeline(
+          &mpGraphics->device, cmd, HASH_INITIAL_VALUE, "Standard.translucent",
+          MakeTranslucentMeshPipelineDesc(
+              cGraphics::PogoColorFormat, cGraphics::DepthFormat,
+              refractive && !reflectionOnly
+                  ? TranslucentMeshPipelineDesc::BLEND_REPLACE
+                  : remapBlend(blendMode),
+              vertexMask, material->GetDepthTest()));
       Push push{static_cast<uint32_t>(remapBlend(blendMode)),
                 1.0f,
                 refractive ? 1u : 0u,

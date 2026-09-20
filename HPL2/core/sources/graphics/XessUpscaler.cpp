@@ -12,8 +12,8 @@
 #include <limits>
 
 #if defined(HPL2_XESS_AVAILABLE) && HPL2_XESS_AVAILABLE
-#include "graphics/RIDevice.h"
 #include "graphics/RICommand.h"
+#include "graphics/RIDevice.h"
 #include "graphics/RIVK.h"
 #include "graphics/XessVulkanSupport.h"
 #endif
@@ -58,8 +58,7 @@ static bool MapQuality(TemporalUpscalerQuality quality,
 }
 
 static void LogXessFailure(const char *operation, xess_result_t result) {
-  Log("XeSS: %s failed with result %d\n", operation,
-      static_cast<int>(result));
+  Log("XeSS: %s failed with result %d\n", operation, static_cast<int>(result));
 }
 
 static bool Is2DBinding(const TemporalUpscalerTextureBinding &binding) {
@@ -71,8 +70,7 @@ static bool Is2DBinding(const TemporalUpscalerTextureBinding &binding) {
 
 static bool FillImageViewInfo(const TemporalUpscalerTextureBinding &binding,
                               VkImageAspectFlags aspect,
-                              xess_vk_image_view_info *info,
-                              const char *name) {
+                              xess_vk_image_view_info *info, const char *name) {
   if (!info || !Is2DBinding(binding) || binding.texture->isEmpty() ||
       binding.view->isEmpty() || binding.texture->vk.image == VK_NULL_HANDLE ||
       binding.view->vk.image == VK_NULL_HANDLE) {
@@ -102,11 +100,12 @@ static bool FillImageViewInfo(const TemporalUpscalerTextureBinding &binding,
   return true;
 }
 
-static void AppendTextureBarrier(
-    std::array<RITextureBarrier, 5> *barriers, uint32_t *count,
-    const TemporalUpscalerTextureBinding &binding, uint32_t before,
-    uint32_t after, uint32_t beforeStages, uint32_t afterStages,
-    RIBarrierAspect_e aspect) {
+static void AppendTextureBarrier(std::array<RITextureBarrier, 5> *barriers,
+                                 uint32_t *count,
+                                 const TemporalUpscalerTextureBinding &binding,
+                                 uint32_t before, uint32_t after,
+                                 uint32_t beforeStages, uint32_t afterStages,
+                                 RIBarrierAspect_e aspect) {
   if (!barriers || !count)
     return;
 
@@ -183,9 +182,9 @@ TemporalUpscalerExtent cXessUpscaler::GetRecommendedRenderExtent(
     return output;
   }
 
-  const xess_result_t result = getOptimal(
-      m_context, &outputResolution, mappedQuality, &optimal, &minimum,
-      &maximum);
+  const xess_result_t result =
+      getOptimal(m_context, &outputResolution, mappedQuality, &optimal,
+                 &minimum, &maximum);
   if (result != XESS_RESULT_SUCCESS || optimal.x == 0 || optimal.y == 0) {
     LogXessFailure("xessGetOptimalInputResolution", result);
     return output;
@@ -198,8 +197,9 @@ TemporalUpscalerExtent cXessUpscaler::GetRecommendedRenderExtent(
 #endif
 }
 
-uint32_t cXessUpscaler::GetJitterPhaseCount(
-    TemporalUpscalerExtent render, TemporalUpscalerExtent output) const {
+uint32_t
+cXessUpscaler::GetJitterPhaseCount(TemporalUpscalerExtent render,
+                                   TemporalUpscalerExtent output) const {
   if (!IsNonZeroExtent(render) || !IsNonZeroExtent(output))
     return 8;
 
@@ -207,8 +207,8 @@ uint32_t cXessUpscaler::GetJitterPhaseCount(
   // upscale factor.  Use the width ratio as the guide does; the optimal input
   // and output extents preserve aspect ratio.  The minimum keeps native and
   // downscaled configurations on the ordinary eight-phase sequence.
-  const double upscale = static_cast<double>(output.width) /
-                         static_cast<double>(render.width);
+  const double upscale =
+      static_cast<double>(output.width) / static_cast<double>(render.width);
   const double requested = std::ceil(8.0 * upscale * upscale);
   if (requested <= 8.0)
     return 8;
@@ -243,8 +243,7 @@ bool cXessUpscaler::PrepareContext(const TemporalUpscalerSettings &settings,
     return false;
   }
 
-  if (m_contextInitialized &&
-      SameExtent(m_preparedRender, render) &&
+  if (m_contextInitialized && SameExtent(m_preparedRender, render) &&
       SameExtent(m_preparedOutput, output) &&
       m_preparedQuality == settings.quality) {
     return true;
@@ -283,9 +282,10 @@ bool cXessUpscaler::PrepareContext(const TemporalUpscalerSettings &settings,
 #endif
 }
 
-TemporalUpscalerOutput cXessUpscaler::RecordResolve(
-    TemporalUpscalerExtent render, TemporalUpscalerExtent output,
-    const TemporalUpscalerFrameInput &input) {
+TemporalUpscalerOutput
+cXessUpscaler::RecordResolve(TemporalUpscalerExtent render,
+                             TemporalUpscalerExtent output,
+                             const TemporalUpscalerFrameInput &input) {
   TemporalUpscalerOutput failure = {};
 
 #if defined(HPL2_XESS_AVAILABLE) && HPL2_XESS_AVAILABLE
@@ -323,7 +323,8 @@ TemporalUpscalerOutput cXessUpscaler::RecordResolve(
   if (input.responsiveMaskUnjittered.IsValid() &&
       (!SameExtent(input.responsiveMaskUnjittered.extent, render) ||
        !Is2DBinding(input.responsiveMaskUnjittered)))
-    return fail("responsive mask is not a one-mip, one-layer render-sized view");
+    return fail(
+        "responsive mask is not a one-mip, one-layer render-sized view");
   if (input.jitterPixels[0] < -0.5f || input.jitterPixels[0] > 0.5f ||
       input.jitterPixels[1] < -0.5f || input.jitterPixels[1] > 0.5f)
     return fail("jitter is outside the contract's [-0.5, 0.5] range");
@@ -337,12 +338,11 @@ TemporalUpscalerOutput cXessUpscaler::RecordResolve(
   if (useResponsiveMask != m_responsiveMaskEnabled) {
     if (m_hasExecuted)
       return fail("responsive-mask availability changed after XeSS executed");
-    const uint32_t responsiveMaskFlag = static_cast<uint32_t>(
-        XESS_INIT_FLAG_RESPONSIVE_PIXEL_MASK);
-    const uint32_t flags =
-        useResponsiveMask
-            ? (m_initFlags | responsiveMaskFlag)
-            : (m_initFlags & ~responsiveMaskFlag);
+    const uint32_t responsiveMaskFlag =
+        static_cast<uint32_t>(XESS_INIT_FLAG_RESPONSIVE_PIXEL_MASK);
+    const uint32_t flags = useResponsiveMask
+                               ? (m_initFlags | responsiveMaskFlag)
+                               : (m_initFlags & ~responsiveMaskFlag);
     if (!InitializeContext(m_preparedRender, m_preparedOutput,
                            m_preparedQuality, flags)) {
       RetireContext();
@@ -361,16 +361,15 @@ TemporalUpscalerOutput cXessUpscaler::RecordResolve(
                          &execute.outputTexture, "output"))
     return failure;
   if (useResponsiveMask &&
-      !FillImageViewInfo(input.responsiveMaskUnjittered,
-                         VK_IMAGE_ASPECT_COLOR_BIT,
-                         &execute.responsivePixelMaskTexture, "responsive mask"))
+      !FillImageViewInfo(
+          input.responsiveMaskUnjittered, VK_IMAGE_ASPECT_COLOR_BIT,
+          &execute.responsivePixelMaskTexture, "responsive mask"))
     return failure;
 
   execute.jitterOffsetX = -input.jitterPixels[0];
   execute.jitterOffsetY = -input.jitterPixels[1];
-  execute.exposureScale = input.preExposure > 0.0f
-                              ? 1.0f / input.preExposure
-                              : 1.0f;
+  execute.exposureScale =
+      input.preExposure > 0.0f ? 1.0f / input.preExposure : 1.0f;
   execute.resetHistory = input.resetHistory ? 1u : 0u;
   execute.inputWidth = render.width;
   execute.inputHeight = render.height;
@@ -378,12 +377,13 @@ TemporalUpscalerOutput cXessUpscaler::RecordResolve(
   std::array<RITextureBarrier, 5> beginBarriers = {};
   uint32_t beginCount = 0;
   AppendTextureBarrier(&beginBarriers, &beginCount, input.color,
-                       input.color.entryState, RI_RESOURCE_STATE_SHADER_RESOURCE,
-                       RI_STAGE_NONE, RI_STAGE_COMPUTE,
-                       RI_BARRIER_ASPECT_COLOR);
+                       input.color.entryState,
+                       RI_RESOURCE_STATE_SHADER_RESOURCE, RI_STAGE_NONE,
+                       RI_STAGE_COMPUTE, RI_BARRIER_ASPECT_COLOR);
   AppendTextureBarrier(&beginBarriers, &beginCount, input.depth,
-                       input.depth.entryState, RI_RESOURCE_STATE_SHADER_RESOURCE,
-                       RI_STAGE_NONE, RI_STAGE_COMPUTE, RI_BARRIER_ASPECT_DEPTH);
+                       input.depth.entryState,
+                       RI_RESOURCE_STATE_SHADER_RESOURCE, RI_STAGE_NONE,
+                       RI_STAGE_COMPUTE, RI_BARRIER_ASPECT_DEPTH);
   AppendTextureBarrier(&beginBarriers, &beginCount, input.motionVectors,
                        input.motionVectors.entryState,
                        RI_RESOURCE_STATE_SHADER_RESOURCE, RI_STAGE_NONE,
@@ -406,8 +406,8 @@ TemporalUpscalerOutput cXessUpscaler::RecordResolve(
     uint32_t endCount = 0;
     AppendTextureBarrier(&endBarriers, &endCount, input.color,
                          RI_RESOURCE_STATE_SHADER_RESOURCE,
-                         input.color.exitState, RI_STAGE_COMPUTE,
-                         RI_STAGE_NONE, RI_BARRIER_ASPECT_COLOR);
+                         input.color.exitState, RI_STAGE_COMPUTE, RI_STAGE_NONE,
+                         RI_BARRIER_ASPECT_COLOR);
     AppendTextureBarrier(&endBarriers, &endCount, input.depth,
                          RI_RESOURCE_STATE_SHADER_RESOURCE,
                          input.depth.exitState, RI_STAGE_COMPUTE, RI_STAGE_NONE,
@@ -417,12 +417,11 @@ TemporalUpscalerOutput cXessUpscaler::RecordResolve(
                          input.motionVectors.exitState, RI_STAGE_COMPUTE,
                          RI_STAGE_NONE, RI_BARRIER_ASPECT_COLOR);
     if (useResponsiveMask)
-      AppendTextureBarrier(&endBarriers, &endCount,
-                           input.responsiveMaskUnjittered,
-                           RI_RESOURCE_STATE_SHADER_RESOURCE,
-                           input.responsiveMaskUnjittered.exitState,
-                           RI_STAGE_COMPUTE, RI_STAGE_NONE,
-                           RI_BARRIER_ASPECT_COLOR);
+      AppendTextureBarrier(
+          &endBarriers, &endCount, input.responsiveMaskUnjittered,
+          RI_RESOURCE_STATE_SHADER_RESOURCE,
+          input.responsiveMaskUnjittered.exitState, RI_STAGE_COMPUTE,
+          RI_STAGE_NONE, RI_BARRIER_ASPECT_COLOR);
     // xessVKExecute leaves its output in GENERAL.  The declared exit state is
     // the presentation contract, so publish that state before returning.
     AppendTextureBarrier(&endBarriers, &endCount, input.output,
@@ -456,6 +455,7 @@ TemporalUpscalerOutput cXessUpscaler::RecordResolve(
   success.success = true;
   success.result = input.output;
   success.resultState = input.output.exitState;
+  success.resultStage = input.output.exitStage;
   return success;
 #else
   (void)render;
@@ -509,9 +509,9 @@ bool cXessUpscaler::EnsureContextForQuery() const {
 }
 
 bool cXessUpscaler::InitializeContext(TemporalUpscalerExtent render,
-                                       TemporalUpscalerExtent output,
-                                       TemporalUpscalerQuality quality,
-                                       uint32_t initFlags) {
+                                      TemporalUpscalerExtent output,
+                                      TemporalUpscalerQuality quality,
+                                      uint32_t initFlags) {
   if (!m_context || !IsNonZeroExtent(render) || !IsNonZeroExtent(output)) {
     Log("XeSS: xessVKInit failed: context or output extent is invalid\n");
     return false;
@@ -546,9 +546,9 @@ bool cXessUpscaler::InitializeContext(TemporalUpscalerExtent render,
   // from current back to previous, so negate and scale once per context
   // initialization/extent change. Jitter remains an independent execution
   // parameter and does not affect this conversion.
-  const xess_result_t velocityResult = setVelocityScale(
-      m_context, -static_cast<float>(render.width),
-      -static_cast<float>(render.height));
+  const xess_result_t velocityResult =
+      setVelocityScale(m_context, -static_cast<float>(render.width),
+                       -static_cast<float>(render.height));
   if (velocityResult != XESS_RESULT_SUCCESS) {
     LogXessFailure("xessSetVelocityScale", velocityResult);
     return false;
@@ -585,8 +585,8 @@ void cXessUpscaler::RetireContext() {
   // The loader is a process-lifetime singleton. Capturing the typed function
   // pointer keeps this retirement independent of the adapter object while the
   // context remains parked behind the graphics timeline.
-  graphics->graphicsDefer.push(std::function<void()>(
-      [context, destroyContext]() {
+  graphics->graphicsDefer.push(
+      std::function<void()>([context, destroyContext]() {
         const xess_result_t result = destroyContext(context);
         if (result != XESS_RESULT_SUCCESS)
           LogXessFailure("xessDestroyContext", result);

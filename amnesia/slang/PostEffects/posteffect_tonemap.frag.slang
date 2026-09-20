@@ -78,7 +78,7 @@ struct ToneMapPC
 };
 
 [vk::push_constant]
-ToneMapPC pc;
+ToneMapPC gPushConstants;
 
 // Highlight shoulder knee. Below it the encode is bit-exact, so the particle
 // path's sRGBToLinear/linearToSRGB round trip stays an identity for the faint
@@ -101,22 +101,22 @@ float3 softShoulder(float3 x)
 
 struct PSIn
 {
-    [vk::location(0)] float2 v_uv;
+    [vk::location(0)] float2 v_uv : TEXCOORD0;
 };
 
 [shader("fragment")]
 float4 psMain(PSIn pin) : SV_Target
 {
-    float3 hdr = sourceInput.Sample(inputSampler, pin.v_uv).rgb * pc.exposure;
+    float3 hdr = sourceInput.Sample(inputSampler, pin.v_uv).rgb * gPushConstants.exposure;
     // Display-encoded sRGB. With the shoulder it rolls off into [0,1]; without
     // it (Standard) values clip at display white exactly like the base game,
     // so authored display terms below 1 come back bit-exact. The saturate keeps
     // the output bounded for the display-space effects that follow.
     float3 display = max(linearToSRGB(hdr), 0.0f);
-    if (pc.shoulder != 0.0f)
+    if (gPushConstants.shoulder != 0.0f)
         display = softShoulder(display);
     display = saturate(display);
     // User gamma adjust (final): gamma 1.0 = identity, <1 darker / >1 brighter.
-    display = pow(display, (1.0f / max(pc.gamma, 1e-4f)).xxx);
+    display = pow(display, (1.0f / max(gPushConstants.gamma, 1e-4f)).xxx);
     return float4(display, 1.0f);
 }

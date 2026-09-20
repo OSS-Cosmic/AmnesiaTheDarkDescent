@@ -18,7 +18,7 @@ Texture2D<float4> blurInput;
 
 struct PSIn
 {
-    [vk::location(0)] float2 v_uv;
+    [vk::location(0)] float2 v_uv : TEXCOORD0;
 };
 
 [shader("fragment")]

@@ -1,6 +1,9 @@
 #ifndef RI_VK_H
 #define RI_VK_H
 
+// Vulkan translation helpers: the ri_vk_RI*ToVK / RI_VK_* inline mappings from
+// RI vocabulary onto Vulkan enums. RID3D12.h holds the symmetric D3D12 set.
+
 #include "RITypes.h"
 #include "RIFormat.h"
 #include "graphics/GraphicsTypes.h"
@@ -8,7 +11,6 @@
 #include <vulkan/vulkan_core.h>
 
 #if DEVICE_IMPL_VULKAN
-// VkResult RI_VK_InitImageView( struct RIDevice *dev, VkImageViewCreateInfo *info, struct RIDescriptor *desc, VkDescriptorType type );
 #define RI_VK_DESCRIPTOR_IS_IMAGE( desc ) ( (desc).type == RI_DESCRIPTOR_TYPE_SAMPLER || (desc).type == RI_DESCRIPTOR_TYPE_STORAGE_IMAGE || (desc).type == RI_DESCRIPTOR_TYPE_SAMPLED_IMAGE )
 
 namespace hpl {
@@ -184,13 +186,13 @@ static inline VkImageUsageFlags ri_vk_RITextureUsageToVK(uint32_t usage) {
   return out;
 }
 
-static inline VkRect2D RIToVKRect2D(struct RIRect* in) {
-	VkRect2D out;
-	out.extent.width = static_cast<uint32_t>(in->width);
-	out.extent.height = static_cast<uint32_t>(in->height);
-	out.offset.x = static_cast<int32_t>(in->x);
-	out.offset.y = static_cast<int32_t>(in->y);
-	return out;
+static inline VkRect2D RIToVKRect2D(const struct RIRect *in) {
+  VkRect2D out = {};
+  out.extent.width = in->width;
+  out.extent.height = in->height;
+  out.offset.x = in->x;
+  out.offset.y = in->y;
+  return out;
 }
 
 static inline VkRect2D RIViewportToRect2D( struct RIViewport *in )
@@ -200,23 +202,6 @@ static inline VkRect2D RIViewportToRect2D( struct RIViewport *in )
 	out.extent.height = static_cast<uint32_t>(in->height);
 	out.offset.x = static_cast<int32_t>(in->x);
 	out.offset.y = static_cast<int32_t>(in->y);
-	return out;
-}
-
-static inline VkViewport RIToVKViewport(struct RIViewport* in) {
-	VkViewport out;
-	out.x = in->x;
-	out.y = in->y;
-	out.width = in->width;
-	out.height = in->height;
-	out.minDepth = in->depthMin;
-	out.maxDepth = in->depthMax;
-
-	// Origin top-left requires flipping
-	if( !in->originBottomLeft ) {
-		out.y += in->height;
-		out.height = -in->height;
-	}
 	return out;
 }
 
@@ -268,8 +253,8 @@ static inline VkCullModeFlagBits ri_vk_RICullModeToVK( enum RICullMode_e mask )
 	return (VkCullModeFlagBits)flags;
 }
 
-static inline VkBlendFactor ri_vk_RIColorWriteMaskToVK(enum RIColorWriteMask_e mask) {
-	uint32_t ret = 0;
+static inline VkColorComponentFlags ri_vk_RIColorWriteMaskToVK(enum RIColorWriteMask_e mask) {
+	VkColorComponentFlags ret = 0;
 	if (mask & RI_COLOR_WRITE_R) {
 		ret |= VK_COLOR_COMPONENT_R_BIT;
 	}
@@ -282,7 +267,7 @@ static inline VkBlendFactor ri_vk_RIColorWriteMaskToVK(enum RIColorWriteMask_e m
 	if (mask & RI_COLOR_WRITE_A) {
 		ret |= VK_COLOR_COMPONENT_A_BIT;
 	}
-	return (VkBlendFactor)ret;
+	return ret;
 }
 
 static inline VkPrimitiveTopology ri_vk_RITopologyToVK(enum RITopology_e topology) {
@@ -355,6 +340,99 @@ static inline VkBlendFactor ri_vk_RIBlendFactorToVK(enum RIBlendFactor_e factor)
 			return VK_BLEND_FACTOR_ONE_MINUS_SRC1_ALPHA;
 	}
 	return VK_BLEND_FACTOR_ZERO;
+}
+
+static inline VkBlendOp ri_vk_RIBlendOpToVK(enum RIBlendOp_e op) {
+	switch (op) {
+		case RI_BLEND_OP_ADD:
+			return VK_BLEND_OP_ADD;
+		case RI_BLEND_OP_SUBTRACT:
+			return VK_BLEND_OP_SUBTRACT;
+		case RI_BLEND_OP_REVERSE_SUBTRACT:
+			return VK_BLEND_OP_REVERSE_SUBTRACT;
+		case RI_BLEND_OP_MIN:
+			return VK_BLEND_OP_MIN;
+		case RI_BLEND_OP_MAX:
+			return VK_BLEND_OP_MAX;
+	}
+	assert(false);
+	return VK_BLEND_OP_ADD;
+}
+
+static inline VkStencilOp ri_vk_RIStencilOpToVK(enum RIStencilOp_e op) {
+	switch (op) {
+		case RI_STENCIL_OP_KEEP:
+			return VK_STENCIL_OP_KEEP;
+		case RI_STENCIL_OP_ZERO:
+			return VK_STENCIL_OP_ZERO;
+		case RI_STENCIL_OP_REPLACE:
+			return VK_STENCIL_OP_REPLACE;
+		case RI_STENCIL_OP_INCREMENT_AND_CLAMP:
+			return VK_STENCIL_OP_INCREMENT_AND_CLAMP;
+		case RI_STENCIL_OP_DECREMENT_AND_CLAMP:
+			return VK_STENCIL_OP_DECREMENT_AND_CLAMP;
+		case RI_STENCIL_OP_INVERT:
+			return VK_STENCIL_OP_INVERT;
+		case RI_STENCIL_OP_INCREMENT_AND_WRAP:
+			return VK_STENCIL_OP_INCREMENT_AND_WRAP;
+		case RI_STENCIL_OP_DECREMENT_AND_WRAP:
+			return VK_STENCIL_OP_DECREMENT_AND_WRAP;
+	}
+	assert(false);
+	return VK_STENCIL_OP_KEEP;
+}
+
+static inline VkPolygonMode ri_vk_RIPolygonModeToVK(enum RIPolygonMode_e mode) {
+	switch (mode) {
+		case RI_POLYGON_MODE_FILL:
+			return VK_POLYGON_MODE_FILL;
+		case RI_POLYGON_MODE_LINE:
+			return VK_POLYGON_MODE_LINE;
+	}
+	assert(false);
+	return VK_POLYGON_MODE_FILL;
+}
+
+static inline VkFrontFace ri_vk_RIFrontFaceToVK(enum RIFrontFace_e face) {
+	switch (face) {
+		case RI_FRONT_FACE_COUNTER_CLOCKWISE:
+			return VK_FRONT_FACE_COUNTER_CLOCKWISE;
+		case RI_FRONT_FACE_CLOCKWISE:
+			return VK_FRONT_FACE_CLOCKWISE;
+	}
+	assert(false);
+	return VK_FRONT_FACE_CLOCKWISE;
+}
+
+static inline VkVertexInputRate ri_vk_RIVertexInputRateToVK(enum RIVertexInputRate_e rate) {
+	switch (rate) {
+		case RI_VERTEX_INPUT_RATE_VERTEX:
+			return VK_VERTEX_INPUT_RATE_VERTEX;
+		case RI_VERTEX_INPUT_RATE_INSTANCE:
+			return VK_VERTEX_INPUT_RATE_INSTANCE;
+	}
+	assert(false);
+	return VK_VERTEX_INPUT_RATE_VERTEX;
+}
+
+// RISampleCount_e / RIGraphicsPipelineDesc::sampleCount -> VkSampleCountFlagBits.
+// 0 and 1 both mean "no MSAA", matching the RITextureDesc convention.
+static inline VkSampleCountFlagBits ri_vk_RISampleCountToVK(uint32_t sampleCount) {
+	switch (sampleCount) {
+		case 0:
+		case 1:
+			return VK_SAMPLE_COUNT_1_BIT;
+		case 2:
+			return VK_SAMPLE_COUNT_2_BIT;
+		case 4:
+			return VK_SAMPLE_COUNT_4_BIT;
+		case 8:
+			return VK_SAMPLE_COUNT_8_BIT;
+		case 16:
+			return VK_SAMPLE_COUNT_16_BIT;
+	}
+	assert(false);
+	return VK_SAMPLE_COUNT_1_BIT;
 }
 
 static inline VkImageType ri_vk_RITextureTypeToVKImageType( enum RITextureType_e e )

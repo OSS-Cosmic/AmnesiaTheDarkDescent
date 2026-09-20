@@ -20,21 +20,19 @@
 // (manifests as billboards anchored to the camera instead of the world).
 
 import bindless;
+import GeometryStream;
 import SceneTypes;
 import PerFrame.resource;
 
-// BDA accesses use direct primitive pointer casts (`float4*`, `float3*`,
-// `uint*`). The wrapper-struct-with-runtime-array pattern collapses to
-// `Ptr<PhysicalStorageBuffer, uint>` in slangc 2026+, which silently
-// returns zero. Primitive pointer types translate correctly. Same convention
-// as `BindlessTriangle.slang`.
+// BDA accesses go through the shared GeometryStream helpers, which preserve
+// the target-specific address ABI while keeping these loads byte-offset based.
 
 struct ParticleVSOut
 {
-    float3 viewPos                 : VIEWPOS;   // view-space position (for fog + lightLevelAt posW)
-    float2 uv                      : TEXCRD;
-    float4 color                   : COLOR;
-    nointerpolation uint objectId  : OBJECTID;
+    [vk::location(0)] float3 viewPos                 : TEXCOORD0;   // view-space position (for fog + lightLevelAt posW)
+    [vk::location(1)] float2 uv                      : TEXCOORD1;
+    [vk::location(2)] float4 color                   : TEXCOORD2;
+    [vk::location(3)] nointerpolation uint objectId  : TEXCOORD3;
     float4 posH                    : SV_POSITION;
 };
 
@@ -47,7 +45,8 @@ ParticleVSOut vsMain(uint vertexId : SV_VertexID,
     // BaseInstance from Vulkan's InstanceIndex to give DX semantics.
     // Bindless slot id arrives via firstInstance — reconstruct
     // gl_InstanceIndex by summing. Same fix as VBufferRaster.3d.slang.
-    uint instanceId = drawInst + baseInst;
+    uint instanceId = drawInst;
+    instanceId += baseInst;
 
     // Stream BDAs now live in the per-object UniformObject (folded in from the
     // former gOpaque*Handles buffers — for particles these point at the
@@ -59,17 +58,17 @@ ParticleVSOut vsMain(uint vertexId : SV_VertexID,
     uint64_t colAddr   = obj.colorHandle;
 
     uint idx = (indexAddr != 0ull)
-        ? ((uint*)indexAddr)[vertexId]
+        ? geometryLoad(indexAddr, vertexId * 4u)
         : vertexId;
 
     float3 a_position = (posAddr != 0ull)
-        ? ((float4*)posAddr)[idx].xyz
+        ? asfloat(geometryLoad4(posAddr, idx * 16u)).xyz
         : float3(0.0f);
     float2 a_texcoord = (uv0Addr != 0ull)
-        ? ((float3*)uv0Addr)[idx].xy
+        ? asfloat(geometryLoad3(uv0Addr, idx * 12u)).xy
         : float2(0.0f);
     float4 a_color = (colAddr != 0ull)
-        ? ((float4*)colAddr)[idx]
+        ? asfloat(geometryLoad4(colAddr, idx * 16u))
         : float4(1.0f);
 
     float4x4 modelView    = mul(gPerFrame.viewMat, obj.modelMat);

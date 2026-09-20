@@ -83,6 +83,8 @@ struct TemporalPresentationResult {
   bool colorProduced = false;
   TemporalUpscalerTextureBinding color = {};
   RIResourceState_e colorState = RI_RESOURCE_STATE_UNDEFINED;
+  uint32_t colorEntryStage = RI_STAGE_NONE;
+  uint32_t colorExitStage = RI_STAGE_NONE;
   bool colorIsSpatialFallback = false;
 
   // Exactly one depth route is selected: either this frame produced the

@@ -931,6 +931,7 @@ bool cLuxBase::InitMainConfig()
 	msDefaultProfileName = mpMainConfig->GetStringW("Main","DefaultProfileName",_W(""));
 
 	mbShowPreMenu = mpMainConfig->GetBool("Main", "ShowPreMenu", true);
+	if(std::getenv("HPL_DIAGNOSTIC_SKIP_PREMENU")) mbShowPreMenu = false;
 	mbShowMenu = mpMainConfig->GetBool("Main", "ShowMenu",true);
 
 	SetUpdateLogActive(mpMainConfig->GetBool("Main","UpdateLogActive", true));
@@ -1155,6 +1156,7 @@ bool cLuxBase::InitEngine()
 
 	mpEngine->SetLimitFPS(mpMainConfig->GetBool("Engine","LimitFPS", false));
 	mpEngine->SetWaitIfAppOutOfFocus(mpMainConfig->GetBool("Engine","SleepWhenOutOfFocus", true));
+	if(std::getenv("HPL_DIAGNOSTIC_SKIP_PREMENU")) mpEngine->SetWaitIfAppOutOfFocus(false);
 
 	cMaterialManager* pMatMgr = mpEngine->GetResources()->GetMaterialManager();
 	pMatMgr->SetTextureSizeDownScaleLevel(mpConfigHandler->mlTextureQuality);

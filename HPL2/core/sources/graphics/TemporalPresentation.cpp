@@ -64,6 +64,8 @@ static void RejectProviderResult(TemporalPresentationResult &result) {
   result.colorProduced = false;
   result.color = {};
   result.colorState = RI_RESOURCE_STATE_UNDEFINED;
+  result.colorEntryStage = RI_STAGE_NONE;
+  result.colorExitStage = RI_STAGE_NONE;
   result.colorIsSpatialFallback = false;
   result.providerFailed = true;
 }
@@ -109,7 +111,7 @@ bool cTemporalPresentation::EnsureResolveDepthProgram() {
   // reflection creates the sampler/texture descriptor set and push-constant
   // layout, while RIProgram owns the backend pipeline layout.
   auto resolveDepthBin =
-      RIProgram::loadShaderStage(mpShaderFiles, "ResolveDepth.3d.spv");
+      RIProgram::loadShaderStage(mpShaderFiles, "ResolveDepth.3d");
   if (resolveDepthBin.empty())
     return false;
 
@@ -133,7 +135,7 @@ bool cTemporalPresentation::EnsureSpatialFallbackProgram() {
     return false;
 
   auto spatialFallbackBin =
-      RIProgram::loadShaderStage(mpShaderFiles, "SpatialFallback.3d.spv");
+      RIProgram::loadShaderStage(mpShaderFiles, "SpatialFallback.3d");
   if (spatialFallbackBin.empty())
     return false;
 
@@ -175,7 +177,7 @@ bool cTemporalPresentation::EnsureDisplayDepth(
 
   for (uint32_t i = 0; i < imageCount; ++i) {
     // The combined D32S8 attachment is retained because outline uses its
-    // stencil aspect and issues a raw stencil barrier against this texture.
+    // stencil aspect; RI transitions depth and stencil independently.
     if (!CreateViewportAttachmentTexture(
             &graphics->device, extent.width, extent.height,
             cGraphics::DepthFormat,
@@ -290,39 +292,21 @@ bool cTemporalPresentation::RecordDepthResolve(
       input.scene.renderDepthTexture, input.scene.renderDepthEntryState,
       RI_RESOURCE_STATE_SHADER_RESOURCE, RI_STAGE_FRAGMENT,
       RI_STAGE_FRAGMENT, RI_BARRIER_ASPECT_DEPTH);
-  // The display attachment has no prior consumer for this frame. RI maps
-  // DEPTH_WRITE to DEPTH_ATTACHMENT_OPTIMAL, so transition only the depth
-  // aspect through RI; the stencil aspect needs its own Vulkan layout because
-  // dynamic rendering binds it as STENCIL_ATTACHMENT_OPTIMAL.
+  // The display attachment has no prior consumer for this frame. Transition
+  // depth and stencil separately because dynamic rendering binds them with
+  // DEPTH_ATTACHMENT_OPTIMAL and STENCIL_ATTACHMENT_OPTIMAL respectively.
   RITextureBarrier displayDepthToAttachment(
       m_displayDepthTextures[imageIndex].Get(), RI_RESOURCE_STATE_UNDEFINED,
       RI_RESOURCE_STATE_DEPTH_WRITE, RI_STAGE_NONE, RI_STAGE_FRAGMENT,
       RI_BARRIER_ASPECT_DEPTH);
-  RITextureBarrier beginBarriers[2] = {renderDepthToSample,
-                                       displayDepthToAttachment};
-  input.cmd->vk_d3d12_textureBarriers<2>(2, beginBarriers);
-
-  VkImageMemoryBarrier2 stencilToAttachment = {
-      VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2};
-  stencilToAttachment.srcStageMask = VK_PIPELINE_STAGE_2_NONE;
-  stencilToAttachment.srcAccessMask = VK_ACCESS_2_NONE;
-  stencilToAttachment.dstStageMask =
-      VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT |
-      VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT;
-  stencilToAttachment.dstAccessMask =
-      VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_READ_BIT |
-      VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
-  stencilToAttachment.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-  stencilToAttachment.newLayout = VK_IMAGE_LAYOUT_STENCIL_ATTACHMENT_OPTIMAL;
-  stencilToAttachment.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-  stencilToAttachment.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-  stencilToAttachment.image = m_displayDepthTextures[imageIndex]->vk.image;
-  stencilToAttachment.subresourceRange = {
-      VK_IMAGE_ASPECT_STENCIL_BIT, 0, 1, 0, 1};
-  VkDependencyInfo stencilDependency = {VK_STRUCTURE_TYPE_DEPENDENCY_INFO};
-  stencilDependency.imageMemoryBarrierCount = 1;
-  stencilDependency.pImageMemoryBarriers = &stencilToAttachment;
-  vkCmdPipelineBarrier2(input.cmd->vk.cmd, &stencilDependency);
+  RITextureBarrier displayStencilToAttachment(
+      m_displayDepthTextures[imageIndex].Get(), RI_RESOURCE_STATE_UNDEFINED,
+      RI_RESOURCE_STATE_DEPTH_WRITE, RI_STAGE_NONE, RI_STAGE_FRAGMENT,
+      RI_BARRIER_ASPECT_STENCIL);
+  RITextureBarrier beginBarriers[3] = {
+      renderDepthToSample, displayDepthToAttachment,
+      displayStencilToAttachment};
+  input.cmd->vk_d3d12_textureBarriers<3>(3, beginBarriers);
 
   RIRenderingAttachment depth = {};
   depth.view = *m_displayDepthViews[imageIndex];
@@ -336,8 +320,8 @@ bool cTemporalPresentation::RecordDepthResolve(
   depth.clearValue.stencil = 0;
 
   RIBeginRenderingDesc begin = {};
-  begin.renderArea.width = static_cast<int16_t>(input.displayExtent.width);
-  begin.renderArea.height = static_cast<int16_t>(input.displayExtent.height);
+  begin.renderArea.width = input.displayExtent.width;
+  begin.renderArea.height = input.displayExtent.height;
   begin.depthStencil = &depth;
   input.cmd->vk_d3d12_beginRendering(&graphics->device, begin);
 
@@ -354,33 +338,31 @@ bool cTemporalPresentation::RecordDepthResolve(
   input.cmd->setViewport(&graphics->device, viewport);
 
   RIRect scissor = {};
-  scissor.width = static_cast<int16_t>(input.displayExtent.width);
-  scissor.height = static_cast<int16_t>(input.displayExtent.height);
+  scissor.width = input.displayExtent.width;
+  scissor.height = input.displayExtent.height;
   input.cmd->setScissor(&graphics->device, scissor);
 
   // Use the shared fullscreen RI pipeline state; this pass has no color target
   // because the fragment shader writes SV_Depth into D32S8.
-  PostEffectPipelineState pipelineState = {};
-  InitPostEffectPipelineState(pipelineState, cGraphics::PogoColorFormat, false);
-  pipelineState.pipelineRendering.colorAttachmentCount = 0;
-  pipelineState.pipelineRendering.pColorAttachmentFormats = nullptr;
-  pipelineState.pipelineRendering.depthAttachmentFormat =
-      RIFormatToVK(cGraphics::DepthFormat);
-  pipelineState.pipelineRendering.stencilAttachmentFormat =
-      RIFormatToVK(cGraphics::DepthFormat);
-  pipelineState.depthStencil.depthTestEnable = VK_TRUE;
-  pipelineState.depthStencil.depthWriteEnable = VK_TRUE;
-  pipelineState.depthStencil.depthCompareOp = VK_COMPARE_OP_ALWAYS;
-  pipelineState.depthStencil.stencilTestEnable = VK_FALSE;
-  pipelineState.depthStencil.minDepthBounds = 0.0f;
-  pipelineState.depthStencil.maxDepthBounds = 1.0f;
-  pipelineState.colorBlend.attachmentCount = 0;
-  pipelineState.colorBlend.pAttachments = nullptr;
+  // Start from the shared fullscreen state and strip the colour half of it:
+  // RI_FORMAT_UNKNOWN keeps the (unused) colour format inert, and colorCount /
+  // blendCount are both zeroed -- the desc asserts they stay equal.
+  RIGraphicsPipelineDesc pipelineDesc =
+      MakePostEffectPipelineDesc(RI_FORMAT_UNKNOWN, false);
+  pipelineDesc.renderTarget.colorCount = 0;
+  pipelineDesc.renderTarget.colorFormats[0] = RI_FORMAT_UNKNOWN;
+  pipelineDesc.blendCount = 0;
+  pipelineDesc.renderTarget.depthFormat = cGraphics::DepthFormat;
+  pipelineDesc.renderTarget.stencilFormat = cGraphics::DepthFormat;
+  pipelineDesc.depthStencil.depthTest = true;
+  pipelineDesc.depthStencil.depthWrite = true;
+  pipelineDesc.depthStencil.depthCompare = RI_COMPARE_ALWAYS;
+  // stencilTest stays false (the RI default), as it was explicitly in the
+  // Vulkan create-info this replaced.
   const hash_t pipelineHash =
       hash_u32(hash_u32(HASH_INITIAL_VALUE, cGraphics::DepthFormat), 0u);
   mpResolveDepth->bindPipeline(&graphics->device, input.cmd, pipelineHash,
-                               "Temporal.ResolveDepth.3d",
-                               &pipelineState.createInfo);
+                               "Temporal.ResolveDepth.3d", pipelineDesc);
 
   RIProgram::DescriptorBinding bindings[2] = {};
   bindings[0].handle = DescriptorBindingID::Create("depthSampler");
@@ -439,7 +421,8 @@ bool cTemporalPresentation::RecordSpatialFallback(
   const uint32_t imageIndex = graphics->swapchainIndex;
   RITextureBarrier hdrColorToSample(
       input.scene.hdrColor.texture, input.scene.hdrColor.entryState,
-      RI_RESOURCE_STATE_SHADER_RESOURCE, RI_STAGE_FRAGMENT, RI_STAGE_FRAGMENT,
+      RI_RESOURCE_STATE_SHADER_RESOURCE, input.scene.hdrColor.entryStage,
+      RI_STAGE_FRAGMENT,
       RI_BARRIER_ASPECT_COLOR);
   RITextureBarrier displayColorToAttachment(
       m_displayColorTextures[imageIndex].Get(), RI_RESOURCE_STATE_UNDEFINED,
@@ -455,8 +438,8 @@ bool cTemporalPresentation::RecordSpatialFallback(
   color.storeOp = RI_ATTACHMENT_STORE_OP_STORE;
 
   RIBeginRenderingDesc begin = {};
-  begin.renderArea.width = static_cast<int16_t>(input.displayExtent.width);
-  begin.renderArea.height = static_cast<int16_t>(input.displayExtent.height);
+  begin.renderArea.width = input.displayExtent.width;
+  begin.renderArea.height = input.displayExtent.height;
   begin.colorCount = 1;
   begin.colors = &color;
   input.cmd->vk_d3d12_beginRendering(&graphics->device, begin);
@@ -473,17 +456,16 @@ bool cTemporalPresentation::RecordSpatialFallback(
   input.cmd->setViewport(&graphics->device, viewport);
 
   RIRect scissor = {};
-  scissor.width = static_cast<int16_t>(input.displayExtent.width);
-  scissor.height = static_cast<int16_t>(input.displayExtent.height);
+  scissor.width = input.displayExtent.width;
+  scissor.height = input.displayExtent.height;
   input.cmd->setScissor(&graphics->device, scissor);
 
-  PostEffectPipelineState pipelineState = {};
-  InitPostEffectPipelineState(pipelineState, cGraphics::PogoColorFormat, false);
+  const RIGraphicsPipelineDesc pipelineDesc =
+      MakePostEffectPipelineDesc(cGraphics::PogoColorFormat, false);
   const hash_t pipelineHash =
       hash_u32(HASH_INITIAL_VALUE, cGraphics::PogoColorFormat);
   mpSpatialFallback->bindPipeline(&graphics->device, input.cmd, pipelineHash,
-                                  "Temporal.SpatialFallback.3d",
-                                  &pipelineState.createInfo);
+                                  "Temporal.SpatialFallback.3d", pipelineDesc);
 
   RIProgram::DescriptorBinding bindings[2] = {};
   bindings[0].handle = DescriptorBindingID::Create("colorSampler");
@@ -514,7 +496,8 @@ bool cTemporalPresentation::RecordSpatialFallback(
 
   RITextureBarrier hdrColorBack(
       input.scene.hdrColor.texture, RI_RESOURCE_STATE_SHADER_RESOURCE,
-      input.scene.hdrColor.exitState, RI_STAGE_FRAGMENT, RI_STAGE_FRAGMENT,
+      input.scene.hdrColor.exitState, RI_STAGE_FRAGMENT,
+      input.scene.hdrColor.exitStage,
       RI_BARRIER_ASPECT_COLOR);
   RITextureBarrier displayColorBack(
       m_displayColorTextures[imageIndex].Get(), RI_RESOURCE_STATE_RENDER_TARGET,
@@ -569,7 +552,11 @@ TemporalPresentationResult cTemporalPresentation::Resolve(
       result.color.extent = input.displayExtent;
       result.color.entryState = RI_RESOURCE_STATE_UNDEFINED;
       result.color.exitState = RI_RESOURCE_STATE_SHADER_RESOURCE;
+      result.color.entryStage = RI_STAGE_NONE;
+      result.color.exitStage = RI_STAGE_FRAGMENT;
       result.colorState = RI_RESOURCE_STATE_SHADER_RESOURCE;
+      result.colorEntryStage = RI_STAGE_NONE;
+      result.colorExitStage = RI_STAGE_FRAGMENT;
       result.colorIsSpatialFallback = true;
     } else {
       // In particular, never expose the previous contents of displayColor.
@@ -657,6 +644,8 @@ TemporalPresentationResult cTemporalPresentation::Resolve(
   output.extent = input.displayExtent;
   output.entryState = RI_RESOURCE_STATE_UNDEFINED;
   output.exitState = RI_RESOURCE_STATE_SHADER_RESOURCE;
+  output.entryStage = RI_STAGE_NONE;
+  output.exitStage = RI_STAGE_FRAGMENT;
 
   TemporalUpscalerFrameInput providerInput = {};
   providerInput.color = input.scene.hdrColor;
@@ -716,6 +705,8 @@ TemporalPresentationResult cTemporalPresentation::Resolve(
   result.colorProduced = true;
   result.color = providerOutput.result;
   result.colorState = providerOutput.resultState;
+  result.colorEntryStage = providerOutput.result.entryStage;
+  result.colorExitStage = providerOutput.resultStage;
   result.colorIsSpatialFallback = false;
   m_providerFailureReported = false;
   return result;

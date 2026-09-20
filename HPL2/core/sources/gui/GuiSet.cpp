@@ -623,11 +623,11 @@ namespace hpl {
 	  	clipRemap.a23 = 0.5f;
 	  	projectionMtx = clipRemap * projectionMtx;
 	  }
-		const VkDeviceSize vkOffset = vtxReq.elementOffset * vtxReq.elementStride; 
-		const VkDeviceSize idxOffset = idxReq.elementOffset * idxReq.elementStride;
+		const RIDeviceSize vertexBaseOffset = vtxReq.elementOffset * vtxReq.elementStride;
+		const RIDeviceSize indexBaseOffset = idxReq.elementOffset * idxReq.elementStride;
 
-  	void *vboMemory = ( (uint8_t *)mpGraphics->guiVertexBuffer->mappedAddress ) + vkOffset;
-  	void *eleMemory = ( (uint8_t *)mpGraphics->guiIndexBuffer->mappedAddress) + idxOffset ;
+		void *vboMemory = ( (uint8_t *)mpGraphics->guiVertexBuffer->mappedAddress ) + vertexBaseOffset;
+		void *eleMemory = ( (uint8_t *)mpGraphics->guiIndexBuffer->mappedAddress) + indexBaseOffset ;
 
     auto it = m_setRenderObjects.begin();
 
@@ -640,14 +640,18 @@ namespace hpl {
 		Image* pTexture = pGfx->mvTextures[0];
 		cGuiClipRegion *pClipRegion = it->mpClipRegion;
 
-		VkViewport viewports[] = {
-			{0,(float)mpGraphics->swapchain->height, (float)mpGraphics->swapchain->width, -(float)mpGraphics->swapchain->height, 0.0f, 1.0f}
-		};
-		VkRect2D scissors[] = {
-			{ {0, 0}, {mpGraphics->swapchain->width, mpGraphics->swapchain->height} }
-		};
-		vkCmdSetViewport(mpGraphics->primary.cmds[0].vk.cmd, 0, ARRAY_COUNT(viewports), viewports);
-		vkCmdSetScissor( mpGraphics->primary.cmds[0].vk.cmd, 0, ARRAY_COUNT(scissors), scissors );
+		RIViewport viewport = {};
+		viewport.x = 0.0f;
+		viewport.y = (float)mpGraphics->swapchain->height;
+		viewport.width = (float)mpGraphics->swapchain->width;
+		viewport.height = -(float)mpGraphics->swapchain->height;
+		viewport.depthMin = 0.0f;
+		viewport.depthMax = 1.0f;
+		RIRect scissor = {};
+		scissor.width = mpGraphics->swapchain->width;
+		scissor.height = mpGraphics->swapchain->height;
+		mpGraphics->primary.cmds[0].setViewport(&mpGraphics->device, viewport);
+		mpGraphics->primary.cmds[0].setScissor(&mpGraphics->device, scissor);
 
 		size_t vertexBufferOffset = 0;
 		size_t indexBufferOffset = 0;
@@ -732,169 +736,92 @@ namespace hpl {
 					mpGraphics->swapchain->width,
 					mpGraphics->swapchain->height) != nullptr;
 
-			hash_t hash = hash_u32(HASH_INITIAL_VALUE, materialType);
-			hash = hash_u32(hash, bRenderPassHasDepth ? cGraphics::DepthFormat
-			                                          : RI_FORMAT_UNKNOWN);
-			hash = hash_u32(hash, mpGraphics->swapchain->format);
-			hash = hash_u32(hash, mbIs3D);
-			VkPipelineVertexInputStateCreateInfo vertexInputState = { VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO };
-			VkVertexInputAttributeDescription vertextbindingDesc[] = {
-				{ 0, 0, VK_FORMAT_R32G32B32_SFLOAT, offsetof(PositionTexColor, position) },
-				{ 1, 0, VK_FORMAT_R32G32_SFLOAT, offsetof(PositionTexColor, texCoords) },
-				{ 2, 0, VK_FORMAT_R32G32B32A32_SFLOAT, offsetof(PositionTexColor, color) }
-			};
-			VkVertexInputBindingDescription vertexInputStreamsDesc[] = {
-			 	{ 0, sizeof(PositionTexColor), VK_VERTEX_INPUT_RATE_VERTEX }
-			};
-			vertexInputState.pVertexAttributeDescriptions = vertextbindingDesc;
-			vertexInputState.vertexAttributeDescriptionCount = ARRAY_COUNT(vertextbindingDesc);
-			vertexInputState.pVertexBindingDescriptions = vertexInputStreamsDesc;
-			vertexInputState.vertexBindingDescriptionCount = ARRAY_COUNT(vertexInputStreamsDesc);
+			// Material type, attachment formats, mbIs3D's depth test and the
+			// vertex layout are all hashed structurally out of the desc now, so
+			// the variant hash carries nothing extra.
+			RIGraphicsPipelineDesc pipelineDesc = {};
+			pipelineDesc.vertexInput.attributeCount = 3;
+			pipelineDesc.vertexInput.attributes[0] = { 0, 0, RI_FORMAT_RGB32_SFLOAT, offsetof(PositionTexColor, position) };
+			pipelineDesc.vertexInput.attributes[1] = { 1, 0, RI_FORMAT_RG32_SFLOAT, offsetof(PositionTexColor, texCoords) };
+			pipelineDesc.vertexInput.attributes[2] = { 2, 0, RI_FORMAT_RGBA32_SFLOAT, offsetof(PositionTexColor, color) };
+			pipelineDesc.vertexInput.bindingCount = 1;
+			pipelineDesc.vertexInput.bindings[0] = { 0, (uint32_t)sizeof(PositionTexColor), RI_VERTEX_INPUT_RATE_VERTEX };
 
-			VkPipelineInputAssemblyStateCreateInfo inputAssemblyState = { VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO };
-			inputAssemblyState.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+			pipelineDesc.topology = RI_TOPOLOGY_TRIANGLE_LIST;
 
-			VkPipelineRasterizationStateCreateInfo rasterizationState = { VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO };
-			rasterizationState.polygonMode = VK_POLYGON_MODE_FILL;
-			rasterizationState.cullMode = VK_CULL_MODE_NONE;
-			rasterizationState.depthBiasEnable = VK_FALSE;
-			rasterizationState.lineWidth = 1.0f;
-		
-			VkDynamicState dynamicStates[] = { VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR };
-			VkPipelineDynamicStateCreateInfo dynamicState = { VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO };
-			dynamicState.dynamicStateCount = ARRAY_COUNT(dynamicStates);
-			dynamicState.pDynamicStates = dynamicStates;
+			pipelineDesc.raster.polygonMode = RI_POLYGON_MODE_FILL;
+			pipelineDesc.raster.cullMode = RI_CULL_MODE_NONE;
+			// The Vk create-info never assigned frontFace (zero ==
+			// COUNTER_CLOCKWISE); the RI default is CLOCKWISE, so be explicit.
+			pipelineDesc.raster.frontFace = RI_FRONT_FACE_COUNTER_CLOCKWISE;
+			pipelineDesc.raster.depthBiasEnable = false;
+			pipelineDesc.raster.lineWidth = 1.0f;
 
-			VkPipelineRenderingCreateInfo pipelineRenderingCreateInfo = { VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO };
-			pipelineRenderingCreateInfo.colorAttachmentCount = 1;
 			// Invariant: GUI sets are only ever rendered into the swapchain
 			// (Scene.cpp Render3DGui/RenderScreenGui, LuxHelpFuncs DrawSetToScreen).
-			// Both the pipeline cache hash above and the attachment format here key
-			// on Interface<cGraphics>::Get()->swapchain.format; if you ever render a GUI into a non-swapchain
-			// target, this needs to take the actual attachment's format instead.
-			VkFormat colorFormats[1] = { RIFormatToVK((RI_Format_e)mpGraphics->swapchain->format) };
-			pipelineRenderingCreateInfo.pColorAttachmentFormats = colorFormats;
-			pipelineRenderingCreateInfo.depthAttachmentFormat =
-				bRenderPassHasDepth ? RIFormatToVK( cGraphics::DepthFormat ) : VK_FORMAT_UNDEFINED;
-			pipelineRenderingCreateInfo.stencilAttachmentFormat = VK_FORMAT_UNDEFINED;
+			// The attachment format here keys on Interface<cGraphics>::Get()->swapchain.format;
+			// if you ever render a GUI into a non-swapchain target, this needs to
+			// take the actual attachment's format instead.
+			pipelineDesc.renderTarget.colorCount = 1;
+			pipelineDesc.renderTarget.colorFormats[0] = (RI_Format_e)mpGraphics->swapchain->format;
+			pipelineDesc.renderTarget.depthFormat =
+				bRenderPassHasDepth ? cGraphics::DepthFormat : RI_FORMAT_UNKNOWN;
 
-			VkPipelineViewportStateCreateInfo viewportState = { VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO };
-			viewportState.viewportCount = 1;
-			viewportState.scissorCount = 1;
-
-			VkPipelineMultisampleStateCreateInfo multisampleState = { VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO };
-			multisampleState.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
-		
-			VkPipelineDepthStencilStateCreateInfo depthStencilState = { VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO };
-			depthStencilState.minDepthBounds = 0.0f;
-			depthStencilState.maxDepthBounds = 1.0f;
 			if (mbIs3D && bRenderPassHasDepth) {
-				depthStencilState.depthTestEnable = VK_TRUE;
-				depthStencilState.depthCompareOp = VK_COMPARE_OP_LESS_OR_EQUAL;
+				pipelineDesc.depthStencil.depthTest = true;
+				pipelineDesc.depthStencil.depthCompare = RI_COMPARE_LESS_EQUAL;
 			}
 
-			VkGraphicsPipelineCreateInfo pipelineCreateInfo = { VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO };
-			pipelineCreateInfo.pNext = &pipelineRenderingCreateInfo;
-			pipelineCreateInfo.pVertexInputState = &vertexInputState;
-			pipelineCreateInfo.pRasterizationState = &rasterizationState;
-			pipelineCreateInfo.pDynamicState = &dynamicState;
-			pipelineCreateInfo.pInputAssemblyState = &inputAssemblyState;
-			pipelineCreateInfo.pViewportState = &viewportState;
-			pipelineCreateInfo.pDepthStencilState = &depthStencilState;
-			pipelineCreateInfo.pMultisampleState = &multisampleState;
-			
+			// Every variant blends into a single RGBA target with ADD ops; only
+			// the factors differ.
+			pipelineDesc.blendCount = 1;
+			pipelineDesc.blend[0].blendEnable = true;
+			pipelineDesc.blend[0].colorOp = RI_BLEND_OP_ADD;
+			pipelineDesc.blend[0].alphaOp = RI_BLEND_OP_ADD;
+			pipelineDesc.blend[0].writeMask = RI_COLOR_WRITE_RGBA;
+
 			switch(materialType)
 			{
-				case eGuiMaterial_FontNormal: 
+				case eGuiMaterial_FontNormal:
 				case eGuiMaterial_Alpha: {
-					VkPipelineColorBlendAttachmentState blendAttachmentState[] = { 
-						VK_TRUE,
-						VK_BLEND_FACTOR_SRC_ALPHA,
-					  VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA,
-						VK_BLEND_OP_ADD,
-						VK_BLEND_FACTOR_SRC_ALPHA,
-						VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA,
-						VK_BLEND_OP_ADD,
-				  	VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT
-					};
-					VkPipelineColorBlendStateCreateInfo colorBlendState = { VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO };
-					colorBlendState.attachmentCount = ARRAY_COUNT(blendAttachmentState);
-					colorBlendState.pAttachments = blendAttachmentState;
-				 	pipelineCreateInfo.pColorBlendState = &colorBlendState;
-					mpGraphics->gui.bindPipeline(&mpGraphics->device, &mpGraphics->primary.cmds[0], hash,"gui.eGuiMaterial_Alpha", &pipelineCreateInfo);
+					pipelineDesc.blend[0].srcColor = RI_BLEND_SRC_ALPHA;
+					pipelineDesc.blend[0].dstColor = RI_BLEND_ONE_MINUS_SRC_ALPHA;
+					pipelineDesc.blend[0].srcAlpha = RI_BLEND_SRC_ALPHA;
+					pipelineDesc.blend[0].dstAlpha = RI_BLEND_ONE_MINUS_SRC_ALPHA;
+					mpGraphics->gui.bindPipeline(&mpGraphics->device, &mpGraphics->primary.cmds[0], HASH_INITIAL_VALUE,"gui.eGuiMaterial_Alpha", pipelineDesc);
 					break;
 				}
 				case eGuiMaterial_Additive: {
-					VkPipelineColorBlendAttachmentState blendAttachmentState[] = { 
-						VK_TRUE,
-						VK_BLEND_FACTOR_ONE,
-					  VK_BLEND_FACTOR_ONE,
-						VK_BLEND_OP_ADD,
-						VK_BLEND_FACTOR_ONE,
-					  VK_BLEND_FACTOR_ONE,
-						VK_BLEND_OP_ADD,
-				  	VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT
-					};
-					VkPipelineColorBlendStateCreateInfo colorBlendState = { VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO };
-					colorBlendState.attachmentCount = ARRAY_COUNT(blendAttachmentState);
-					colorBlendState.pAttachments = blendAttachmentState;
-				 	pipelineCreateInfo.pColorBlendState = &colorBlendState;
-					mpGraphics->gui.bindPipeline(&mpGraphics->device, &mpGraphics->primary.cmds[0], hash,"gui.eGuiMaterial_Additive", &pipelineCreateInfo);
-					break;	
+					pipelineDesc.blend[0].srcColor = RI_BLEND_ONE;
+					pipelineDesc.blend[0].dstColor = RI_BLEND_ONE;
+					pipelineDesc.blend[0].srcAlpha = RI_BLEND_ONE;
+					pipelineDesc.blend[0].dstAlpha = RI_BLEND_ONE;
+					mpGraphics->gui.bindPipeline(&mpGraphics->device, &mpGraphics->primary.cmds[0], HASH_INITIAL_VALUE,"gui.eGuiMaterial_Additive", pipelineDesc);
+					break;
 				}
 				case eGuiMaterial_Modulative: {
-					VkPipelineColorBlendAttachmentState blendAttachmentState[] = { 
-						VK_TRUE,
-						VK_BLEND_FACTOR_DST_COLOR,
-					  VK_BLEND_FACTOR_ZERO,
-						VK_BLEND_OP_ADD,
-						VK_BLEND_FACTOR_DST_ALPHA,
-					  VK_BLEND_FACTOR_ZERO,
-						VK_BLEND_OP_ADD,
-				  	VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT
-					};
-					VkPipelineColorBlendStateCreateInfo colorBlendState = { VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO };
-					colorBlendState.attachmentCount = ARRAY_COUNT(blendAttachmentState);
-					colorBlendState.pAttachments = blendAttachmentState;
-				 	pipelineCreateInfo.pColorBlendState = &colorBlendState;
-					mpGraphics->gui.bindPipeline(&mpGraphics->device, &mpGraphics->primary.cmds[0], hash,"gui.eGuiMaterial_Modulative", &pipelineCreateInfo);
-					break;	
+					pipelineDesc.blend[0].srcColor = RI_BLEND_DST_COLOR;
+					pipelineDesc.blend[0].dstColor = RI_BLEND_ZERO;
+					pipelineDesc.blend[0].srcAlpha = RI_BLEND_DST_ALPHA;
+					pipelineDesc.blend[0].dstAlpha = RI_BLEND_ZERO;
+					mpGraphics->gui.bindPipeline(&mpGraphics->device, &mpGraphics->primary.cmds[0], HASH_INITIAL_VALUE,"gui.eGuiMaterial_Modulative", pipelineDesc);
+					break;
 				}
 				case eGuiMaterial_PremulAlpha: {
-					VkPipelineColorBlendAttachmentState blendAttachmentState[] = { 
-						VK_TRUE,
-						VK_BLEND_FACTOR_ONE,
-					  VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA,
-						VK_BLEND_OP_ADD,
-						VK_BLEND_FACTOR_ONE,
-					  VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA,
-						VK_BLEND_OP_ADD,
-				  	VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT
-					};
-					VkPipelineColorBlendStateCreateInfo colorBlendState = { VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO };
-					colorBlendState.attachmentCount = ARRAY_COUNT(blendAttachmentState);
-					colorBlendState.pAttachments = blendAttachmentState;
-				 	pipelineCreateInfo.pColorBlendState = &colorBlendState;
-					mpGraphics->gui.bindPipeline(&mpGraphics->device, &mpGraphics->primary.cmds[0], hash,"gui.eGuiMaterial_PremulAlpha", &pipelineCreateInfo);
-					break;	
+					pipelineDesc.blend[0].srcColor = RI_BLEND_ONE;
+					pipelineDesc.blend[0].dstColor = RI_BLEND_ONE_MINUS_SRC_ALPHA;
+					pipelineDesc.blend[0].srcAlpha = RI_BLEND_ONE;
+					pipelineDesc.blend[0].dstAlpha = RI_BLEND_ONE_MINUS_SRC_ALPHA;
+					mpGraphics->gui.bindPipeline(&mpGraphics->device, &mpGraphics->primary.cmds[0], HASH_INITIAL_VALUE,"gui.eGuiMaterial_PremulAlpha", pipelineDesc);
+					break;
 				}
 				case eGuiMaterial_Diffuse:{
 				default:
-					VkPipelineColorBlendAttachmentState blendAttachmentState[] = { 
-						VK_TRUE,
-						VK_BLEND_FACTOR_ONE,
-					  VK_BLEND_FACTOR_ZERO,
-						VK_BLEND_OP_ADD,
-						VK_BLEND_FACTOR_ONE,
-					  VK_BLEND_FACTOR_ZERO,
-						VK_BLEND_OP_ADD,
-				  	VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT
-					};
-					VkPipelineColorBlendStateCreateInfo colorBlendState = { VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO };
-					colorBlendState.attachmentCount = ARRAY_COUNT(blendAttachmentState);
-					colorBlendState.pAttachments = blendAttachmentState;
-				 	pipelineCreateInfo.pColorBlendState = &colorBlendState;
-					mpGraphics->gui.bindPipeline(&mpGraphics->device, &mpGraphics->primary.cmds[0], hash,"gui.eGuiMaterial_Diffuse", &pipelineCreateInfo);
+					pipelineDesc.blend[0].srcColor = RI_BLEND_ONE;
+					pipelineDesc.blend[0].dstColor = RI_BLEND_ZERO;
+					pipelineDesc.blend[0].srcAlpha = RI_BLEND_ONE;
+					pipelineDesc.blend[0].dstAlpha = RI_BLEND_ZERO;
+					mpGraphics->gui.bindPipeline(&mpGraphics->device, &mpGraphics->primary.cmds[0], HASH_INITIAL_VALUE,"gui.eGuiMaterial_Diffuse", pipelineDesc);
 					break;
 				}
 			}
@@ -979,10 +906,12 @@ namespace hpl {
 				materialType == pLastMaterial &&
 				pClipRegion == pLastClipRegion);
 
-			uint64_t vbOffset = vkOffset + vertexBufferOffset * sizeof(PositionTexColor);
-			uint64_t ibOffset = idxOffset + indexBufferOffset * sizeof(uint32_t);
-			vkCmdBindVertexBuffers(mpGraphics->primary.cmds[0].vk.cmd, 0, 1, &mpGraphics->guiVertexBuffer->vk.buffer, &vbOffset);
-			vkCmdBindIndexBuffer(mpGraphics->primary.cmds[0].vk.cmd, mpGraphics->guiIndexBuffer->vk.buffer, ibOffset, VK_INDEX_TYPE_UINT32);
+			const RIDeviceSize vertexOffset = vertexBaseOffset + vertexBufferOffset * sizeof(PositionTexColor);
+			const RIDeviceSize indexOffset = indexBaseOffset + indexBufferOffset * sizeof(uint32_t);
+			RIBuffer *guiVertexBuffers[1] = {mpGraphics->guiVertexBuffer.Get()};
+			const RIDeviceSize guiVertexOffsets[1] = {vertexOffset};
+			mpGraphics->primary.cmds[0].bindVertexBuffers<1>(0, 1, guiVertexBuffers, guiVertexOffsets);
+			mpGraphics->primary.cmds[0].bindIndexBuffer(&mpGraphics->device, mpGraphics->guiIndexBuffer.Get(), indexOffset, RI_INDEX_TYPE_32);
 			mpGraphics->primary.cmds[0].drawIndexed(&mpGraphics->device, static_cast<uint32_t>(indexBufferIndex), 1, 0, 0, 0);
 
 			vertexBufferOffset += vertexBufferIndex;

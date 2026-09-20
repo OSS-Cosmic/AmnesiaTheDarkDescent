@@ -26,11 +26,11 @@ struct BloomCompositePC
 };
 
 [vk::push_constant]
-BloomCompositePC pc;
+BloomCompositePC gPushConstants;
 
 struct PSIn
 {
-    [vk::location(0)] float2 v_uv;
+    [vk::location(0)] float2 v_uv : TEXCOORD0;
 };
 
 [shader("fragment")]
@@ -38,5 +38,5 @@ float4 psMain(PSIn pin) : SV_Target
 {
     float4 scene = sourceInput.Sample(inputSampler, pin.v_uv);
     float3 bloom = bloomInput.Sample(inputSampler, pin.v_uv).rgb;
-    return float4(scene.rgb + bloom * pc.strength, scene.a);
+    return float4(scene.rgb + bloom * gPushConstants.strength, scene.a);
 }

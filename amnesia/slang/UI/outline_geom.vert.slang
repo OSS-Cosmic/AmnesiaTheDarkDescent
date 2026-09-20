@@ -27,17 +27,17 @@ struct OutlinePC
 };
 
 [vk::push_constant]
-OutlinePC pc;
+OutlinePC gPushConstants;
 
 struct VSIn
 {
-    [vk::location(0)] float3 a_position;
-    [vk::location(1)] float3 a_normal;
+    [vk::location(0)] float3 a_position : TEXCOORD0;
+    [vk::location(1)] float3 a_normal : TEXCOORD1;
 };
 
 struct VSOut
 {
-    [vk::location(0)] float3 v_viewNormal;
+    [vk::location(0)] float3 v_viewNormal : TEXCOORD0;
     float4 posH : SV_Position;
 };
 
@@ -45,10 +45,10 @@ struct VSOut
 VSOut vsMain(VSIn vin)
 {
     VSOut o;
-    float4 worldPos = mul(pc.model, float4(vin.a_position, 1.0f));
+    float4 worldPos = mul(gPushConstants.model, float4(vin.a_position, 1.0f));
     o.posH = mul(pass.viewProj, worldPos);
     // Ignore non-uniform scale (good enough for a rim term).
-    float3 worldN = mul((float3x3)pc.model, vin.a_normal);
+    float3 worldN = mul((float3x3)gPushConstants.model, vin.a_normal);
     o.v_viewNormal = mul((float3x3)pass.view, worldN);
     return o;
 }

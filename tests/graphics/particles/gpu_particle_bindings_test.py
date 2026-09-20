@@ -20,8 +20,8 @@ REPO_ROOT = Path(__file__).resolve().parents[3]
 # Search order matters: the runtime loads out of the Release directory, and a
 # stale Debug build is a known way to test the wrong artifact.
 SHADER_DIRS = (
-    REPO_ROOT / "build-premake" / "amnesia" / "Release" / "compiled_shaders",
-    REPO_ROOT / "build-premake" / "amnesia" / "Debug" / "compiled_shaders",
+    REPO_ROOT / "build-premake" / "amnesia" / "Release" / "compiled_shaders" / "vk",
+    REPO_ROOT / "build-premake" / "amnesia" / "Debug" / "compiled_shaders" / "vk",
 )
 
 SPIRV_MAGIC = 0x07230203

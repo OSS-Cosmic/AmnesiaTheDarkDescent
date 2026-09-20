@@ -312,8 +312,8 @@ namespace hpl {
 				}
 
 				RIBeginRenderingDesc beginDesc = {};
-				beginDesc.renderArea.width = (int16_t)mpGraphics->swapchain->width;
-				beginDesc.renderArea.height = (int16_t)mpGraphics->swapchain->height;
+				beginDesc.renderArea.width = mpGraphics->swapchain->width;
+				beginDesc.renderArea.height = mpGraphics->swapchain->height;
 				beginDesc.colorCount = 1;
 				beginDesc.colors = &color;
 				beginDesc.depthStencil = pGuiDepthView ? &depth : NULL;

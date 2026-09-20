@@ -15,7 +15,7 @@ import bindless;
 [vk::binding(13,2)] StructuredBuffer<StandardBoxLight> standardBoxLights;
 
 struct ReflectionPush { float4 plane; };
-[vk::push_constant] ReflectionPush pc;
+[vk::push_constant] ReflectionPush gPushConstants;
 struct I { float3 p:POSITION; float3 n:NORMAL; float4 t:TANGENT; float4 c:COLOR; float2 uv:TEXCOORD0; };
 struct V { float3 p:POSITION; float3 n:NORMAL; float2 uv:TEXCOORD0; nointerpolation uint id:OBJECTID; float4 h:SV_POSITION; };
 struct ReflectionOutputs { float4 color:SV_TARGET0; float4 position:SV_TARGET1; };
@@ -34,7 +34,7 @@ V vsMain(I x, uint di:SV_InstanceID, uint bi:SV_StartInstanceLocation)
 [shader("fragment")]
 ReflectionOutputs psMain(V v)
 {
-    if (dot(pc.plane.xyz,v.p)+pc.plane.w < 0.0f) discard;
+    if (dot(gPushConstants.plane.xyz,v.p)+gPushConstants.plane.w < 0.0f) discard;
     UniformObject o=gSceneObjects[v.id];
     // Same coverage gate as every other Standard raster pass. Without it,
     // alpha-cutout geometry -- grates, slime nets, foliage -- reflects as

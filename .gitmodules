@@ -34,6 +34,9 @@
 [submodule "HPL2/dependencies/extern/rapidjson"]
 	path = HPL2/extern/rapidjson
 	url = https://github.com/Tencent/rapidjson.git
+[submodule "HPL2/dependencies/extern/D3D12MemoryAllocator"]
+	path = HPL2/extern/D3D12MemoryAllocator
+	url = https://github.com/GPUOpen-LibrariesAndSDKs/D3D12MemoryAllocator.git
 [submodule "HPL2/dependencies/extern/NRD"]
 	path = HPL2/extern/NRD
 	url = https://github.com/NVIDIA-RTX/NRD.git

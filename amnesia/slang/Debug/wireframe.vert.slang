@@ -22,7 +22,7 @@ ConstantBuffer<WireFramePass> pass;
 
 struct VSIn
 {
-    [vk::location(0)] float3 a_position;
+    [vk::location(0)] float3 a_position : TEXCOORD0;
 };
 
 struct VSOut

@@ -475,6 +475,7 @@ public:
     RISharedPointer<RITexture> renderTarget[RI_MAX_SWAPCHAIN_IMAGES];
     RISharedPointer<RITexture> depthTextures[RI_MAX_SWAPCHAIN_IMAGES];
     RISharedPointer<RITextureView> renderTargetView[RI_MAX_SWAPCHAIN_IMAGES];
+    RISharedPointer<RITextureView> renderTargetAttachmentView[RI_MAX_SWAPCHAIN_IMAGES];
     RISharedPointer<RITextureView> depthView[RI_MAX_SWAPCHAIN_IMAGES];
     RISharedPointer<RITextureView> depthSampleView[RI_MAX_SWAPCHAIN_IMAGES];
     // Depth pyramid for the camera occlusion cull. See HiZPyramid.h.
@@ -654,7 +655,9 @@ public:
                    !mPogoBuffer.textures[0].isEmpty() &&
                    !mPogoBuffer.textures[1].isEmpty() &&
                    !mPogoBuffer.pogoView[0].isEmpty() &&
-                   !mPogoBuffer.pogoView[1].isEmpty()
+                   !mPogoBuffer.pogoView[1].isEmpty() &&
+                   !mPogoBuffer.attachmentView[0].isEmpty() &&
+                   !mPogoBuffer.attachmentView[1].isEmpty()
                ? &mPogoBuffer
                : nullptr;
   }
@@ -856,6 +859,7 @@ private:
   RasterCamera mRasterCamera = {};
   bool mTemporalHistoryReset = false;
   std::unique_ptr<cTemporalPresentation> mpTemporalPresentation;
+  std::shared_ptr<RIProgram> mpFeedProgram;
   std::unique_ptr<cTemporalReactiveMask> mpTemporalReactiveMask;
   std::shared_ptr<iTemporalUpscaler> mpTemporalUpscalerProvider;
   TemporalUpscalerSettings mTemporalProviderPreparedSettings = {};

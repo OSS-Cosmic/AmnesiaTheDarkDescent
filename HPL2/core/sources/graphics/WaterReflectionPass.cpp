@@ -2,6 +2,7 @@
 
 #include "graphics/Graphics.h"
 #include "graphics/GlobalManagedSets.h"
+#include "graphics/PathTracePayload.h"
 #include "graphics/RIBarrier.h"
 #include "graphics/RICommand.h"
 #include "graphics/RIDescriptor.h"
@@ -218,13 +219,13 @@ void WaterReflectionPass::Initialize(cGraphics *graphics, cResources *resources)
   assert(resources != nullptr);
   m_graphics = graphics;
 
-  const VkDescriptorSetLayout externalLayouts[] = {
-      graphics->globalset->m_bindlessSet.vk.m_bindlessSetLayout};
+  const RIBindlessLayout externalLayouts[] = {
+      graphics->globalset->m_bindlessSet.layout()};
 
   auto guideVert = RIProgram::loadShaderStage(
-      resources->GetFileSearcher(), "WaterGuide.vert.spv");
+      resources->GetFileSearcher(), "WaterGuide.vert");
   auto guideFrag = RIProgram::loadShaderStage(
-      resources->GetFileSearcher(), "WaterGuide.frag.spv");
+      resources->GetFileSearcher(), "WaterGuide.frag");
   std::array<RIProgram::ModuleStage, 2> guideStages = {
       RIProgram::ModuleStage{RIProgram::PROGRAM_STAGE_VERTEX, guideVert,
                              "vsMain"},
@@ -234,7 +235,7 @@ void WaterReflectionPass::Initialize(cGraphics *graphics, cResources *resources)
                      "Water.guide");
 
   auto reduceBin = RIProgram::loadShaderStage(
-      resources->GetFileSearcher(), "WaterGuideReduce.cs.spv");
+      resources->GetFileSearcher(), "WaterGuideReduce.cs");
   RIProgram::ModuleStage reduceStage = {RIProgram::PROGRAM_STAGE_COMPUTE,
                                         reduceBin, "csMain"};
   m_reduce.initialize(&graphics->device,
@@ -242,7 +243,7 @@ void WaterReflectionPass::Initialize(cGraphics *graphics, cResources *resources)
                       externalLayouts, "Water.reduce");
 
   auto traceBin = RIProgram::loadShaderStage(
-      resources->GetFileSearcher(), "WaterReflection.rt.spv");
+      resources->GetFileSearcher(), "WaterReflection.rt");
   std::array<RIProgram::ModuleStage, 4> traceStages = {
       RIProgram::ModuleStage{RIProgram::PROGRAM_STAGE_RAYGEN, traceBin,
                              "waterReflRayGen"},
@@ -256,7 +257,7 @@ void WaterReflectionPass::Initialize(cGraphics *graphics, cResources *resources)
                      "Water.trace");
 
   auto packBin = RIProgram::loadShaderStage(
-      resources->GetFileSearcher(), "WaterReflectionPack.cs.spv");
+      resources->GetFileSearcher(), "WaterReflectionPack.cs");
   RIProgram::ModuleStage packStage = {RIProgram::PROGRAM_STAGE_COMPUTE,
                                       packBin, "csMain"};
   m_pack.initialize(&graphics->device,
@@ -454,8 +455,8 @@ WaterReflectionResult WaterReflectionPass::RecordSurface(
     depth.readOnly = true;
 
     RIBeginRenderingDesc rendering = {};
-    rendering.renderArea.width = static_cast<int16_t>(impl.width);
-    rendering.renderArea.height = static_cast<int16_t>(impl.height);
+    rendering.renderArea.width = impl.width;
+    rendering.renderArea.height = impl.height;
     rendering.colorCount = 3;
     rendering.colors = colors;
     rendering.depthStencil = &depth;
@@ -469,18 +470,18 @@ WaterReflectionResult WaterReflectionPass::RecordSurface(
     viewport.depthMax = 1.0f;
     cmd->setViewport(&graphics->device, viewport);
     RIRect scissor = {};
-    scissor.width = static_cast<int16_t>(impl.width);
-    scissor.height = static_cast<int16_t>(impl.height);
+    scissor.width = impl.width;
+    scissor.height = impl.height;
     cmd->setScissor(&graphics->device, scissor);
 
-    WaterGuidePipelineDesc pipelineDesc(
-        RI_FORMAT_RGBA32_SFLOAT, RI_FORMAT_RGBA16_SFLOAT, RI_FORMAT_RG16_SFLOAT,
-        cGraphics::DepthFormat, surface.vertexPresentMask);
-    const hash_t pipelineHash = hash_u32(pipelineDesc.hash, 0x57475544u);
-    m_guide.bindPipeline(&graphics->device, cmd, pipelineHash, "Water.guide",
-                         &pipelineDesc.createInfo);
+    m_guide.bindPipeline(&graphics->device, cmd, HASH_INITIAL_VALUE,
+                         "Water.guide",
+                         MakeWaterGuidePipelineDesc(
+                             RI_FORMAT_RGBA32_SFLOAT, RI_FORMAT_RGBA16_SFLOAT,
+                             RI_FORMAT_RG16_SFLOAT, cGraphics::DepthFormat,
+                             surface.vertexPresentMask));
     m_guide.bindBindlessDescriptorSet(cmd, &graphics->globalset->m_bindlessSet,
-                                      0);
+                                      uint32_t(0));
     bindGuideResources(graphics, cmd, m_guide, surface, impl.frameIndex);
     cmd->drawIndexed(&graphics->device, surface.indexCount, 1, 0, 0,
                      surface.objectSlot);
@@ -504,11 +505,9 @@ WaterReflectionResult WaterReflectionPass::RecordSurface(
     transition(cmd, impl.halfVelocity, RI_RESOURCE_STATE_STORAGE_WRITE,
                RI_STAGE_COMPUTE);
 
-    VkComputePipelineCreateInfo pipelineInfo = {
-        VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO};
     const hash_t pipelineHash = hash_u32(HASH_INITIAL_VALUE, 0x57524443u);
     m_reduce.bindComputePipeline(&graphics->device, cmd, pipelineHash,
-                                 "Water.reduce", &pipelineInfo);
+                                 "Water.reduce");
     m_reduce.bindBindlessDescriptorSet(
         cmd, &graphics->globalset->m_bindlessSet, 0,
         VK_PIPELINE_BIND_POINT_COMPUTE);
@@ -551,12 +550,13 @@ WaterReflectionResult WaterReflectionPass::RecordSurface(
     transition(cmd, impl.reflectionRadianceHitDist,
                RI_RESOURCE_STATE_STORAGE_WRITE, RI_STAGE_RAY_TRACING);
 
-    VkRayTracingPipelineCreateInfoKHR pipelineInfo = {
-        VK_STRUCTURE_TYPE_RAY_TRACING_PIPELINE_CREATE_INFO_KHR};
-    pipelineInfo.maxPipelineRayRecursionDepth = 1;
+    RIRayTracingPipelineDesc pipelineDesc = {};
+    pipelineDesc.maxRecursionDepth = 1;
+    pipelineDesc.maxPayloadSize = kScatterPayloadSize;
+    pipelineDesc.maxAttributeSize = kTriangleAttributeSize;
     const hash_t pipelineHash = hash_u32(HASH_INITIAL_VALUE, 0x57525443u);
     m_trace.bindRayTracingPipeline(&graphics->device, cmd, pipelineHash,
-                                   "Water.trace", &pipelineInfo);
+                                   "Water.trace", pipelineDesc);
     m_trace.bindBindlessDescriptorSet(
         cmd, &graphics->globalset->m_bindlessSet, 0,
         VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR);
@@ -602,11 +602,9 @@ WaterReflectionResult WaterReflectionPass::RecordSurface(
     transition(cmd, impl.nrdMotionVectors, RI_RESOURCE_STATE_STORAGE_WRITE,
                RI_STAGE_COMPUTE);
 
-    VkComputePipelineCreateInfo pipelineInfo = {
-        VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO};
     const hash_t pipelineHash = hash_u32(HASH_INITIAL_VALUE, 0x57504b43u);
     m_pack.bindComputePipeline(&graphics->device, cmd, pipelineHash,
-                               "Water.pack", &pipelineInfo);
+                               "Water.pack");
     m_pack.bindBindlessDescriptorSet(
         cmd, &graphics->globalset->m_bindlessSet, 0,
         VK_PIPELINE_BIND_POINT_COMPUTE);

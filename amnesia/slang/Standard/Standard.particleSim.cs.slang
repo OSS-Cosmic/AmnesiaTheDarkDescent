@@ -33,7 +33,7 @@ struct ParticleSimPC
 };
 
 [vk::push_constant]
-ParticleSimPC pc;
+ParticleSimPC gPushConstants;
 
 // Screen-space collision. Projects the particle with the PREVIOUS frame's
 // matrices (this pass runs before the current frame's depth exists) and treats
@@ -42,7 +42,7 @@ ParticleSimPC pc;
 // Exactly one shipped emitter authors Collides="true".
 bool particleCollide(inout GpuParticle part, float bounceAmount)
 {
-    if (pc.collisionEnabled == 0u)
+    if (gPushConstants.collisionEnabled == 0u)
         return false;
 
     float4 view = mul(gPerFrame.prevViewMat, float4(part.pos, 1.0f));
@@ -69,7 +69,7 @@ bool particleCollide(inout GpuParticle part, float bounceAmount)
 
     // Behind the surface, but not so far behind that the particle has clearly
     // passed through a thin wall into a different room.
-    if (partZ < sceneZ || partZ > sceneZ + pc.collisionThickness)
+    if (partZ < sceneZ || partZ > sceneZ + gPushConstants.collisionThickness)
         return false;
 
     // Reconstruct a surface normal from the depth neighbourhood. Cheap central
@@ -93,7 +93,7 @@ bool particleCollide(inout GpuParticle part, float bounceAmount)
 [numthreads(64, 1, 1)]
 void csMain(uint3 gid : SV_GroupID, uint3 gtid : SV_GroupThreadID)
 {
-    if (gid.x >= pc.groupCount)
+    if (gid.x >= gPushConstants.groupCount)
         return;
 
     uint2 group       = gParticleGroups[gid.x];

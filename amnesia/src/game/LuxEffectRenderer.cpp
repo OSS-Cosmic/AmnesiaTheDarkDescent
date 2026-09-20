@@ -114,98 +114,73 @@ void BindGeomPipeline(RIProgram &aProgram, RICmd *apCmd, eGeomPassMode aMode,
 					  bool abNormalPresent, bool abUvLayout, const char *asDebugName) {
 	const bool bGlow = (aMode == eGeomPassMode_Glow);
 
-	VkVertexInputBindingDescription bindings[2] = {
-		{0, 16, VK_VERTEX_INPUT_RATE_VERTEX},                       // position (float4 stride)
-		{1, abUvLayout ? 12u : (abNormalPresent ? 12u : 0u),
-		 VK_VERTEX_INPUT_RATE_VERTEX},                              // texcoord (12) or normal (12)
-	};
-	VkVertexInputAttributeDescription attribs[2] = {
-		{0, 0, VK_FORMAT_R32G32B32_SFLOAT, 0},                                        // position
-		{1, 1, abUvLayout ? VK_FORMAT_R32G32_SFLOAT : VK_FORMAT_R32G32B32_SFLOAT, 0}, // uv / normal
-	};
-	VkPipelineVertexInputStateCreateInfo vertexInput = {
-		VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO};
-	vertexInput.vertexBindingDescriptionCount = 2;
-	vertexInput.pVertexBindingDescriptions = bindings;
-	vertexInput.vertexAttributeDescriptionCount = 2;
-	vertexInput.pVertexAttributeDescriptions = attribs;
+	RIGraphicsPipelineDesc desc = {};
 
-	VkPipelineInputAssemblyStateCreateInfo inputAssembly = {
-		VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO};
-	inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+	desc.vertexInput.bindingCount = 2;
+	desc.vertexInput.bindings[0] = {0, 16, RI_VERTEX_INPUT_RATE_VERTEX}; // position (float4 stride)
+	desc.vertexInput.bindings[1] = {1, abUvLayout ? 12u : (abNormalPresent ? 12u : 0u),
+									RI_VERTEX_INPUT_RATE_VERTEX};        // texcoord (12) or normal (12)
+	desc.vertexInput.attributeCount = 2;
+	desc.vertexInput.attributes[0] = {0, 0, RI_FORMAT_RGB32_SFLOAT, 0};  // position
+	desc.vertexInput.attributes[1] = {1, 1,
+									  abUvLayout ? RI_FORMAT_RG32_SFLOAT : RI_FORMAT_RGB32_SFLOAT,
+									  0};                                // uv / normal
 
-	VkPipelineRasterizationStateCreateInfo rasterization = {
-		VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO};
-	rasterization.polygonMode = VK_POLYGON_MODE_FILL;
+	desc.topology = RI_TOPOLOGY_TRIANGLE_LIST;
+
+	desc.raster.polygonMode = RI_POLYGON_MODE_FILL;
 	// Cull BACK everywhere — the glow draws the visible FRONT faces so the mesh
 	// interior fills with the additive glow (no silhouette-only border).
-	rasterization.cullMode = VK_CULL_MODE_BACK_BIT;
-	rasterization.frontFace = VK_FRONT_FACE_CLOCKWISE; // engine winding
-	rasterization.lineWidth = 1.0f;
-
-	VkDynamicState dynamicStates[2] = {VK_DYNAMIC_STATE_VIEWPORT,
-									   VK_DYNAMIC_STATE_SCISSOR};
-	VkPipelineDynamicStateCreateInfo dynamicState = {
-		VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO};
-	dynamicState.dynamicStateCount = 2;
-	dynamicState.pDynamicStates = dynamicStates;
+	desc.raster.cullMode = RI_CULL_MODE_BACK;
+	desc.raster.frontFace = RI_FRONT_FACE_CLOCKWISE; // engine winding
+	desc.raster.lineWidth = 1.0f;
+	// Static negative depth bias, so the overlay geometry wins the LESS_EQUAL
+	// test against the scene depth it was rasterised from. (The Vk create-info
+	// set these fields in the middle of the depth-stencil block; they are
+	// rasterizer state.)
+	desc.raster.depthBiasEnable = true;
+	desc.raster.depthBiasConstant = -1.0f;
+	desc.raster.depthBiasSlope = -1.0f;
+	desc.raster.depthBiasClamp = 0.0f;
 
 	const bool bHasStencil = (aMode == eGeomPassMode_OutlineMark ||
 							  aMode == eGeomPassMode_OutlineRim);
 
-	VkFormat colorFormat = RIFormatToVK(cGraphics::PogoColorFormat);
-	VkPipelineRenderingCreateInfo pipelineRendering = {
-		VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO};
-	pipelineRendering.colorAttachmentCount = 1;
-	pipelineRendering.pColorAttachmentFormats = &colorFormat;
-	pipelineRendering.depthAttachmentFormat = RIFormatToVK(cGraphics::DepthFormat);
-	pipelineRendering.stencilAttachmentFormat =
-		bHasStencil ? RIFormatToVK(cGraphics::DepthFormat) : VK_FORMAT_UNDEFINED;
-
-	VkPipelineViewportStateCreateInfo viewportState = {
-		VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO};
-	viewportState.viewportCount = 1;
-	viewportState.scissorCount = 1;
-
-	VkPipelineMultisampleStateCreateInfo multisample = {
-		VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO};
-	multisample.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
+	desc.renderTarget.colorCount = 1;
+	desc.renderTarget.colorFormats[0] = cGraphics::PogoColorFormat;
+	desc.renderTarget.depthFormat = cGraphics::DepthFormat;
+	desc.renderTarget.stencilFormat =
+		bHasStencil ? cGraphics::DepthFormat : RI_FORMAT_UNKNOWN;
 
 	// Read-only depth test against the scene depth (never writes).
-	VkPipelineDepthStencilStateCreateInfo depthStencil = {
-		VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO};
-	depthStencil.depthTestEnable = VK_TRUE;
-	depthStencil.depthWriteEnable = VK_FALSE;
-	rasterization.depthBiasEnable = VK_TRUE;
-	rasterization.depthBiasConstantFactor = -1.0f;
-	rasterization.depthBiasSlopeFactor = -1.0f;
-	rasterization.depthBiasClamp = 0.0f;
-	depthStencil.depthCompareOp = VK_COMPARE_OP_LESS_OR_EQUAL;
-	depthStencil.minDepthBounds = 0.0f;
-	depthStencil.maxDepthBounds = 1.0f;
+	desc.depthStencil.depthTest = true;
+	desc.depthStencil.depthWrite = false;
+	desc.depthStencil.depthCompare = RI_COMPARE_LESS_EQUAL;
 	if (bHasStencil) {
-		depthStencil.stencilTestEnable = VK_TRUE;
-		VkStencilOpState op = {};
+		desc.depthStencil.stencilTest = true;
+		// The reference is shared by both faces in the RI desc (D3D12 has one
+		// OMSetStencilRef); it is not part of RIStencilFaceDesc.
+		desc.depthStencil.stencilReference = 1;
+		RIStencilFaceDesc op = {};
 		op.compareMask = 0xFF;
-		op.reference = 1;
 		if (aMode == eGeomPassMode_OutlineMark) {
-			op.failOp = VK_STENCIL_OP_KEEP;
-			op.passOp = VK_STENCIL_OP_REPLACE;
-			op.depthFailOp = VK_STENCIL_OP_KEEP;
-			op.compareOp = VK_COMPARE_OP_ALWAYS;
+			op.failOp = RI_STENCIL_OP_KEEP;
+			op.passOp = RI_STENCIL_OP_REPLACE;
+			op.depthFailOp = RI_STENCIL_OP_KEEP;
+			op.compareFunc = RI_COMPARE_ALWAYS;
 			op.writeMask = 0xFF;
 		} else { // rim
-			op.failOp = VK_STENCIL_OP_KEEP;
-			op.passOp = VK_STENCIL_OP_KEEP;
-			op.depthFailOp = VK_STENCIL_OP_KEEP;
-			op.compareOp = VK_COMPARE_OP_NOT_EQUAL;
+			op.failOp = RI_STENCIL_OP_KEEP;
+			op.passOp = RI_STENCIL_OP_KEEP;
+			op.depthFailOp = RI_STENCIL_OP_KEEP;
+			op.compareFunc = RI_COMPARE_NOT_EQUAL;
 			op.writeMask = 0x00;
 		}
-		depthStencil.front = op;
-		depthStencil.back = op;
+		desc.depthStencil.front = op;
+		desc.depthStencil.back = op;
 	}
 
-	VkPipelineColorBlendAttachmentState blend = {};
+	desc.blendCount = 1; // must match renderTarget.colorCount
 	if (bGlow) {
 		// TRUE additive (ONE/ONE), RGB only. Flash/enemy glow draw into the
 		// linear-HDR backbuffer BEFORE the post chain (OnPostTranslucenceDraw),
@@ -213,91 +188,49 @@ void BindGeomPipeline(RIProgram &aProgram, RICmd *apCmd, eGeomPassMode aMode,
 		// halo — matching the original cLuxEffectRenderer. (Drawing post-tonemap
 		// with a SCREEN blend instead collapsed a white flash to a flat white
 		// cutout, since dst + src*(1-dst) trends to 1.0 for any bright source.)
-		blend.blendEnable = VK_TRUE;
-		blend.colorBlendOp = VK_BLEND_OP_ADD;
-		blend.alphaBlendOp = VK_BLEND_OP_ADD;
-		blend.srcColorBlendFactor = VK_BLEND_FACTOR_ONE;
-		blend.dstColorBlendFactor = VK_BLEND_FACTOR_ONE;
-		blend.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
-		blend.dstAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
-		blend.colorWriteMask = VK_COLOR_COMPONENT_R_BIT |
-							   VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT;
+		desc.blend[0].blendEnable = true;
+		desc.blend[0].colorOp = RI_BLEND_OP_ADD;
+		desc.blend[0].alphaOp = RI_BLEND_OP_ADD;
+		desc.blend[0].srcColor = RI_BLEND_ONE;
+		desc.blend[0].dstColor = RI_BLEND_ONE;
+		desc.blend[0].srcAlpha = RI_BLEND_ONE;
+		desc.blend[0].dstAlpha = RI_BLEND_ONE;
+		desc.blend[0].writeMask = RI_COLOR_WRITE_RGB; // RI default is RGBA
 	} else if (aMode == eGeomPassMode_OutlineRim) {
 		// Overwrite the glow color into the cleared offscreen target.
-		blend.blendEnable = VK_FALSE;
-		blend.colorWriteMask = VK_COLOR_COMPONENT_R_BIT |
-							   VK_COLOR_COMPONENT_G_BIT |
-							   VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
+		desc.blend[0].blendEnable = false;
+		desc.blend[0].writeMask = RI_COLOR_WRITE_RGBA;
 	} else { // mark — no color
-		blend.blendEnable = VK_FALSE;
-		blend.colorWriteMask = 0;
+		desc.blend[0].blendEnable = false;
+		// Writes NOTHING: the RI default is RGBA, so leaving this unset would
+		// silently turn a depth/stencil-only pass into a colour write.
+		desc.blend[0].writeMask = RI_COLOR_WRITE_NONE;
 	}
-	VkPipelineColorBlendStateCreateInfo colorBlend = {
-		VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO};
-	colorBlend.attachmentCount = 1;
-	colorBlend.pAttachments = &blend;
 
-	VkGraphicsPipelineCreateInfo createInfo = {
-		VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO};
-	createInfo.pNext = &pipelineRendering;
-	createInfo.pVertexInputState = &vertexInput;
-	createInfo.pInputAssemblyState = &inputAssembly;
-	createInfo.pRasterizationState = &rasterization;
-	createInfo.pDynamicState = &dynamicState;
-	createInfo.pViewportState = &viewportState;
-	createInfo.pMultisampleState = &multisample;
-	createInfo.pDepthStencilState = &depthStencil;
-	createInfo.pColorBlendState = &colorBlend;
-
-	hash_t hash = hash_u32(HASH_INITIAL_VALUE, (uint32_t)aMode);
-	hash = hash_u32(hash, abNormalPresent ? 1u : 0u);
-	hash = hash_u32(hash, abUvLayout ? 1u : 0u);
-	aProgram.bindPipeline(&Interface<cGraphics>::Get()->device, apCmd, hash, asDebugName, &createInfo);
+	// aMode, abNormalPresent and abUvLayout are all structural now (blend +
+	// stencil state, binding stride, attribute format), so no variant salt.
+	aProgram.bindPipeline(&Interface<cGraphics>::Get()->device, apCmd, HASH_INITIAL_VALUE,
+						  asDebugName, desc);
 }
 
 // Fullscreen-triangle pipeline (no vertex input, no depth, cull NONE). When
 // abAdditive, blends ONE/ONE RGB-only into the bound color attachment.
 void BindFullscreenPipeline(RIProgram &aProgram, RICmd *apCmd, bool abAdditive,
 							hash_t aSeed, const char *asDebugName) {
-	VkPipelineVertexInputStateCreateInfo vertexInput = {
-		VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO};
+	// No vertex input, no depth attachment, cull NONE.
+	RIGraphicsPipelineDesc desc = {};
+	desc.topology = RI_TOPOLOGY_TRIANGLE_LIST;
+	desc.raster.polygonMode = RI_POLYGON_MODE_FILL;
+	desc.raster.cullMode = RI_CULL_MODE_NONE;
+	// The Vk create-info never assigned frontFace (zero == COUNTER_CLOCKWISE);
+	// the RI default is CLOCKWISE, so spell it out.
+	desc.raster.frontFace = RI_FRONT_FACE_COUNTER_CLOCKWISE;
+	desc.raster.lineWidth = 1.0f;
 
-	VkPipelineInputAssemblyStateCreateInfo inputAssembly = {
-		VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO};
-	inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+	desc.renderTarget.colorCount = 1;
+	desc.renderTarget.colorFormats[0] = cGraphics::PogoColorFormat;
 
-	VkPipelineRasterizationStateCreateInfo rasterization = {
-		VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO};
-	rasterization.polygonMode = VK_POLYGON_MODE_FILL;
-	rasterization.cullMode = VK_CULL_MODE_NONE;
-	rasterization.lineWidth = 1.0f;
-
-	VkDynamicState dynamicStates[2] = {VK_DYNAMIC_STATE_VIEWPORT,
-									   VK_DYNAMIC_STATE_SCISSOR};
-	VkPipelineDynamicStateCreateInfo dynamicState = {
-		VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO};
-	dynamicState.dynamicStateCount = 2;
-	dynamicState.pDynamicStates = dynamicStates;
-
-	VkFormat colorFormat = RIFormatToVK(cGraphics::PogoColorFormat);
-	VkPipelineRenderingCreateInfo pipelineRendering = {
-		VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO};
-	pipelineRendering.colorAttachmentCount = 1;
-	pipelineRendering.pColorAttachmentFormats = &colorFormat;
-
-	VkPipelineViewportStateCreateInfo viewportState = {
-		VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO};
-	viewportState.viewportCount = 1;
-	viewportState.scissorCount = 1;
-
-	VkPipelineMultisampleStateCreateInfo multisample = {
-		VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO};
-	multisample.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
-
-	VkPipelineDepthStencilStateCreateInfo depthStencil = {
-		VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO};
-
-	VkPipelineColorBlendAttachmentState blend = {};
+	desc.blendCount = 1;
 	if (abAdditive) {
 		// SCREEN, not straight additive: this composites the glow onto the
 		// pogo read half AFTER the tone-map / post chain has run, so the image
@@ -305,39 +238,20 @@ void BindFullscreenPipeline(RIProgram &aProgram, RICmd *apCmd, bool abAdditive,
 		// past 1.0 and clip to white (the original cLuxEffectRenderer composited
 		// pre-tone-map, so its additive glow got compressed back into range).
 		// Screen — dst + src*(1-dst) — brightens toward white but never past it.
-		blend.blendEnable = VK_TRUE;
-		blend.colorBlendOp = VK_BLEND_OP_ADD;
-		blend.alphaBlendOp = VK_BLEND_OP_ADD;
-		blend.srcColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_DST_COLOR;
-		blend.dstColorBlendFactor = VK_BLEND_FACTOR_ONE;
-		blend.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_DST_COLOR;
-		blend.dstAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
-		blend.colorWriteMask = VK_COLOR_COMPONENT_R_BIT |
-							   VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT;
+		desc.blend[0].blendEnable = true;
+		desc.blend[0].colorOp = RI_BLEND_OP_ADD;
+		desc.blend[0].alphaOp = RI_BLEND_OP_ADD;
+		desc.blend[0].srcColor = RI_BLEND_ONE_MINUS_DST_COLOR;
+		desc.blend[0].dstColor = RI_BLEND_ONE;
+		desc.blend[0].srcAlpha = RI_BLEND_ONE_MINUS_DST_COLOR;
+		desc.blend[0].dstAlpha = RI_BLEND_ONE;
+		desc.blend[0].writeMask = RI_COLOR_WRITE_RGB; // RI default is RGBA
 	} else {
-		blend.blendEnable = VK_FALSE;
-		blend.colorWriteMask = VK_COLOR_COMPONENT_R_BIT |
-							   VK_COLOR_COMPONENT_G_BIT |
-							   VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
+		desc.blend[0].blendEnable = false;
+		desc.blend[0].writeMask = RI_COLOR_WRITE_RGBA;
 	}
-	VkPipelineColorBlendStateCreateInfo colorBlend = {
-		VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO};
-	colorBlend.attachmentCount = 1;
-	colorBlend.pAttachments = &blend;
 
-	VkGraphicsPipelineCreateInfo createInfo = {
-		VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO};
-	createInfo.pNext = &pipelineRendering;
-	createInfo.pVertexInputState = &vertexInput;
-	createInfo.pInputAssemblyState = &inputAssembly;
-	createInfo.pRasterizationState = &rasterization;
-	createInfo.pDynamicState = &dynamicState;
-	createInfo.pViewportState = &viewportState;
-	createInfo.pMultisampleState = &multisample;
-	createInfo.pDepthStencilState = &depthStencil;
-	createInfo.pColorBlendState = &colorBlend;
-
-	aProgram.bindPipeline(&Interface<cGraphics>::Get()->device, apCmd, aSeed, asDebugName, &createInfo);
+	aProgram.bindPipeline(&Interface<cGraphics>::Get()->device, apCmd, aSeed, asDebugName, desc);
 }
 
 // Bind a renderable's position + normal streams (bindings 0/1). Substitutes
@@ -502,17 +416,17 @@ void cLuxEffectRenderer::EnsurePrograms()
 	cResources *pResources = gpBase->mpEngine->GetResources();
 
 	LoadSlangGraphics(&Interface<cGraphics>::Get()->device, mGeomProgram, pResources,
-					  "outline_geom.vert.spv", "outline_geom.frag.spv");
+					  "outline_geom.vert", "outline_geom.frag");
 	LoadSlangGraphics(&Interface<cGraphics>::Get()->device, mAlphaProgram, pResources,
-					  "outline_alpha.vert.spv", "outline_alpha.frag.spv");
+					  "outline_alpha.vert", "outline_alpha.frag");
 	LoadSlangGraphics(&Interface<cGraphics>::Get()->device, mGlowProgram, pResources,
-					  "glow_object.vert.spv", "glow_object.frag.spv");
+					  "glow_object.vert", "glow_object.frag");
 	LoadSlangGraphics(&Interface<cGraphics>::Get()->device, mBlurProgram, pResources,
-					  "posteffect_fullscreen.vert.spv",
-					  "posteffect_bloom_blur.frag.spv");
+					  "posteffect_fullscreen.vert",
+					  "posteffect_bloom_blur.frag");
 	LoadSlangGraphics(&Interface<cGraphics>::Get()->device, mCompositeProgram, pResources,
-					  "posteffect_fullscreen.vert.spv",
-					  "outline_composite.frag.spv");
+					  "posteffect_fullscreen.vert",
+					  "outline_composite.frag");
 	mbProgramsLoaded = true;
 }
 
@@ -611,13 +525,14 @@ void cLuxEffectRenderer::OnPostWorldDraw(const PostWorldDrawCtx &ctx)
 		color.storeOp = RI_ATTACHMENT_STORE_OP_STORE;
 
 		RIBeginRenderingDesc beginDesc = {};
-		beginDesc.renderArea.width = (int16_t)w;
-		beginDesc.renderArea.height = (int16_t)h;
+		beginDesc.renderArea.width = w;
+		beginDesc.renderArea.height = h;
 		beginDesc.colorCount = 1;
 		beginDesc.colors = &color;
 		pCmd->vk_d3d12_beginRendering(&Interface<cGraphics>::Get()->device, beginDesc);
 
-		const VkViewport fsViewport = {0.0f, 0.0f, (float)w, (float)h, 0.0f, 1.0f};
+		// Negative height: the engine convention shared with posteffect_fullscreen.vert.
+		const VkViewport fsViewport = {0.0f, (float)h, (float)w, -(float)h, 0.0f, 1.0f};
 		vkCmdSetViewport(pCmd->vk.cmd, 0, 1, &fsViewport);
 		vkCmdSetScissor(pCmd->vk.cmd, 0, 1, &scissor);
 
@@ -719,8 +634,8 @@ void cLuxEffectRenderer::OnPostTranslucenceDraw(const PostTranslucenceDrawCtx &c
 		depth.storeOp = RI_ATTACHMENT_STORE_OP_STORE;
 
 		RIBeginRenderingDesc beginDesc = {};
-		beginDesc.renderArea.width = (int16_t)w;
-		beginDesc.renderArea.height = (int16_t)h;
+		beginDesc.renderArea.width = w;
+		beginDesc.renderArea.height = h;
 		beginDesc.colorCount = 1;
 		beginDesc.colors = &color;
 		beginDesc.depthStencil = &depth;
@@ -886,8 +801,8 @@ void cLuxEffectRenderer::RenderOutline(const PostWorldDrawCtx &ctx,
 		depth.clearValue.stencil = 0;
 
 		RIBeginRenderingDesc beginDesc = {};
-		beginDesc.renderArea.width = (int16_t)alWidth;
-		beginDesc.renderArea.height = (int16_t)alHeight;
+		beginDesc.renderArea.width = alWidth;
+		beginDesc.renderArea.height = alHeight;
 		beginDesc.colorCount = 1;
 		beginDesc.colors = &color;
 		beginDesc.depthStencil = &depth;
@@ -1022,7 +937,8 @@ void cLuxEffectRenderer::BlurOutline(RICmd *apCmd, uint32_t alBlurW, uint32_t al
 		eTextureWrap_ClampToEdge, eTextureWrap_ClampToEdge,
 		eTextureWrap_ClampToEdge, eTextureFilter_Bilinear);
 
-	const VkViewport viewport = {0.0f, 0.0f, (float)alBlurW, (float)alBlurH, 0.0f, 1.0f};
+	// Negative height: the engine convention shared with posteffect_fullscreen.vert.
+	const VkViewport viewport = {0.0f, (float)alBlurH, (float)alBlurW, -(float)alBlurH, 0.0f, 1.0f};
 	const VkRect2D scissor = {{0, 0}, {alBlurW, alBlurH}};
 
 	auto blurPass = [&](VkImageView destView, RITexture *destTexture,
@@ -1040,8 +956,8 @@ void cLuxEffectRenderer::BlurOutline(RICmd *apCmd, uint32_t alBlurW, uint32_t al
 		color.loadOp = RI_ATTACHMENT_LOAD_OP_DONT_CARE;
 		color.storeOp = RI_ATTACHMENT_STORE_OP_STORE;
 		RIBeginRenderingDesc beginDesc = {};
-		beginDesc.renderArea.width = (int16_t)alBlurW;
-		beginDesc.renderArea.height = (int16_t)alBlurH;
+		beginDesc.renderArea.width = alBlurW;
+		beginDesc.renderArea.height = alBlurH;
 		beginDesc.colorCount = 1;
 		beginDesc.colors = &color;
 		apCmd->vk_d3d12_beginRendering(&Interface<cGraphics>::Get()->device, beginDesc);

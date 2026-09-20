@@ -40,6 +40,18 @@
 #include "vk_mem_alloc.h"
 #endif
 
+#ifdef DEVICE_SUPPORT_D3D12
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <windows.h>
+#include <d3d12.h>
+#include <dxgi1_6.h>
+#endif
+
 // vulkan.h drags in X11 headers (via the Xlib platform surface), which #define
 // bare identifiers like DestroyAll / ButtonPress as macros and collide with
 // engine method names (e.g. iResourceManager::DestroyAll). Neutralize them here,
@@ -85,6 +97,22 @@ enum RIResult_e {
 #define RI_QUEUE_PROTECTED_BIT 0x40
 #define RI_QUEUE_OPTICAL_FLOW_BIT_NV 0x80
 #define RI_QUEUE_INVALID 0x0
+
+#ifdef DEVICE_SUPPORT_D3D12
+// Logs + returns false on a failed HRESULT; true otherwise.
+#define D3D12_WrapResult(res)                                                   \
+  __D3D12_WrapResult(res, __FILE__, __FUNCTION__, __LINE__)
+
+static inline bool __D3D12_WrapResult(HRESULT result, const char *sourceFilename,
+                                      const char *functionName, int sourceLine) {
+  if (FAILED(result)) {
+    hpl::Log("RI: D3D12 HRESULT 0x%08lX, file %s:%i (%s)\n",
+             (unsigned long)result, sourceFilename, sourceLine, functionName);
+    return false;
+  }
+  return true;
+}
+#endif
 
 #ifdef DEVICE_SUPPORT_VULKAN
 // Splice `next` into the front of `current`'s pNext chain.

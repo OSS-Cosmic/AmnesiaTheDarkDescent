@@ -47,13 +47,13 @@ struct LightProbePC
 };
 
 [vk::push_constant]
-LightProbePC pc;
+LightProbePC gPushConstants;
 
 bool isExcluded(uint packedId)
 {
-    for (uint i = 0u; i < pc.excludeCount && i < kMaxLightProbeExcludes; ++i)
+    for (uint i = 0u; i < gPushConstants.excludeCount && i < kMaxLightProbeExcludes; ++i)
     {
-        if (pc.excludeIds[i] == packedId)
+        if (gPushConstants.excludeIds[i] == packedId)
             return true;
     }
     return false;
@@ -64,7 +64,7 @@ bool isExcluded(uint packedId)
 void csMain(uint3 tid : SV_DispatchThreadID)
 {
     uint probe = tid.x;
-    if (probe >= pc.probeCount || probe >= kMaxLightProbes)
+    if (probe >= gPushConstants.probeCount || probe >= kMaxLightProbes)
         return;
 
     LightProbeRequest req = gProbeRequests[probe];

@@ -55,15 +55,15 @@ struct WaterPC
     uint _p1;
     uint _p2;
 };
-[vk::push_constant] WaterPC pc;
+[vk::push_constant] WaterPC gPushConstants;
 
 struct WaterVSOut
 {
-    float3 posW                    : POSW;
-    float3 normalW                 : NORMAL;
-    float3 tangentW                : TANGENT;
-    float2 uv                      : TEXCRD;
-    nointerpolation uint objectId  : OBJECTID;
+    [vk::location(0)] float3 posW                    : TEXCOORD0;
+    [vk::location(1)] float3 normalW                 : TEXCOORD1;
+    [vk::location(2)] float3 tangentW                : TEXCOORD2;
+    [vk::location(3)] float2 uv                      : TEXCOORD3;
+    [vk::location(4)] nointerpolation uint objectId  : TEXCOORD4;
     float4 posH                    : SV_POSITION;
 };
 
@@ -72,7 +72,7 @@ float4 psMain(WaterVSOut psIn) : SV_TARGET
 {
     // Independent of reflection validity, Fresnel, fog and wave shading.
     // MIN blending records the nearest rasterized water surface per pixel.
-    if (pc.pass == 2u)
+    if (gPushConstants.pass == 2u)
         return float4(-mul(gPerFrame.viewMat, float4(psIn.posW, 1.0f)).z, 0, 0, 0);
 
     float2 dBaseUvDx = ddx(psIn.uv);
@@ -93,7 +93,7 @@ float4 psMain(WaterVSOut psIn) : SV_TARGET
     // weakly-fogged the refracted background is.
     FogResult fog = computeFog(psIn.posW, gPerFrame.posW);
 
-    if (pc.pass == 0u)
+    if (gPushConstants.pass == 0u)
     {
         // Tint (+ refraction-exposure lift) of the refracted background (MUL),
         // faded to zero as fog thickens.
@@ -127,7 +127,7 @@ float4 psMain(WaterVSOut psIn) : SV_TARGET
     float3 reflN = waterReflectionNormal(frame, waveN);
 
     float3 sampledReflection = float3(0.0f);
-    if (pc.reflectionAvailable != 0u)
+    if (gPushConstants.reflectionAvailable != 0u)
     {
         WaterReflectionSample s = sampleWaterReflectionHalfRes(
             gWaterReflectionSpecular,

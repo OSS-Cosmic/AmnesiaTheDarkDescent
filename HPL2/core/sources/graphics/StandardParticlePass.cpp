@@ -102,16 +102,18 @@ bool cStandardParticlePass::LoadData() {
     return true;
   if (!mpGraphics || !mpResources || !mpGraphics->globalset)
     return false;
-  auto bin = RIProgram::loadShaderStage(mpResources->GetFileSearcher(),
-                                        "Standard.particle.3d.spv");
-  if (bin.empty())
+  auto vertBin = RIProgram::loadShaderStage(mpResources->GetFileSearcher(),
+                                            "Standard.particle.3d", "vsMain");
+  auto fragBin = RIProgram::loadShaderStage(mpResources->GetFileSearcher(),
+                                            "Standard.particle.3d", "psMain");
+  if (vertBin.empty() || fragBin.empty())
     return false;
   auto program = std::make_shared<RIProgram>();
   std::array<RIProgram::ModuleStage, 2> stages = {
-      RIProgram::ModuleStage{RIProgram::PROGRAM_STAGE_VERTEX, bin, "vsMain"},
-      RIProgram::ModuleStage{RIProgram::PROGRAM_STAGE_FRAGMENT, bin, "psMain"}};
-  const VkDescriptorSetLayout external[] = {
-      mpGraphics->globalset->m_bindlessSet.vk.m_bindlessSetLayout};
+      RIProgram::ModuleStage{RIProgram::PROGRAM_STAGE_VERTEX, vertBin, "vsMain"},
+      RIProgram::ModuleStage{RIProgram::PROGRAM_STAGE_FRAGMENT, fragBin, "psMain"}};
+  const RIBindlessLayout external[] = {
+      mpGraphics->globalset->m_bindlessSet.layout()};
   program->initialize(&mpGraphics->device, stages, external,
                       "Standard.particle");
   auto old = std::move(m_program);
@@ -154,11 +156,6 @@ bool cStandardParticlePass::Render(
   (void)pointLightCount;
   (void)spotLightCount;
 
-  struct Pipeline : ParticlePipelineDesc {
-    Pipeline(BlendMode mode, bool depthTest)
-        : ParticlePipelineDesc(cGraphics::PogoColorFormat,
-                               cGraphics::DepthFormat, mode, depthTest) {}
-  };
   std::vector<RIProgram::DescriptorBinding> bindings;
   bindings.push_back(*frameBinding);
   // The same image is bound as a read-only depth attachment and sampled by
@@ -213,31 +210,38 @@ bool cStandardParticlePass::Render(
     objectData.modelMatrix = object->GetModelMatrix(frustum);
     objectData.uvMatrix = material->GetUvMatrix();
     objectData.materialId = materialId;
-    objectData.streamHandles.pos =
-        mpGraphics->translucentVtxBuffer->GetDeviceHandle(&mpGraphics->device) +
-        geometry.pos;
-    objectData.streamHandles.color =
-        mpGraphics->translucentVtxBuffer->GetDeviceHandle(&mpGraphics->device) +
-        geometry.color;
-    objectData.streamHandles.uv0 =
-        mpGraphics->translucentVtxBuffer->GetDeviceHandle(&mpGraphics->device) +
-        geometry.uv;
-    objectData.streamHandles.index =
-        mpGraphics->translucentIdxBuffer->GetDeviceHandle(&mpGraphics->device) +
-        geometry.index;
-    objectData.streamHandles.set = true;
+    // Backend-neutral buffer references: submitObject resolves them to Vulkan
+    // device addresses or D3D12 raw-SRV geometry handles. (Packed
+    // streamHandles are Vulkan-only and rejected on D3D12.)
+    objectData.streamRefs.pos = {mpGraphics->translucentVtxBuffer.Get(),
+                                 geometry.pos};
+    objectData.streamRefs.color = {mpGraphics->translucentVtxBuffer.Get(),
+                                   geometry.color};
+    objectData.streamRefs.uv0 = {mpGraphics->translucentVtxBuffer.Get(),
+                                 geometry.uv};
+    objectData.streamRefs.index = {mpGraphics->translucentIdxBuffer.Get(),
+                                   geometry.index};
+    objectData.streamRefs.set = true;
     const hash_t cookie = hash_u32(
         hash_u64(HASH_INITIAL_VALUE, object->GetUniqueCookie()), viewportSalt);
     const uint32_t slot = mpGraphics->globalset->submitObject(
         cookie, frameIndex, nullptr, objectData, kSubmitData);
-    if (slot == UINT32_MAX)
+    if (slot == UINT32_MAX) {
+      static bool warned = false;
+      if (!warned) {
+        warned = true;
+        Warning("Standard particle pass: object submit rejected (slot pool "
+                "exhausted or stream reference invalid); particle skipped\n");
+      }
       continue;
+    }
     const auto mode = remapBlend(material->GetBlendMode());
     // Legacy RendererDeferred keys particle pipelines by material DepthTest.
     const bool depthTest = material->GetDepthTest();
-    Pipeline pipeline(mode, depthTest);
-    m_program->bindPipeline(&mpGraphics->device, cmd, pipeline.hash,
-                            "Standard.particle", &pipeline.createInfo);
+    m_program->bindPipeline(
+        &mpGraphics->device, cmd, HASH_INITIAL_VALUE, "Standard.particle",
+        MakeParticlePipelineDesc(cGraphics::PogoColorFormat,
+                                 cGraphics::DepthFormat, mode, depthTest));
     m_program->bindBindlessDescriptorSet(
         cmd, &mpGraphics->globalset->m_bindlessSet, 0);
     m_program->bindDescriptors(&mpGraphics->device, cmd, frameIndex,

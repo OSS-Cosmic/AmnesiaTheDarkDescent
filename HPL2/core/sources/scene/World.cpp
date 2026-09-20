@@ -973,6 +973,39 @@ void cWorld::BuildTlas(cGraphics::FrameContext *cntx, cFrustum *apFrustum) {
   mpGraphics->graphicsDefer.push(mpTlasStorage);
   mpGraphics->graphicsDefer.push(mpTlasInstanceBuffer);
 
+  // One instance record serves both backends: VkAccelerationStructureInstanceKHR
+  // and D3D12_RAYTRACING_INSTANCE_DESC are byte-identical (row-major 3x4
+  // transform, instanceCustomIndex:24 + mask:8, SBT record offset:24 + flags:8,
+  // then the 8-byte acceleration-structure address), and the RIAccelInstanceBits_e
+  // values coincide with D3D12_RAYTRACING_INSTANCE_FLAG_*. Assert the layout
+  // rather than trusting it, so a header change here fails the build instead of
+  // silently corrupting D3D12 TLAS builds.
+  static_assert(sizeof(VkAccelerationStructureInstanceKHR) == 64,
+                "TLAS instance record must stay 64 bytes for D3D12 reuse");
+  static_assert(offsetof(VkAccelerationStructureInstanceKHR, transform) == 0,
+                "TLAS instance transform must lead the record");
+  static_assert(
+      offsetof(VkAccelerationStructureInstanceKHR,
+               accelerationStructureReference) == 56,
+      "TLAS instance AS address must occupy the trailing 8 bytes");
+#if (DEVICE_IMPL_D3D12)
+  static_assert(sizeof(VkAccelerationStructureInstanceKHR) ==
+                    sizeof(D3D12_RAYTRACING_INSTANCE_DESC),
+                "TLAS instance record must match D3D12_RAYTRACING_INSTANCE_DESC");
+  static_assert(offsetof(D3D12_RAYTRACING_INSTANCE_DESC, AccelerationStructure) ==
+                    offsetof(VkAccelerationStructureInstanceKHR,
+                             accelerationStructureReference),
+                "TLAS instance AS address must land at the same offset");
+  static_assert((uint32_t)RI_ACCEL_INSTANCE_TRIANGLE_CULL_DISABLE ==
+                        (uint32_t)D3D12_RAYTRACING_INSTANCE_FLAG_TRIANGLE_CULL_DISABLE &&
+                    (uint32_t)RI_ACCEL_INSTANCE_TRIANGLE_FLIP_FACING ==
+                        (uint32_t)D3D12_RAYTRACING_INSTANCE_FLAG_TRIANGLE_FRONT_COUNTERCLOCKWISE &&
+                    (uint32_t)RI_ACCEL_INSTANCE_FORCE_OPAQUE ==
+                        (uint32_t)D3D12_RAYTRACING_INSTANCE_FLAG_FORCE_OPAQUE &&
+                    (uint32_t)RI_ACCEL_INSTANCE_FORCE_NON_OPAQUE ==
+                        (uint32_t)D3D12_RAYTRACING_INSTANCE_FLAG_FORCE_NON_OPAQUE,
+                "RIAccelInstanceBits_e must match D3D12_RAYTRACING_INSTANCE_FLAG_*");
+#endif
   std::vector<VkAccelerationStructureInstanceKHR> tlasInstances;
 
   // Walk both containers with NO frustum cull. Only sub-meshes are ray-traced
@@ -1020,7 +1053,9 @@ void cWorld::BuildTlas(cGraphics::FrameContext *cntx, cFrustum *apFrustum) {
       return;
 
     auto blas = vb->accelStructure();
-    if (!blas || blas->vk.handle == VK_NULL_HANDLE)
+    // isEmpty() dispatches per backend; reading blas->vk.handle directly would
+    // read D3D12 union storage on a D3D12 device.
+    if (!blas || blas->isEmpty())
       return;
 
     // VkAccelerationStructureInstanceKHR::transform is row-major 3x4; modelF4 is
@@ -1052,8 +1087,9 @@ void cWorld::BuildTlas(cGraphics::FrameContext *cntx, cFrustum *apFrustum) {
           pObject->GetCoverageAmount() >= 1.0f && !dissolveFlags)
         inst.flags |= RI_ACCEL_INSTANCE_FORCE_OPAQUE;
     }
-    assert(blas->vk.deviceAddress != 0);
-    inst.accelerationStructureReference = blas->vk.deviceAddress;
+    const uint64_t blasAddress = blas->getDeviceAddress(&mpGraphics->device);
+    assert(blasAddress != 0);
+    inst.accelerationStructureReference = blasAddress;
     tlasInstances.push_back(inst);
   };
   for (int i = 0; i < eWorldContainerType_LastEnum; ++i) {

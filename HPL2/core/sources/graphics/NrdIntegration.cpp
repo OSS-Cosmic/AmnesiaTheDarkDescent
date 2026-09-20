@@ -620,11 +620,8 @@ struct NrdIntegration::Impl {
 
     const hash_t pipelineHash =
         hash_u32(HASH_INITIAL_VALUE, dispatchDesc.pipelineIndex);
-    VkComputePipelineCreateInfo pipelineCreateInfo = {
-        VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO};
-    program.bindComputePipeline(
-        &graphics->device, cmd, pipelineHash, pipelineDesc.shaderIdentifier,
-        &pipelineCreateInfo);
+    program.bindComputePipeline(&graphics->device, cmd, pipelineHash,
+                                pipelineDesc.shaderIdentifier);
     program.bindDescriptors(&graphics->device, cmd, frameIndex, bindings.data(),
                             bindings.size(), VK_PIPELINE_BIND_POINT_COMPUTE);
     cmd->dispatch(&graphics->device, dispatchDesc.gridWidth,

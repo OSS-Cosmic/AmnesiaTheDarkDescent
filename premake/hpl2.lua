@@ -42,7 +42,19 @@ project "HPL2"
     }
     for _, p in ipairs(impl_patterns) do table.insert(patterns, IMPL .. p) end
     table.insert(patterns, CORE .. "/sources/platform/sdl2/*.cpp")
-    files (glob(patterns))
+    local file_list = glob(patterns)
+    -- RID3D12.cpp is Windows-only (opt-in DX12 backend). Prune it from the source
+    -- list on non-Windows targets so gmake doesn't emit a compile target for it;
+    -- the file's own `#if DEVICE_IMPL_D3D12` guard already keeps it a trivially
+    -- empty TU on Windows Vulkan-only builds.
+    if os.target() ~= "windows" then
+        for i = #file_list, 1, -1 do
+            if file_list[i]:match("RID3D12%.cpp$") then
+                table.remove(file_list, i)
+            end
+        end
+    end
+    files (file_list)
     files { CORE .. "/include/**.h" }   -- headers for IDE/source groups
     memory_engine()
     memory_rebuild_engine()
@@ -70,9 +82,17 @@ project "HPL2"
         ROOT .. "/amnesia/slang",
         DEPS_SOURCES .. "/AngelScript/include",
         DEPS_EXTERN .. "/tinyxml2",
+        DEPS_EXTERN .. "/rapidjson/include", -- RIProgram's reflection parser
         DEPS_EXTERN .. "/zlib",             -- zlib.h/zconf.h for BinaryBuffer/SerializeClass
         DEPS_EXTERN .. "/cgltf",            -- cgltf.h single-header glTF 2.0 parser (MeshLoaderGLTF)
     }
+    generated_includes()
+    d3d12ma_includes()
+    if os.target() == "windows" and _OPTIONS["with-d3d12"] == "yes" then
+        defines { "DEVICE_SUPPORT_D3D12" }
+        dependson { "D3D12MA" }
+        slang_d3d12_mips_prebuild()
+    end
     deps_public_includes()   -- ogg/vorbis/IL/Newton/OALWrapper public headers
     vulkan_includes()
     link_sdl2()      -- SDL2 headers + link + dependson

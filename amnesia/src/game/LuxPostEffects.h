@@ -103,7 +103,7 @@ private:
 	void RenderEffect(const hpl::PostEffectRenderCtx &ctx) override;
 	void RenderDesaturate(const hpl::PostEffectRenderCtx &ctx);
 	void RenderBlur(const hpl::PostEffectRenderCtx &ctx);
-	void EnsureScratch(uint32_t alWidth, uint32_t alHeight);
+	void EnsureScratch(const hpl::PostEffectRenderCtx &ctx);
 
 	hpl::RIProgram m_blurProgram;  // posteffect_bloom_blur.frag
 	hpl::RIProgram m_desatProgram; // inventory_post.frag

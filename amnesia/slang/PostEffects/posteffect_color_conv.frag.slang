@@ -32,11 +32,11 @@ struct ColorConvPC
 };
 
 [vk::push_constant]
-ColorConvPC pc;
+ColorConvPC gPushConstants;
 
 struct PSIn
 {
-    [vk::location(0)] float2 v_uv;
+    [vk::location(0)] float2 v_uv : TEXCOORD0;
 };
 
 [shader("fragment")]
@@ -47,7 +47,7 @@ float4 psMain(PSIn pin) : SV_Target
         colorConv.Sample(inputSampler, float2(diffuseColor.x, 0.5f)).x,
         colorConv.Sample(inputSampler, float2(diffuseColor.y, 0.5f)).y,
         colorConv.Sample(inputSampler, float2(diffuseColor.z, 0.5f)).z);
-    return float4(outputColor * pc.alphaFade
-                  + diffuseColor * (1.0f - pc.alphaFade),
+    return float4(outputColor * gPushConstants.alphaFade
+                  + diffuseColor * (1.0f - gPushConstants.alphaFade),
                   1.0f);
 }

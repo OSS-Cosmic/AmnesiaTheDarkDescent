@@ -28,9 +28,9 @@ import Utils.Color.ColorHelpers; // linearToSRGB
 
 struct DecalVSOut
 {
-    float2 uv                      : TEXCRD;
-    float4 color                   : COLOR;
-    nointerpolation uint objectId  : OBJECTID;
+    [vk::location(0)] float2 uv                      : TEXCOORD0;
+    [vk::location(1)] float4 color                   : TEXCOORD1;
+    [vk::location(2)] nointerpolation uint objectId  : TEXCOORD2;
     float4 posH                    : SV_POSITION;
 };
 

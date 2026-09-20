@@ -24,7 +24,7 @@ struct V { float3 viewPos:VIEWPOS; float2 uv:TEXCRD; float3 n:NORMAL; float3 t:T
 // clipPlane is the half-space the planar water reflection keeps. A zero normal
 // disables it, which is what the main viewport passes.
 struct Push { uint blendMode; float sceneAlpha; uint refractive; float lightLevel; uint reflectionOnly; float4 clipPlane; };
-[vk::push_constant] Push pc;
+[vk::push_constant] Push gPushConstants;
 
 float3 safeN(float3 x, float3 fallback)
 {
@@ -138,12 +138,12 @@ float4 psMain(V v):SV_TARGET0
     UniformObject o=gSceneObjects[v.objectId];TranslucentMaterial m=loadTranslucentMaterial(o.materialID);
     if(o.dissolveAmount<=0.0f)discard;
     float3 worldPos=mul(gPerFrame.invViewMat,float4(v.viewPos,1)).xyz;
-    if(any(pc.clipPlane.xyz!=0.0f)&&dot(pc.clipPlane.xyz,worldPos)+pc.clipPlane.w<0.0f)discard;
+    if(any(gPushConstants.clipPlane.xyz!=0.0f)&&dot(gPushConstants.clipPlane.xyz,worldPos)+gPushConstants.clipPlane.w<0.0f)discard;
     uint cfg=m.materialConfig;float4 source=float4(0,0,0,1);
     if ((cfg&kMaterialFlagEnableDiffuse)!=0u&&m.tex[0]!=kInvalidTextureIndex)
     {
-        if(pc.blendMode==kBlendModeAdd&&(cfg&kMaterialFlagSmoothHalo)!=0u)source=smoothHaloLinearSample(v.uv,v.c);
-        else source=translucentLinearSample(sampleBindless2D(m.tex[0],v.uv),v.c,pc.blendMode,(cfg&kMaterialFlagDiffuseIsMask)!=0u);
+        if(gPushConstants.blendMode==kBlendModeAdd&&(cfg&kMaterialFlagSmoothHalo)!=0u)source=smoothHaloLinearSample(v.uv,v.c);
+        else source=translucentLinearSample(sampleBindless2D(m.tex[0],v.uv),v.c,gPushConstants.blendMode,(cfg&kMaterialFlagDiffuseIsMask)!=0u);
     }
     bool dissolve=o.dissolveAmount<1.0f||(cfg&(kMaterialFlagEnableDissolveAlpha|kMaterialFlagUseDissolveFilter))!=0u;
     if(dissolve)
@@ -168,18 +168,18 @@ float4 psMain(V v):SV_TARGET0
     // is already fogged, so a fogged surface fades instead of being painted
     // with fog colour.
     FogResult fog=computeFog(p,gPerFrame.posW);
-    float opacity=pc.sceneAlpha*fog.visibility;
+    float opacity=gPushConstants.sceneAlpha*fog.visibility;
     source.rgb*=transLighting(p,n,cameraToSurfaceW,m,dx,dy);
     // Lit radiance is already exposure-scaled; encodeStandardBlendSource divides once.
-    if((cfg&kMaterialFlagLitDiffuse)!=0u&&pc.blendMode!=kBlendModeMul&&pc.blendMode!=kBlendModeMulX2)
+    if((cfg&kMaterialFlagLitDiffuse)!=0u&&gPushConstants.blendMode!=kBlendModeMul&&gPushConstants.blendMode!=kBlendModeMulX2)
         source.rgb*=kSceneExposure;
     float ll=1.0f;
     if ((cfg&kMaterialFlagAffectedByLightLevel)!=0u&&
         (cfg&kMaterialFlagLitDiffuse)==0u)
-        ll=saturate(pc.lightLevel); // legacy per-object CPU level (StandardTranslucentPass)
+        ll=saturate(gPushConstants.lightLevel); // legacy per-object CPU level (StandardTranslucentPass)
     float3 env;float envFresnel;float envRim;
     const bool hasEnvironment=standardTranslucentEnvironment(v,m,cfg,n,env,envFresnel,envRim);
-    if(pc.reflectionOnly!=0u)
+    if(gPushConstants.reflectionOnly!=0u)
     {
         // Legacy UseIlluminationTrans pass: the object is drawn again with
         // additive blending and only the cube reflection and rim terms.
@@ -188,11 +188,11 @@ float4 psMain(V v):SV_TARGET0
         if(!all(isfinite(reflection)))discard;
         return float4(reflection,1.0f);
     }
-    float4 out=encodeBlendOutputLinear(pc.blendMode,encodeStandardBlendSource(pc.blendMode,
-        applyBlendModulation(pc.blendMode,source,opacity,ll)));
+    float4 out=encodeBlendOutputLinear(gPushConstants.blendMode,encodeStandardBlendSource(gPushConstants.blendMode,
+        applyBlendModulation(gPushConstants.blendMode,source,opacity,ll)));
     if(out.a<=0.0f||!isfinite(out.a))discard;
     if(!all(isfinite(out.rgb)))discard;
-    if(pc.refractive!=0u)
+    if(gPushConstants.refractive!=0u)
     {
         // The copy was taken immediately before this draw, so the undistorted
         // sample is exactly the destination the hardware blend would have read.
@@ -218,7 +218,7 @@ float4 psMain(V v):SV_TARGET0
         }
         float3 refracted=sceneColorInput.SampleLevel(sceneColorSampler,uv,0).rgb;
         if(!all(isfinite(refracted)))discard;
-        float3 composed=standardTranslucentRefractionCompose(pc.blendMode,out.rgb,out.a,refracted);
+        float3 composed=standardTranslucentRefractionCompose(gPushConstants.blendMode,out.rgb,out.a,refracted);
         if(hasEnvironment)
             composed+=standardTranslucentReflection(env,envFresnel,envRim,opacity,ll);
         if(!all(isfinite(composed)))discard;

@@ -462,12 +462,9 @@ bool cVertexBuffer::Compile(tVertexCompileFlag aFlags) {
   return true;
 }
 
-void cVertexBuffer::SubmitToGPU(RICmd *cmd, RIDevice *device,
-                                    cGraphics::FrameContext *cntx) {
+void cVertexBuffer::SubmitToGPU(RIDevice *device) {
   cGraphics* pGraphics = Interface<cGraphics>::Get();
-  assert(cmd);
   assert(device);
-  assert(cntx);
 
   if (m_generation == m_lastSubmitted) {
     return;
@@ -590,10 +587,13 @@ void cVertexBuffer::BuildBlas(RICmd *cmd, RIDevice *device,
   cGraphics* pGraphics = Interface<cGraphics>::Get();
   // Streams must be current before any build — no-op if a prior submit (e.g.
   // the translucent/decal prepare) already uploaded this generation.
-  SubmitToGPU(cmd, device, cntx);
+  SubmitToGPU(device);
 
   if (!device->accelerationStructureEnabled)
     return;
+
+  assert(cmd);
+  assert(cntx);
 
   if (!m_blas.isEmpty() && m_blasGeneration == m_generation) {
     return;
@@ -684,15 +684,23 @@ void cVertexBuffer::BuildBlas(RICmd *cmd, RIDevice *device,
   // single refcount domain for the VkAccelerationStructure.
   RIAccelStructure blas{};
   if (blas.init(device, &asDesc) != RI_SUCCESS) {
-    Error("failed to construct acceel structure");
+    // Continuing would adopt a zeroed acceleration structure whose device
+    // address is 0, and every TLAS instance referencing it would be invalid.
+    // Drop the storage and keep any previously-built BLAS, exactly as the
+    // storage-allocation failure above does.
+    Error("failed to construct acceleration structure for VB[%p]; skipping build",
+          static_cast<void *>(this));
+    m_blasStorage = {};
+    return;
   }
   // Distinct name for the AS itself (was reusing the storage buffer's name).
   std::snprintf(dbgName, sizeof(dbgName), "VB[%p]:Blas", static_cast<void *>(this));
   blas.setDebugObjectName(device, dbgName);
-  // The AS device address comes straight from vkGetAccelerationStructureDeviceAddress
-  // here; if it's zero/garbage every TLAS instance referencing it is invalid.
-  assert(blas.vk.handle != VK_NULL_HANDLE);
-  assert(blas.vk.deviceAddress != 0);
+  // If the address is zero/garbage every TLAS instance referencing it is
+  // invalid. isEmpty()/getDeviceAddress() dispatch per backend; reading
+  // blas.vk.* directly would read D3D12 union storage on a D3D12 device.
+  assert(!blas.isEmpty());
+  assert(blas.getDeviceAddress(device) != 0);
   m_blas = RISharedPointer<RIAccelStructure>(device, blas);
 
   struct RIBufferScratchAllocReq scratchReq = RIAllocBufferFromScratchAlloc(

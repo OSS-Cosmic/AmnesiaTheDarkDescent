@@ -18,6 +18,13 @@
 import SceneTypes;
 import PerFrame.resource;   // gPerFrame.afT for animated-texture frame selection
 
+// GeometryStream imports this module for geometry pull loads.  Keep the
+// reflected unbounded range here so bindless owns the descriptor boundary.
+// DXIL requires an unbounded range to be last in its register space. Vulkan's
+// geometry path remains BDA-only and must not reflect or bind this table.
+#if defined(DXIL)
+public ByteAddressBuffer gGeometryBuffers[] : register(t0, space36);
+#endif
 
 // -----------------------------------------------------------------------------
 // Bindless texture pools (LRU-allocated by cHybridRenderer's bindless
@@ -26,23 +33,23 @@ import PerFrame.resource;   // gPerFrame.afT for animated-texture frame selectio
 // `gTextures2D[i].Sample(gMaterialSampler, uv)`).
 // -----------------------------------------------------------------------------
 [vk::binding(kBindingTextures2D, 0)]
-public Texture2D gTextures2D[];
+public Texture2D gTextures2D[] : register(t0, space32);
 
 [vk::binding(kBindingTexturesCube, 0)]
-public TextureCube gTexturesCube[];
+public TextureCube gTexturesCube[] : register(t0, space33);
 
 // Animated images: one Texture2DArray per animated Image (N frames = N layers).
 // A texture index with kAnimatedTextureBit set selects this array; the bindless
 // sample helpers below strip the bit and pick the current layer from gAnimTex +
 // gPerFrame.afT. cTextureManager writes the descriptor once (no per-frame rewrite).
 [vk::binding(kBindingTextures2DArray, 0)]
-public Texture2DArray gTextures2DArray[];
+public Texture2DArray gTextures2DArray[] : register(t0, space34);
 
 [vk::binding(kBindingAnimTex, 0)]
-public StructuredBuffer<AnimTexRec> gAnimTex;
+public StructuredBuffer<AnimTexRec> gAnimTex : register(t0, space35);
 
 [vk::binding(kBindingMaterialSampler, 0)]
-public SamplerState gMaterialSampler;
+public SamplerState gMaterialSampler : register(s0, space41);
 
 // Current animation layer from the accumulated animation-time `afT` (seconds).
 public uint animFrame(float afT, AnimTexRec r)
@@ -177,7 +184,7 @@ public float4 sampleBindless2DGrad(uint idx, float2 uv, float2 dUVdx, float2 dUV
 // cHybridRenderer::Draw), so a consumer holding a cached slot index can detect
 // that the slot now refers to different geometry.
 [vk::binding(kBindingBindlessSlotGeneration, 0)]
-public RWStructuredBuffer<uint> gBindlessSlotGeneration;
+public RWStructuredBuffer<uint> gBindlessSlotGeneration : register(u0, space70);
 
 // Coarse world-space light grid (LightGridBuildPass writes, the shading passes'
 // NEE reads). gLightGridList stores PACKED light ids (packLightId(type, slot) — the
@@ -185,10 +192,10 @@ public RWStructuredBuffer<uint> gBindlessSlotGeneration;
 // id stays valid) for each cell, kLightsPerCellMax per cell; gLightGridCount is
 // the (capped) per-cell length.
 [vk::binding(kBindingLightGridCount, 0)]
-public RWStructuredBuffer<uint> gLightGridCount;
+public RWStructuredBuffer<uint> gLightGridCount : register(u0, space72);
 
 [vk::binding(kBindingLightGridList, 0)]
-public RWStructuredBuffer<uint> gLightGridList;
+public RWStructuredBuffer<uint> gLightGridList : register(u0, space73);
 
 // -----------------------------------------------------------------------------
 // Scene-object + per-material-variant tables. Slot-allocated by the same
@@ -203,14 +210,14 @@ public RWStructuredBuffer<uint> gLightGridList;
 // not via shader writes.
 // -----------------------------------------------------------------------------
 [vk::binding(kBindingSceneObjects, 0)]
-public RWStructuredBuffer<UniformObject> gSceneObjects;
+public RWStructuredBuffer<UniformObject> gSceneObjects : register(u0, space52);
 
 // Flat material table (Falcor MaterialSystem model). gMaterials[materialID] is a
 // fixed-size MaterialDataBlob; the Material.slang loaders read the type from
 // its header and reinterpret<T> it into the concrete material struct. Replaces the
 // old typed DiffuseMaterial / TranslucentMaterial / WaterMaterial / DecalMaterial SSBOs.
 [vk::binding(kBindingMaterials, 0)]
-public StructuredBuffer<MaterialDataBlob> gMaterials;
+public StructuredBuffer<MaterialDataBlob> gMaterials : register(t0, space53);
 
 // -----------------------------------------------------------------------------
 // Per-world light/fog SSBOs. These live on the dedicated per-world set kWorldSet
@@ -264,7 +271,7 @@ public Texture2D<float> gSceneDepth;
 // Immutable, written once at init; sampled UV-space (wrap) by the shared
 // Material.alphaTest for the CoverageAmount dissolve fade.
 [vk::binding(kBindingDissolveMap, 0)]
-public Texture2D<float4> gDissolveMap;
+public Texture2D<float4> gDissolveMap : register(t0, space80);
 
 // Scene top-level acceleration structure (TLAS). Pushed on set 1
 // per-dispatch (the TLAS is rebuilt every frame).

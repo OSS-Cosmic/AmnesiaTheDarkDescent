@@ -26,22 +26,22 @@ struct OutlineAlphaPC
 };
 
 [vk::push_constant]
-OutlineAlphaPC pc;
+OutlineAlphaPC gPushConstants;
 
 struct PSIn
 {
-    [vk::location(0)] float2 v_uv;
+    [vk::location(0)] float2 v_uv : TEXCOORD0;
 };
 
 [shader("fragment")]
 float4 psMain(PSIn pin) : SV_Target
 {
     float4 tex = diffuseMap.Sample(diffuseSampler, pin.v_uv);
-    if (pc.params.x > 0.5f)
+    if (gPushConstants.params.x > 0.5f)
     {
-        float a = (pc.params.y > 0.5f) ? tex.r : tex.a;
+        float a = (gPushConstants.params.y > 0.5f) ? tex.r : tex.a;
         if (a < 0.5f)
             discard;
     }
-    return float4(tex.rgb * pc.color.rgb * pc.color.a, 0.0f);
+    return float4(tex.rgb * gPushConstants.color.rgb * gPushConstants.color.a, 0.0f);
 }

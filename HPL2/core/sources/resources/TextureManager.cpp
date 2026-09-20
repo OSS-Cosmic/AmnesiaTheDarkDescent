@@ -609,8 +609,15 @@ void cTextureManager::WriteImageDescriptor(Image *apImage) {
                                                      : kBindingTextures2D);
   binding.arrayElement = slot;
   binding.descriptor = tex->descriptor();
-  g.m_bindlessSet.writeDescriptors(&mpGraphics->device, {&binding, 1});
-  apImage->SetBindlessViewCookie(tex->view.cookie);
+  // Stamp the cookie only on success. It is the write-once guard read at the
+  // top of this function, so recording a failed write would make the null slot
+  // permanent for the image's lifetime.
+  if (g.m_bindlessSet.writeDescriptors(&mpGraphics->device, {&binding, 1}))
+    apImage->SetBindlessViewCookie(tex->view.cookie);
+  else
+    Warning("Bindless texture write failed for '%s' (binding %u slot %u); "
+            "the slot stays null\n",
+            apImage->GetName().c_str(), binding.binding, slot);
 
   // Animated: write the per-slot animation record so the shader can pick the
   // layer from gPerFrame.afT (gAnimTex[slot] = {frameCount, frameTime, mode}).

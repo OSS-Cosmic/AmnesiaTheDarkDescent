@@ -39,6 +39,26 @@ newoption {
 }
 
 newoption {
+    trigger = "with-d3d12",
+    value = "yes/no",
+    description = "Enable the DirectX 12 runtime backend on Windows (disabled by default). Ordinary generation uses Vulkan; Windows generation with --with-d3d12=yes uses D3D12 and D3D12MA.",
+    allowed = { { "yes", "Build DX12 backend" }, { "no", "Skip DX12 backend" } },
+    default = "no",
+}
+
+newoption {
+    trigger = "d3d12ma-dir",
+    value = "PATH",
+    description = "Path to the D3D12 Memory Allocator source root (default: HPL2/extern/D3D12MemoryAllocator).",
+}
+
+newoption {
+    trigger = "agility-sdk-dir",
+    value = "PATH",
+    description = "Path to a local DirectX 12 Agility SDK package root (skips SDK acquisition).",
+}
+
+newoption {
     trigger = "xess-sdk-dir",
     value = "PATH",
     description = "Path to a local XeSS SDK root containing inc/xess/xess_vk.h (skips SDK acquisition).",

@@ -357,6 +357,17 @@ static bool GetFsrCapabilities(cGraphics *graphics, FfxInterface *backend,
   if (!graphics || !backend || !scratch || !capabilities)
     return false;
 
+  // This adapter is backed exclusively by FidelityFX's Vulkan backend.  RI's
+  // Vulkan and D3D12 handles share union storage, so inspecting vk.device while
+  // D3D12 is active can make an ID3D12Device pointer look like a valid VkDevice
+  // (and likewise for the physical adapter).  Reject the active API before
+  // reading either Vulkan union member or entering the FidelityFX VK backend.
+  if (!RIIsTargetSelected(RI_DEVICE_API_VK)) {
+    if (reason)
+      *reason = "FSR requires the Vulkan renderer";
+    return false;
+  }
+
   const VkPhysicalDevice physicalDevice =
       graphics->device.physicalAdapter.vk.physicalDevice;
   if (physicalDevice == VK_NULL_HANDLE || graphics->device.vk.device == VK_NULL_HANDLE) {
@@ -484,7 +495,7 @@ struct cFsrUpscaler::Impl {
         return false;
 
       auto copyDeviceDepthBin = RIProgram::loadShaderStage(
-          resources->GetFileSearcher(), "CopyDeviceDepth.cs.spv");
+          resources->GetFileSearcher(), "CopyDeviceDepth.cs");
       if (copyDeviceDepthBin.empty())
         return false;
 
@@ -497,12 +508,9 @@ struct cFsrUpscaler::Impl {
       prepared.copyDeviceDepthProgram = std::move(program);
     }
 
-    VkComputePipelineCreateInfo pipelineInfo = {};
-    pipelineInfo.sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO;
     const hash_t pipelineHash = hash_u32(HASH_INITIAL_VALUE, 0x43445054u);
     prepared.copyDeviceDepthProgram->bindComputePipeline(
-        &graphics->device, cmd, pipelineHash, "Temporal.CopyDeviceDepth.cs",
-        &pipelineInfo);
+        &graphics->device, cmd, pipelineHash, "Temporal.CopyDeviceDepth.cs");
 
     // The caller supplies the depth-aspect-only sampled view. A combined
     // depth/stencil view is not legal for this sampled image descriptor.
@@ -577,6 +585,10 @@ bool cFsrUpscaler::Supports(TemporalUpscalerProvider provider,
 
   if (!m_impl->graphics) {
     m_impl->LogSupportFailure("owning graphics device is unavailable");
+    return false;
+  }
+  if (!RIIsTargetSelected(RI_DEVICE_API_VK)) {
+    m_impl->LogSupportFailure("FSR requires the Vulkan renderer");
     return false;
   }
   if (m_impl->graphics->device.vk.device == VK_NULL_HANDLE ||
@@ -872,6 +884,8 @@ TemporalUpscalerOutput cFsrUpscaler::RecordResolve(
     return failure;
   };
 
+  if (!RIIsTargetSelected(RI_DEVICE_API_VK))
+    return fail("FSR requires the Vulkan renderer");
   if (!m_impl->prepared.valid || !m_impl->prepared.contextCreated)
     return fail("context was not prepared");
   if (!SameExtent(render, m_impl->prepared.render) ||
@@ -1193,6 +1207,7 @@ TemporalUpscalerOutput cFsrUpscaler::RecordResolve(
   success.success = true;
   success.result = input.output;
   success.resultState = input.output.exitState;
+  success.resultStage = input.output.exitStage;
   return success;
 #else
   (void)render;

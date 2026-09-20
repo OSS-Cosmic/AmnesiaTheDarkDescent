@@ -256,8 +256,8 @@ void cLuxHelpFuncs::DrawSetToScreen(bool abClearScreen, const cColor &aCol,
   //}
 
   RIBeginRenderingDesc beginDesc = {};
-  beginDesc.renderArea.width = (int16_t)swapchainWidth;
-  beginDesc.renderArea.height = (int16_t)swapchainHeight;
+  beginDesc.renderArea.width = swapchainWidth;
+  beginDesc.renderArea.height = swapchainHeight;
   beginDesc.colorCount = 1;
   beginDesc.colors = &color;
   beginDesc.depthStencil = pDepthView ? &depth : NULL;

@@ -105,7 +105,10 @@ bool cGpuParticleSystem::SeedQuadIndexBuffer() {
   transaction.currentState = RI_RESOURCE_STATE_UNDEFINED;
   transaction.currentStages = RI_STAGE_NONE;
   transaction.postState = RI_RESOURCE_STATE_INDEX_BUFFER;
-  transaction.postStages = RI_STAGE_VERTEX;
+  // INDEX_BUFFER is consumed by the fixed-function input assembler, not the
+  // vertex shader. RI has no explicit vertex-input stage bit, so leave the
+  // hint empty and let the barrier backend derive INDEX_INPUT from the state.
+  transaction.postStages = RI_STAGE_NONE;
   RI_ResourceBeginCopyBuffer(&mpGraphics->device, &mpGraphics->uploader,
                              &transaction);
   if (!transaction.mapped.data) {

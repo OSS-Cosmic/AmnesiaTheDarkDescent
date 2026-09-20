@@ -13,9 +13,12 @@ void RI_PogoBufferInit( struct RIDevice *device, struct RI_PogoBuffer *pogo, uin
 	for( size_t p = 0; p < 2; p++ ) {
 		if( !pogo->pogoView[p].isEmpty() )
 			pGraphics->graphicsDefer.push( pogo->pogoView[p] );
+		if( !pogo->attachmentView[p].isEmpty() )
+			pGraphics->graphicsDefer.push( pogo->attachmentView[p] );
 		if( !pogo->textures[p].isEmpty() )
 			pGraphics->graphicsDefer.push( pogo->textures[p] );
 		pogo->pogoView[p] = {};
+		pogo->attachmentView[p] = {};
 		pogo->textures[p] = {};
 	}
 	pogo->attachmentIndex = 0;
@@ -45,6 +48,11 @@ void RI_PogoBufferInit( struct RIDevice *device, struct RI_PogoBuffer *pogo, uin
 		pogo->pogoView[p] = RISharedPointer<RITextureView>(
 			device,
 			RITextureView::create( device, pogo->textures[p].Get(), viewDesc ) );
+
+		viewDesc.viewType = RI_VIEWTYPE_COLOR_ATTACHMENT;
+		pogo->attachmentView[p] = RISharedPointer<RITextureView>(
+			device,
+			RITextureView::create( device, pogo->textures[p].Get(), viewDesc ) );
 	}
 }
 
@@ -54,9 +62,12 @@ void RI_PogoBufferDestroy( struct RIDevice *device, struct RI_PogoBuffer *pogo )
 	for( size_t p = 0; p < 2; p++ ) {
 		if( !pogo->pogoView[p].isEmpty() )
 			pGraphics->graphicsDefer.push( pogo->pogoView[p] );
+		if( !pogo->attachmentView[p].isEmpty() )
+			pGraphics->graphicsDefer.push( pogo->attachmentView[p] );
 		if( !pogo->textures[p].isEmpty() )
 			pGraphics->graphicsDefer.push( pogo->textures[p] );
 		pogo->pogoView[p] = {};
+		pogo->attachmentView[p] = {};
 		pogo->textures[p] = {};
 	}
 }

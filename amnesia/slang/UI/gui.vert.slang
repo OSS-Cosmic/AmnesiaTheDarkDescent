@@ -27,19 +27,19 @@ ConstantBuffer<GuiPass> pass;
 
 struct VSIn
 {
-    [vk::location(0)] float3 a_position;
-    [vk::location(1)] float2 a_texcoord;
-    [vk::location(2)] float4 a_color;
+    [vk::location(0)] float3 a_position : POSITION;
+    [vk::location(1)] float2 a_texcoord : TEXCOORD0;
+    [vk::location(2)] float4 a_color : COLOR0;
 };
 
 struct VSOut
 {
-    [vk::location(0)] float2 v_texcoord;
-    [vk::location(1)] float4 v_color;
+    [vk::location(0)] float2 v_texcoord : TEXCOORD0;
+    [vk::location(1)] float4 v_color : COLOR0;
     // Screen-space (pre-MVP) position — the clip planes in pass.clipPlane
     // are computed in screen space (see cGuiSet::Render), so the frag
     // shader's clip test multiplies them against this rather than posH.
-    [vk::location(2)] float4 v_position;
+    [vk::location(2)] float4 v_position : TEXCOORD1;
     float4 posH : SV_Position;
 };
 

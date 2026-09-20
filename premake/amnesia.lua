@@ -25,6 +25,7 @@ project "Amnesia"
         DEPS_SOURCES .. "/AngelScript/include",
         DEPS_EXTERN .. "/tinyxml2",
     }
+    generated_includes()
     deps_public_includes()   -- ogg/vorbis/IL/Newton/OALWrapper public headers
     vulkan_includes()
     mathlib_use()
@@ -41,6 +42,10 @@ project "Amnesia"
     -- Per-shader Slang -> SPIR-V build rules next to the executable (incremental,
     -- no python).
     slang_prebuild()
+    if os.target() == "windows" and _OPTIONS["with-d3d12"] == "yes" then
+        defines { "DEVICE_SUPPORT_D3D12" }
+        slang_dxil_production_prebuild()
+    end
 
     -- RPATH so the colocated SDL2/OpenAL shared libs in ./libs are found.
     filter "system:linux"

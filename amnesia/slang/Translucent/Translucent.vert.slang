@@ -46,13 +46,13 @@ struct TranslucentVSIn
 
 struct TranslucentVSOut
 {
-    float3 viewPos                 : VIEWPOS;   // view-space position (for fog + refraction invDist)
-    float2 uv                      : TEXCRD;
-    float3 normal                  : NORMAL;    // view-space normal
-    float3 tangent                 : TANGENT;   // view-space tangent
-    float3 bitangent               : BITANGENT; // view-space bitangent
-    float4 color                   : COLOR;
-    nointerpolation uint objectId  : OBJECTID;
+    [vk::location(0)] float3 viewPos                 : TEXCOORD0;   // view-space position (for fog + refraction invDist)
+    [vk::location(1)] float2 uv                      : TEXCOORD1;
+    [vk::location(2)] float3 normal                  : TEXCOORD2;    // view-space normal
+    [vk::location(3)] float3 tangent                 : TEXCOORD3;   // view-space tangent
+    [vk::location(4)] float3 bitangent               : TEXCOORD4; // view-space bitangent
+    [vk::location(5)] float4 color                   : TEXCOORD5;
+    [vk::location(6)] nointerpolation uint objectId  : TEXCOORD6;
     float4 posH                    : SV_POSITION;
 };
 
@@ -65,7 +65,8 @@ TranslucentVSOut vsMain(TranslucentVSIn vin,
     // BaseInstance from Vulkan's InstanceIndex to give DX semantics.
     // Bindless slot id arrives via firstInstance — reconstruct
     // gl_InstanceIndex by summing. Same fix as VBufferRaster.3d.slang.
-    uint instanceId = drawInst + baseInst;
+    uint instanceId = drawInst;
+    instanceId += baseInst;
 
     UniformObject obj     = gSceneObjects[instanceId];
     float4x4 modelView    = mul(gPerFrame.viewMat, obj.modelMat);

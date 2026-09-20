@@ -147,6 +147,7 @@ bool HasTargets(const cViewport::StandardViewportState &state,
       return true;
     if (state.renderTarget[i].isEmpty() ||
         state.renderTargetView[i].isEmpty() ||
+        state.renderTargetAttachmentView[i].isEmpty() ||
         state.depthTextures[i].isEmpty() || state.depthView[i].isEmpty())
       return false;
     if (state.depthSampleView[i].isEmpty() ||
@@ -185,142 +186,57 @@ bool HasTargets(const cViewport::StandardViewportState &state,
 // albedo, world position/validity, geometric view normal/validity, authored
 // shading normal, and stable packed UV/material/object IDs. The hit image is
 // only its input.
-struct StandardReconstructPipelineDesc {
-  VkPipelineVertexInputStateCreateInfo vi{
-      VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO};
-  VkPipelineInputAssemblyStateCreateInfo ia{
-      VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO};
-  VkPipelineRasterizationStateCreateInfo rs{
-      VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO};
-  VkDynamicState dyn[2] = {VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR};
-  VkPipelineDynamicStateCreateInfo ds{
-      VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO};
-  VkFormat formats[6];
-  VkPipelineRenderingCreateInfo rendering{
-      VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO};
-  VkPipelineViewportStateCreateInfo vp{
-      VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO};
-  VkPipelineMultisampleStateCreateInfo ms{
-      VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO};
-  VkPipelineDepthStencilStateCreateInfo depth{
-      VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO};
-  VkPipelineColorBlendAttachmentState blend[6] = {};
-  VkPipelineColorBlendStateCreateInfo cb{
-      VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO};
-  VkGraphicsPipelineCreateInfo create{
-      VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO};
-  hash_t hash = 0;
-  // writesVelocity appends cGraphics::VelocityFormat as attachment 5 for the
-  // fallback raster pass (Standard.fallback's SV_TARGET5); the reconstruct pass
-  // writes only the five material targets.
-  StandardReconstructPipelineDesc(RI_Format_e color, RI_Format_e position,
-                                  RI_Format_e normal, RI_Format_e shadingNormal,
-                                  RI_Format_e surface, RI_Format_e depthFormat,
-                                  bool rasterGeometry,
-                                  bool writesVelocity = false) {
-    const uint32_t count = writesVelocity ? 6u : 5u;
-    RI_Format_e f[6] = {color,         position, normal,
-                        shadingNormal, surface,  cGraphics::VelocityFormat};
-    for (uint32_t i = 0; i < count; ++i) {
-      formats[i] = RIFormatToVK(f[i]);
-      blend[i].colorWriteMask =
-          VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT |
-          VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
-    }
-    ia.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
-    rs.polygonMode = VK_POLYGON_MODE_FILL;
-    rs.cullMode = rasterGeometry ? VK_CULL_MODE_BACK_BIT : VK_CULL_MODE_NONE;
-    rs.frontFace = VK_FRONT_FACE_CLOCKWISE;
-    rs.lineWidth = 1.0f;
-    ds.dynamicStateCount = 2;
-    ds.pDynamicStates = dyn;
-    rendering.colorAttachmentCount = count;
-    rendering.pColorAttachmentFormats = formats;
-    rendering.depthAttachmentFormat =
-        rasterGeometry ? RIFormatToVK(depthFormat) : VK_FORMAT_UNDEFINED;
-    vp.viewportCount = 1;
-    vp.scissorCount = 1;
-    ms.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
-    depth.depthTestEnable = rasterGeometry ? VK_TRUE : VK_FALSE;
-    depth.depthWriteEnable = rasterGeometry ? VK_TRUE : VK_FALSE;
-    depth.depthCompareOp = VK_COMPARE_OP_LESS_OR_EQUAL;
-    cb.attachmentCount = count;
-    cb.pAttachments = blend;
-    create.pNext = &rendering;
-    create.pVertexInputState = &vi;
-    create.pInputAssemblyState = &ia;
-    create.pRasterizationState = &rs;
-    create.pDynamicState = &ds;
-    create.pViewportState = &vp;
-    create.pMultisampleState = &ms;
-    create.pDepthStencilState = &depth;
-    create.pColorBlendState = &cb;
-    hash = hash_u32(
-        hash_u32(hash_u32(hash_u32(hash_u32(hash_u32(HASH_INITIAL_VALUE, color),
-                                            position),
-                                   normal),
-                          shadingNormal),
-                 surface),
-        rasterGeometry);
-    hash = hash_u32(hash, count);
-  }
-};
+// writesVelocity appends cGraphics::VelocityFormat as attachment 5 for the
+// fallback raster pass (Standard.fallback's SV_TARGET5); the reconstruct pass
+// writes only the five material targets.
+RIGraphicsPipelineDesc MakeStandardReconstructPipelineDesc(
+    RI_Format_e color, RI_Format_e position, RI_Format_e normal,
+    RI_Format_e shadingNormal, RI_Format_e surface, RI_Format_e depthFormat,
+    bool rasterGeometry, bool writesVelocity = false) {
+  RIGraphicsPipelineDesc desc = {};
+  const uint32_t count = writesVelocity ? 6u : 5u;
+  const RI_Format_e f[6] = {color,         position, normal,
+                            shadingNormal, surface,  cGraphics::VelocityFormat};
 
-struct StandardResolvePipelineDesc {
-  VkPipelineVertexInputStateCreateInfo vi{
-      VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO};
-  VkPipelineInputAssemblyStateCreateInfo ia{
-      VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO};
-  VkPipelineRasterizationStateCreateInfo rs{
-      VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO};
-  VkDynamicState dyn[2] = {VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR};
-  VkPipelineDynamicStateCreateInfo ds{
-      VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO};
-  VkPipelineRenderingCreateInfo rendering{
-      VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO};
-  VkPipelineViewportStateCreateInfo vp{
-      VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO};
-  VkPipelineMultisampleStateCreateInfo ms{
-      VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO};
-  VkPipelineDepthStencilStateCreateInfo depth{
-      VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO};
-  VkPipelineColorBlendAttachmentState blend{};
-  VkPipelineColorBlendStateCreateInfo cb{
-      VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO};
-  VkGraphicsPipelineCreateInfo create{
-      VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO};
-  VkFormat colorFormat = VK_FORMAT_UNDEFINED;
-  hash_t hash = 0;
-  explicit StandardResolvePipelineDesc(RI_Format_e format) {
-    colorFormat = RIFormatToVK(format);
-    rendering.colorAttachmentCount = 1;
-    rendering.pColorAttachmentFormats = &colorFormat;
-    ia.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
-    rs.polygonMode = VK_POLYGON_MODE_FILL;
-    rs.cullMode = VK_CULL_MODE_NONE;
-    rs.frontFace = VK_FRONT_FACE_CLOCKWISE;
-    rs.lineWidth = 1.0f;
-    ds.dynamicStateCount = 2;
-    ds.pDynamicStates = dyn;
-    vp.viewportCount = 1;
-    vp.scissorCount = 1;
-    ms.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
-    blend.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT |
-                           VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
-    cb.attachmentCount = 1;
-    cb.pAttachments = &blend;
-    create.pNext = &rendering;
-    create.pVertexInputState = &vi;
-    create.pInputAssemblyState = &ia;
-    create.pRasterizationState = &rs;
-    create.pDynamicState = &ds;
-    create.pViewportState = &vp;
-    create.pMultisampleState = &ms;
-    create.pDepthStencilState = &depth;
-    create.pColorBlendState = &cb;
-    hash = hash_u32(HASH_INITIAL_VALUE, format);
+  // No vertex input: the fullscreen/visibility VS pulls everything it needs.
+  desc.topology = RI_TOPOLOGY_TRIANGLE_LIST;
+  desc.raster.polygonMode = RI_POLYGON_MODE_FILL;
+  desc.raster.cullMode =
+      rasterGeometry ? RI_CULL_MODE_BACK : RI_CULL_MODE_NONE;
+  desc.raster.frontFace = RI_FRONT_FACE_CLOCKWISE;
+
+  desc.depthStencil.depthTest = rasterGeometry;
+  desc.depthStencil.depthWrite = rasterGeometry;
+  desc.depthStencil.depthCompare = RI_COMPARE_LESS_EQUAL;
+
+  desc.blendCount = count;
+  desc.renderTarget.colorCount = count;
+  for (uint32_t i = 0; i < count; ++i) {
+    desc.renderTarget.colorFormats[i] = f[i];
+    // No blending; every target writes all four channels raw.
+    desc.blend[i].blendEnable = false;
+    desc.blend[i].writeMask = RI_COLOR_WRITE_RGBA;
   }
-};
+  // Depth only exists when this variant rasterizes geometry.
+  desc.renderTarget.depthFormat =
+      rasterGeometry ? depthFormat : RI_FORMAT_UNKNOWN;
+  return desc;
+}
+
+// Single opaque full-screen target, no depth, no blend.
+RIGraphicsPipelineDesc MakeStandardResolvePipelineDesc(RI_Format_e format) {
+  RIGraphicsPipelineDesc desc = {};
+  desc.topology = RI_TOPOLOGY_TRIANGLE_LIST;
+  desc.raster.polygonMode = RI_POLYGON_MODE_FILL;
+  desc.raster.cullMode = RI_CULL_MODE_NONE;
+  desc.raster.frontFace = RI_FRONT_FACE_CLOCKWISE;
+  desc.blendCount = 1;
+  desc.blend[0].blendEnable = false;
+  desc.blend[0].writeMask = RI_COLOR_WRITE_RGBA;
+  desc.renderTarget.colorCount = 1;
+  desc.renderTarget.colorFormats[0] = format;
+  return desc;
+}
 
 bool CreateDepthSampleView(cGraphics *graphics, uint32_t index,
                            cViewport::StandardViewportState &state) {
@@ -865,8 +781,7 @@ cStandardRenderer::cStandardRenderer(cGraphics *apGraphics,
   m_indirectSegment = RISegmentAlloc<RI_NUMBER_FRAME_SEGMENTS>(&desc);
   m_indirectDrawBuffer = detail::CreateBindlessSlotBuffer(
       &mpGraphics->device, kObjectSlotCapacity, sizeof(VkDrawIndirectCommand),
-      VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
-      false);
+      RI_BUFFER_USAGE_INDIRECT, false);
   RISegmentAllocDesc shadowDesc = {};
   shadowDesc.numSegments = RI_NUMBER_FRAMES_FLIGHT;
   shadowDesc.elementStride = sizeof(VkDrawIndirectCommand);
@@ -875,8 +790,7 @@ cStandardRenderer::cStandardRenderer(cGraphics *apGraphics,
       RISegmentAlloc<RI_NUMBER_FRAME_SEGMENTS>(&shadowDesc);
   m_shadowIndirectBuffer = detail::CreateBindlessSlotBuffer(
       &mpGraphics->device, kObjectSlotCapacity, sizeof(VkDrawIndirectCommand),
-      VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
-      false);
+      RI_BUFFER_USAGE_INDIRECT, false);
 
   CreateCullBuffers();
   // Like cRendererSimple: cGraphics::Init no longer loads renderers, and Draw
@@ -894,9 +808,17 @@ cStandardRenderer::cStandardRenderer(cGraphics *apGraphics,
 // and the GPU only reads them, so a staged device-local copy would add an
 // upload for no benefit.
 void cStandardRenderer::CreateCullBuffers() {
+#if (DEVICE_IMPL_D3D12)
+  // D3D12 upload heaps cannot carry UAV flags. The current Standard cull path
+  // depends on host-mapped buffers that compute also writes, so use the
+  // renderer's existing host-built indirect commands until that path owns
+  // explicit upload/default copies. Vulkan retains the GPU cull path below.
+  if (RIIsTargetSelected(RI_DEVICE_API_D3D12))
+    return;
+#endif
   const auto makeCullBuffer = [&](RISegmentAlloc<RI_NUMBER_FRAME_SEGMENTS> *segment,
                                   struct RIBuffer *buffer, uint32_t elements,
-                                  uint32_t stride, VkBufferUsageFlags usage,
+                                  uint32_t stride, uint32_t usage,
                                   bool deviceLocal, const char *debugName) {
     if (!buffer->isEmpty())
       return;
@@ -910,41 +832,41 @@ void cStandardRenderer::CreateCullBuffers() {
   };
   makeCullBuffer(&m_shadowCandidateSegment, &m_shadowCandidateBuffer,
                  kStandardShadowMaxCandidates, sizeof(StandardCullCandidate),
-                 VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, false,
+                 RI_BUFFER_USAGE_SHADER_RESOURCE_STORAGE, false,
                  "StandardRenderer.shadowCullCandidates");
   makeCullBuffer(&m_shadowCullTileSegment, &m_shadowCullTileBuffer,
                  kStandardShadowMaxTiles, sizeof(StandardCullTile),
-                 VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, false,
+                 RI_BUFFER_USAGE_SHADER_RESOURCE_STORAGE, false,
                  "StandardRenderer.shadowCullTiles");
   makeCullBuffer(&m_shadowCullGroupSegment, &m_shadowCullGroupBuffer,
                  kStandardShadowMaxCullGroups, sizeof(StandardCullGroup),
-                 VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, false,
+                 RI_BUFFER_USAGE_SHADER_RESOURCE_STORAGE, false,
                  "StandardRenderer.shadowCullGroups");
   makeCullBuffer(&m_cullCameraSegment, &m_cullCameraBuffer,
                  kStandardCullMaxCameras, sizeof(StandardCullCamera),
-                 VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, false,
+                 RI_BUFFER_USAGE_SHADER_RESOURCE_STORAGE, false,
                  "StandardRenderer.cullCameras");
   makeCullBuffer(&m_translucentCommandSegment, &m_translucentCommandBuffer,
                  kStandardTranslucentMaxDraws,
                  sizeof(VkDrawIndexedIndirectCommand),
-                 VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT |
-                     VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
+                 RI_BUFFER_USAGE_INDIRECT |
+                     RI_BUFFER_USAGE_SHADER_RESOURCE_STORAGE,
                  false,
                  "StandardRenderer.translucentCommands");
   makeCullBuffer(&m_translucentCandidateSegment, &m_translucentCandidateBuffer,
                  kStandardTranslucentMaxDraws, sizeof(StandardCullCandidate),
-                 VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, false,
+                 RI_BUFFER_USAGE_SHADER_RESOURCE_STORAGE, false,
                  "StandardRenderer.translucentCandidates");
   makeCullBuffer(&m_cameraCandidateSegment, &m_cameraCandidateBuffer,
                  kStandardCameraMaxDraws, sizeof(StandardCullCandidate),
-                 VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, false,
+                 RI_BUFFER_USAGE_SHADER_RESOURCE_STORAGE, false,
                  "StandardRenderer.cameraCullCandidates");
   // Device-local: the counts are written by compute and consumed by
   // vkCmdDrawIndirectCount without ever being read back on the host.
   makeCullBuffer(&m_shadowDrawCountSegment, &m_shadowDrawCountBuffer,
                  kStandardShadowMaxTiles, sizeof(uint32_t),
-                 VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT |
-                     VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
+                 RI_BUFFER_USAGE_INDIRECT |
+                     RI_BUFFER_USAGE_SHADER_RESOURCE_STORAGE,
                  true,
                  "StandardRenderer.shadowDrawCounts");
   // Persistent across frames, so no segment allocator. Host-mapped purely so it
@@ -953,7 +875,7 @@ void cStandardRenderer::CreateCullBuffers() {
   if (m_cullVisibilityBuffer.isEmpty()) {
     m_cullVisibilityBuffer = detail::CreateBindlessSlotBuffer(
         &mpGraphics->device, kStandardCullVisibilityKeys, sizeof(uint32_t),
-        VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, false,
+        RI_BUFFER_USAGE_SHADER_RESOURCE_STORAGE, false,
         "StandardRenderer.cullVisibility");
     if (m_cullVisibilityBuffer.mappedAddress)
       std::memset(m_cullVisibilityBuffer.mappedAddress, 0,
@@ -1014,12 +936,19 @@ bool cStandardRenderer::LoadData() {
     return false;
   // The cull kernel is not optional: without it the shadow indirect range is
   // never written, so shadows are dropped rather than drawn from stale data.
-  m_hiZLoaded = m_hiZ && m_hiZ->LoadData();
-  if (!m_hiZLoaded)
-    Error("Standard renderer: HiZ pass failed to load; camera occlusion "
-          "culling is off this run\n");
-  if (!loadPass(m_shadowCull && m_shadowCull->LoadData(), "shadow cull"))
-    return false;
+#if (DEVICE_IMPL_D3D12)
+  if (RIIsTargetSelected(RI_DEVICE_API_D3D12)) {
+    m_hiZLoaded = false;
+  } else
+#endif
+  {
+    m_hiZLoaded = m_hiZ && m_hiZ->LoadData();
+    if (!m_hiZLoaded)
+      Error("Standard renderer: HiZ pass failed to load; camera occlusion "
+            "culling is off this run\n");
+    if (!loadPass(m_shadowCull && m_shadowCull->LoadData(), "shadow cull"))
+      return false;
+  }
   // AO is optional: without it the light pass reads a cleared fallback.
   m_ambientOcclusionLoaded =
       m_ambientOcclusion && m_ambientOcclusion->LoadData();
@@ -1034,8 +963,7 @@ bool cStandardRenderer::LoadData() {
     m_indirectSegment = RISegmentAlloc<RI_NUMBER_FRAME_SEGMENTS>(&desc);
     m_indirectDrawBuffer = detail::CreateBindlessSlotBuffer(
         &mpGraphics->device, kObjectSlotCapacity, sizeof(VkDrawIndirectCommand),
-        VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT |
-            VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
+        RI_BUFFER_USAGE_INDIRECT,
         false);
   }
   if (m_shadowIndirectBuffer.isEmpty()) {
@@ -1046,24 +974,26 @@ bool cStandardRenderer::LoadData() {
     m_shadowIndirectSegment = RISegmentAlloc<RI_NUMBER_FRAME_SEGMENTS>(&desc);
     m_shadowIndirectBuffer = detail::CreateBindlessSlotBuffer(
         &mpGraphics->device, kObjectSlotCapacity, sizeof(VkDrawIndirectCommand),
-        VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT |
-            VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
+        RI_BUFFER_USAGE_INDIRECT,
         false);
   }
   // DestroyData hands these back, so a hot-reload has to rebuild them before
   // any pass binds them again.
   CreateCullBuffers();
-  const VkDescriptorSetLayout external[] = {
-      mpGraphics->globalset->m_bindlessSet.vk.m_bindlessSetLayout};
+  const RIBindlessLayout external[] = {
+      mpGraphics->globalset->m_bindlessSet.layout()};
   auto load = [&](std::shared_ptr<RIProgram> &program, const char *file,
                   const char *name) -> bool {
-    auto bin = RIProgram::loadShaderStage(mpResources->GetFileSearcher(), file);
-    if (bin.empty())
+    auto vertBin = RIProgram::loadShaderStage(mpResources->GetFileSearcher(),
+                                              file, "vsMain");
+    auto fragBin = RIProgram::loadShaderStage(mpResources->GetFileSearcher(),
+                                              file, "psMain");
+    if (vertBin.empty() || fragBin.empty())
       return false;
     auto replacement = std::make_shared<RIProgram>();
     std::array<RIProgram::ModuleStage, 2> stages = {
-        RIProgram::ModuleStage{RIProgram::PROGRAM_STAGE_VERTEX, bin, "vsMain"},
-        RIProgram::ModuleStage{RIProgram::PROGRAM_STAGE_FRAGMENT, bin,
+        RIProgram::ModuleStage{RIProgram::PROGRAM_STAGE_VERTEX, vertBin, "vsMain"},
+        RIProgram::ModuleStage{RIProgram::PROGRAM_STAGE_FRAGMENT, fragBin,
                                "psMain"}};
     replacement->initialize(&mpGraphics->device, stages, external, name);
     auto old = std::move(program);
@@ -1093,10 +1023,10 @@ bool cStandardRenderer::LoadData() {
                          mpGraphics->device.geometryShaderEnabled;
   if (usePacked) {
     if (!m_visibilityLoaded)
-      m_visibilityLoaded = load(m_visibility, "Standard.visibility.3d.spv",
+      m_visibilityLoaded = load(m_visibility, "Standard.visibility.3d",
                                 "Standard.visibility");
     if (!m_reconstructLoaded)
-      m_reconstructLoaded = load(m_reconstruct, "Standard.reconstruct.3d.spv",
+      m_reconstructLoaded = load(m_reconstruct, "Standard.reconstruct.3d",
                                  "Standard.reconstruct");
   } else {
     if (m_visibility)
@@ -1108,17 +1038,17 @@ bool cStandardRenderer::LoadData() {
   }
   if (!m_fallbackLoaded)
     m_fallbackLoaded =
-        load(m_fallback, "Standard.fallback.3d.spv", "Standard.fallback");
+        load(m_fallback, "Standard.fallback.3d", "Standard.fallback");
   if (!m_lightingLoaded)
     m_lightingLoaded =
-        load(m_lighting, "Standard.light.3d.spv", "Standard.light");
+        load(m_lighting, "Standard.light.3d", "Standard.light");
   // Type="Decal" meshes are optional: without the program the accumulators
   // still clear to identity and the resolve is unchanged.
   if (!m_meshDecalLoaded) {
     auto vert = RIProgram::loadShaderStage(mpResources->GetFileSearcher(),
-                                           "Decal.vert.spv");
+                                           "Decal.vert");
     auto frag = RIProgram::loadShaderStage(mpResources->GetFileSearcher(),
-                                           "Decal.frag.spv");
+                                           "Decal.frag");
     if (!vert.empty() && !frag.empty()) {
       auto replacement = std::make_shared<RIProgram>();
       std::array<RIProgram::ModuleStage, 2> stages = {
@@ -1237,6 +1167,7 @@ cViewport::StandardViewportState::~StandardViewportState() {
   for (uint32_t i = 0; i < RI_MAX_SWAPCHAIN_IMAGES; ++i) {
     graphics->graphicsDefer.push(renderTarget[i]);
     graphics->graphicsDefer.push(renderTargetView[i]);
+    graphics->graphicsDefer.push(renderTargetAttachmentView[i]);
     graphics->graphicsDefer.push(depthTextures[i]);
     graphics->graphicsDefer.push(depthView[i]);
     graphics->graphicsDefer.push(visibilityTexture[i]);
@@ -1314,6 +1245,8 @@ cViewport::StandardViewportState::StandardViewportState(
   for (uint32_t i = 0; i < RI_MAX_SWAPCHAIN_IMAGES; ++i) {
     renderTarget[i] = std::move(rhs.renderTarget[i]);
     renderTargetView[i] = std::move(rhs.renderTargetView[i]);
+    renderTargetAttachmentView[i] =
+        std::move(rhs.renderTargetAttachmentView[i]);
     depthTextures[i] = std::move(rhs.depthTextures[i]);
     depthView[i] = std::move(rhs.depthView[i]);
     visibilityTexture[i] = std::move(rhs.visibilityTexture[i]);
@@ -1473,6 +1406,10 @@ void cViewport::StandardViewportState::Update(cGraphics::FrameContext *cntx,
             static_cast<decltype(RI_USAGE_TRANSFER_SRC)>(0x40),
         &replacement.renderTarget[i], &replacement.renderTargetView[i],
         "StandardViewportState.renderTarget");
+    if (success)
+      success = makeAttachmentView(replacement.renderTarget[i],
+                                   cGraphics::PogoColorFormat,
+                                   replacement.renderTargetAttachmentView[i]);
     success =
         success &&
         CreateViewportAttachmentTexture(
@@ -1980,8 +1917,7 @@ void cStandardRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
   for (iRenderable *o : solids) {
     if (o && o->GetVertexBuffer())
       static_cast<cVertexBuffer *>(o->GetVertexBuffer())
-          ->SubmitToGPU(&mpGraphics->blasSubmit.cmds[0], &mpGraphics->device,
-                        cntx);
+          ->SubmitToGPU(&mpGraphics->device);
   }
   const uint32_t index = mpGraphics->swapchainIndex;
   const uint32_t imageCount =
@@ -1999,6 +1935,12 @@ void cStandardRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
       state->renderTargetView[index].isEmpty() ||
       state->depthView[index].isEmpty())
     return;
+  static bool sLoggedD3D12MrtVerification = false;
+  if (!sLoggedD3D12MrtVerification) {
+    Log("Standard renderer verification: viewport state ready (%ux%u, %zu solids)\n",
+        state->width, state->height, solids.size());
+    sLoggedD3D12MrtVerification = true;
+  }
 
   // Publish exactly the matrices used by the raster pass.
   const uint32_t jitterPhaseCount = viewport->GetTemporalJitterPhaseCount();
@@ -2370,8 +2312,7 @@ void cStandardRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
             } else {
               // Shadow-only caster (typically behind the camera): the camera
               // list never saw it, so its geometry may not be resident.
-              vb->SubmitToGPU(&mpGraphics->blasSubmit.cmds[0],
-                              &mpGraphics->device, cntx);
+              vb->SubmitToGPU(&mpGraphics->device);
               const uint32_t materialId =
                   mpGraphics->globalset
                       ->submitMaterial(
@@ -2857,6 +2798,8 @@ void cStandardRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
       !state->visibilityTexture[index].isEmpty() &&
       !state->visibilityView[index].isEmpty() &&
       !state->visibilityAttachmentView[index].isEmpty();
+  Log("Standard renderer verification: packed visibility=%u\n",
+      packedVisibility ? 1u : 0u);
   RITextureBarrier barriers[8] = {};
   barriers[0] =
       RI_PogoAttachmentBarrier(state->renderTarget[index].Get(), true);
@@ -3039,24 +2982,24 @@ void cStandardRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
   if (drawCount) {
     if (packedVisibility) {
       // Matches the packed begin above: visibility, material colour, velocity.
-      GBufferMRTPipelineDesc pd(
+      const RIGraphicsPipelineDesc pd = MakeGBufferMRTPipelineDesc(
           cGraphics::VisibilityFormat, cGraphics::PogoColorFormat,
           cGraphics::VelocityFormat, cGraphics::DepthFormat);
       m_visibility->bindPipeline(&mpGraphics->device,
-                                 &mpGraphics->primary.cmds[0], pd.hash,
-                                 "Standard.visibility", &pd.createInfo);
+                                 &mpGraphics->primary.cmds[0],
+                                 HASH_INITIAL_VALUE, "Standard.visibility", pd);
       m_visibility->bindBindlessDescriptorSet(
           &mpGraphics->primary.cmds[0], &mpGraphics->globalset->m_bindlessSet,
           0);
     } else {
-      StandardReconstructPipelineDesc pd(
+      const RIGraphicsPipelineDesc pd = MakeStandardReconstructPipelineDesc(
           cGraphics::PogoColorFormat, RI_FORMAT_RGBA32_SFLOAT,
           RI_FORMAT_RGBA32_SFLOAT, RI_FORMAT_RGBA32_SFLOAT,
           cGraphics::VisibilityFormat, cGraphics::DepthFormat, true,
           /*writesVelocity=*/true);
       m_fallback->bindPipeline(&mpGraphics->device,
-                               &mpGraphics->primary.cmds[0], pd.hash,
-                               "Standard.fallback", &pd.create);
+                               &mpGraphics->primary.cmds[0], HASH_INITIAL_VALUE,
+                               "Standard.fallback", pd);
       m_fallback->bindBindlessDescriptorSet(
           &mpGraphics->primary.cmds[0], &mpGraphics->globalset->m_bindlessSet,
           0);
@@ -3085,6 +3028,7 @@ void cStandardRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
   }
 
   mpGraphics->primary.cmds[0].vk_d3d12_endRendering(&mpGraphics->device);
+  Log("Standard renderer verification: primary geometry scope recorded\n");
 
   // ---------------------------------------------------------------------
   // Phase 2 of the camera cull.
@@ -3100,6 +3044,7 @@ void cStandardRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
   // output survives.
   // ---------------------------------------------------------------------
   if (cameraCullDispatched) {
+    Log("Standard renderer verification: entering phase 2 cull\n");
     RICmd *cameraCmd = &mpGraphics->primary.cmds[0];
     cameraCmd->vk_d3d12_textureBarrier(RITextureBarrier(
         state->depthTextures[index].Get(), RI_RESOURCE_STATE_DEPTH_WRITE,
@@ -3132,21 +3077,22 @@ void cStandardRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
       depth.loadOp = RI_ATTACHMENT_LOAD_OP_LOAD;
       cameraCmd->vk_d3d12_beginRendering(&mpGraphics->device, begin);
       if (packedVisibility) {
-        GBufferMRTPipelineDesc pd(
+        const RIGraphicsPipelineDesc pd = MakeGBufferMRTPipelineDesc(
             cGraphics::VisibilityFormat, cGraphics::PogoColorFormat,
             cGraphics::VelocityFormat, cGraphics::DepthFormat);
-        m_visibility->bindPipeline(&mpGraphics->device, cameraCmd, pd.hash,
-                                   "Standard.visibility", &pd.createInfo);
+        m_visibility->bindPipeline(&mpGraphics->device, cameraCmd,
+                                   HASH_INITIAL_VALUE, "Standard.visibility",
+                                   pd);
         m_visibility->bindBindlessDescriptorSet(
             cameraCmd, &mpGraphics->globalset->m_bindlessSet, 0);
       } else {
-        StandardReconstructPipelineDesc pd(
+        const RIGraphicsPipelineDesc pd = MakeStandardReconstructPipelineDesc(
             cGraphics::PogoColorFormat, RI_FORMAT_RGBA32_SFLOAT,
             RI_FORMAT_RGBA32_SFLOAT, RI_FORMAT_RGBA32_SFLOAT,
             cGraphics::VisibilityFormat, cGraphics::DepthFormat, true,
             /*writesVelocity=*/true);
-        m_fallback->bindPipeline(&mpGraphics->device, cameraCmd, pd.hash,
-                                 "Standard.fallback", &pd.create);
+        m_fallback->bindPipeline(&mpGraphics->device, cameraCmd,
+                                 HASH_INITIAL_VALUE, "Standard.fallback", pd);
         m_fallback->bindBindlessDescriptorSet(
             cameraCmd, &mpGraphics->globalset->m_bindlessSet, 0);
       }
@@ -3174,6 +3120,7 @@ void cStandardRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
       cameraCmd->vk_d3d12_endRendering(&mpGraphics->device);
     }
   }
+  Log("Standard renderer verification: phase 2 skipped/completed\n");
   if (!packedVisibility) {
     mpGraphics->primary.cmds[0].vk_d3d12_textureBarrier(
         RI_PogoShaderBarrier(state->materialColorTexture[index].Get(), false));
@@ -3199,21 +3146,25 @@ void cStandardRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
         state->visibilityTexture[index].Get(), RI_RESOURCE_STATE_RENDER_TARGET,
         RI_RESOURCE_STATE_SHADER_RESOURCE, RI_STAGE_FRAGMENT, RI_STAGE_FRAGMENT,
         RI_BARRIER_ASPECT_COLOR));
+  Log("Standard renderer verification: visibility barrier recorded\n");
   mpGraphics->primary.cmds[0].vk_d3d12_textureBarrier(RITextureBarrier(
       state->velocityTexture[index].Get(), RI_RESOURCE_STATE_RENDER_TARGET,
       RI_RESOURCE_STATE_SHADER_RESOURCE, RI_STAGE_FRAGMENT, RI_STAGE_FRAGMENT,
       RI_BARRIER_ASPECT_COLOR));
+  Log("Standard renderer verification: velocity barrier recorded\n");
 
   if (!packedVisibility)
     mpGraphics->primary.cmds[0].vk_d3d12_textureBarrier(RITextureBarrier(
         state->depthTextures[index].Get(), RI_RESOURCE_STATE_DEPTH_WRITE,
         RI_RESOURCE_STATE_SHADER_RESOURCE, RI_STAGE_FRAGMENT, RI_STAGE_FRAGMENT,
         RI_BARRIER_ASPECT_DEPTH));
+  Log("Standard renderer verification: fallback depth barrier recorded/skipped\n");
 
   // Decode the packed hit with a fullscreen graphics pass. All material
   // G-buffer outputs are written at native extent, so downstream geometric
   // normal consumers and lighting have real surfaces in the barycentric path.
   if (packedVisibility && m_reconstruct && m_reconstructLoaded) {
+    Log("Standard renderer verification: entering reconstruct\n");
     RITextureBarrier reconInputs[6] = {};
     auto makeReconOutputBarrier = [](RITexture *texture,
                                      RIResourceState_e before,
@@ -3267,13 +3218,13 @@ void cStandardRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
     reconBegin.depthStencil = nullptr;
     mpGraphics->primary.cmds[0].vk_d3d12_beginRendering(&mpGraphics->device,
                                                         reconBegin);
-    StandardReconstructPipelineDesc pd(
+    const RIGraphicsPipelineDesc pd = MakeStandardReconstructPipelineDesc(
         cGraphics::PogoColorFormat, RI_FORMAT_RGBA32_SFLOAT,
         RI_FORMAT_RGBA32_SFLOAT, RI_FORMAT_RGBA32_SFLOAT,
         cGraphics::VisibilityFormat, cGraphics::DepthFormat, false);
     m_reconstruct->bindPipeline(&mpGraphics->device,
-                                &mpGraphics->primary.cmds[0], pd.hash,
-                                "Standard.reconstruct", &pd.create);
+                                &mpGraphics->primary.cmds[0],
+                                HASH_INITIAL_VALUE, "Standard.reconstruct", pd);
     m_reconstruct->bindBindlessDescriptorSet(
         &mpGraphics->primary.cmds[0], &mpGraphics->globalset->m_bindlessSet, 0);
     RIProgram::DescriptorBinding inputs[2];
@@ -3304,6 +3255,7 @@ void cStandardRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
     mpGraphics->primary.cmds[0].setScissor(&mpGraphics->device, sc);
     mpGraphics->primary.cmds[0].draw(&mpGraphics->device, 3, 1, 0, 0);
     mpGraphics->primary.cmds[0].vk_d3d12_endRendering(&mpGraphics->device);
+    Log("Standard renderer verification: reconstruct recorded\n");
     mpGraphics->primary.cmds[0].vk_d3d12_textureBarrier(
         RI_PogoShaderBarrier(state->materialColorTexture[index].Get(), false));
     mpGraphics->primary.cmds[0].vk_d3d12_textureBarrier(
@@ -3317,10 +3269,12 @@ void cStandardRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
         RI_RESOURCE_STATE_SHADER_RESOURCE, RI_STAGE_FRAGMENT, RI_STAGE_FRAGMENT,
         RI_BARRIER_ASPECT_COLOR));
   }
+  Log("Standard renderer verification: reconstruction completed/skipped\n");
 
   // Project clustered decals after reconstruction/fallback and before
   // lighting. The pass writes an independent target, so a failed/empty pass
   // cannot corrupt the identity material color input.
+  Log("Standard renderer verification: entering clustered decals\n");
   bool decalsRendered = false;
   if (m_decals && m_decals->IsLoaded() && apWorld->GetDecalCount() > 0 &&
       !state->decalColorTexture[index].isEmpty()) {
@@ -3353,6 +3307,7 @@ void cStandardRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
     }
     state->decalColorInitialized[index] = true;
   }
+  Log("Standard renderer verification: clustered decals completed/skipped\n");
 
   // Type="Decal" meshes (dirt_floor / moist_wall / trails). The legacy
   // deferred renderer drew them into its albedo target (RendererDeferred.cpp
@@ -3361,6 +3316,7 @@ void cStandardRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
   // Hybrid composite. Both clear every frame so the resolve reads identity
   // when nothing draws.
   {
+    Log("Standard renderer verification: entering mesh decals\n");
     std::vector<iRenderable *> mulDecals, addDecals;
     for (iRenderable *o :
          m_rendererList.GetRenderableItems(eRenderListType_Decal)) {
@@ -3389,8 +3345,7 @@ void cStandardRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
       for (iRenderable *o : list) {
         cMaterial *mat = o->GetMaterial();
         auto *vb = static_cast<cVertexBuffer *>(o->GetVertexBuffer());
-        vb->SubmitToGPU(&mpGraphics->blasSubmit.cmds[0], &mpGraphics->device,
-                        cntx);
+        vb->SubmitToGPU(&mpGraphics->device);
         const uint32_t materialId =
             mpGraphics->globalset
                 ->submitMaterial(cntx, mat,
@@ -3416,6 +3371,8 @@ void cStandardRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
     };
     const std::vector<MeshDecalDraw> mulDraws = submitDecals(mulDecals);
     const std::vector<MeshDecalDraw> addDraws = submitDecals(addDecals);
+    Log("Standard renderer verification: mesh decals submitted (%zu/%zu)\n",
+        mulDraws.size(), addDraws.size());
     if (!mulDraws.empty() || !addDraws.empty())
       mpGraphics->globalset->flushMirrors(&mpGraphics->device);
 
@@ -3471,11 +3428,12 @@ void cStandardRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
           uint32_t presentMask = 0;
           if (!BindMeshDecalStreams(cmd, mpGraphics, draw.vb, &presentMask))
             continue;
-          DecalPipelineDesc pd(cGraphics::PogoColorFormat,
-                               cGraphics::DepthFormat,
-                               MeshDecalBlend(draw.blend), presentMask);
-          m_meshDecal->bindPipeline(&mpGraphics->device, cmd, pd.hash,
-                                    "Standard.meshDecal", &pd.createInfo);
+          m_meshDecal->bindPipeline(
+              &mpGraphics->device, cmd, HASH_INITIAL_VALUE,
+              "Standard.meshDecal",
+              MakeDecalPipelineDesc(cGraphics::PogoColorFormat,
+                                    cGraphics::DepthFormat,
+                                    MeshDecalBlend(draw.blend), presentMask));
           cmd->drawIndexed(&mpGraphics->device,
                            static_cast<uint32_t>(draw.vb->GetIndexNum()), 1u,
                            0u, 0, draw.slot);
@@ -3486,18 +3444,22 @@ void cStandardRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
     };
     accumulate(state->decalMulTexture[index].Get(),
                state->decalMulAttachmentView[index].Get(), 1.0f, mulDraws);
+    Log("Standard renderer verification: multiply decal target recorded\n");
     accumulate(state->decalAddTexture[index].Get(),
                state->decalAddAttachmentView[index].Get(), 0.0f, addDraws);
+    Log("Standard renderer verification: additive decal target recorded\n");
     cmd->vk_d3d12_textureBarrier(RITextureBarrier(
         state->depthTextures[index].Get(), RI_RESOURCE_STATE_DEPTH_READ,
         RI_RESOURCE_STATE_SHADER_RESOURCE, RI_STAGE_NONE, RI_STAGE_FRAGMENT,
         RI_BARRIER_ASPECT_DEPTH));
   }
+  Log("Standard renderer verification: mesh decals completed\n");
 
   // Legacy RendererDeferred billboard halos: occluded-texel counts of each
   // halo's source box fade its glow (cStandardHaloPass). Resolved before the
   // particle pass so this frame draws the newest alpha.
   if (m_halo) {
+    Log("Standard renderer verification: entering halo pass\n");
     if (!state->haloQueries) {
       state->haloQueries = std::make_shared<StandardHaloQueryState>();
       state->haloQueries->graphics = mpGraphics;
@@ -3511,14 +3473,18 @@ void cStandardRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
                    state->depthView[index].Get(), state->width, state->height,
                    frameBinding, paneSalt);
   }
+  Log("Standard renderer verification: halo pass completed/skipped\n");
 
   bool aoRendered = false;
+  Log("Standard renderer verification: entering AO pass\n");
   if (apSettings && apSettings->mbSSAOActive && m_ambientOcclusion &&
       m_ambientOcclusionLoaded) {
     aoRendered = m_ambientOcclusion->Render(cntx, &mpGraphics->primary.cmds[0],
                                             mpGraphics->frameIndex, state,
                                             index, apFrustum, &frameBinding);
   }
+  Log("Standard renderer verification: AO pass completed/skipped (%u)\n",
+      aoRendered ? 1u : 0u);
 
   // From here on the render depth sits in SHADER_RESOURCE. Every exit must hand
   // it back in DEPTH_ATTACHMENT_OPTIMAL, the same contract as
@@ -3538,6 +3504,8 @@ void cStandardRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
   RISharedPointer<RITexture> aoFallbackTexture;
   RISharedPointer<RITextureView> aoFallbackView;
   const bool useAoFallback = !aoRendered || state->aoView[index].isEmpty();
+  Log("Standard renderer verification: entering AO fallback (%u)\n",
+      useAoFallback ? 1u : 0u);
   if (useAoFallback) {
     RITextureDesc td{};
     td.type = RI_TEXTURE_2D;
@@ -3579,25 +3547,41 @@ void cStandardRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
         mpGraphics->graphicsDefer.push(aoFallbackView);
     }
   }
+  Log("Standard renderer verification: AO fallback completed/skipped\n");
 
   // Resolve the reconstructed material inputs into the final HDR target.
   // The light buffers are immutable for this draw and are retired only after
   // the frame completes, allowing multiple panes and in-flight frames.
   {
+    Log("Standard renderer verification: entering light resolve\n");
     RIRenderingAttachment output = {};
-    output.view = *state->renderTargetView[index];
+    output.view = *state->renderTargetAttachmentView[index];
     output.loadOp = RI_ATTACHMENT_LOAD_OP_CLEAR;
     output.storeOp = RI_ATTACHMENT_STORE_OP_STORE;
     RIBeginRenderingDesc resolveBegin = {};
     resolveBegin.renderArea.width = static_cast<int16_t>(state->width);
     resolveBegin.renderArea.height = static_cast<int16_t>(state->height);
+#if (DEVICE_IMPL_D3D12)
+    if (RIIsTargetSelected(RI_DEVICE_API_D3D12)) {
+      const RITextureView &v = output.view;
+      const D3D12_RESOURCE_DESC rd = v.d3d12.resource->GetDesc();
+      Log("Standard renderer verification: resolve view type=%u resource=%p "
+          "extent=%llux%u area=%dx%d mip=%u/%u layer=%u/%u\n",
+          v.d3d12.viewType, static_cast<void *>(v.d3d12.resource),
+          static_cast<unsigned long long>(rd.Width), rd.Height,
+          resolveBegin.renderArea.width, resolveBegin.renderArea.height,
+          v.d3d12.baseMip, v.d3d12.mipNum, v.d3d12.baseLayer,
+          v.d3d12.layerNum);
+    }
+#endif
     resolveBegin.colorCount = 1;
     resolveBegin.colors = &output;
     mpGraphics->primary.cmds[0].vk_d3d12_beginRendering(&mpGraphics->device,
                                                         resolveBegin);
-    StandardResolvePipelineDesc pd(cGraphics::PogoColorFormat);
+    const RIGraphicsPipelineDesc pd =
+        MakeStandardResolvePipelineDesc(cGraphics::PogoColorFormat);
     m_lighting->bindPipeline(&mpGraphics->device, &mpGraphics->primary.cmds[0],
-                             pd.hash, "Standard.light", &pd.create);
+                             HASH_INITIAL_VALUE, "Standard.light", pd);
     m_lighting->bindBindlessDescriptorSet(
         &mpGraphics->primary.cmds[0], &mpGraphics->globalset->m_bindlessSet, 0);
     RIProgram::DescriptorBinding bindings[9] = {};
@@ -3755,6 +3739,7 @@ void cStandardRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
     mpGraphics->primary.cmds[0].vk_d3d12_textureBarrier(
         RI_PogoShaderBarrier(state->renderTarget[index].Get(), false));
   }
+  Log("Standard renderer verification: light resolve completed\n");
 
   if (m_environment && m_environment->LoadData() &&
       !state->environmentTexture[index].isEmpty()) {
@@ -3969,7 +3954,9 @@ void cStandardRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
           RI_RESOURCE_STATE_DEPTH_READ | RI_RESOURCE_STATE_SHADER_RESOURCE,
           RI_STAGE_FRAGMENT, RI_STAGE_ALL_GRAPHICS, RI_BARRIER_ASPECT_DEPTH));
       RIRenderingAttachment color = {};
-      color.view = *state->renderTargetView[index];
+      // renderTargetView is the SHADER_RESOURCE_2D view; D3D12 needs the
+      // COLOR_ATTACHMENT view to build an RTV.
+      color.view = *state->renderTargetAttachmentView[index];
       color.loadOp = RI_ATTACHMENT_LOAD_OP_LOAD;
       color.storeOp = RI_ATTACHMENT_STORE_OP_STORE;
       RIRenderingAttachment depth = {};
@@ -4085,7 +4072,7 @@ void cStandardRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
         RI_RESOURCE_STATE_RENDER_TARGET_READ, RI_STAGE_FRAGMENT,
         RI_STAGE_FRAGMENT, RI_BARRIER_ASPECT_COLOR));
     RIRenderingAttachment color = {};
-    color.view = *state->renderTargetView[index];
+    color.view = *state->renderTargetAttachmentView[index];
     color.loadOp = RI_ATTACHMENT_LOAD_OP_LOAD;
     color.storeOp = RI_ATTACHMENT_STORE_OP_STORE;
     RIRenderingAttachment depth = {};

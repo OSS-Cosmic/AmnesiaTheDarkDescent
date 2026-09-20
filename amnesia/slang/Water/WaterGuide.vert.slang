@@ -28,12 +28,12 @@ struct WaterVSIn
 
 struct WaterGuideVSOut
 {
-    float3 posW                    : POSW;
-    float2 uv                      : TEXCRD;
-    nointerpolation uint objectId  : OBJECTID;
+    [vk::location(0)] float3 posW                    : TEXCOORD0;
+    [vk::location(1)] float2 uv                      : TEXCOORD1;
+    [vk::location(2)] nointerpolation uint objectId  : TEXCOORD2;
     float4 posH                    : SV_POSITION;
-    float4 curClip                 : CUR_CLIP;
-    float4 prevClip                : PREV_CLIP;
+    [vk::location(3)] float4 curClip                 : TEXCOORD3;
+    [vk::location(4)] float4 prevClip                : TEXCOORD4;
 };
 
 [shader("vertex")]
@@ -41,7 +41,8 @@ WaterGuideVSOut vsMain(WaterVSIn vin,
                        uint drawInst : SV_InstanceID,
                        uint baseInst : SV_StartInstanceLocation)
 {
-    uint instanceId = drawInst + baseInst;
+    uint instanceId = drawInst;
+    instanceId += baseInst;
     UniformObject obj = gSceneObjects[instanceId];
 
     float4 pos = float4(vin.a_position, 1.0f);

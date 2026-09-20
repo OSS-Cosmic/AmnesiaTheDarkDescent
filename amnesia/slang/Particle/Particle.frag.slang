@@ -30,14 +30,14 @@ struct ParticlePushConstants
 };
 
 [vk::push_constant]
-ParticlePushConstants pc;
+ParticlePushConstants gPushConstants;
 
 struct ParticleVSOut
 {
-    float3 viewPos                 : VIEWPOS;
-    float2 uv                      : TEXCRD;
-    float4 color                   : COLOR;
-    nointerpolation uint objectId  : OBJECTID;
+    [vk::location(0)] float3 viewPos                 : TEXCOORD0;
+    [vk::location(1)] float2 uv                      : TEXCOORD1;
+    [vk::location(2)] float4 color                   : TEXCOORD2;
+    [vk::location(3)] nointerpolation uint objectId  : TEXCOORD3;
     float4 posH                    : SV_POSITION;
 };
 
@@ -51,13 +51,13 @@ float4 psMain(ParticleVSOut psIn) : SV_TARGET
 
     float4 sample = float4(0.0f, 0.0f, 0.0f, 1.0f);
     uint diffuseTex = mat.tex[0];
-    bool smoothHalo = pc.blendMode == kBlendModeAdd &&
+    bool smoothHalo = gPushConstants.blendMode == kBlendModeAdd &&
         (mat.materialConfig & kMaterialFlagSmoothHalo) != 0u;
     if (!smoothHalo && diffuseTex != kInvalidTextureIndex)
         sample = sampleBindless2D(diffuseTex, psIn.uv);
     float4 diffuseColor = smoothHalo ? smoothHaloLinearSample(psIn.uv, psIn.color)
         : translucentLinearSample(sample, psIn.color,
-        pc.blendMode, (mat.materialConfig & kMaterialFlagDiffuseIsMask) != 0u);
+        gPushConstants.blendMode, (mat.materialConfig & kMaterialFlagDiffuseIsMask) != 0u);
 
     // Per-pixel fog via the shared helper (world + fog areas), matching
     // Translucent.frag: the visibility scalar folds into the per-pixel alpha.
@@ -71,7 +71,7 @@ float4 psMain(ParticleVSOut psIn) : SV_TARGET
     FogResult fog = computeFog(surfacePosW, gPerFrame.posW);
     // Authoring controls operate in linear space, before display processing.
     // Opacity still controls both source coverage and destination transmission.
-    float finalAlpha = pc.sceneAlpha * fog.visibility * saturate(mat.particleOpacityScale);
+    float finalAlpha = gPushConstants.sceneAlpha * fog.visibility * saturate(mat.particleOpacityScale);
 
     // Soft particles: fade alpha as this camera-facing fragment approaches the
     // opaque geometry behind it, replacing the hard intersection edge with a
@@ -116,7 +116,7 @@ float4 psMain(ParticleVSOut psIn) : SV_TARGET
     lightLevel *= max(mat.particleBrightnessScale, 0.0f);
 
     // Opacity and lighting modulate linear RGB; gamma never changes alpha.
-    float4 modulated    = applyBlendModulation(pc.blendMode, diffuseColor,
+    float4 modulated    = applyBlendModulation(gPushConstants.blendMode, diffuseColor,
                                                finalAlpha, lightLevel);
 
     // The legacy alpha test (translucency_particle.frag: `finalColor.a < 0.01
@@ -131,5 +131,5 @@ float4 psMain(ParticleVSOut psIn) : SV_TARGET
     if (modulated.a < kParticleAlphaDiscard)
         discard;
 
-    return encodeBlendOutputLinear(pc.blendMode, modulated);
+    return encodeBlendOutputLinear(gPushConstants.blendMode, modulated);
 }

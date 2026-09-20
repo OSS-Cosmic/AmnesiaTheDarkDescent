@@ -104,7 +104,7 @@ bool cTemporalReactiveMask::EnsureReactiveMaskProgram() {
     return false;
 
   auto reactiveMaskBin =
-      RIProgram::loadShaderStage(mpShaderFiles, "ReactiveMask.cs.spv");
+      RIProgram::loadShaderStage(mpShaderFiles, "ReactiveMask.cs");
   if (reactiveMaskBin.empty())
     return false;
 
@@ -311,12 +311,9 @@ bool cTemporalReactiveMask::RecordMasks(
       RI_RESOURCE_STATE_SHADER_RESOURCE, RI_STAGE_FRAGMENT, RI_STAGE_COMPUTE);
   desc.cmd->vk_d3d12_textureBarrier(finalToCompute);
 
-  VkComputePipelineCreateInfo pipelineInfo = {};
-  pipelineInfo.sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO;
   const hash_t pipelineHash = hash_u32(HASH_INITIAL_VALUE, 0x524d4153u);
-  mpReactiveMask->bindComputePipeline(
-      &graphics->device, desc.cmd, pipelineHash, "Temporal.ReactiveMask.cs",
-      &pipelineInfo);
+  mpReactiveMask->bindComputePipeline(&graphics->device, desc.cmd, pipelineHash,
+                                      "Temporal.ReactiveMask.cs");
 
   RITextureView *responsiveView =
       m_needUnjitteredVariant ? m_responsiveMasks[imageIndex].view.Get()

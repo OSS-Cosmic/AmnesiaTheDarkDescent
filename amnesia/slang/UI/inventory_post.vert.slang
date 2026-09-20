@@ -13,7 +13,7 @@
 
 struct VSOut
 {
-    [vk::location(0)] float2 v_uv;
+    [vk::location(0)] float2 v_uv : TEXCOORD0;
     float4 posH : SV_Position;
 };
 

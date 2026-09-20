@@ -1,24 +1,26 @@
 #ifndef RI_DEVICE_H
 #define RI_DEVICE_H
 
-// Renderer, physical adapter and logical device — the top domain layer
-// (mirrors ref_nri/ri_device.h). Owns the device-capability enums, the
-// backend-selection helpers (RIIsTargetSelected / RIGetVkInstance) and the
-// out-of-line resource isEmpty() definitions (which need RIIsTargetSelected).
-// Depends on the prelude + resource leaves + RICommand.h (RIDevice embeds
-// RIQueue[] / RIPhysicalAdapter by value) + RIDescriptor.h (the RISampler /
-// RIAccelStructure isEmpty() bodies). RIDeviceDesc is used by pointer only
-// (defined in RIRenderer.h) so a forward declaration is enough.
+// Renderer, physical adapter and logical device — the top domain layer. Owns
+// the device-capability enums, the backend-selection helpers
+// (RIIsTargetSelected / RIGetVkInstance) and the out-of-line resource
+// isEmpty() definitions. Pulls in RICommand.h (RIDevice embeds RIQueue[] /
+// RIPhysicalAdapter by value) and RIDescriptor.h (the RISampler /
+// RIAccelStructure isEmpty() bodies); RIDeviceDesc is used by pointer only.
 #include "graphics/RIPreamble.h"
 #include "graphics/RIBuffer.h"
 #include "graphics/RITexture.h"
 #include "graphics/RITextureView.h"
 #include "graphics/RICommand.h"
 #include "graphics/RIDescriptor.h"
+#include "graphics/RID3D12.h"
 #include <cassert>
 #include <cstring>
 
 struct RIDeviceDesc;
+#if (DEVICE_IMPL_D3D12)
+namespace D3D12MA { class Allocator; }
+#endif
 
 enum RIPresetLevel_e {
   RI_GPU_PRESET_NONE = 0,
@@ -29,14 +31,6 @@ enum RIPresetLevel_e {
   RI_GPU_PRESET_HIGH,
   RI_GPU_PRESET_ULTRA,
   RI_GPU_PRESET_COUNT
-};
-
-enum RIDeviceAPI_e {
-  RI_DEVICE_API_UNKNOWN,
-  RI_DEVICE_API_VK,
-  RI_DEVICE_API_D3D11,
-  RI_DEVICE_API_D3D12,
-  RI_DEVICE_API_MTL
 };
 
 enum RIAdapterType_e {
@@ -60,21 +54,30 @@ struct RIRenderer {
       VkDebugUtilsMessengerEXT debugMessageUtils;
     } vk;
 #endif
+#if (DEVICE_IMPL_D3D12)
+    struct {
+      IDXGIFactory6 *factory;
+      ID3D12Debug *debug;
+      uint32_t enableDebugLayer : 1;
+      uint32_t enableGpuValidation : 1;
+    } d3d12;
+#endif
   };
 };
 
-// There is only ever one renderer per process. Rather than threading a
-// RIRenderer through the API (or exposing a global object), the single instance
-// lives at file scope in RIRenderer.cpp and is reached through these top-level
-// functions — they are the application's highest-level entry points and assume
-// the renderer has been initialized.
+// There is only ever one renderer per process: it lives at file scope in
+// RIRenderer.cpp and is reached through these top-level entry points rather
+// than being threaded through the API or exposed as a global.
 int InitRIRenderer(const struct RIBackendInit *init);
 int EnumerateRIAdapters(struct RIPhysicalAdapter *adapters,
                         uint32_t *numAdapters);
-// Destroys the debug messenger + instance and tears down the loader
-// (volkFinalize). Instance-level — the device is normally gone by the time
-// this runs.
+// Instance-level teardown (VK: debug messenger, instance, volkFinalize). The
+// device is normally gone by the time this runs.
 void ShutdownRIRenderer();
+
+// True when the renderer has selected a backend and the device pointer for the active
+// backend is non-null. Cheap check used by the smoke test.
+bool RIDeviceIsValid(const struct RIDevice *device);
 
 #if DEVICE_MULTI_BACKEND
 // Active backend (RIDeviceAPI_e); defined in RIRenderer.cpp. Only needed when
@@ -82,18 +85,13 @@ void ShutdownRIRenderer();
 uint8_t RIActiveBackendApi();
 #elif DEVICE_IMPL_VULKAN
 #define RI_ACTIVE_BACKEND_API RI_DEVICE_API_VK
-#elif DEVICE_IMPL_MTL
-#define RI_ACTIVE_BACKEND_API RI_DEVICE_API_MTL
 #elif DEVICE_IMPL_D3D12
 #define RI_ACTIVE_BACKEND_API RI_DEVICE_API_D3D12
-#elif DEVICE_IMPL_D3D11
-#define RI_ACTIVE_BACKEND_API RI_DEVICE_API_D3D11
 #endif
 
 // True when the renderer's active backend matches `targetApi` (RIDeviceAPI_e).
-// static inline so single-backend builds fold this to a compile-time constant,
-// letting the optimizer drop the dead backend branches at every call site
-// (the RICmd Vulkan/Metal paths). Multi-backend builds read the active backend.
+// static inline so single-backend builds fold it to a compile-time constant and
+// the optimizer drops the dead backend branch at every call site.
 static inline bool RIIsTargetSelected(uint8_t targetApi) {
 #if DEVICE_MULTI_BACKEND
   return targetApi == RIActiveBackendApi();
@@ -116,16 +114,9 @@ struct RIBackendInit {
     struct {
       uint32_t enableValidationLayer : 1;
       size_t numFilterLayers;
-      // Was `const char* filterLayers[];` — a C99 flexible-array member.
-      // MSVC rejects FAMs inside an anonymous union when the enclosing
-      // struct is stack-allocated (error C2466 in Graphics.cpp::Init).
-      // No call site currently writes to this field; if filter-layer
-      // support is added later, allocate the array externally and point
-      // here.
+      // Externally allocated; no call site writes this today.
       const char *const *filterLayers;
     } vk;
-#endif
-#if (DEVICE_IMPL_MTL)
 #endif
   };
 };
@@ -182,12 +173,9 @@ struct RIPhysicalAdapter {
   uint32_t uploadBufferOffsetAlignment;
   uint32_t bufferShaderResourceOffsetAlignment;
   uint32_t constantBufferOffsetAlignment;
-  // uint32_t scratchBufferOffsetAlignment;
-  // uint32_t shaderBindingTableAlignment;
 
-  // Pipeline layout
-  // D3D12 only: rootConstantSize + descriptorSetNum * 4 + rootDescriptorNum * 8
-  // <= 256 (see "FitPipelineLayoutSettingsIntoDeviceLimits")
+  // Pipeline layout. D3D12 root-signature budget:
+  // rootConstantSize + descriptorSetNum * 4 + rootDescriptorNum * 8 <= 256.
   uint32_t pipelineLayoutDescriptorSetMaxNum;
   uint32_t pipelineLayoutRootConstantMaxSize;
   uint32_t pipelineLayoutRootDescriptorMaxNum;
@@ -247,16 +235,6 @@ struct RIPhysicalAdapter {
   uint32_t rayTracingGeometryObjectMaxNum;
   uint32_t accelerationStructureScratchOffsetAlignment;
 
-  // Mesh shaders
-  // uint32_t meshControlSharedMemoryMaxSize;
-  // uint32_t meshControlWorkGroupInvocationMaxNum;
-  // uint32_t meshControlPayloadMaxSize;
-  // uint32_t meshEvaluationOutputVerticesMaxNum;
-  // uint32_t meshEvaluationOutputPrimitiveMaxNum;
-  // uint32_t meshEvaluationOutputComponentMaxNum;
-  // uint32_t meshEvaluationSharedMemoryMaxSize;
-  // uint32_t meshEvaluationWorkGroupInvocationMaxNum;
-
   // Precision bits
   uint32_t viewportPrecisionBits;
   uint32_t subPixelPrecisionBits;
@@ -276,31 +254,12 @@ struct RIPhysicalAdapter {
   uint32_t clipDistanceMaxNum;
   uint32_t cullDistanceMaxNum;
   uint32_t combinedClipAndCullDistanceMaxNum;
-  // uint8_t shadingRateAttachmentTileSize;
-  // uint8_t shaderModel; // major * 10 + minor
 
   // Tiers (0 - unsupported)
-  // 1 - 1/2 pixel uncertainty region and does not support post-snap degenerates
-  // 2 - reduces the maximum uncertainty region to 1/256 and requires post-snap
-  // degenerates not be culled 3 - maintains a maximum 1/256 uncertainty region
-  // and adds support for inner input coverage, aka "SV_InnerCoverage"
-  // uint8_t conservativeRasterTier;
-
-  // 1 - a single sample pattern can be specified to repeat for every pixel
-  // ("locationNum / sampleNum" must be 1 in "CmdSetSampleLocations") 2 - four
-  // separate sample patterns can be specified for each pixel in a 2x2 grid
-  // ("locationNum / sampleNum" can be up to 4 in "CmdSetSampleLocations")
-  // uint8_t sampleLocationsTier;
-
   // 1 - DXR 1.0: full raytracing functionality, except features below
-  // 2 - DXR 1.1: adds - ray query, "CmdDispatchRaysIndirect", "GeometryIndex()"
+  // 2 - DXR 1.1: adds ray query, indirect dispatch, "GeometryIndex()"
   // intrinsic, additional ray flags & vertex formats
   uint8_t rayTracingTier;
-
-  // 1 - shading rate can be specified only per draw
-  // 2 - adds: per primitive shading rate, per "shadingRateAttachmentTileSize"
-  // shading rate, combiners, "SV_ShadingRate" support
-  // uint8_t shadingRateTier;
 
   // 1 - unbound arrays with dynamic indexing
   // 2 - D3D12 dynamic resources:
@@ -313,15 +272,12 @@ struct RIPhysicalAdapter {
   uint32_t isDepthBoundsTestSupported : 1;
   uint32_t isDrawIndirectCountSupported : 1;
   uint32_t isIndependentFrontAndBackStencilReferenceAndMasksSupported : 1;
-  // uint32_t isLineSmoothingSupported : 1;
   uint32_t isCopyQueueTimestampSupported : 1;
-  // uint32_t isMeshShaderPipelineStatsSupported : 1;
   uint32_t isEnchancedBarrierSupported : 1; // aka - can "Layout" be ignored?
   uint32_t isMemoryTier2Supported
-      : 1; // a memory object can support resources from all 3 categories
-           // (buffers, attachments, all other textures)
+      : 1; // one memory object can back buffers, attachments and all other
+           // textures alike
   uint32_t isDynamicDepthBiasSupported : 1;
-  // uint32_t isAdditionalShadingRatesSupported : 1;
   uint32_t isViewportOriginBottomLeftSupported : 1;
   uint32_t isRegionResolveSupported : 1;
 
@@ -333,77 +289,71 @@ struct RIPhysicalAdapter {
   uint32_t isShaderNativeI64Supported : 1;
   uint32_t isShaderNativeF64Supported : 1;
   uint32_t isShaderAtomicsI16Supported : 1;
-  // uint32_t isShaderAtomicsF16Supported : 1;
   uint32_t isShaderAtomicsI32Supported : 1;
-  // uint32_t isShaderAtomicsF32Supported : 1;
   uint32_t isShaderAtomicsI64Supported : 1;
-  // uint32_t isShaderAtomicsF64Supported : 1;
 
   // Emulated features
   uint32_t isDrawParametersEmulationEnabled : 1;
 
-  //// Extensions (unexposed are always supported)
-  // uint32_t isSwapChainSupported : 1;	// swapchain Support
+  // Extensions, in backend-neutral terms. Each backend folds its own extension
+  // / feature / SDK prerequisites into these bits while enumerating. Check them
+  // before asking for anything in RIDeviceDesc, rather than re-deriving
+  // availability from the tier fields above.
+  uint32_t isSwapChainSupported : 1; // swapchain Support
+  uint32_t isBufferDeviceAddressSupported : 1;
+  uint32_t isShaderStorageScalarLayoutSupported
+      : 1; // VK scalarBlockLayout / HLSL native packing
+  uint32_t isDynamicRenderingSupported
+      : 1; // VK 1.3 dynamicRendering / D3D12 OMSetRenderTargets
+  uint32_t isRayTracingSupported
+      : 1; // acceleration structures + ray tracing pipelines; DXR tier 1
   uint32_t isRayQuerySupported
       : 1; // VK_KHR_ray_query / DXR 1.1 inline ray queries
-  // uint32_t isMeshShaderSupported : 1; // meshshader support
 
+  // The renderer owns the enumerated IDXGIAdapter4 array for its whole lifetime;
+  // RIPhysicalAdapter values only borrow those pointers.
   union {
 #if (DEVICE_IMPL_VULKAN)
     struct {
       uint32_t apiVersion;
       VkPhysicalDevice physicalDevice;
 
-      uint32_t isSwapChainSupported : 1; // swapchain Support
-      uint32_t isBufferDeviceAddressSupported : 1;
       uint32_t isAMDDeviceCoherentMemorySupported
           : 1; // PHYSICAL support: extension advertised and feature reported
       uint32_t isPresentIDSupported : 1;
-      // uint32_t YCbCrExtension : 1;
-      // uint32_t FillModeNonSolid : 1;
-      // uint32_t KHRRayQueryExtension : 1;
-      // uint32_t AMDGCNShaderExtension : 1;
-      // uint32_t AMDDrawIndirectCountExtension : 1;
-      // uint32_t AMDShaderInfoExtension : 1;
-      // uint32_t DescriptorIndexingExtension : 1;
-      // uint32_t DynamicRenderingExtension : 1;
-      // uint32_t ShaderSampledImageArrayDynamicIndexingSupported : 1;
-      // uint32_t BufferDeviceAddressSupported : 1;
-      // uint32_t DrawIndirectCountExtension : 1;
-      // uint32_t DedicatedAllocationExtension : 1;
-      // uint32_t DebugMarkerExtension : 1;
-      // uint32_t MemoryReq2Extension : 1;
-      // uint32_t FragmentShaderInterlockExtension : 1;
-      // uint32_t BufferDeviceAddressExtension : 1;
       uint32_t accelerationStructureExtension : 1;
       uint32_t rayTracingPipelineExtension : 1;
       uint32_t rayQueryExtension : 1;
-      // uint32_t ShaderAtomicInt64Extension : 1;
-      // uint32_t BufferDeviceAddressFeature : 1;
-      // uint32_t ShaderFloatControlsExtension : 1;
-      // uint32_t Spirv14Extension : 1;
       uint32_t deferredHostOperationsExtension : 1;
-      // uint32_t DeviceFaultExtension : 1;
-      // uint32_t DeviceFaultSupported : 1;
-      // uint32_t ASTCDecodeModeExtension : 1;
-      // uint32_t DeviceMemoryReportExtension : 1;
-      // uint32_t AMDBufferMarkerExtension : 1;
-      // uint32_t AMDDeviceCoherentMemoryExtension : 1;
-      // uint32_t AMDDeviceCoherentMemorySupported : 1;
     } vk;
 #endif
-#if (DEVICE_IMPL_MTL)
+#if (DEVICE_IMPL_D3D12)
     struct {
-
-    } mtl;
+      IDXGIAdapter4 *adapter; // borrowed from renderer-owned list; released by ShutdownRIRenderer
+      uint64_t dedicatedVideoMemory;
+      uint64_t dedicatedSystemMemory;
+      uint64_t sharedSystemMemory;
+      uint32_t vendorId;
+      uint32_t deviceId;
+      uint8_t highestFeatureLevelMajor;
+      uint8_t highestFeatureLevelMinor;
+      uint8_t highestShaderModelMajor;
+      uint8_t highestShaderModelMinor;
+      uint8_t resourceBindingTier;
+      uint8_t rayTracingTier; // 0=none, 1=DXR 1.0, 2=DXR 1.1
+      uint8_t meshShaderTier;
+      uint8_t isWarp : 1;
+    } d3d12;
 #endif
   };
 };
 
 struct RIDevice {
   RIDevice() { memset(this, 0, sizeof(*this)); }
-  // Creates the logical device, queues and VMA allocator on the adapter
-  // selected in init->physicalAdapter (RIDeviceDesc lives in RIRenderer.h).
+  // Creates the logical device, queues and memory allocator (VMA / D3D12MA) on
+  // the adapter in init->physicalAdapter. Capability-neutral: it enables what
+  // the adapter can give and publishes the result on the *Enabled fields below,
+  // so callers vet the adapter first and read those fields afterwards.
   int init(struct RIDeviceDesc *init);
   void dispose();
   struct RIPhysicalAdapter physicalAdapter;
@@ -443,7 +393,24 @@ struct RIDevice {
       VmaAllocator vmaAllocator;
     } vk;
 #endif
-#if (DEVICE_IMPL_MTL)
+#if (DEVICE_IMPL_D3D12)
+    struct {
+      ID3D12Device *device;
+      // QueryInterface'd from `device` once at init. NULL when the runtime or
+      // adapter predates DXR; every acceleration-structure and state-object
+      // entry point checks it before use.
+      ID3D12Device5 *device5;
+      D3D12MA::Allocator *allocator;
+      // Owned COM references parallel to `queues[]`. Released alongside the device.
+      ID3D12CommandQueue *queues[RI_QUEUE_LEN];
+      ID3D12InfoQueue *infoQueue;
+      ID3D12InfoQueue1 *infoQueue1;
+      ID3D12CommandSignature *drawIndirectSignature;
+      ID3D12CommandSignature *drawIndirectPaddedSignature;
+      ID3D12CommandSignature *drawIndexedIndirectSignature;
+      DWORD infoQueueCookie;
+      uint32_t nextGeometrySrvIndex;
+    } d3d12;
 #endif
   };
 };
@@ -452,6 +419,10 @@ inline bool RITexture::isEmpty() const {
 #if (DEVICE_IMPL_VULKAN)
   if (RIIsTargetSelected(RI_DEVICE_API_VK))
     return vk.image == VK_NULL_HANDLE;
+#endif
+#if (DEVICE_IMPL_D3D12)
+  if (RIIsTargetSelected(RI_DEVICE_API_D3D12))
+    return RID3D12_TextureIsEmpty(*this);
 #endif
   assert(false && "unhandled backend");
   return true;
@@ -462,6 +433,10 @@ inline bool RIBuffer::isEmpty() const {
   if (RIIsTargetSelected(RI_DEVICE_API_VK))
     return vk.buffer == VK_NULL_HANDLE;
 #endif
+#if (DEVICE_IMPL_D3D12)
+  if (RIIsTargetSelected(RI_DEVICE_API_D3D12))
+    return RID3D12_BufferIsEmpty(*this);
+#endif
   assert(false && "unhandled backend");
   return true;
 }
@@ -470,6 +445,10 @@ inline bool RITextureView::isEmpty() const {
 #if (DEVICE_IMPL_VULKAN)
   if (RIIsTargetSelected(RI_DEVICE_API_VK))
     return vk.image == VK_NULL_HANDLE;
+#endif
+#if (DEVICE_IMPL_D3D12)
+  if (RIIsTargetSelected(RI_DEVICE_API_D3D12))
+    return RID3D12_TextureViewIsEmpty(*this);
 #endif
   assert(false && "unhandled backend");
   return true;
@@ -480,6 +459,10 @@ inline bool RICmd::isEmpty() const {
   if (RIIsTargetSelected(RI_DEVICE_API_VK))
     return vk.cmd == VK_NULL_HANDLE || vk.pool == VK_NULL_HANDLE;
 #endif
+#if (DEVICE_IMPL_D3D12)
+  if (RIIsTargetSelected(RI_DEVICE_API_D3D12))
+    return d3d12.cmdList == nullptr || d3d12.allocator == nullptr;
+#endif
   assert(false && "unhandled backend");
   return true;
 }
@@ -489,6 +472,10 @@ inline bool RISampler::isEmpty() const {
   if (RIIsTargetSelected(RI_DEVICE_API_VK))
     return vk.sampler == VK_NULL_HANDLE;
 #endif
+#if (DEVICE_IMPL_D3D12)
+  if (RIIsTargetSelected(RI_DEVICE_API_D3D12))
+    return RID3D12_SamplerIsEmpty(*this);
+#endif
   assert(false && "unhandled backend");
   return true;
 }
@@ -497,6 +484,10 @@ inline bool RIAccelStructure::isEmpty() const {
 #if (DEVICE_IMPL_VULKAN)
   if (RIIsTargetSelected(RI_DEVICE_API_VK))
     return vk.handle == VK_NULL_HANDLE;
+#endif
+#if (DEVICE_IMPL_D3D12)
+  if (RIIsTargetSelected(RI_DEVICE_API_D3D12))
+    return RID3D12_AccelStructureIsEmpty(*this);
 #endif
   assert(false && "unhandled backend");
   return true;
