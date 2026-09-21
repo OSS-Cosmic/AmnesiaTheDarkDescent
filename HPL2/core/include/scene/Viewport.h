@@ -632,7 +632,9 @@ public:
     // cScene's delivery renders the viewport's finished pogo read half into
     // `view` and leaves the image SHADER_READ_ONLY for the consumer.
     // `texture` is the view's backing image — needed for the layout
-    // transitions around the delivery draw.
+    // transitions around the delivery draw. `view` must be a
+    // RI_VIEWTYPE_COLOR_ATTACHMENT view (D3D12 cannot build an RTV from a
+    // SHADER_RESOURCE view).
     struct RITexture texture;
     RITextureView view;
     // Format of `view` — the delivery draw's color attachment (and pipeline

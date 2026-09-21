@@ -2233,6 +2233,19 @@ void RIProgram::bindDescriptors(struct RIDevice *device, struct RICmd *cmd,
                 "RIProgram: D3D12 descriptor arena exhausted (%u resource / %u "
                 "sampler descriptors requested, %zu tables cached)\n",
                 resourceCount, samplerCount, d3d12DescriptorCache.size());
+            RIDescriptorArenaStats s;
+            if (getDescriptorArenaStats(device, &s))
+              Error("RIProgram: D3D12 arena usage — resources: bumped %u/%u, "
+                    "live %u, free %u, pending %u, retired %u | samplers: "
+                    "bumped %u/%u, live %u, free %u, pending %u, retired %u | "
+                    "%u live / %u pending allocations, %u cached tables "
+                    "across all programs\n",
+                    s.resourceBumped, s.resourceCapacity, s.resourceLive,
+                    s.resourceFree, s.resourcePending, s.resourceRetired,
+                    s.samplerBumped, s.samplerCapacity, s.samplerLive,
+                    s.samplerFree, s.samplerPending, s.samplerRetired,
+                    s.liveAllocations, s.pendingAllocations,
+                    g_riD3D12DescriptorCacheEntries.load());
           }
           return;
         }

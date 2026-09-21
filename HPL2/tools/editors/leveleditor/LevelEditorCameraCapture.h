@@ -139,6 +139,7 @@ private:
 		// freed while an in-flight frame still references it.
 		RISharedPointer<RITexture>     mTargetTexture;
 		RISharedPointer<RITextureView> mTargetView;
+		RISharedPointer<RITextureView> mTargetAttachmentView; // delivery RTV (D3D12)
 		RISharedPointer<RIBuffer>      mReadback;
 
 		// Filled on Staged -> Completed; handed to the server on the next Pump.

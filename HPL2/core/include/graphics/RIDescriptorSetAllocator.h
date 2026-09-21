@@ -127,6 +127,13 @@ void releaseDescriptorArena( struct RIDevice *device,
 	const struct RIDescriptorArenaAllocation *allocation,
 	const struct RIDescriptorArenaFence *fence );
 void reclaimDescriptorArena( struct RIDevice *device );
+// Diagnostic snapshot of the ordinary-table arena (geometry sub-range excluded).
+struct RIDescriptorArenaStats {
+	uint32_t resourceCapacity, resourceBumped, resourceLive, resourceFree, resourcePending, resourceRetired;
+	uint32_t samplerCapacity, samplerBumped, samplerLive, samplerFree, samplerPending, samplerRetired;
+	uint32_t liveAllocations, pendingAllocations;
+};
+bool getDescriptorArenaStats( struct RIDevice *device, struct RIDescriptorArenaStats *out );
 // utility
 struct RIDescriptorSetSlot *allocDescriptorSetSlot( struct RIDescriptorSetAlloc *alloc );
 void attachDescriptorSlot( struct RIDescriptorSetAlloc *alloc, struct RIDescriptorSetSlot *slot );

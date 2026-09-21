@@ -30,6 +30,7 @@
 
 #include <D3D12MemAlloc.h>
 
+#include <algorithm>
 #include <cassert>
 #include <cstring>
 #include <vector>
@@ -165,9 +166,12 @@ void RID3D12_AccelStructureGetMemoryReqs(
     inputs.pGeometryDescs = geometries.data();
   } else {
     // TLAS sizing scales with the instance count only; InstanceDescs is not
-    // read by the prebuild query.
+    // read by the prebuild query. An empty TLAS is a legal build (World.cpp
+    // emits one for worlds with no RT geometry), but drivers may report a
+    // 0-byte result for NumDescs == 0, which leaves no storage to init the AS
+    // on. Size it as one instance; RID3D12_BuildTlas still builds with 0.
     inputs.Type = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL;
-    inputs.NumDescs = desc->geometryOrInstanceNum;
+    inputs.NumDescs = std::max(desc->geometryOrInstanceNum, 1u);
   }
 
   D3D12_RAYTRACING_ACCELERATION_STRUCTURE_PREBUILD_INFO info = {};

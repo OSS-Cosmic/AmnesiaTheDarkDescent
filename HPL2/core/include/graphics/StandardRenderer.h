@@ -175,7 +175,6 @@ private:
   // BuildStandardLights, so every enabled light lands in the visible prefix.
   // An A/B against the default isolates the partition from the rest of the
   // light path without a rebuild.
-  bool m_lightFrustumCull = true;
   bool m_visibilityLoaded = false;
   bool m_fallbackLoaded = false;
   bool m_reconstructLoaded = false;

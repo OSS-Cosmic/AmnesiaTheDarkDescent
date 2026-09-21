@@ -888,6 +888,16 @@ void ReleaseViewportAttachmentTexture(RISharedPointer<RITexture> *tex,
 						  uint32_t alHashSalt, const char *asLabel)
 	{
 		cGraphics* pGraphics = Interface<cGraphics>::Get();
+		// D3D12 builds the RTV from the view and silently drops anything that
+		// is not a COLOR_ATTACHMENT view — the target would just stay black.
+#if (DEVICE_IMPL_D3D12)
+		if(RIIsTargetSelected(RI_DEVICE_API_D3D12) &&
+		   aView.d3d12.viewType != RI_VIEWTYPE_COLOR_ATTACHMENT)
+		{
+			Warning("%s: target view is not a COLOR_ATTACHMENT view; skipping delivery\n", asLabel);
+			return;
+		}
+#endif
 		RIRenderingAttachment color = {};
 		color.view    = aView;
 		color.loadOp  = RI_ATTACHMENT_LOAD_OP_DONT_CARE;

@@ -70,13 +70,70 @@ local function download_slangc()
     return found
 end
 
+-- Pinned DXC release. The Slang release does not bundle dxcompiler.dll, so
+-- `-target dxil` otherwise depends on whatever DXC is on PATH (the Vulkan SDK
+-- locally, nothing on hosted CI runners).
+DXC_VERSION = "1.9.2607"
+DXC_ASSET   = "dxc_2026_07_29.zip"
+DXC_SHA256  = "a1dfb116ba3eeae6a1582291b53a8e7bf65ad760676bd3194685c8f7367cd241"
+
+local function file_sha256(filename)
+    local output = os.outputof('certutil -hashfile "' .. winpath(filename) .. '" SHA256') or ''
+    for candidate in output:gmatch('%x+') do
+        if #candidate == 64 then return candidate:lower() end
+    end
+    error('DXC: could not calculate SHA-256 for ' .. filename)
+end
+
+-- Stage dxcompiler.dll + dxil.dll beside slangc.exe. Windows searches the
+-- executable's directory before PATH, so slangc loads this copy rather than
+-- any DXC a developer happens to have installed. Idempotent.
+local function stage_dxc(slangc)
+    local bin = path.getdirectory(slangc)
+    local dlls = { "dxcompiler.dll", "dxil.dll" }
+    local stamp = bin .. "/dxc-" .. DXC_VERSION .. ".stamp"
+    if os.isfile(stamp) then return end
+
+    local root = SLANG_PREBUILT .. "/dxc-" .. DXC_VERSION
+    local archive = SLANG_PREBUILT .. "/" .. DXC_ASSET
+    local url = "https://github.com/microsoft/DirectXShaderCompiler/releases/download/v"
+        .. DXC_VERSION .. "/" .. DXC_ASSET
+    os.mkdir(root)
+    print("DXC: downloading " .. url)
+    local res, code = http.download(url, archive, {})
+    if res ~= "OK" then
+        os.remove(archive)
+        error(string.format("DXC: download failed (%s, code %s). URL: %s", tostring(res), tostring(code), url))
+    end
+    local actual = file_sha256(archive)
+    if actual ~= DXC_SHA256 then
+        os.remove(archive)
+        error(string.format("DXC: SHA-256 mismatch for %s (expected %s, got %s)", archive, DXC_SHA256, actual))
+    end
+    zip.extract(archive, root)
+    os.remove(archive)
+
+    for _, dll in ipairs(dlls) do
+        local src = root .. "/bin/x64/" .. dll
+        if not os.isfile(src) then
+            error("DXC: " .. dll .. " not found in extracted archive at " .. root)
+        end
+        local ok, err = os.copyfile(src, bin .. "/" .. dll)
+        if not ok then error("DXC: failed to stage " .. dll .. ": " .. tostring(err)) end
+    end
+    io.writefile(stamp, DXC_VERSION .. "\n")
+end
+
 -- Resolve a slangc executable for shader compilation.
 --  1. --slangc=<path>
 --  2. the pinned prebuilt release, reused from build-premake/_deps/slang-prebuilt
---     if already extracted, otherwise downloaded now (configure time)
+--     if already extracted, otherwise downloaded now (configure time). On
+--     Windows the pinned DXC is staged beside it for the DXIL targets.
 function resolve_slangc()
     if _OPTIONS["slangc"] then return _OPTIONS["slangc"] end
-    return download_slangc()
+    local slangc = download_slangc()
+    if os.target() == "windows" then stage_dxc(slangc) end
+    return slangc
 end
 
 -- Slang entry-point stage suffixes -- a .slang file is a shader to compile only if

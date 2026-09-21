@@ -302,6 +302,19 @@ void cLevelEditorCameraCapture::Pump(float afFrameTime)
 		cWorld* pWorld = pEdWorld ? pEdWorld->GetWorld() : NULL;
 		if(pWorld == NULL) return; // no world yet; retry next frame (still Idle)
 
+		// The readback (RecordReadbackCopy / BuildResultFromReadback) is still
+		// Vulkan-only: a D3D12 port needs 256 B-aligned row pitches + repacking.
+		if(RIActiveBackendApi() != RI_DEVICE_API_VK)
+		{
+			cMCPToolResult err;
+			err.mbIsError = true;
+			err.msContentJson = "[{\"type\":\"text\",\"text\":\"capture failed: camera capture is only supported on the Vulkan backend\"}]";
+			mlstCompleted.push_back(std::make_pair(pJob->mlId, err));
+			for(std::list<cCaptureJob>::iterator it = mlstJobs.begin(); it != mlstJobs.end(); ++it)
+				if(&(*it) == pJob) { mlstJobs.erase(it); break; }
+			return;
+		}
+
 		//////////////////////////////////////////
 		// Per-job GPU resources: an RGBA8_UNORM color target (TRANSFER_SRC backs the
 		// readback copy) + a host-readable buffer the copy lands in. UNORM is
@@ -315,7 +328,9 @@ void cLevelEditorCameraCapture::Pump(float afFrameTime)
 									   RI_FORMAT_RGBA8_UNORM,
 									   RI_USAGE_COLOR_ATTACHMENT | RI_USAGE_SHADER_RESOURCE | RI_USAGE_TRANSFER_SRC,
 									   &pJob->mTargetTexture, &pJob->mTargetView,
-									   "MCPCameraCapture"))
+									   "MCPCameraCapture") ||
+		   !CreateViewportColorAttachmentView(&pGfx->device, &pJob->mTargetTexture,
+											  RI_FORMAT_RGBA8_UNORM, &pJob->mTargetAttachmentView))
 		{
 			// Give up on this job — report an error rather than retry forever.
 			cMCPToolResult err;
@@ -412,7 +427,7 @@ void cLevelEditorCameraCapture::Pump(float afFrameTime)
 	target.width  = (uint32_t)pJob->mlWidth;
 	target.height = (uint32_t)pJob->mlHeight;
 	target.texture      = *pJob->mTargetTexture;
-	target.view.vk.image = pJob->mTargetView->vk.image;
+	target.view   = *pJob->mTargetAttachmentView;
 	target.format = RI_FORMAT_RGBA8_UNORM;
 	mpViewport->SetTarget(target);
 
@@ -560,9 +575,11 @@ void cLevelEditorCameraCapture::FreeJobResources(cCaptureJob& aJob)
 	// so freeing it early is a GPU use-after-free (RADV TCP read VM fault).
 	// graphicsDefer.push() no-ops on an empty handle.
 	cGraphics* pGfx = Interface<cGraphics>::Get();
+	pGfx->graphicsDefer.push(aJob.mTargetAttachmentView);
 	pGfx->graphicsDefer.push(aJob.mTargetView);
 	pGfx->graphicsDefer.push(aJob.mTargetTexture);
 	pGfx->graphicsDefer.push(aJob.mReadback);
+	aJob.mTargetAttachmentView = {};
 	aJob.mTargetView    = {};
 	aJob.mTargetTexture = {};
 	aJob.mReadback      = {};

@@ -804,6 +804,8 @@ iEditorViewport::~iEditorViewport()
 	mpGfx->DestroyPostEffect(mpPostEffectToneMap);
 	mpGfx->DestroyPostEffectComposite(mpPostEffectComposite);
 	if(mpImgViewport) mpGuiSet->DestroyWidget(mpImgViewport);
+	Interface<cGraphics>::Get()->graphicsDefer.push(mPaneAttachmentView);
+	mPaneAttachmentView = {};
 
 	hplDelete(mpGrid);
 
@@ -884,29 +886,16 @@ static std::optional<cTexture> CreatePaneTexture(uint32_t alWidth, uint32_t alHe
 	cGraphics* pGraphics = Interface<cGraphics>::Get();
 	cTexture texture;
 
-	VkImageCreateInfo imageInfo = {VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO};
-	imageInfo.imageType = VK_IMAGE_TYPE_2D;
-	imageInfo.format = RIFormatToVK(cGraphics::PogoColorFormat);
-	imageInfo.extent = {alWidth, alHeight, 1};
-	imageInfo.mipLevels = 1;
-	imageInfo.arrayLayers = 1;
-	imageInfo.samples = VK_SAMPLE_COUNT_1_BIT;
-	imageInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
+	RITextureDesc desc = {};
+	desc.type = RI_TEXTURE_2D;
+	desc.format = cGraphics::PogoColorFormat;
+	desc.width = alWidth;
+	desc.height = alHeight;
 	// COLOR_ATTACHMENT: cScene's delivery draw renders into it.
-	// SAMPLED: the GUI (GuiSet) displays it like any other Image.
-	imageInfo.usage = VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
-	imageInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-
-	uint32_t queueFamilies[RI_QUEUE_LEN] = {0};
-	imageInfo.pQueueFamilyIndices = queueFamilies;
-	VK_ConfigureImageQueueFamilies(&imageInfo, pGraphics->device.queues, RI_QUEUE_LEN,
-								   queueFamilies, RI_QUEUE_LEN);
-
-	VmaAllocationCreateInfo allocInfo = {};
-	allocInfo.usage = VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE;
-	if(!VK_WrapResult(vmaCreateImage(pGraphics->device.vk.vmaAllocator, &imageInfo,
-									 &allocInfo, &texture.handle.vk.image,
-									 &texture.handle.vk.allocation, NULL)))
+	// SHADER_RESOURCE: the GUI (GuiSet) displays it like any other Image.
+	desc.usage = RI_USAGE_SHADER_RESOURCE | RI_USAGE_COLOR_ATTACHMENT;
+	texture.handle = RITexture::create(&pGraphics->device, desc);
+	if(texture.handle.isEmpty())
 	{
 		Error("EditorViewport: failed to create %ux%u pane image\n", alWidth, alHeight);
 		return std::nullopt;
@@ -914,19 +903,17 @@ static std::optional<cTexture> CreatePaneTexture(uint32_t alWidth, uint32_t alHe
 
 	RITextureViewDesc viewDesc = {};
 	viewDesc.viewType = RI_VIEWTYPE_SHADER_RESOURCE_2D;
-	viewDesc.format = VKToRIFormat(imageInfo.format);
+	viewDesc.format = cGraphics::PogoColorFormat;
 	viewDesc.mipNum = 1;
 	viewDesc.layerNum = 1;
 	texture.view = RITextureView::create(&pGraphics->device, &texture.handle, viewDesc);
 	if(texture.view.isEmpty())
 	{
 		Error("EditorViewport: failed to create pane image view\n");
-		vmaDestroyImage(pGraphics->device.vk.vmaAllocator, texture.handle.vk.image,
-						texture.handle.vk.allocation);
-		texture.handle.vk.image = VK_NULL_HANDLE;
-		texture.handle.vk.allocation = NULL;
+		texture.handle.dispose(&pGraphics->device);
 		return std::nullopt;
 	}
+	texture.handle.setDebugObjectName(&pGraphics->device, "EditorPane");
 
 	texture.width = (uint16_t)alWidth;
 	texture.height = (uint16_t)alHeight;
@@ -976,14 +963,37 @@ void iEditorViewport::UpdateViewport()
 		{
 			mpPaneImage = AdoptStandaloneImage(new Image(std::move(singleImage)));
 		}
+
+		// The previous view may still be referenced by an in-flight frame.
+		cGraphics* pGraphics = Interface<cGraphics>::Get();
+		pGraphics->graphicsDefer.push(mPaneAttachmentView);
+		mPaneAttachmentView = {};
 	}
 
 	cTexture* pPaneTex = mpPaneImage->GetTexture();
+	if(mPaneAttachmentView.isEmpty())
+	{
+		cGraphics* pGraphics = Interface<cGraphics>::Get();
+		RITextureViewDesc viewDesc = {};
+		viewDesc.viewType = RI_VIEWTYPE_COLOR_ATTACHMENT;
+		viewDesc.format = cGraphics::PogoColorFormat;
+		viewDesc.mipNum = 1;
+		viewDesc.layerNum = 1;
+		RITextureView attachmentView =
+			RITextureView::create(&pGraphics->device, &pPaneTex->handle, viewDesc);
+		if(attachmentView.isEmpty())
+		{
+			Error("EditorViewport: failed to create pane attachment view\n");
+			return; // retry next update
+		}
+		mPaneAttachmentView = RISharedPointer<RITextureView>(&pGraphics->device, attachmentView);
+	}
+
 	cViewport::TargetView target = {};
 	target.width = (uint32_t)vSize.x;
 	target.height = (uint32_t)vSize.y;
 	target.texture = pPaneTex->handle;
-	target.view.vk.image = pPaneTex->view.vk.image;
+	target.view = *mPaneAttachmentView;
 	mpEngineViewport->SetTarget(target);
 
 	////////////////////////////////////////////

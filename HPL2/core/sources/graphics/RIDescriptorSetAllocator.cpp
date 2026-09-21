@@ -484,6 +484,39 @@ void releaseDescriptorArena( struct RIDevice *device,
 	arena->pending.push_back( { *allocation, *fence } );
 }
 
+bool getDescriptorArenaStats( struct RIDevice *device, struct RIDescriptorArenaStats *out )
+{
+	if( !out ) return false;
+	*out = {};
+	ArenaState *arena = findArena( device );
+	if( !arena ) return false;
+	auto sum = []( const std::vector<ArenaRange> &ranges ) {
+		uint32_t total = 0;
+		for( const ArenaRange &r : ranges ) total += r.count;
+		return total;
+	};
+	out->resourceCapacity = kResourceCapacity - RI_D3D12_GEOMETRY_DESCRIPTOR_CAPACITY;
+	out->resourceBumped = arena->nextResource > RI_D3D12_GEOMETRY_DESCRIPTOR_CAPACITY
+		? arena->nextResource - RI_D3D12_GEOMETRY_DESCRIPTOR_CAPACITY : 0;
+	out->resourceFree = sum( arena->freeResources );
+	out->resourceRetired = sum( arena->retiredResources );
+	out->samplerCapacity = kSamplerCapacity;
+	out->samplerBumped = arena->nextSampler;
+	out->samplerFree = sum( arena->freeSamplers );
+	out->samplerRetired = sum( arena->retiredSamplers );
+	for( const RIDescriptorArenaAllocation &a : arena->live ) {
+		out->resourceLive += a.resourceCount;
+		out->samplerLive += a.samplerCount;
+	}
+	for( const PendingRange &p : arena->pending ) {
+		out->resourcePending += p.allocation.resourceCount;
+		out->samplerPending += p.allocation.samplerCount;
+	}
+	out->liveAllocations = (uint32_t)arena->live.size();
+	out->pendingAllocations = (uint32_t)arena->pending.size();
+	return true;
+}
+
 void freeDescriptorArena( struct RIDevice *device )
 {
 	// The heaps remain GPU-visible until all fence-retired ranges are gone.
@@ -519,4 +552,6 @@ void releaseDescriptorArena( struct RIDevice *device,
 	const struct RIDescriptorArenaFence *fence )
 { (void)device; (void)allocation; (void)fence; }
 void reclaimDescriptorArena( struct RIDevice *device ) { (void)device; }
+bool getDescriptorArenaStats( struct RIDevice *device, struct RIDescriptorArenaStats *out )
+{ (void)device; if (out) *out = {}; return false; }
 #endif

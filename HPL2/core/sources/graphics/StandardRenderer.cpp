@@ -824,8 +824,6 @@ cStandardRenderer::cStandardRenderer(cGraphics *apGraphics,
   m_ambientOcclusion =
       std::make_unique<cStandardAmbientOcclusionPass>(mpGraphics, apResources);
   m_forceFallback = std::getenv("HPL_STANDARD_FORCE_FALLBACK") != nullptr;
-  if (const char *lightCull = std::getenv("HPL_STANDARD_LIGHT_CULL"))
-    m_lightFrustumCull = std::strcmp(lightCull, "0") != 0;
   RISegmentAllocDesc desc = {};
   desc.numSegments = RI_NUMBER_FRAMES_FLIGHT;
   desc.elementStride = sizeof(VkDrawIndirectCommand);
@@ -3009,7 +3007,7 @@ void cStandardRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
   // A null frustum makes BuildStandardLights put every enabled light in the
   // visible prefix -- the HPL_STANDARD_LIGHT_CULL=0 A/B path.
   if (!BuildStandardLights(apWorld, mpGraphics,
-                           m_lightFrustumCull ? apFrustum : nullptr, pointLights,
+                            apFrustum, pointLights,
                            spotLights, boxLights, pointLightCount,
                            spotLightCount, boxLightCount, pointLightCountTotal,
                            spotLightCountTotal, shadowCount,

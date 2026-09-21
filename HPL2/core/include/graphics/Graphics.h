@@ -354,6 +354,10 @@ public:
   // the debug checkbox for A/B comparison.
   bool allLightsCastShadows = true;
 
+  // Ray-traced backend: multiplier on the legacy box lights' flat global fill
+  // (MainCompositePass). 1 reproduces Standard's box-light term; 0 disables it.
+  float boxFillScale = 1.0f;
+
   // Shared manual override for the render/display resolution split:
   // 1.0f means native (the (0,0) render-extent sentinel); values in (0,1)
   // make every viewport shade at a reduced render extent while presenting at

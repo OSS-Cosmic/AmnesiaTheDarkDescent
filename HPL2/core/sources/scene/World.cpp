@@ -1186,9 +1186,20 @@ void cWorld::BuildTlas(cGraphics::FrameContext *cntx, cFrustum *apFrustum) {
     // Build into a local handle, then adopt on success so the TLAS has a single
     // refcount domain (mpTlas stays empty if init fails → skip build).
     RIAccelStructure tlas{};
-    if (tlas.init(&mpGraphics->device, &tlasDesc) == RI_SUCCESS)
+    if (tlas.init(&mpGraphics->device, &tlasDesc) == RI_SUCCESS) {
       mpTlas = RISharedPointer<RIAccelStructure>(&mpGraphics->device, tlas);
-    mTlasStorageCapacity = static_cast<uint32_t>(tlasStorageSize);
+      mTlasStorageCapacity = static_cast<uint32_t>(tlasStorageSize);
+    } else {
+      // Leave the capacity unrecorded so the next frame retries instead of
+      // treating the failed storage as a usable TLAS allocation. Drop mpTlas
+      // too: on a grow it still addresses the storage just replaced (already
+      // deferred above), which must not outlive that defer.
+      Warning("TLAS init failed (instances=%u, storage=%llu); RT passes see no TLAS\n",
+              instanceCount, (unsigned long long)tlasStorageSize);
+      mpTlas = {};
+      mpTlasStorage = {};
+      mTlasStorageCapacity = 0;
+    }
   }
 
   if (!mpTlas.isEmpty()) {

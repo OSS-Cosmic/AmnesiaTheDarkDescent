@@ -238,6 +238,9 @@ namespace hpl {
 		// Resolved for the backend this light is driving: the authored colour of
 		// the active tuning, moved by any colour fade.
 		const cColor& GetDiffuseColor() const { return Resolved().mDiffuseColor; }
+		// The same resolution against one named tuning, whichever is active. For
+		// a shape that only one backend has a tuning for (box lights).
+		cColor GetDiffuseColorFor(eLightModel aModel) const;
 		void SetDiffuseColor(cColor aColor);
 		
 		const cColor&  GetDefaultDiffuseColor() const { return Resolved().mDefaultDiffuseColor;}

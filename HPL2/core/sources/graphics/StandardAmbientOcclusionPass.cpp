@@ -100,7 +100,6 @@ bool cStandardAmbientOcclusionPass::Render(
       state->normalView[image].isEmpty()) {
     return false;
   }
-  Log("Standard AO verification: resources ready\n");
 
   // Must match AOConstants in amnesia/slang/Standard/StandardAmbientOcclusion.slang.
   struct AOConstants {
@@ -140,7 +139,6 @@ bool cStandardAmbientOcclusionPass::Render(
   constBinding.handle = DescriptorBindingID::Create("gAOConstants");
   mpGraphics->UpdateFrameUBO(&constBinding.descriptor, &aoConst,
                              sizeof(aoConst));
-  Log("Standard AO verification: constants uploaded\n");
 
   auto barrier = [cmd](RITexture *texture, uint32_t before, uint32_t after) {
     RITextureBarrier b(texture, before, after);
@@ -167,49 +165,36 @@ bool cStandardAmbientOcclusionPass::Render(
   std::vector<RIProgram::DescriptorBinding> bindings;
 
   {
-    Log("Standard AO verification: entering prepare depths\n");
     RIGpuScope _gs(&mpGraphics->profiler, cmd, "StandardAO.prepareDepths");
-    Log("Standard AO verification: prepare profiler scope opened\n");
     barrier(state->aoPreparedDepthTexture[image].Get(),
             RI_RESOURCE_STATE_UNDEFINED, RI_RESOURCE_STATE_GENERAL);
-    Log("Standard AO verification: prepare barrier recorded\n");
 
     const hash_t kHash = hash_u32(HASH_INITIAL_VALUE, /*variant=*/0u);
     m_programs[0]->bindComputePipeline(&mpGraphics->device, cmd, kHash,
                                        "Standard.aoPrepareDepths.cs:csMain");
-    Log("Standard AO verification: prepare pipeline bound\n");
     m_programs[0]->bindBindlessDescriptorSet(
         cmd, &mpGraphics->globalset->m_bindlessSet, 0,
         VK_PIPELINE_BIND_POINT_COMPUTE);
-    Log("Standard AO verification: prepare bindless set bound\n");
 
     bindings.clear();
     bindings.push_back(*frameBinding);
-    Log("Standard AO verification: prepare frame binding assembled\n");
     bindings.push_back(RIProgram::DescriptorBinding(
         "positionTexture",
         RIDescriptor::sampledImage(&mpGraphics->device,
                                    state->positionView[image].Get(),
                                    RI_RESOURCE_STATE_SHADER_RESOURCE)));
-    Log("Standard AO verification: prepare position binding assembled\n");
     bindings.push_back(RIProgram::DescriptorBinding(
         "aoPreparedDepthTexture",
         RIDescriptor::storageImage(
             &mpGraphics->device,
             state->aoPreparedDepthStorageView[image].Get())));
-    Log("Standard AO verification: prepare storage binding assembled\n");
     m_programs[0]->bindDescriptors(&mpGraphics->device, cmd, frameIndex,
                                    bindings.data(), bindings.size(),
                                    VK_PIPELINE_BIND_POINT_COMPUTE);
-    Log("Standard AO verification: prepare descriptors bound\n");
 
     cmd->dispatch(&mpGraphics->device, groupsX, groupsY, 1);
-    Log("Standard AO verification: prepare dispatch recorded\n");
   }
-  Log("Standard AO verification: prepare depths recorded\n");
-
   {
-    Log("Standard AO verification: entering coarse pass\n");
     RIGpuScope _gs(&mpGraphics->profiler, cmd, "StandardAO.coarse");
     barrier(state->aoQuarterTexture[image].Get(), RI_RESOURCE_STATE_UNDEFINED,
             RI_RESOURCE_STATE_GENERAL);
@@ -245,10 +230,8 @@ bool cStandardAmbientOcclusionPass::Render(
 
     cmd->dispatch(&mpGraphics->device, groupsX, groupsY, 16);
   }
-  Log("Standard AO verification: coarse pass recorded\n");
 
   {
-    Log("Standard AO verification: entering reinterleave\n");
     RIGpuScope _gs(&mpGraphics->profiler, cmd, "StandardAO.reinterleave");
 
     // The 16 slices cover every in-bounds full-resolution pixel exactly once;
@@ -295,7 +278,6 @@ bool cStandardAmbientOcclusionPass::Render(
     barrier(state->aoTexture[image].Get(), RI_RESOURCE_STATE_GENERAL,
             RI_RESOURCE_STATE_SHADER_RESOURCE);
   }
-  Log("Standard AO verification: reinterleave recorded\n");
 
   return true;
 }

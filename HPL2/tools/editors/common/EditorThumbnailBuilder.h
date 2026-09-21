@@ -112,6 +112,8 @@ protected:
 	// TRANSFER_SRC backs the cache copy).
 	RISharedPointer<RITexture> mTargetTexture;
 	RISharedPointer<RITextureView> mTargetView;
+	// COLOR_ATTACHMENT view the delivery draw renders through (D3D12 RTV).
+	RISharedPointer<RITextureView> mTargetAttachmentView;
 
 	struct cThumbnailJob
 	{
