@@ -106,13 +106,18 @@ bool EnsureViewportFeedProgram(std::shared_ptr<RIProgram> &program)
 	cResources *resources = Interface<cResources>::Get();
 	if (!resources || !resources->GetFileSearcher())
 		return false;
-	auto module = RIProgram::loadShaderStage(resources->GetFileSearcher(),
-			"viewport_feed.3d");
-	if (module.empty())
+	// One source, two entry points: load per stage so D3D12 gets the per-entry
+	// executable rather than the lib_6_8 library a multi-entry source compiles
+	// to, which no graphics PSO can consume. Vulkan resolves both to the .spv.
+	auto vsModule = RIProgram::loadShaderStage(resources->GetFileSearcher(),
+			"viewport_feed.3d", "vsMain");
+	auto psModule = RIProgram::loadShaderStage(resources->GetFileSearcher(),
+			"viewport_feed.3d", "psMain");
+	if (vsModule.empty() || psModule.empty())
 		return false;
 	std::array<RIProgram::ModuleStage, 2> stages = {
-			RIProgram::ModuleStage{RIProgram::PROGRAM_STAGE_VERTEX, module, "vsMain"},
-			RIProgram::ModuleStage{RIProgram::PROGRAM_STAGE_FRAGMENT, module, "psMain"}};
+			RIProgram::ModuleStage{RIProgram::PROGRAM_STAGE_VERTEX, vsModule, "vsMain"},
+			RIProgram::ModuleStage{RIProgram::PROGRAM_STAGE_FRAGMENT, psModule, "psMain"}};
 	program = std::make_shared<RIProgram>();
 	program->initialize(&Interface<cGraphics>::Get()->device, stages, {},
 							"Viewport.Feed");
@@ -667,23 +672,16 @@ namespace hpl {
 
 	//-----------------------------------------------------------------------
 
-// Names a viewport image for Vulkan validation and captures, so a layout or
-// usage error reports "StandardViewportState.depth" instead of a bare handle.
-static void NameViewportImage(struct RIDevice *device, const RITexture &texture,
+// Names a viewport image for validation and captures, so a layout, usage or
+// uninitialized-resource error reports "StandardViewportState.depth" instead of
+// a bare handle. RITexture::setDebugObjectName dispatches to
+// vkSetDebugUtilsObjectNameEXT or ID3D12Object::SetName; going through it keeps
+// D3D12 targets named too, which the old Vulkan-only body did not.
+static void NameViewportImage(struct RIDevice *device, RITexture &texture,
 							  const char *what) {
-#if (DEVICE_IMPL_VULKAN)
-	if (what == nullptr || vkSetDebugUtilsObjectNameEXT == nullptr ||
-		texture.vk.image == VK_NULL_HANDLE)
+	if (what == nullptr || texture.isEmpty())
 		return;
-	VkDebugUtilsObjectNameInfoEXT name = {
-		VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT};
-	name.objectType = VK_OBJECT_TYPE_IMAGE;
-	name.objectHandle = reinterpret_cast<uint64_t>(texture.vk.image);
-	name.pObjectName = what;
-	vkSetDebugUtilsObjectNameEXT(device->vk.device, &name);
-#else
-	(void)device; (void)texture; (void)what;
-#endif
+	texture.setDebugObjectName(device, what);
 }
 
 bool CreateViewportColorTexture(struct RIDevice *device, uint32_t width,
@@ -764,6 +762,20 @@ bool CreateViewportAttachmentTexture(struct RIDevice *device, uint32_t width,
 	*tex = RISharedPointer<RITexture>(device, t);
 	*view = RISharedPointer<RITextureView>(device, v);
 	return true;
+}
+
+bool CreateViewportColorAttachmentView(struct RIDevice *device,
+									   RISharedPointer<RITexture> *tex,
+									   enum RI_Format_e format,
+									   RISharedPointer<RITextureView> *view) {
+	RITextureViewDesc vd = {};
+	vd.viewType = RI_VIEWTYPE_COLOR_ATTACHMENT;
+	vd.format = format;
+	vd.mipNum = 1;
+	vd.layerNum = 1;
+	RITextureView av = RITextureView::create(device, tex->Get(), vd);
+	*view = RISharedPointer<RITextureView>(device, av);
+	return !av.isEmpty();
 }
 
 void ReleaseViewportAttachmentTexture(RISharedPointer<RITexture> *tex,

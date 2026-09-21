@@ -67,6 +67,12 @@ bool cStandardHiZPass::Build(RICmd *cmd, uint32_t frameIndex,
     return false;
   if (!pyramid.IsUsable(image))
     return false;
+  // Validate every level before the opening barrier below. Bailing from inside
+  // the loop would leave the texture in UNORDERED_ACCESS with no closing
+  // transition, desyncing the state the next pass declares.
+  for (uint32_t mip = 0; mip < pyramid.mipCount; ++mip)
+    if (pyramid.mipView[image][mip].isEmpty())
+      return false;
 
   RIGpuScope _gs(&mpGraphics->profiler, cmd, "Standard.hiz");
 
@@ -87,9 +93,6 @@ bool cStandardHiZPass::Build(RICmd *cmd, uint32_t frameIndex,
   } constants{};
 
   for (uint32_t mip = 0; mip < pyramid.mipCount; ++mip) {
-    if (pyramid.mipView[image][mip].isEmpty())
-      return false;
-
     const uint32_t targetWidth = std::max<uint32_t>(1u, pyramid.width >> mip);
     const uint32_t targetHeight = std::max<uint32_t>(1u, pyramid.height >> mip);
     constants.targetWidth = targetWidth;

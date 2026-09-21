@@ -90,6 +90,14 @@ struct StandardLightCounts {
   uint32_t boxCount;
   // eShadowMapQuality for the opaque resolve; 0 (Low) everywhere else.
   uint32_t shadowQuality;
+  // Tiles across the render extent, for the opaque resolve's per-tile light
+  // list (see kStandardLightTile* in Constants.h). 0 means "no tile list" and
+  // makes the resolve loop every light, which is what every pass other than
+  // the opaque resolve does.
+  uint32_t lightTilesX;
+  uint32_t reserved0;
+  uint32_t reserved1;
+  uint32_t reserved2;
 };
 
 using StandardPointLight = StandardPointLightData;
@@ -103,7 +111,7 @@ static_assert(sizeof(StandardBoxLightData) == 48,
               "Standard box-light ABI changed");
 static_assert(sizeof(StandardShadowTileData) == 112,
               "Standard shadow-tile ABI changed");
-static_assert(sizeof(StandardLightCounts) == 16, "Standard light counts ABI changed");
+static_assert(sizeof(StandardLightCounts) == 32, "Standard light counts ABI changed");
 
 // Set-2 bindings used by the Standard resolve.  Keeping these names and
 // indices in the CPU header documents the shader interface; descriptor writes

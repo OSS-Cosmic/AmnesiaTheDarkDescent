@@ -97,15 +97,17 @@ project "HPL2"
     vulkan_includes()
     link_sdl2()      -- SDL2 headers + link + dependson
     link_openal()    -- openal-soft headers + link + dependson
-    link_nrd()       -- NRD denoiser headers + link + dependson
-    link_fsr()       -- FidelityFX Super Resolution headers + link + dependson
+    nrd_use()        -- NRD denoiser headers only (runtime-loaded, never linked)
+    fsr_use()        -- FidelityFX Super Resolution headers + dependson (no link:
+                     -- the engine loads the ffx-api module at runtime)
     xess_use()       -- Intel XeSS headers + availability define (Windows only)
     mathlib_use()
+    fmt_use()        -- fmt headers + matching FMT_USE_EXCEPTIONS (static lib: deps/fmt.lua)
 
     -- Keep HPL2 aware of its dependency set; final executables still call
     -- link_engine() because static-library links are not relied on transitively.
     links {
-        "OALWrapper", "AngelScript", "Newton", "tinyxml2",
+        "OALWrapper", "AngelScript", "Newton", "tinyxml2", "fmt",
         "vorbisfile", "vorbis", "ogg", "freealut",
         "zlib", "volk", "IL", "png", "jpeg",
     }

@@ -13,6 +13,8 @@ Usage: .\build-windows.ps1 [release|debug] [options] [--<premake-opt>=<value> ..
 Options:
     -Clean              Remove build-premake\ before generating
     -WithTest           Build and run the unit tests (disabled by default)
+    -CompileCommands    Export compile_commands.json for clangd and copy the
+                        selected configuration's database to the repo root
     -GameDir <path>     Path to your Amnesia: The Dark Descent install
                         (default: ATDD_DIR or AMNESIA_GAME_DIRECTORY)
     -Help               Show this help
@@ -24,6 +26,7 @@ Examples:
     .\build-windows.ps1 debug
     .\build-windows.ps1 debug -WithTest
     .\build-windows.ps1 release -Clean
+    .\build-windows.ps1 release -CompileCommands
     .\build-windows.ps1 release -GameDir "C:\Games\Amnesia The Dark Descent"
     .\build-windows.ps1 release --with-tools=no
 '@
@@ -32,6 +35,7 @@ Examples:
 $config = 'release'
 $clean = $false
 $withTest = $false
+$compileCommands = $false
 $gameDir = $null
 $extraArgs = @()
 
@@ -53,6 +57,9 @@ while ($i -lt $scriptArgs.Count) {
         $i++
     } elseif ($arg -ieq '-WithTest' -or $arg -ieq '-with-test' -or $arg -ieq '--with-test') {
         $withTest = $true
+        $i++
+    } elseif ($arg -ieq '-CompileCommands' -or $arg -ieq '--compile-commands') {
+        $compileCommands = $true
         $i++
     } elseif ($arg -ieq '-NoDeploy' -or $arg -ieq '--no-deploy') {
         Write-Host "==> -NoDeploy is obsolete: builds no longer stage assets"
@@ -189,6 +196,33 @@ if ($extraArgs) {
 Write-Host "==> Generating Visual Studio 2026 solution"
 & $premake @premakeArgs
 if ($LASTEXITCODE -ne 0) { throw "premake5 vs2026 failed" }
+
+if ($compileCommands) {
+    # Reads the already-resolved premake project model directly, so it needs no
+    # compile step and every path it emits (`directory` and each `-I`) is
+    # absolute. The premake options are the ones used for the generate above so
+    # the database's defines and include dirs match what MSBuild will build.
+    Write-Host "==> Exporting compile_commands.json ($config)"
+    $exportArgs = @('export-compile-commands')
+    if ($premakeArgs.Count -gt 1) {
+        $exportArgs += $premakeArgs[1..($premakeArgs.Count - 1)]
+    }
+    & $premake @exportArgs
+    if ($LASTEXITCODE -ne 0) { throw "premake5 export-compile-commands failed" }
+
+    $exportDir = Join-Path $buildDir 'compile_commands'
+    $db = Join-Path $exportDir "$config.json"
+    if (-not (Test-Path -LiteralPath $db -PathType Leaf)) {
+        $found = @(Get-ChildItem -LiteralPath $exportDir -Filter '*.json' -ErrorAction SilentlyContinue |
+            ForEach-Object { $_.Name })
+        throw "Expected $db; export produced: $(if ($found) { $found -join ', ' } else { '(nothing)' })"
+    }
+
+    # Windows has no privilege-free equivalent of `ln -sf`, so the repo-root
+    # database is a copy: re-run with -CompileCommands after changing the build.
+    Copy-Item -LiteralPath $db -Destination (Join-Path $root 'compile_commands.json') -Force
+    Write-Host "==> Wrote compile_commands.json (copied from $db)"
+}
 
 $solutionCandidates = @(
     (Join-Path $buildDir 'Amnesia.slnx'),

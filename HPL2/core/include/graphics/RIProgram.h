@@ -185,6 +185,18 @@ public:
   // Once a set has been bound, updates require a fence that has already
   // completed. This makes in-place descriptor updates explicit and prevents
   // replacing resources still referenced by submitted GPU work.
+  //
+  // An EMPTY descriptor releases the slot instead of writing one: the element
+  // goes back to the typed null descriptor initialize() put there, and D3D12
+  // drops the reference it retained, so the slot stops counting as live and can
+  // be written again. Releasing needs no fence -- there is no new resource to
+  // protect -- but the caller must still only release once the GPU is past the
+  // frames that referenced the slot, which for pooled indices means from the
+  // graphicsDefer drain (see cTextureManager::ReturnBindlessSlot). Vulkan keeps
+  // no per-slot state, so a release is a no-op there.
+  //
+  // All or nothing: every write is validated before any descriptor is touched,
+  // and one rejected entry fails the whole batch.
   bool
   writeDescriptors(RIDevice *device, std::span<const WriteBinding> writes,
                    const RIDescriptorArenaFence *completionFence = nullptr);
@@ -646,9 +658,6 @@ private:
       D3D12_GRAPHICS_PIPELINE_STATE_DESC &psoDesc, PipelineSlot &slot);
   void applyD3D12GraphicsPipeline(struct RICmd *cmd, const PipelineSlot &slot,
                                   const char *debugName);
-  // Folds this program's shader bytes, entry points and reflection into a
-  // pipeline cache key, so two programs cannot share a cached PSO.
-  hash_t hashD3D12GraphicsShaders(hash_t seed) const;
   void
   bindD3D12ComputePipeline(struct RIDevice *device, struct RICmd *cmd,
                            hash_t pipelineHash, const char *debugName);

@@ -31,9 +31,14 @@ void RIProgram::bindD3D12Pipeline(struct RIDevice *device, struct RICmd *cmd,
                "render-target count (%u)\n",
                pipelineDesc.blendCount, rt.colorCount);
 
-  // The caller-supplied hash is only a variant tag; RIProgram::bindPipeline
-  // has already folded the pipeline state into it.
-  const hash_t cacheKey = hashD3D12GraphicsShaders(pipelineHash);
+  // The caller-supplied hash is only a variant tag; RIProgram::bindPipeline has
+  // already folded the whole pipeline state into it via
+  // RIHashGraphicsPipelineDesc, so it identifies this PSO on its own. The
+  // shader bytes deliberately stay out of the key: `pipeline` is a per-program
+  // member map that dispose() clears, so a reload cannot leave a stale PSO
+  // behind for a rebuilt program to find, and folding half a megabyte of DXIL
+  // and reflection JSON in here would run once per draw.
+  const hash_t cacheKey = pipelineHash;
   auto it = pipeline.find(cacheKey);
   if (it == pipeline.end()) {
     const auto &vs = shaderBin[PROGRAM_STAGE_VERTEX];
@@ -140,8 +145,8 @@ void RIProgram::bindD3D12Pipeline(struct RIDevice *device, struct RICmd *cmd,
       o.SrcBlend = ri_d3d12_RIBlendFactorToD3D12(a.srcColor);
       o.DestBlend = ri_d3d12_RIBlendFactorToD3D12(a.dstColor);
       o.BlendOp = ri_d3d12_RIBlendOpToD3D12(a.colorOp);
-      o.SrcBlendAlpha = ri_d3d12_RIBlendFactorToD3D12(a.srcAlpha);
-      o.DestBlendAlpha = ri_d3d12_RIBlendFactorToD3D12(a.dstAlpha);
+      o.SrcBlendAlpha = ri_d3d12_RIBlendFactorToD3D12Alpha(a.srcAlpha);
+      o.DestBlendAlpha = ri_d3d12_RIBlendFactorToD3D12Alpha(a.dstAlpha);
       o.BlendOpAlpha = ri_d3d12_RIBlendOpToD3D12(a.alphaOp);
       o.RenderTargetWriteMask = ri_d3d12_RIColorWriteMaskToD3D12(a.writeMask);
     }
@@ -200,20 +205,6 @@ void RIProgram::bindD3D12Pipeline(struct RIDevice *device, struct RICmd *cmd,
     it = pipeline.find(cacheKey);
   }
   applyD3D12GraphicsPipeline(cmd, it->second, debugName);
-}
-
-hash_t RIProgram::hashD3D12GraphicsShaders(hash_t seed) const {
-  hash_t hash = seed;
-  const auto fold = [&](const ShaderBinary &shader) {
-    hash = hash_data(hash, shader.buf.data(), shader.buf.size());
-    hash = hash_data(hash, shader.entryPoint.data(), shader.entryPoint.size());
-    if (shader.reflection && shader.reflection->json)
-      hash = hash_data(hash, shader.reflection->json->data(),
-                       shader.reflection->json->size());
-  };
-  fold(shaderBin[PROGRAM_STAGE_VERTEX]);
-  fold(shaderBin[PROGRAM_STAGE_FRAGMENT]);
-  return hash;
 }
 
 void RIProgram::createD3D12GraphicsPipeline(
@@ -275,16 +266,12 @@ void RIProgram::bindD3D12ComputePipeline(struct RIDevice *device,
                                          const char *debugName) {
   if (!device || !cmd || !cmd->d3d12.cmdList || !impl.d3d12.rootSignature)
     FatalError("RIProgram: invalid D3D12 compute pipeline bind state\n");
-  hash_t cacheKey =
+  // The shader size is folded in purely as a domain tag, so a compute key
+  // cannot collide with a graphics one in this program's shared pipeline map.
+  // The DXIL itself stays out for the same reason as the graphics path: the
+  // map is per-program and dispose() clears it.
+  const hash_t cacheKey =
       hash_u64(pipelineHash, shaderBin[PROGRAM_STAGE_COMPUTE].buf.size());
-  const auto &computeShader = shaderBin[PROGRAM_STAGE_COMPUTE];
-  cacheKey =
-      hash_data(cacheKey, computeShader.buf.data(), computeShader.buf.size());
-  cacheKey = hash_data(cacheKey, computeShader.entryPoint.data(),
-                       computeShader.entryPoint.size());
-  if (computeShader.reflection && computeShader.reflection->json)
-    cacheKey = hash_data(cacheKey, computeShader.reflection->json->data(),
-                         computeShader.reflection->json->size());
   auto it = pipeline.find(cacheKey);
   if (it == pipeline.end()) {
     const auto &cs = shaderBin[PROGRAM_STAGE_COMPUTE];
@@ -644,8 +631,12 @@ void RIProgram::bindD3D12RayTracingPipeline(
 
   // What the state object is actually built from. The map stays keyed by the
   // caller's variant tag, because traceRays is handed nothing else to look the
-  // slot up with; this is compared against the cached slot instead, so a
-  // shader reload behind a reused tag rebuilds in place.
+  // slot up with; this is compared against the cached slot instead, so a desc
+  // change behind a reused tag rebuilds in place. Only the desc fields and the
+  // entry-point identifiers go in -- they are the parts that genuinely vary
+  // under one tag, and they are tiny. The DXIL itself is excluded: rtPipeline
+  // is a per-program member map that dispose() clears, so a reload cannot
+  // leave a stale state object behind for a rebuilt program to find.
   hash_t contentKey = hash_u64(pipelineHash, desc.maxRecursionDepth);
   contentKey = hash_u64(contentKey, desc.maxPayloadSize);
   contentKey = hash_u64(contentKey, desc.maxAttributeSize);
@@ -653,7 +644,6 @@ void RIProgram::bindD3D12RayTracingPipeline(
     const auto &bin = shaderBin[kRtStages[i]];
     if (bin.buf.empty())
       continue;
-    contentKey = hash_data(contentKey, bin.buf.data(), bin.buf.size());
     contentKey =
         hash_data(contentKey, bin.entryPoint.data(), bin.entryPoint.size());
   }

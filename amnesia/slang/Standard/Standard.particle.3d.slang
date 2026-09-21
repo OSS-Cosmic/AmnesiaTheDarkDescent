@@ -2,6 +2,8 @@
 // shares the particle material, blend, fog, and light-level contracts with
 // Particle/Particle.frag.slang, but has no water or ray-tracing binding.
 
+#include "../HostDefinitions.h"
+
 import bindless;
 import GeometryStream;
 import SceneTypes;
@@ -32,7 +34,7 @@ struct StandardParticlePushConstants
 };
 
 [vk::push_constant]
-StandardParticlePushConstants gPushConstants;
+StandardParticlePushConstants gPushConstants HPL_PUSH_CONSTANT_REGISTER;
 
 // Standard/Vulkan projections use a [0, 1] device-depth range: zero is the
 // near plane and one is the far plane. Perspective depth needs the usual

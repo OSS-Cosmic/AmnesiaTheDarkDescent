@@ -374,6 +374,17 @@ SLANG_PUBLIC struct SceneConstants {
     SLANG_PUBLIC float prevJitterX;                   // previous frame's jitterUV.x, same units and sign convention
     SLANG_PUBLIC float3 cameraW;
     SLANG_PUBLIC float prevJitterY;                   // previous frame's jitterUV.y, same units and sign convention
+    // Origin of the camera-centered world light grid: posW snapped DOWN to a
+    // whole kLightGridUnit. Both LightGridBuildPass (which bins into cells) and
+    // getCellLights (which looks cells up) must use this exact value or the
+    // lookup reads a cell the builder filled for a different origin.
+    //
+    // Snapped rather than raw posW so the grid shifts one whole cell at a time
+    // instead of sliding continuously: with a raw origin every surface point
+    // changes cell every frame, its light list churns, and the ReSTIR reservoirs
+    // keyed on that list churn with it.
+    SLANG_PUBLIC float3 lightGridOriginW;
+    SLANG_PUBLIC float _padLightGridOrigin;           // keep the next float3 on a 16-byte row (D3D12 cbuffer packing)
     SLANG_PUBLIC float materialMipBias;               // mip bias for gradient-based MATERIAL sampling when a temporal provider shades at a reduced render extent; 0 for Off/NativeAA/native-extent frames
     SLANG_PUBLIC uint _padFogAreaIndices0;            // row-align fogAreaIndices (D3D12 cbuffer arrays start on a 16-byte row)
     SLANG_PUBLIC uint _padFogAreaIndices1;

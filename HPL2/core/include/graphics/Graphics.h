@@ -400,6 +400,11 @@ public:
 
   void UpdateFrameUBO(RIDescriptor *descriptor, void *data, size_t size);
 
+  // One-line GPU memory residency summary (budget usage, allocator heaps,
+  // descriptor-cache entries, NRD instances created) for the debug overlay and
+  // the periodic log. Empty when the backend reports no budget.
+  std::string GpuMemoryDiagnostics() const;
+
   // Claim per-frame segments of the translucent scratch buffers.
   bool RequestTranslucentVtx(FrameContext *cntx, size_t numFloats,
                              struct RISegmentReq *req);

@@ -17,6 +17,8 @@
 // VUID-vkCmdDraw-viewType-07752. The color value drives u; v is the row
 // center (0.5) of the single-row LUT.
 
+#include "../HostDefinitions.h"
+
 [vk::binding(0, 0)]
 SamplerState inputSampler;
 
@@ -32,7 +34,7 @@ struct ColorConvPC
 };
 
 [vk::push_constant]
-ColorConvPC gPushConstants;
+ColorConvPC gPushConstants HPL_PUSH_CONSTANT_REGISTER;
 
 struct PSIn
 {

@@ -37,6 +37,7 @@
 #include "graphics/LightProbeQuery.h"
 #include "graphics/MaterialType.h"
 #include "graphics/MeshCreator.h"
+#include "graphics/NrdIntegration.h"
 #include "graphics/PostEffect.h"
 #include "graphics/PostEffectComposite.h"
 #include "graphics/RIRenderer.h"
@@ -44,6 +45,7 @@
 #include "graphics/RITypes.h"
 #include "graphics/RIVK.h"
 #include "graphics/TextureCreator.h"
+#include "graphics/XessUpscaler.h"
 
 #include "resources/FileSearcher.h"
 #include "resources/LowLevelResources.h"
@@ -70,6 +72,8 @@
 
 #include "graphics/RISwapchain.h"
 #include <algorithm>
+#include <chrono>
+#include <cstdio>
 #include <optional>
 
 namespace hpl {
@@ -259,30 +263,80 @@ void cGraphics::Init(const cEngineInitVars::cGraphicsVars &aVars,
   } else {
     mbScreenIsSetup = false;
   }
+#if !DEVICE_IMPL_VULKAN && !DEVICE_IMPL_D3D12
+#error "No RI graphics backend compiled"
+#endif
   {
     struct RIBackendInit backendInit = {};
     backendInit.applicationName = "HPL2";
-#if (DEVICE_IMPL_D3D12)
-    backendInit.api = RI_DEVICE_API_D3D12;
-    const char *pBackendDisplayName = "Direct3D 12";
-#elif (DEVICE_IMPL_VULKAN)
-    backendInit.api = RI_DEVICE_API_VK;
-    const char *pBackendDisplayName = "Vulkan";
-    // OFF unless the user opts in with HPL_VK_VALIDATION=1, in any build.
-    // Nobody should pay for the layer without asking for it, and leaving it on
-    // by default also stacks it under driver-debug modes (RADV_DEBUG=hang
-    // etc.) -- both intercept submits, and the combination is the least-tested
-    // path as well as one that perturbs hang repros.
-    //
-    // Turn it on while working on the renderer: it is what catches unbound
-    // descriptor sets, malformed copies and bad barriers at the call that
-    // causes them rather than as corruption several frames later.
-    const char *pValidationEnv = getenv("HPL_VK_VALIDATION");
-    backendInit.vk.enableValidationLayer =
-        pValidationEnv != NULL && atoi(pValidationEnv) != 0;
-#else
-#error "No RI graphics backend compiled"
+
+    // D3D12 wherever it is compiled in (Windows), Vulkan everywhere else,
+    // unless the command line asked for one of them specifically.
+    uint8_t requestedApi;
+    switch (aVars.mRenderApi) {
+    case eRenderApiPreference_Vulkan:
+      requestedApi = RI_DEVICE_API_VK;
+      break;
+    case eRenderApiPreference_D3D12:
+      requestedApi = RI_DEVICE_API_D3D12;
+      break;
+    case eRenderApiPreference_Auto:
+    default:
+      requestedApi = DEVICE_IMPL_D3D12 ? RI_DEVICE_API_D3D12 : RI_DEVICE_API_VK;
+      break;
+    }
+
+    // Asking for a backend this build does not contain is a hard stop rather
+    // than a fallback: the renderer never silently substitutes another API, and
+    // an override that is quietly ignored is how you spend an afternoon on a
+    // repro that was running the other backend the whole time.
+    // DEVICE_IMPL_* are 0/1, so these fold away in single-backend builds while
+    // both arms stay type-checked everywhere.
+    if (requestedApi == RI_DEVICE_API_D3D12 && !DEVICE_IMPL_D3D12) {
+      FatalError("Direct3D 12 was not compiled into this build. Rebuild with "
+                 "--with-d3d12=yes, or omit --d3d12 to use Vulkan.\n");
+    }
+    if (requestedApi == RI_DEVICE_API_VK && !DEVICE_IMPL_VULKAN) {
+      FatalError("Vulkan was not compiled into this build. Omit --vulkan to "
+                 "use this build's default backend.\n");
+    }
+
+    backendInit.api = requestedApi;
+    const char *pBackendDisplayName =
+        (requestedApi == RI_DEVICE_API_D3D12) ? "Direct3D 12" : "Vulkan";
+
+#if (DEVICE_IMPL_VULKAN)
+    if (requestedApi == RI_DEVICE_API_VK) {
+      // OFF unless the user opts in with HPL_VK_VALIDATION=1, in any build.
+      // Nobody should pay for the layer without asking for it, and leaving it
+      // on by default also stacks it under driver-debug modes (RADV_DEBUG=hang
+      // etc.) -- both intercept submits, and the combination is the
+      // least-tested path as well as one that perturbs hang repros.
+      //
+      // Turn it on while working on the renderer: it is what catches unbound
+      // descriptor sets, malformed copies and bad barriers at the call that
+      // causes them rather than as corruption several frames later.
+      const char *pValidationEnv = getenv("HPL_VK_VALIDATION");
+      backendInit.vk.enableValidationLayer =
+          pValidationEnv != NULL && atoi(pValidationEnv) != 0;
+    }
+
+    // XeSS needs instance extensions that cannot be added after vkCreateInstance,
+    // so it contributes them here. RI declines anything this instance cannot
+    // provide, which vetoes XeSS rather than failing initialization -- so this
+    // is pure opt-in and never affects whether the renderer comes up. Must
+    // outlive InitRIRenderer below.
+    struct RIVkInstanceRequirements instanceRequirements[1] = {};
+    if (requestedApi == RI_DEVICE_API_VK &&
+        XessVkInstanceRequirements(&instanceRequirements[0])) {
+      backendInit.vk.optionalRequirements = instanceRequirements;
+      backendInit.vk.optionalRequirementCount = 1;
+    }
 #endif
+
+    // Two backends can ship in one binary now, so name the one that came up:
+    // without this a log from a bug report does not say which API ran.
+    Log("Graphics API: %s\n", pBackendDisplayName);
 
     if (InitRIRenderer(&backendInit) != RI_SUCCESS) {
       FatalError(
@@ -386,6 +440,20 @@ void cGraphics::Init(const cEngineInitVars::cGraphicsVars &aVars,
     // The ray-traced shaders trace with inline ray query, so it is requested
     // together with the acceleration structures it reads.
     deviceInit.requestRayQuery = deviceInit.requestRayTracing;
+#if (DEVICE_IMPL_VULKAN)
+    // XeSS's device extensions and feature chain, which likewise have to be in
+    // place before vkCreateDevice. Queried against the adapter just selected;
+    // RI drops the whole contribution rather than failing if it cannot be
+    // honoured. Must outlive device.init below.
+    struct RIVkDeviceRequirements deviceRequirements[1] = {};
+    if (RIIsTargetSelected(RI_DEVICE_API_VK) &&
+        XessVkDeviceRequirements(
+            &deviceRequirements[0], RIGetVkInstance(),
+            physicalAdapters[selectedAdapterIdx].vk.physicalDevice)) {
+      deviceInit.optionalRequirements = deviceRequirements;
+      deviceInit.optionalRequirementCount = 1;
+    }
+#endif
     if (device.init(&deviceInit) != RI_SUCCESS) {
       FatalError("Failed to create %s device on adapter '%s'! Make sure "
                  "your drivers are up to date.\n",
@@ -478,6 +546,7 @@ void cGraphics::Init(const cEngineInitVars::cGraphicsVars &aVars,
       if (whiteTexture2D.isEmpty()) {
         FatalError("Failed to create white texture image!\n");
       }
+      whiteTexture2D.setDebugObjectName(&device, "Graphics.whiteTexture2D");
 
       const uint8_t whitePixel[4] = {255, 255, 255, 255};
       const RIDeviceSize whiteRowPitch = RIFormatAlignRowPitch(
@@ -1282,6 +1351,7 @@ void cGraphics::CloseAndSubmitActiveSet() {
       m_forceSwapchainRebuild = true;
 
     graphicsDefer.seal(frameTimelineValue);
+    RISealRetiredBuffers(&device, frameTimelineValue);
     IncrementFrame();
     return;
   }
@@ -1395,6 +1465,7 @@ void cGraphics::CloseAndSubmitActiveSet() {
 
     // Seal this frame's deferred destroys against the timeline value.
     graphicsDefer.seal(frameTimelineValue);
+    RISealRetiredBuffers(&device, frameTimelineValue);
   }
   IncrementFrame();
 }
@@ -1423,8 +1494,25 @@ void cGraphics::BeginActiveSet() {
 
   const uint64_t completedTimeline = graphicsTimeline.completed(&device);
   graphicsDefer.drain(completedTimeline);
+  // Buffers the backend kept alive past dispose (D3D12 raw-SRV registry) are
+  // released on the same timeline as graphicsDefer.
+  RIReclaimRetiredBuffers(&device, completedTimeline);
   // Read back any GPU timing slot whose frame has finished.
   profiler.resolve(&device, completedTimeline);
+
+  // Periodic residency trace, so a long session leaves a record of whether GPU
+  // memory drifts over budget as frame time climbs.
+  {
+    static std::chrono::steady_clock::time_point lastMemoryLog;
+    const auto now = std::chrono::steady_clock::now();
+    if (now - lastMemoryLog >= std::chrono::seconds(10)) {
+      lastMemoryLog = now;
+      const std::string memory = GpuMemoryDiagnostics();
+      if (!memory.empty())
+        Log("GPU memory: %s  gpu %.2f ms\n", memory.c_str(),
+            profiler.lastTotalMs());
+    }
+  }
 
   // Recreate the swapchain before we acquire when the live window size (owned
   // by cWindow, polled here each frame) or the requested vsync differs from the
@@ -1540,6 +1628,28 @@ void cGraphics::UpdateFrameUBO(RIDescriptor *descriptor, void *data,
   *descriptor = RIDescriptor::uniformBuffer(&device, &scratchReq.block.buffer,
                                             scratchReq.bufferOffset, size);
   RIFinishScrachReq(&device, &scratchReq);
+}
+
+std::string cGraphics::GpuMemoryDiagnostics() const {
+  RIMemoryStats stats = {};
+  if (!RIQueryMemoryStats(&device, &stats))
+    return {};
+  constexpr double kMiB = 1024.0 * 1024.0;
+  uint32_t descriptorCacheEntries = 0;
+#if (DEVICE_IMPL_D3D12)
+  descriptorCacheEntries = g_riD3D12DescriptorCacheEntries;
+#endif
+  char line[256];
+  snprintf(line, sizeof(line),
+           "VRAM local %.0f/%.0f MB  nonlocal %.0f/%.0f MB  heaps %.0f MB "
+           "(live %.0f MB)  retired %.0f MB  reg %u  descCache %u  nrdInst %u",
+           stats.localUsage / kMiB, stats.localBudget / kMiB,
+           stats.nonLocalUsage / kMiB, stats.nonLocalBudget / kMiB,
+           stats.allocatorBlockBytes / kMiB,
+           stats.allocatorAllocationBytes / kMiB,
+           stats.retiredBufferBytes / kMiB, stats.registeredBuffers,
+           descriptorCacheEntries, NrdIntegration::InstancesCreated());
+  return line;
 }
 
 std::optional<RIDescriptor>

@@ -99,8 +99,14 @@ namespace hpl {
     bool ShouldUseRayTracedLightClass(const cLightElementInfo &aInfo, unsigned int alMask,
                                       bool abRayTracedBackend);
 
-    // reach^2 = maxLinear * intensity / radianceFloor - sourceRadius^2, and its
-    // inverse. Colours are sRGB.
+    // reach = min(sqrt(maxLinear * intensity / radianceFloor - sourceRadius^2),
+    //             kLightReachMaxScale * intensity), and the unclamped inverse.
+    // Colours are sRGB.
+    //
+    // The clamp bounds light-grid occupancy (see DeriveReach in the .cpp) and
+    // makes these two NOT strict inverses of each other: DeriveLightReach is the
+    // derived path (author gave an intensity), while DeriveLightIntensityForReach
+    // solves for an explicitly authored reach, which is taken verbatim.
     float DeriveLightReach(float afIntensity, float afRed, float afGreen, float afBlue);
     float DeriveLightIntensityForReach(float afReach, float afRed, float afGreen, float afBlue);
 

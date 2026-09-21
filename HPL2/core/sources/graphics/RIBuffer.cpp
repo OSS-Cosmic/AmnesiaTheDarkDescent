@@ -1,11 +1,10 @@
-#include "graphics/RITypes.h"
-#include "graphics/RIRenderer.h" // VK_ConfigureBufferQueueFamilies, RI_QUEUE_LEN
-#include "graphics/RIVK.h"       // ri_vk_RIBufferUsageToVK
 #include "graphics/RID3D12.h"
+#include "graphics/RIRenderer.h" // VK_ConfigureBufferQueueFamilies, RI_QUEUE_LEN
+#include "graphics/RITypes.h"
+#include "graphics/RIVK.h" // ri_vk_RIBufferUsageToVK
 #include <cassert>
 
-void RIBuffer::setDebugObjectName(struct RIDevice *device,
-                                  const char *name) {
+void RIBuffer::setDebugObjectName(struct RIDevice *device, const char *name) {
 #if (DEVICE_IMPL_VULKAN)
   if (RIIsTargetSelected(RI_DEVICE_API_VK)) {
     if (vkSetDebugUtilsObjectNameEXT && vk.buffer) {
@@ -90,10 +89,9 @@ struct RIBuffer RIBuffer::create(struct RIDevice *device,
           device->vk.vmaAllocator, &bci, &aci, desc.alignment, &buf.vk.buffer,
           &buf.vk.allocation, &allocationInfo));
     } else {
-      created = VK_WrapResult(vmaCreateBuffer(device->vk.vmaAllocator, &bci,
-                                              &aci, &buf.vk.buffer,
-                                              &buf.vk.allocation,
-                                              &allocationInfo));
+      created = VK_WrapResult(
+          vmaCreateBuffer(device->vk.vmaAllocator, &bci, &aci, &buf.vk.buffer,
+                          &buf.vk.allocation, &allocationInfo));
     }
     if (!created)
       return RIBuffer{};

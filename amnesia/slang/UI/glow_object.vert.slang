@@ -12,6 +12,8 @@
 // viewProj arrive via the shared "pass" UBO and the per-object model + tint via
 // the push constant. Pairs with glow_object.frag.
 
+#include "../HostDefinitions.h"
+
 struct OutlinePass
 {
     float4x4 viewProj;
@@ -29,7 +31,7 @@ struct OutlineAlphaPC
 };
 
 [vk::push_constant]
-OutlineAlphaPC gPushConstants;
+OutlineAlphaPC gPushConstants HPL_PUSH_CONSTANT_REGISTER;
 
 struct VSIn
 {

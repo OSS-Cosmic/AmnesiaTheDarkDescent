@@ -31,6 +31,8 @@
 // hardest, which reads as milky fog and blown-out halos; a linear exposure
 // multiply preserves every blend ratio.
 
+#include "../HostDefinitions.h"
+
 import Utils.Color.ColorHelpers;   // piecewise linearToSRGB()
 
 [vk::binding(0, 0)]
@@ -78,7 +80,7 @@ struct ToneMapPC
 };
 
 [vk::push_constant]
-ToneMapPC gPushConstants;
+ToneMapPC gPushConstants HPL_PUSH_CONSTANT_REGISTER;
 
 // Highlight shoulder knee. Below it the encode is bit-exact, so the particle
 // path's sRGBToLinear/linearToSRGB round trip stays an identity for the faint

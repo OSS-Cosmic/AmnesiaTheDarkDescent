@@ -35,6 +35,13 @@ import Utils.Color.ColorHelpers; // linearToSRGB / sRGBToLinear for the decal fo
 // offsets per texel stacked as jitterSamples/2 tile blocks.
 [vk::binding(10,2)] Texture2D<float4> standardShadowJitterInput;
 
+// Per-tile light list from Standard.lightCull.cs. Layout and the overflow
+// sentinel are documented beside kStandardLightTile* in Constants.h. When
+// standardLightCounts.lightTilesX is 0 this is unbound-but-valid and every
+// light is looped, which is the path the translucent and reflection passes
+// take (they share this module's light buffers but not the camera's tiles).
+[vk::binding(17,2)] StructuredBuffer<uint> standardTileLights;
+
 // Emulates the legacy LINEAR comparison sampler with four bilinearly weighted
 // texel compares inside one atlas tile. Spot tiles treat taps outside the tile
 // as the fully-lit border; cube-face tiles clamp to the edge texel (their
@@ -81,11 +88,12 @@ float standardShadowLoadDepth(StandardShadowTile tile, float2 uv)
 
 // Fetches a published tile. Out-of-range indices and malformed tiles are
 // treated as "no shadow" rather than reading past the buffer.
-bool standardShadowTileAt(uint index, out StandardShadowTile tile)
+// `tileCount` is passed in rather than queried here: this sits in the innermost
+// per-light loop, and GetDimensions is a resource query that cannot be hoisted
+// out of it by the compiler. psMain reads it once per pixel instead.
+bool standardShadowTileAt(uint index, uint tileCount, out StandardShadowTile tile)
 {
-    uint count, stride;
-    standardShadowTiles.GetDimensions(count, stride);
-    if (index >= count)
+    if (index >= tileCount)
     {
         tile = (StandardShadowTile)0;
         return false;
@@ -196,13 +204,14 @@ float standardShadowFilter(StandardShadowTile tile, float2 shadowUV, float biase
     return sum / (float)jitterSamples;
 }
 
-float standardSpotShadowVisibility(StandardSpotLight light, float3 position, uint2 pixel)
+float standardSpotShadowVisibility(StandardSpotLight light, float3 position,
+                                   uint2 pixel, uint tileCount)
 {
     if ((light.config & kStandardLightHasShadow) == 0u ||
         light.shadowIndex == kStandardInvalidShadow || !standardFinite3(position))
         return 1.0f;
     StandardShadowTile tile;
-    if (!standardShadowTileAt(light.shadowIndex, tile))
+    if (!standardShadowTileAt(light.shadowIndex, tileCount, tile))
         return 1.0f;
     float2 shadowUV;
     float biasedDepth;
@@ -214,7 +223,8 @@ float standardSpotShadowVisibility(StandardSpotLight light, float3 position, uin
 // Point lights own six cube-face tiles (+X,-X,+Y,-Y,+Z,-Z). The face is the
 // major axis of the light-to-receiver vector, matching the face frusta the
 // CPU rasterized.
-float standardPointShadowVisibility(StandardPointLight light, float3 position, uint2 pixel)
+float standardPointShadowVisibility(StandardPointLight light, float3 position,
+                                    uint2 pixel, uint tileCount)
 {
     if ((light.config & kStandardLightHasShadow) == 0u ||
         light.shadowIndex == kStandardInvalidShadow || light.shadowIndex > 0xfffffff0u ||
@@ -227,7 +237,7 @@ float standardPointShadowVisibility(StandardPointLight light, float3 position, u
     else if (a.y >= a.z)          face = d.y >= 0.0f ? 2u : 3u;
     else                          face = d.z >= 0.0f ? 4u : 5u;
     StandardShadowTile tile;
-    if (!standardShadowTileAt(light.shadowIndex + face, tile))
+    if (!standardShadowTileAt(light.shadowIndex + face, tileCount, tile))
         return 1.0f;
     float2 shadowUV;
     float biasedDepth;
@@ -300,24 +310,72 @@ float4 psMain(V v) : SV_TARGET0
     float3 result = float3(0.0f);
     uint pointCount = standardLightCounts.pointCount;
     uint spotCount = standardLightCounts.spotCount;
+    // Queried once here, not per light: see standardShadowTileAt.
+    uint shadowTileCount, shadowTileStride;
+    standardShadowTiles.GetDimensions(shadowTileCount, shadowTileStride);
 
     // Box lights applied first, then point and spot lights additively, finally emission.
     uint boxCount = standardLightCounts.boxCount;
     for (uint i = 0u; i < boxCount; ++i)
         result = standardBoxLight(result, surface.color, surface.position, standardBoxLights[i]);
 
-    for (uint i = 0u; i < pointCount; ++i)
+    // Per-tile light list. Standard.lightCull.cs binned this tile's lights
+    // against the world-space AABB of the surfaces visible in it, so a light in
+    // the next room that cannot reach any of them is simply absent. The list is
+    // exact -- a tile that could not fit its lights stores the overflow
+    // sentinel and falls back to the full loop below -- and the indices are
+    // ascending, so the accumulation order is unchanged.
+    uint tileBase = 0u;
+    uint tilePointCount = pointCount;   // fall back to every light
+    uint tileSpotCount  = spotCount;
+    bool tiled = false;
+    if (standardLightCounts.lightTilesX != 0u)
     {
+        uint2 tile = pixel / kStandardLightTileSize;
+        uint  flat = tile.x + tile.y * standardLightCounts.lightTilesX;
+        uint  base = flat * kStandardLightTileStride;
+        uint  stored = standardTileLights[base];
+        if (stored != kStandardLightTileOverflow)
+        {
+            tiled = true;
+            tileBase = base + 2u;
+            tilePointCount = stored;
+            tileSpotCount  = standardTileLights[base + 1u];
+        }
+    }
+
+    // The reach test gates the shadow filter. standardPointLight /
+    // standardSpotLight repeat it internally and return zero for exactly the
+    // same lights, so skipping here changes only what a rejected light costs,
+    // never what it contributes. It stays even when tiled: the tile AABB is a
+    // conservative bound over the whole tile, not this pixel.
+    for (uint k = 0u; k < tilePointCount; ++k)
+    {
+        uint i = tiled ? standardTileLights[tileBase + k] : k;
         StandardPointLight light = standardPointLights[i];
-        float visibility = standardPointShadowVisibility(light, surface.position, pixel);
+        if (!standardLightReaches(light.config, light.radius, light.position,
+                                  surface.position))
+            continue;
+        float visibility = standardPointShadowVisibility(light, surface.position,
+                                                         pixel, shadowTileCount);
         result += standardPointLight(surface, V, light, visibility);
     }
-    for (uint i = 0u; i < spotCount; ++i)
+    // Hoisted out of the loop: these are loop-invariant, and the reach test
+    // below makes the loop body divergent, where derivatives are undefined.
+    float3 positionDx = ddx(surface.position);
+    float3 positionDy = ddy(surface.position);
+    for (uint k = 0u; k < tileSpotCount; ++k)
     {
+        // Spot indices follow the point indices in the same tile run.
+        uint i = tiled ? standardTileLights[tileBase + tilePointCount + k] : k;
         StandardSpotLight light = standardSpotLights[i];
-        float visibility = standardSpotShadowVisibility(light, surface.position, pixel);
+        if (!standardLightReaches(light.config, light.radius, light.position,
+                                  surface.position))
+            continue;
+        float visibility = standardSpotShadowVisibility(light, surface.position,
+                                                        pixel, shadowTileCount);
         result += standardSpotLight(surface, V, light, visibility,
-                                    ddx(surface.position), ddy(surface.position));
+                                    positionDx, positionDy);
     }
 
     UniformObject object = gSceneObjects[packed.x];

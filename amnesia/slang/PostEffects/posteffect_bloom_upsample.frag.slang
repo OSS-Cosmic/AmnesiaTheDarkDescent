@@ -13,6 +13,8 @@
 //   binding 0 : SamplerState inputSampler  (bilinear, clamp)
 //   binding 1 : Texture2D<float4> sourceInput   (the smaller mip being upsampled)
 
+#include "../HostDefinitions.h"
+
 [vk::binding(0, 0)]
 SamplerState inputSampler;
 
@@ -26,7 +28,7 @@ struct BloomUpsamplePC
 };
 
 [vk::push_constant]
-BloomUpsamplePC gPushConstants;
+BloomUpsamplePC gPushConstants HPL_PUSH_CONSTANT_REGISTER;
 
 static const float kUpsampleBlend = 0.5f;
 

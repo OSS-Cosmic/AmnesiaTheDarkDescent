@@ -17,11 +17,15 @@ public:
   ~cStandardWaterPass();
   bool LoadData();
   void DestroyData();
+  // The two light-count pairs differ: the surface itself is shaded in the
+  // camera view and uses the frustum-culled counts, while the planar capture
+  // is a view mirrored through the water plane, so its lights are not a subset
+  // of the camera's -- it reads the full buffer extents instead.
   bool RecordSurface(cGraphics::FrameContext *, cViewport::StandardViewportState *,
                      uint32_t, iRenderable *, cFrustum *, cWorld *,
                      RIProgram::DescriptorBinding *, RIProgram::DescriptorBinding *,
                      RISharedPointer<RIBuffer> *, RISharedPointer<RIBuffer> *,
-                     uint32_t, uint32_t, RITextureView *,
+                     uint32_t, uint32_t, uint32_t, uint32_t, RITextureView *,
                      std::span<cFogArea *> visibleFogAreas = {},
                      RISharedPointer<RIBuffer> *boxLights = nullptr,
                      uint32_t boxLightCount = 0);

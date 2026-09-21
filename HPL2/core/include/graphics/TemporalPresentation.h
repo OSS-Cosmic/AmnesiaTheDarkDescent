@@ -166,6 +166,11 @@ private:
       m_displayColorTextures;
   std::array<RISharedPointer<RITextureView>, RI_MAX_SWAPCHAIN_IMAGES>
       m_displayColorViews;
+  // Same images as m_displayColorViews, COLOR_ATTACHMENT-typed for the spatial
+  // fallback's raster pass. The sampled view above stays the one handed out as
+  // a storage/sampled output; D3D12 rejects it as a render target.
+  std::array<RISharedPointer<RITextureView>, RI_MAX_SWAPCHAIN_IMAGES>
+      m_displayColorAttachmentViews;
 
   TemporalUpscalerExtent m_resourceExtent = {};
   bool m_resourceExtentValid = false;

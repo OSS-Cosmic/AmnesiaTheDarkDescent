@@ -14,6 +14,8 @@
 //   binding 0 : SamplerState colorSampler (bilinear, clamp)
 //   binding 1 : Texture2D<float4> sceneHdrColor
 
+#include "../HostDefinitions.h"
+
 [vk::binding(0, 0)]
 SamplerState colorSampler;
 
@@ -30,7 +32,7 @@ struct SpatialFallbackPC
 };
 
 [vk::push_constant]
-SpatialFallbackPC gPushConstants;
+SpatialFallbackPC gPushConstants HPL_PUSH_CONSTANT_REGISTER;
 
 struct VSOut
 {

@@ -21,8 +21,9 @@
 
 #include "graphics/RIBarrier.h"
 #include "graphics/RICommand.h"
-#include "graphics/RIRenderer.h" // RIDevice::vk.vmaAllocator (readback invalidate)
+#include "graphics/RIRenderer.h"
 #include "scene/Light.h"
+#include "system/LowLevelSystem.h" // Error
 
 #include <cstring>
 
@@ -76,9 +77,18 @@ void cLightProbeQuery::Init(RIDevice *apDevice) {
   for (size_t i = 0; i < mvSlots.size(); ++i) {
     cFrameSlot &slot = mvSlots[i];
 
+    // Read-only on the GPU: LightProbePass.cs declares gProbeRequests as a
+    // StructuredBuffer (t#), never an RWStructuredBuffer. Asking only for
+    // SHADER_RESOURCE is what keeps this host-mapped on D3D12, whose upload
+    // heaps cannot carry UAV flags -- RID3D12Buffer.cpp rejects
+    // HOST_UPLOAD + SHADER_RESOURCE_STORAGE outright. Both flags map to
+    // VK_BUFFER_USAGE_STORAGE_BUFFER_BIT on Vulkan (RIVK.h), so this is a no-op
+    // there, and RIProgram picks SRV vs UAV from the reflected register class
+    // rather than the descriptor type, so the binding side in
+    // cHybridRenderer::Draw is unchanged on both backends.
     RIBufferDesc reqDesc = {};
     reqDesc.size = lRequestSize;
-    reqDesc.usage = RI_BUFFER_USAGE_SHADER_RESOURCE_STORAGE;
+    reqDesc.usage = RI_BUFFER_USAGE_SHADER_RESOURCE;
     reqDesc.location = RI_MEMORY_HOST_UPLOAD;
     slot.mRequests = RIBuffer::create(apDevice, reqDesc);
 
@@ -97,9 +107,20 @@ void cLightProbeQuery::Init(RIDevice *apDevice) {
 
     // A failed allocation leaves the whole service off rather than half-armed:
     // every entry point checks mbInitialized, and GetResult then reports "no
-    // answer", which every caller already has to handle.
+    // answer", which every caller already has to handle. Name the buffer that
+    // failed -- disabling the sensor silently makes the player read as
+    // permanently lit (cLuxLightProbeBrightness resets to fully lit), with
+    // nothing in the log to say why the darkness never arrived.
     if (slot.mRequests.isEmpty() || slot.mResults.isEmpty() ||
         slot.mReadback.isEmpty()) {
+      Error("cLightProbeQuery: frame slot %d failed to allocate its %s buffer; "
+            "the GPU light sensor is disabled for this run and every GetResult "
+            "will report 'no answer'. See the RI warning above for the backend "
+            "reason.\n",
+            (int)i,
+            slot.mRequests.isEmpty()   ? "request (host-upload, shader-resource)"
+            : slot.mResults.isEmpty()  ? "result (device, storage)"
+                                       : "readback (host-readback, transfer-dst)");
       Dispose(apDevice);
       return;
     }
@@ -231,15 +252,23 @@ void cLightProbeQuery::Poll(RIDevice *apDevice,
       lNewest = slot.mlStageValue;
       mlResultCount = slot.mlProbeCount;
       if (mlResultCount > 0) {
-#if (DEVICE_IMPL_VULKAN)
         // The readback allocation may have landed in HOST_CACHED memory, where
-        // the mapped pointer alone would hand back stale cache lines.
-        vmaInvalidateAllocation(apDevice->vk.vmaAllocator,
-                                slot.mReadback.vk.allocation, 0, VK_WHOLE_SIZE);
-#endif
-        std::memcpy(mvResults.data(), slot.mReadback.mappedAddress,
-                    sizeof(cGpuResult) * (size_t)mlResultCount);
-        mbHasResult = true;
+        // the mapped pointer alone would hand back stale cache lines. Routed
+        // through RIBuffer so the active backend's invalidate runs: Vulkan is
+        // compiled in unconditionally (RIDefines.h), so a bare #if here would
+        // feed union-aliased d3d12 members to VMA on a D3D12 run. (0, 0) means
+        // the whole buffer from offset 0 -- VK_WHOLE_SIZE on Vulkan, an
+        // unmap/remap on D3D12.
+        slot.mReadback.invalidateMappedRange(apDevice, 0, 0);
+        // D3D12's invalidate republishes mappedAddress and leaves it null if
+        // the remap failed, so re-check rather than memcpy from null.
+        if (slot.mReadback.mappedAddress != NULL) {
+          std::memcpy(mvResults.data(), slot.mReadback.mappedAddress,
+                      sizeof(cGpuResult) * (size_t)mlResultCount);
+          mbHasResult = true;
+        } else {
+          mlResultCount = 0;
+        }
       }
     }
     slot.mlStageValue = 0;

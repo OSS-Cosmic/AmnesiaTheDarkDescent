@@ -29,7 +29,6 @@
 #include "graphics/RIFormat.h"
 #include "graphics/RIPogoBuffer.h"
 #include "graphics/RIProgramHelpers.h"
-#include "graphics/RIVK.h"
 #include "graphics/VertexBuffer.h"
 #include "scene/Viewport.h"
 #include "system/Hasher.h"
@@ -238,12 +237,19 @@ void BindFullscreenPipeline(RIProgram &aProgram, RICmd *apCmd, bool abAdditive,
 		// past 1.0 and clip to white (the original cLuxEffectRenderer composited
 		// pre-tone-map, so its additive glow got compressed back into range).
 		// Screen — dst + src*(1-dst) — brightens toward white but never past it.
+		//
+		// The alpha slots take the ALPHA analogue of that equation, never the
+		// _COLOR factor the colour slots use: D3D12 rejects a _COLOR blend
+		// factor in SrcBlendAlpha / DestBlendAlpha outright (the PSO fails with
+		// E_INVALIDARG), where Vulkan accepts it. Nothing observable rides on
+		// the choice — writeMask is RGB and outline_composite.frag returns
+		// alpha 0, so the alpha equation's result is discarded either way.
 		desc.blend[0].blendEnable = true;
 		desc.blend[0].colorOp = RI_BLEND_OP_ADD;
 		desc.blend[0].alphaOp = RI_BLEND_OP_ADD;
 		desc.blend[0].srcColor = RI_BLEND_ONE_MINUS_DST_COLOR;
 		desc.blend[0].dstColor = RI_BLEND_ONE;
-		desc.blend[0].srcAlpha = RI_BLEND_ONE_MINUS_DST_COLOR;
+		desc.blend[0].srcAlpha = RI_BLEND_ONE_MINUS_DST_ALPHA;
 		desc.blend[0].dstAlpha = RI_BLEND_ONE;
 		desc.blend[0].writeMask = RI_COLOR_WRITE_RGB; // RI default is RGBA
 	} else {
@@ -508,19 +514,18 @@ void cLuxEffectRenderer::OnPostWorldDraw(const PostWorldDrawCtx &ctx)
 	// Composite the blurred outline into the pogo read half (post-tonemap).
 	const uint32_t readIdx = (pPogo->attachmentIndex + 1u) % 2u;
 	RITexture *pReadTex = pPogo->textures[readIdx].Get();
-	VkImageView readView = RI_PogoBufferShaderResource(pPogo).vkImageView();
 
 	// Read half: SHADER_RESOURCE -> RENDER_TARGET (composite appends).
 	pCmd->vk_d3d12_textureBarrier(RI_PogoAttachmentBarrier(pReadTex, /*initial=*/false));
 
-	const VkRect2D scissor = {{0, 0}, {w, h}};
+	RIRect scissor = {};
+	scissor.width = w;
+	scissor.height = h;
 
 	// (a) Composite the blurred outline — fullscreen, no depth.
 	{
-		RITextureView readViewRi = {};
-		readViewRi.vk.image = readView;
 		RIRenderingAttachment color = {};
-		color.view = readViewRi;
+		color.view = *pPogo->attachmentView[readIdx];
 		color.loadOp = RI_ATTACHMENT_LOAD_OP_LOAD;
 		color.storeOp = RI_ATTACHMENT_STORE_OP_STORE;
 
@@ -532,9 +537,13 @@ void cLuxEffectRenderer::OnPostWorldDraw(const PostWorldDrawCtx &ctx)
 		pCmd->vk_d3d12_beginRendering(&Interface<cGraphics>::Get()->device, beginDesc);
 
 		// Negative height: the engine convention shared with posteffect_fullscreen.vert.
-		const VkViewport fsViewport = {0.0f, (float)h, (float)w, -(float)h, 0.0f, 1.0f};
-		vkCmdSetViewport(pCmd->vk.cmd, 0, 1, &fsViewport);
-		vkCmdSetScissor(pCmd->vk.cmd, 0, 1, &scissor);
+		RIViewport fsViewport = {};
+		fsViewport.y = (float)h;
+		fsViewport.width = (float)w;
+		fsViewport.height = -(float)h;
+		fsViewport.depthMax = 1.0f;
+		pCmd->setViewport(&Interface<cGraphics>::Get()->device, fsViewport);
+		pCmd->setScissor(&Interface<cGraphics>::Get()->device, scissor);
 
 		BindFullscreenPipeline(mCompositeProgram, pCmd, /*additive=*/true,
 							   hash_u32(HASH_INITIAL_VALUE, 0u),
@@ -548,7 +557,7 @@ void cLuxEffectRenderer::OnPostWorldDraw(const PostWorldDrawCtx &ctx)
 		bindings[1].descriptor = m_blur[1].descriptor();
 		bindings[1].handle = DescriptorBindingID::Create("blurInput");
 		mCompositeProgram.bindDescriptors(ctx.device, pCmd, ctx.frameIndex, bindings, 2);
-		vkCmdDraw(pCmd->vk.cmd, 3, 1, 0, 0);
+		pCmd->draw(&Interface<cGraphics>::Get()->device, 3, 1, 0, 0);
 
 		pCmd->vk_d3d12_endRendering(&Interface<cGraphics>::Get()->device);
 
@@ -592,7 +601,6 @@ void cLuxEffectRenderer::OnPostTranslucenceDraw(const PostTranslucenceDrawCtx &c
 	// so the BackBuffer's valid rectangle is the whole image.
 	cViewport::BackBuffer bb = ctx.viewport->GetBackBuffer();
 	if (bb.renderTarget.isEmpty()) return;
-	VkImageView hdrView = bb.renderTargetView.vk.image;
 
 	/////////////////////////////
 	// Per-frame view/viewProj UBO (HDR-space, actual jittered raster matrices)
@@ -615,14 +623,18 @@ void cLuxEffectRenderer::OnPostTranslucenceDraw(const PostTranslucenceDrawCtx &c
 	EmitImageBarrier(pCmd, &bb.renderTarget, RI_RESOURCE_STATE_SHADER_RESOURCE,
 					 RI_STAGE_FRAGMENT, RI_RESOURCE_STATE_RENDER_TARGET, RI_STAGE_NONE);
 
-	const VkViewport flippedViewport = {0.0f, (float)h, (float)w, -(float)h, 0.0f, 1.0f};
-	const VkRect2D scissor = {{0, 0}, {w, h}};
+	RIViewport flippedViewport = {};
+	flippedViewport.y = (float)h;
+	flippedViewport.width = (float)w;
+	flippedViewport.height = -(float)h;
+	flippedViewport.depthMax = 1.0f;
+	RIRect scissor = {};
+	scissor.width = w;
+	scissor.height = h;
 
 	{
-		RITextureView hdrViewRi = {};
-		hdrViewRi.vk.image = hdrView;
 		RIRenderingAttachment color = {};
-		color.view = hdrViewRi;
+		color.view = bb.renderTargetAttachmentView;
 		color.loadOp = RI_ATTACHMENT_LOAD_OP_LOAD;
 		color.storeOp = RI_ATTACHMENT_STORE_OP_STORE;
 
@@ -641,8 +653,8 @@ void cLuxEffectRenderer::OnPostTranslucenceDraw(const PostTranslucenceDrawCtx &c
 		beginDesc.depthStencil = &depth;
 		pCmd->vk_d3d12_beginRendering(&Interface<cGraphics>::Get()->device, beginDesc);
 
-		vkCmdSetViewport(pCmd->vk.cmd, 0, 1, &flippedViewport);
-		vkCmdSetScissor(pCmd->vk.cmd, 0, 1, &scissor);
+		pCmd->setViewport(&Interface<cGraphics>::Get()->device, flippedViewport);
+		pCmd->setScissor(&Interface<cGraphics>::Get()->device, scissor);
 
 		auto pDiffSampler = Interface<cGraphics>::Get()->resolve_filter_descriptor(
 			eTextureWrap_Repeat, eTextureWrap_Repeat, eTextureWrap_Repeat,
@@ -686,9 +698,6 @@ void cLuxEffectRenderer::OnPostTranslucenceDraw(const PostTranslucenceDrawCtx &c
 				pc.params[0] = abAlphaTest ? 1.0f : 0.0f;
 				pc.params[1] =
 					(RIFormatChannelCount(diffTex->format) == 1) ? 1.0f : 0.0f;
-				vkCmdPushConstants(pCmd->vk.cmd, mGlowProgram.getPipelineLayout(),
-								   VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,
-								   0, sizeof(pc), &pc);
 
 				RIProgram::DescriptorBinding bindings[3] = {};
 				bindings[0].descriptor = passDesc;
@@ -698,6 +707,11 @@ void cLuxEffectRenderer::OnPostTranslucenceDraw(const PostTranslucenceDrawCtx &c
 				bindings[2].descriptor = diffTex->descriptor();
 				bindings[2].handle = DescriptorBindingID::Create("diffuseMap");
 				mGlowProgram.bindDescriptors(ctx.device, pCmd, ctx.frameIndex, bindings, 3);
+
+				// Both draws below share these constants, so this stays outside the
+				// loop -- nothing between them invalidates root arguments.
+				pCmd->vk_d3d12_setPushConstants(&Interface<cGraphics>::Get()->device,
+												mGlowProgram, 0, sizeof(pc), &pc);
 
 				for (int d = 0; d < alDrawCount; ++d)
 					pCmd->drawIndexed(&Interface<cGraphics>::Get()->device, (uint32_t)pVB->GetIndexNum(), 1, 0, 0, 0);
@@ -747,28 +761,15 @@ void cLuxEffectRenderer::RenderOutline(const PostWorldDrawCtx &ctx,
 	mbOutlineColorInit = false;
 
 	// Stencil aspect UNDEFINED -> STENCIL_ATTACHMENT_OPTIMAL (the depth aspect
-	// is already DEPTH_ATTACHMENT_OPTIMAL, left by HybridRenderer::Draw). Raw
-	// barrier — the RI helper can't address a single aspect to an attachment
-	// layout.
-	{
-		VkImageMemoryBarrier2 sb = {VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2};
-		sb.srcStageMask = VK_PIPELINE_STAGE_2_NONE;
-		sb.srcAccessMask = 0;
-		sb.dstStageMask = VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT |
-						  VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT;
-		sb.dstAccessMask = VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_READ_BIT |
-						   VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
-		sb.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-		sb.newLayout = VK_IMAGE_LAYOUT_STENCIL_ATTACHMENT_OPTIMAL;
-		sb.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-		sb.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-		sb.image = pDepthTex->vk.image;
-		sb.subresourceRange = {VK_IMAGE_ASPECT_STENCIL_BIT, 0, 1, 0, 1};
-		VkDependencyInfo dep = {VK_STRUCTURE_TYPE_DEPENDENCY_INFO};
-		dep.imageMemoryBarrierCount = 1;
-		dep.pImageMemoryBarriers = &sb;
-		vkCmdPipelineBarrier2(apCmd->vk.cmd, &dep);
-	}
+	// is already DEPTH_ATTACHMENT_OPTIMAL, left by HybridRenderer::Draw).
+	// RI_BARRIER_ASPECT_STENCIL addresses the single aspect: it selects Vulkan's
+	// separate stencil layout and D3D12 plane 1. Zero stage hints derive the
+	// early/late fragment-test stages from DEPTH_WRITE. Built inline rather than
+	// through EmitImageBarrier, which has no aspect parameter.
+	apCmd->vk_d3d12_textureBarrier(
+		RITextureBarrier(pDepthTex, RI_RESOURCE_STATE_UNDEFINED,
+						 RI_RESOURCE_STATE_DEPTH_WRITE, RI_STAGE_NONE,
+						 RI_STAGE_NONE, RI_BARRIER_ASPECT_STENCIL));
 
 	// Cull list once.
 	std::vector<iRenderable *> lstObjects;
@@ -780,9 +781,8 @@ void cLuxEffectRenderer::RenderOutline(const PostWorldDrawCtx &ctx,
 	}
 
 	{
-		RITextureView outlineColorView = m_outlineColor.view;
 		RIRenderingAttachment color = {};
-		color.view = outlineColorView;
+		color.view = m_outlineColor.attachmentView;
 		color.loadOp = RI_ATTACHMENT_LOAD_OP_CLEAR;
 		color.storeOp = RI_ATTACHMENT_STORE_OP_STORE;
 		// clearValue.color defaults to {0,0,0,0}.
@@ -808,11 +808,16 @@ void cLuxEffectRenderer::RenderOutline(const PostWorldDrawCtx &ctx,
 		beginDesc.depthStencil = &depth;
 		apCmd->vk_d3d12_beginRendering(&Interface<cGraphics>::Get()->device, beginDesc);
 
-		const VkViewport flippedViewport = {0.0f, (float)alHeight, (float)alWidth,
-											-(float)alHeight, 0.0f, 1.0f};
-		const VkRect2D scissor = {{0, 0}, {alWidth, alHeight}};
-		vkCmdSetViewport(apCmd->vk.cmd, 0, 1, &flippedViewport);
-		vkCmdSetScissor(apCmd->vk.cmd, 0, 1, &scissor);
+		RIViewport flippedViewport = {};
+		flippedViewport.y = (float)alHeight;
+		flippedViewport.width = (float)alWidth;
+		flippedViewport.height = -(float)alHeight;
+		flippedViewport.depthMax = 1.0f;
+		RIRect scissor = {};
+		scissor.width = alWidth;
+		scissor.height = alHeight;
+		apCmd->setViewport(&Interface<cGraphics>::Get()->device, flippedViewport);
+		apCmd->setScissor(&Interface<cGraphics>::Get()->device, scissor);
 
 		// Two passes: (1) mark stencil from the original silhouette, (2) draw
 		// the glow color from the scaled-out mesh where stencil != 1 (the rim).
@@ -863,9 +868,6 @@ void cLuxEffectRenderer::RenderOutline(const PostWorldDrawCtx &ctx,
 					pc.color[3] = 1.0f;
 					pc.params[0] =
 						(RIFormatChannelCount(alphaTex->format) == 1) ? 1.0f : 0.0f;
-					vkCmdPushConstants(apCmd->vk.cmd, mAlphaProgram.getPipelineLayout(),
-									   VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,
-									   0, sizeof(pc), &pc);
 
 					auto pSampler = Interface<cGraphics>::Get()->resolve_filter_descriptor(
 						eTextureWrap_Repeat, eTextureWrap_Repeat, eTextureWrap_Repeat,
@@ -878,6 +880,12 @@ void cLuxEffectRenderer::RenderOutline(const PostWorldDrawCtx &ctx,
 					bindings[2].descriptor = alphaTex->descriptor();
 					bindings[2].handle = DescriptorBindingID::Create("alphaMap");
 					mAlphaProgram.bindDescriptors(ctx.device, apCmd, ctx.frameIndex, bindings, 3);
+
+					// After bindDescriptors: on D3D12 binding a root signature
+					// invalidates every root argument, and this loop alternates
+					// between the alpha and geom signatures per object.
+					apCmd->vk_d3d12_setPushConstants(&Interface<cGraphics>::Get()->device,
+													 mAlphaProgram, 0, sizeof(pc), &pc);
 
 					apCmd->drawIndexed(&Interface<cGraphics>::Get()->device, (uint32_t)pVB->GetIndexNum(), 1, 0, 0, 0);
 					bDrewAlpha = true;
@@ -896,14 +904,15 @@ void cLuxEffectRenderer::RenderOutline(const PostWorldDrawCtx &ctx,
 				pc.color[1] = sRGBToLinear(kOutlineGlow[1]);
 				pc.color[2] = sRGBToLinear(kOutlineGlow[2]);
 				pc.color[3] = 1.0f;
-				vkCmdPushConstants(apCmd->vk.cmd, mGeomProgram.getPipelineLayout(),
-								   VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,
-								   0, sizeof(pc), &pc);
-
 				RIProgram::DescriptorBinding b = {};
 				b.descriptor = aPassDesc;
 				b.handle = DescriptorBindingID::Create("pass");
 				mGeomProgram.bindDescriptors(ctx.device, apCmd, ctx.frameIndex, &b, 1);
+
+				// After bindDescriptors, for the same root-signature reason as the
+				// alpha path above.
+				apCmd->vk_d3d12_setPushConstants(&Interface<cGraphics>::Get()->device,
+												 mGeomProgram, 0, sizeof(pc), &pc);
 
 				apCmd->drawIndexed(&Interface<cGraphics>::Get()->device, (uint32_t)pVB->GetIndexNum(), 1, 0, 0, 0);
 			}
@@ -938,10 +947,16 @@ void cLuxEffectRenderer::BlurOutline(RICmd *apCmd, uint32_t alBlurW, uint32_t al
 		eTextureWrap_ClampToEdge, eTextureFilter_Bilinear);
 
 	// Negative height: the engine convention shared with posteffect_fullscreen.vert.
-	const VkViewport viewport = {0.0f, (float)alBlurH, (float)alBlurW, -(float)alBlurH, 0.0f, 1.0f};
-	const VkRect2D scissor = {{0, 0}, {alBlurW, alBlurH}};
+	RIViewport viewport = {};
+	viewport.y = (float)alBlurH;
+	viewport.width = (float)alBlurW;
+	viewport.height = -(float)alBlurH;
+	viewport.depthMax = 1.0f;
+	RIRect scissor = {};
+	scissor.width = alBlurW;
+	scissor.height = alBlurH;
 
-	auto blurPass = [&](VkImageView destView, RITexture *destTexture,
+	auto blurPass = [&](const RITextureView &destView, RITexture *destTexture,
 						RITexture *prevDestTexture, const RIDescriptor &inputDesc,
 						float dirX, float dirY) {
 		EmitImageBarrier(apCmd, destTexture, RI_RESOURCE_STATE_SHADER_RESOURCE,
@@ -949,10 +964,8 @@ void cLuxEffectRenderer::BlurOutline(RICmd *apCmd, uint32_t alBlurW, uint32_t al
 		EmitImageBarrier(apCmd, prevDestTexture, RI_RESOURCE_STATE_RENDER_TARGET,
 						 RI_STAGE_NONE, RI_RESOURCE_STATE_SHADER_RESOURCE, RI_STAGE_FRAGMENT);
 
-		RITextureView destViewRi = {};
-		destViewRi.vk.image = destView;
 		RIRenderingAttachment color = {};
-		color.view = destViewRi;
+		color.view = destView;
 		color.loadOp = RI_ATTACHMENT_LOAD_OP_DONT_CARE;
 		color.storeOp = RI_ATTACHMENT_STORE_OP_STORE;
 		RIBeginRenderingDesc beginDesc = {};
@@ -962,8 +975,8 @@ void cLuxEffectRenderer::BlurOutline(RICmd *apCmd, uint32_t alBlurW, uint32_t al
 		beginDesc.colors = &color;
 		apCmd->vk_d3d12_beginRendering(&Interface<cGraphics>::Get()->device, beginDesc);
 
-		vkCmdSetViewport(apCmd->vk.cmd, 0, 1, &viewport);
-		vkCmdSetScissor(apCmd->vk.cmd, 0, 1, &scissor);
+		apCmd->setViewport(&Interface<cGraphics>::Get()->device, viewport);
+		apCmd->setScissor(&Interface<cGraphics>::Get()->device, scissor);
 
 		BindFullscreenPipeline(mBlurProgram, apCmd, /*additive=*/false,
 							   hash_u32(HASH_INITIAL_VALUE, 1u), "LuxOutline.blur");
@@ -977,9 +990,9 @@ void cLuxEffectRenderer::BlurOutline(RICmd *apCmd, uint32_t alBlurW, uint32_t al
 		BlurPushConstants pc = {};
 		pc.blurDir[0] = dirX;
 		pc.blurDir[1] = dirY;
-		vkCmdPushConstants(apCmd->vk.cmd, mBlurProgram.getPipelineLayout(),
-						   VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(pc), &pc);
-		vkCmdDraw(apCmd->vk.cmd, 3, 1, 0, 0);
+		apCmd->vk_d3d12_setPushConstants(&Interface<cGraphics>::Get()->device,
+										 mBlurProgram, 0, sizeof(pc), &pc);
+		apCmd->draw(&Interface<cGraphics>::Get()->device, 3, 1, 0, 0);
 		apCmd->vk_d3d12_endRendering(&Interface<cGraphics>::Get()->device);
 	};
 
@@ -988,10 +1001,10 @@ void cLuxEffectRenderer::BlurOutline(RICmd *apCmd, uint32_t alBlurW, uint32_t al
 		const RIDescriptor firstInput =
 			(iter == 0) ? m_outlineColor.descriptor() : m_blur[1].descriptor();
 		// H: dest blur[0], read firstInput, prevDest blur[1].
-		blurPass(m_blur[0].view.vk.image, &m_blur[0].texture,
+		blurPass(m_blur[0].attachmentView, &m_blur[0].texture,
 				 &m_blur[1].texture, firstInput, fBlurSize, 0.0f);
 		// V: dest blur[1], read blur[0], prevDest blur[0].
-		blurPass(m_blur[1].view.vk.image, &m_blur[1].texture,
+		blurPass(m_blur[1].attachmentView, &m_blur[1].texture,
 				 &m_blur[0].texture, m_blur[0].descriptor(), 0.0f, fBlurSize);
 	}
 

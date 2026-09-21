@@ -31,6 +31,7 @@ static hash_t const HASH_INITIAL_VALUE = 0xcbf29ce484222325ull;
 
 static inline hash_t hash_u32( hash_t hash, uint32_t value )
 {
+
 	return ( hash * 0x100000001b3ull ) ^ value;
 }
 

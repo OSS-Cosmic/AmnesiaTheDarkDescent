@@ -380,7 +380,9 @@ if _OPTIONS["with-fsr"] ~= "no" then
             ROOT .. "/HPL2/core/include/graphics",
         }
         fsr_shader_blob_test_use()
-        link_fsr()
+        -- These reach ffxGetPermutationBlobByIndex and the blob accessors, which
+        -- only the static archive exports -- the engine itself no longer links it.
+        fsr_link_static_vk_archive()
         add_utest()
         add_test_postbuild()
 
@@ -395,10 +397,32 @@ if _OPTIONS["with-fsr"] ~= "no" then
             ROOT .. "/tests/fsr/vulkan_loader/fsr_vulkan_loader_test.cpp",
         }
         vulkan_includes()
-        link_fsr()
+        -- This is the test the static archive exists for: it reaches internal
+        -- ffx_vk.cpp symbols such as findMemoryTypeIndex that no shared module
+        -- exports.
+        fsr_link_static_vk_archive()
         links { "volk" }
         filter "system:linux"
             links { "dl", "pthread" }
+        filter {}
+        add_utest()
+        add_test_postbuild()
+
+    -- The engine loads FSR instead of linking it, so a module that builds but
+    -- exports nothing, never deploys, or shares one backend's shader blobs with
+    -- the other would otherwise go unnoticed until the game asks for an
+    -- upscaler. Needs no GPU: it loads the deployed modules and makes one
+    -- device-free ffxQuery call.
+    project "FsrApiModuleExportsTests"
+        kind "ConsoleApp"
+        language "C++"
+        cppdialect "C++17"
+        objdir (BUILD_OUT .. "/obj/%{prj.name}/%{cfg.buildcfg}")
+        targetdir (BUILD_OUT .. "/tests/%{cfg.buildcfg}")
+        files { ROOT .. "/tests/fsr/module_exports/fsr_api_module_exports_test.cpp" }
+        fsr_module_test_use()
+        filter "system:linux"
+            links { "dl" }
         filter {}
         add_utest()
         add_test_postbuild()
@@ -436,8 +460,16 @@ if os.target() == "windows" and _OPTIONS["with-d3d12"] == "yes" then
                 { path = push_constant_fixture_dir .. "/push_constant.slang", entry = "VSMain", stage = "vertex", output = "push_constant.vert.dxil", reflection = true },
                 { path = push_constant_fixture_dir .. "/push_constant.slang", entry = "PSMain", stage = "fragment", output = "push_constant.frag.dxil", reflection = true },
                 { path = push_constant_fixture_dir .. "/push_constant.slang", entry = "CSMain", stage = "compute", output = "push_constant.comp.dxil", reflection = true },
+                -- Split across two files on purpose: one slangc invocation per
+                -- entry point means each numbers registers from scratch, which
+                -- is what push_constant.slang (one file, three entries) cannot
+                -- reproduce. Guards HPL_PUSH_CONSTANT_REGISTER.
+                { path = push_constant_fixture_dir .. "/split_push_constant.vert.slang", entry = "VSMain", stage = "vertex", output = "split_push_constant.vert.dxil", reflection = true },
+                { path = push_constant_fixture_dir .. "/split_push_constant.frag.slang", entry = "PSMain", stage = "fragment", output = "split_push_constant.frag.dxil", reflection = true },
             },
-            include_dirs = { push_constant_fixture_dir },
+            -- amnesia/slang is on the path for HostDefinitions.h, which owns
+            -- the pinned push-constant register the split fixture exercises.
+            include_dirs = { push_constant_fixture_dir, ROOT .. "/amnesia/slang" },
             output_dir = BUILD_OUT .. "/tests/%{cfg.buildcfg}/compiled_shaders/d3d12",
         }
 

@@ -224,6 +224,20 @@ void ExerciseRiProgramGeometry(RIDevice *device,
           "RIProgram permits a write to a never-written external slot");
   Require(!bindless.writeDescriptors(device, freshWrites),
           "RIProgram rejects rewriting that slot once it is live");
+  // An empty descriptor RELEASES the slot: it restores the null descriptor and
+  // drops the retained resource, so the slot stops counting as live and the next
+  // occupant can claim it with an ordinary fence-less write. Without this the
+  // index could be returned to its pool and handed out again while the set still
+  // believed the slot live, and every write the new texture made was rejected —
+  // leaving it sampling the destroyed one (garbage textures after a level
+  // unload). Releasing needs no fence; the caller owes the GPU-passed ordering.
+  RIBindlessDescriptorSet::WriteBinding releaseWrites[] = {{4, 2, RIDescriptor{}}};
+  Require(bindless.writeDescriptors(device, releaseWrites),
+          "RIProgram releases a live external slot without a fence");
+  Require(bindless.writeDescriptors(device, freshWrites),
+          "RIProgram permits rewriting a released slot without a fence");
+  Require(!bindless.writeDescriptors(device, freshWrites),
+          "RIProgram rejects rewriting the reclaimed slot once it is live again");
   Hr(gate->Signal(1),
      "RIProgram completion gate releases");
   device->queues[RI_QUEUE_GRAPHICS].waitIdle(device);
@@ -345,6 +359,56 @@ void ExerciseRiExternalTable(RIDevice *device,
           "RIProgram public external bind records on D3D12");
   Require(cmd.d3d12.cmdList != nullptr,
           "RIProgram external bindless bind records on D3D12");
+
+  // The set is bound now, so the per-slot liveness gate is armed: a slot that
+  // already resolves to a resource refuses a fence-less rewrite. An EMPTY
+  // descriptor releases it instead -- restoring the null descriptor and
+  // dropping the reference the set retained -- after which the slot is
+  // writable again. Without the release an index returned to its pool and
+  // handed out again stays permanently unwritable, so its new owner samples
+  // the destroyed resource (black/garbage textures after a level unload), and
+  // the old resource is never freed.
+  //
+  // `bindings` puts binding 3 (4 descriptors) before binding 4, so binding 4
+  // element 0 is resources[4]. It holds externalB after the rewrite above.
+  RIBindlessDescriptorSet::WriteBinding relive = {4, 0, descriptorA};
+  Require(!bindless.writeDescriptors(
+              device, std::span<const RIBindlessDescriptorSet::WriteBinding>(
+                          &relive, 1)),
+          "RI bound external slot refuses a fence-less rewrite");
+  ID3D12Resource *const held = descriptorB.payload.buffer.nativeResource;
+  held->AddRef();
+  const ULONG refsWhileLive = held->Release();
+  RIBindlessDescriptorSet::WriteBinding release = {4, 0, RIDescriptor{}};
+  Require(bindless.writeDescriptors(
+              device, std::span<const RIBindlessDescriptorSet::WriteBinding>(
+                          &release, 1)),
+          "RI releases a live external slot without a fence");
+  held->AddRef();
+  Require(held->Release() == refsWhileLive - 1,
+          "RI drops the reference a released slot retained");
+  Require(bindless.d3d12.resources[4] == nullptr &&
+              bindless.d3d12.allocations[4] == nullptr,
+          "RI clears the per-slot resource record on release");
+  Require(bindless.writeDescriptors(
+              device, std::span<const RIBindlessDescriptorSet::WriteBinding>(
+                          &relive, 1)),
+          "RI permits rewriting a released slot without a fence");
+
+  // A release is an ordinary write as far as validation goes, so it inherits
+  // the all-or-nothing contract: one bad entry fails the batch and no slot is
+  // touched. Element 1 must still hold its resource afterwards.
+  RIBindlessDescriptorSet::WriteBinding badRelease = {4, 99, RIDescriptor{}};
+  Require(!bindless.writeDescriptors(
+              device, std::span<const RIBindlessDescriptorSet::WriteBinding>(
+                          &badRelease, 1)),
+          "RI rejects a release past the end of the array");
+  RIBindlessDescriptorSet::WriteBinding mixedRelease[] = {
+      {4, 1, RIDescriptor{}}, {99, 0, RIDescriptor{}}};
+  Require(!bindless.writeDescriptors(device, mixedRelease),
+          "RI rejects a release batch containing an unknown binding");
+  Require(bindless.d3d12.resources[5] != nullptr,
+          "RI validates a release batch before releasing any slot");
   cmd.end(device);
   cmd.dispose(device);
   pool.dispose(device);

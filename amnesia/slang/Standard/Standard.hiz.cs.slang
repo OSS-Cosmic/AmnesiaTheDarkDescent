@@ -21,6 +21,8 @@
 //                    sourceMip on Load, so no per-level SRV is needed
 //   gHiZTarget  out  a single-level storage view of the level being written
 
+#include "../HostDefinitions.h"
+
 [vk::binding(0, 2)] Texture2D<float>   gHiZDepth;
 [vk::binding(1, 2)] Texture2D<float>   gHiZSource;
 [vk::binding(2, 2)] RWTexture2D<float> gHiZTarget;
@@ -35,7 +37,7 @@ struct StandardHiZPC {
 };
 
 [vk::push_constant]
-StandardHiZPC gPushConstants;
+StandardHiZPC gPushConstants HPL_PUSH_CONSTANT_REGISTER;
 
 float loadSource(uint2 coordinate)
 {

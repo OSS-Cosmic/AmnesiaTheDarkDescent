@@ -11,6 +11,8 @@
 //
 // Push constant: 8 bytes, blur direction (texel-scaled before sampling).
 
+#include "../HostDefinitions.h"
+
 [vk::binding(0, 0)]
 SamplerState inputSampler;
 
@@ -24,7 +26,7 @@ struct BloomBlurPC
 };
 
 [vk::push_constant]
-BloomBlurPC gPushConstants;
+BloomBlurPC gPushConstants HPL_PUSH_CONSTANT_REGISTER;
 
 struct PSIn
 {

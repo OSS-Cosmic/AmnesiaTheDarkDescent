@@ -32,24 +32,6 @@ static const float kShadeRayEps = 1.0e-3f;
 // albedo-free radiance -- the caller applies albedo where outgoing radiance is
 // needed. V here is toward the camera (these wrappers shade camera-visible
 // points: composite, water, direct pass).
-float3 evalAnalyticLight(DiffuseShading sd)
-{
-    float3 Lr = float3(0.f);
-    float3 origin = sd.posW + sd.normalW * kShadeRayEps;
-    float3 V = normalize(gPerFrame.posW - sd.posW);
-
-    // Walk the point/spot lights binned to this point's cell in the coarse world
-    // light grid (built each frame by LightGridBuildPass). Conservative binning
-    // means every light whose reach-sphere touches the cell is present, so the
-    // deterministic sum is exact apart from the kLightsPerCellMax cap.
-    CellLights cl = getCellLights(sd.posW);
-    for (uint k = 0u; k < cl.count; ++k)
-        Lr += shadeAnalyticLight(sd.posW, sd.normalW, V, sd.surfaceFootprintW,
-                                        sd.rough, cellLightAt(cl, k), origin);
-
-    return Lr;
-}
-
 static const float3 kReservoirLum = float3(0.2126f, 0.7152f, 0.0722f);
 
 // --- ReSTIR DI helpers ----------------------------------------------------

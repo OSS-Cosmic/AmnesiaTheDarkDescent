@@ -130,7 +130,9 @@ Pass these to `premake5`:
 | `--slangc=PATH` | downloads | Use an existing `slangc` instead of the pinned download. |
 | `--cmake=PATH` | `cmake` | The CMake used to build SDL2 and openal-soft. |
 
-`premake5 export-compile-commands` writes a `compile_commands.json` for clangd.
+`premake5 export-compile-commands` writes a `compile_commands.json` for clangd. The wrappers expose it as
+`.\build-windows.ps1 -CompileCommands` and `./build-linux-docker.sh --compile-commands`, which place the selected
+configuration's database at the repository root.
 
 ## Running
 

@@ -104,6 +104,13 @@ public struct StandardLightCounts
     public uint spotCount;
     public uint boxCount;
     public uint shadowQuality; // eShadowMapQuality; Low outside the opaque resolve
+    // Tiles across the render extent for the opaque resolve's per-tile light
+    // list (kStandardLightTile* in Constants.h). 0 = no list bound, loop every
+    // light -- which is what every pass other than the opaque resolve does.
+    public uint lightTilesX;
+    public uint reserved0;
+    public uint reserved1;
+    public uint reserved2;
 };
 
 public struct StandardLightSurface
@@ -245,22 +252,41 @@ public float3 standardLegacyLight(StandardLightSurface s, float3 V,
     return sRGBToLinear(max(display, 0.0f)) / kSceneExposure;
 }
 
+// The radial reach test both standardPointLight and standardSpotLight open
+// with, factored out so a caller can run it BEFORE paying for the shadow
+// filter. Without this the shading loops evaluate PCSS -- up to ~152 texture
+// fetches per light per pixel -- for lights that then contribute exactly zero.
+// Kept as the single source of truth: both shading functions call it rather
+// than repeating the arithmetic, so the skip can never disagree with the
+// rejection it is predicting.
+public bool standardLightReaches(uint config, float radius, float3 lightPosition,
+                                 float3 position)
+{
+    if ((config & kStandardLightEnabled) == 0u ||
+        !isfinite(radius) || radius <= 0.0f ||
+        !standardFinite3(lightPosition) || !standardFinite3(position))
+        return false;
+    float3 toLight = lightPosition - position;
+    float distanceScale = max(abs(toLight.x), max(abs(toLight.y), abs(toLight.z)));
+    if (!isfinite(distanceScale) || distanceScale <= 0.0f) return false;
+    float3 scaledToLight = toLight / distanceScale;
+    float scaledD2 = dot(scaledToLight, scaledToLight);
+    float distanceOverRadius = (distanceScale / radius) * sqrt(scaledD2);
+    return isfinite(scaledD2) && isfinite(distanceOverRadius) &&
+           distanceOverRadius < 1.0f && distanceOverRadius > 0.0f;
+}
+
 public float3 standardPointLight(StandardLightSurface s, float3 V,
                                  StandardPointLight light, float visibility)
 {
-    if ((light.config & kStandardLightEnabled) == 0u ||
-        !isfinite(light.radius) || light.radius <= 0.0f ||
-        !standardFinite3(light.position) || !standardFinite3(s.position))
+    if (!standardLightReaches(light.config, light.radius, light.position,
+                              s.position))
         return float3(0.0f);
     float3 toLight = light.position - s.position;
     float distanceScale = max(abs(toLight.x), max(abs(toLight.y), abs(toLight.z)));
-    if (!isfinite(distanceScale) || distanceScale <= 0.0f) return float3(0.0f);
     float3 scaledToLight = toLight / distanceScale;
     float scaledD2 = dot(scaledToLight, scaledToLight);
     float distanceOverRadius = (distanceScale / light.radius) * sqrt(scaledD2);
-    if (!isfinite(scaledD2) || !isfinite(distanceOverRadius) ||
-        distanceOverRadius >= 1.0f || distanceOverRadius <= 0.0f)
-        return float3(0.0f);
     float3 L = scaledToLight * rsqrt(scaledD2);
     float attenuation = standardRadialFalloff(light.falloffTexture,
                                                distanceOverRadius * distanceOverRadius);
@@ -299,19 +325,14 @@ public float3 standardSpotLight(StandardLightSurface s, float3 V,
                                 StandardSpotLight light, float visibility,
                                 float3 positionDx, float3 positionDy)
 {
-    if ((light.config & kStandardLightEnabled) == 0u ||
-        !isfinite(light.radius) || light.radius <= 0.0f ||
-        !standardFinite3(light.position) || !standardFinite3(s.position))
+    if (!standardLightReaches(light.config, light.radius, light.position,
+                              s.position))
         return float3(0.0f);
     float3 toLight = light.position - s.position;
     float distanceScale = max(abs(toLight.x), max(abs(toLight.y), abs(toLight.z)));
-    if (!isfinite(distanceScale) || distanceScale <= 0.0f) return float3(0.0f);
     float3 scaledToLight = toLight / distanceScale;
     float scaledD2 = dot(scaledToLight, scaledToLight);
     float distanceOverRadius = (distanceScale / light.radius) * sqrt(scaledD2);
-    if (!isfinite(scaledD2) || !isfinite(distanceOverRadius) ||
-        distanceOverRadius >= 1.0f || distanceOverRadius <= 0.0f)
-        return float3(0.0f);
     float3 L = scaledToLight * rsqrt(scaledD2);
     float attenuation = standardRadialFalloff(light.radialFalloffTexture,
                                                distanceOverRadius * distanceOverRadius);

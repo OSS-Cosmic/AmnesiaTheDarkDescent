@@ -452,6 +452,14 @@ bool cStandardTranslucentPass::Draw(
         cull.groupSlots[group].tileIndex = cull.tileBase;
         cull.groupSlots[group].candidateOffset = group * kStandardCullGroupSize;
       }
+      // Publish the command words just written before the kernel rewrites
+      // their instanceCount. Slots are 5 words and start at commandBase.
+      if (cull.flushCommands) {
+        constexpr uint64_t kSlotBytes =
+            sizeof(VkDrawIndexedIndirectCommand);
+        cull.flushCommands(uint64_t(cull.commandBase) * kSlotBytes,
+                           uint64_t(commandCount) * kSlotBytes);
+      }
       cullDispatched = cull.pass->Dispatch(
           cmd, mpGraphics->frameIndex, cull.buffers, cull.tileBase, 1,
           cull.groupBase, groupCount, kStandardCullModeInstanceMask);

@@ -58,6 +58,11 @@ struct NrdDenoiseOutputs {
 // changes.  The caller owns the input views and records Denoise into cmd.
 class NrdIntegration {
 public:
+  static bool IsAvailable();
+  // Instances constructed since startup. Each one builds its own texture pools
+  // and pipelines, so a count that keeps climbing in play is VRAM churn.
+  static uint32_t InstancesCreated();
+
   explicit NrdIntegration(
       cGraphics *graphics,
       NrdDenoiserMode mode = NrdDenoiserMode::DiffuseSpecular);

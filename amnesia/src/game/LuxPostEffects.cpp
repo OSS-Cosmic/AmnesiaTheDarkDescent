@@ -98,7 +98,6 @@ struct InsanityPushConstants
 void cLuxPostEffect_Insanity::RenderEffect(const hpl::PostEffectRenderCtx &ctx)
 {
 	using namespace hpl;
-	VkCommandBuffer cmd = ctx.cmd->vk.cmd;
 
 	// Animated amp-map pair: ampMap0->1->2->0 as mfAnimCount sweeps [0,3), blended
 	// by its fractional part (matches the legacy afAmpT animation).
@@ -138,10 +137,16 @@ void cLuxPostEffect_Insanity::RenderEffect(const hpl::PostEffectRenderCtx &ctx)
 	ctx.cmd->vk_d3d12_beginRendering(&Interface<cGraphics>::Get()->device, beginDesc);
 
 	// Negative height: the engine convention shared with posteffect_fullscreen.vert.
-	VkViewport viewport = {0.0f, (float)ctx.height, (float)ctx.width, -(float)ctx.height, 0.0f, 1.0f};
-	vkCmdSetViewport(cmd, 0, 1, &viewport);
-	VkRect2D scissor = {{0, 0}, {ctx.width, ctx.height}};
-	vkCmdSetScissor(cmd, 0, 1, &scissor);
+	RIViewport viewport = {};
+	viewport.y        =  (float)ctx.height;
+	viewport.width    =  (float)ctx.width;
+	viewport.height   = -(float)ctx.height;
+	viewport.depthMax = 1.0f;
+	ctx.cmd->setViewport(&Interface<cGraphics>::Get()->device, viewport);
+	RIRect scissor = {};
+	scissor.width  = ctx.width;
+	scissor.height = ctx.height;
+	ctx.cmd->setScissor(&Interface<cGraphics>::Get()->device, scissor);
 
 	const RIGraphicsPipelineDesc pipelineDesc =
 	    MakePostEffectPipelineDesc(cGraphics::PogoColorFormat, false);
@@ -172,10 +177,10 @@ void cLuxPostEffect_Insanity::RenderEffect(const hpl::PostEffectRenderCtx &ctx)
 	pc.amplitude = amplitude;
 	pc.waveAlpha = valid ? mfWaveAlpha : 0.0f;
 	pc.zoomAlpha = valid ? mfZoomAlpha : 0.0f;
-	vkCmdPushConstants(cmd, m_program.getPipelineLayout(),
-	                   VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(pc), &pc);
+	ctx.cmd->vk_d3d12_setPushConstants(&Interface<cGraphics>::Get()->device,
+	                                   m_program, 0, sizeof(pc), &pc);
 
-	vkCmdDraw(cmd, 3, 1, 0, 0);
+	ctx.cmd->draw(&Interface<cGraphics>::Get()->device, 3, 1, 0, 0);
 	ctx.cmd->vk_d3d12_endRendering(&Interface<cGraphics>::Get()->device);
 }
 
@@ -255,7 +260,6 @@ struct MenuBlurPushConstants  { float blurDir[2]; float _pad[2]; }; // matches B
 void cLuxPostEffect_MenuBackdrop::RenderDesaturate(const hpl::PostEffectRenderCtx &ctx)
 {
 	using namespace hpl;
-	VkCommandBuffer cmd = ctx.cmd->vk.cmd;
 
 	// Single fullscreen pass: sample the display-space pogo input, desaturate/
 	// darken lerped by strength, write the pogo output. The composite owns the
@@ -274,10 +278,16 @@ void cLuxPostEffect_MenuBackdrop::RenderDesaturate(const hpl::PostEffectRenderCt
 	ctx.cmd->vk_d3d12_beginRendering(&mpGraphics->device, beginDesc);
 
 	// Negative height: the engine convention shared with posteffect_fullscreen.vert.
-	VkViewport viewport = {0.0f, (float)ctx.height, (float)ctx.width, -(float)ctx.height, 0.0f, 1.0f};
-	vkCmdSetViewport(cmd, 0, 1, &viewport);
-	VkRect2D scissor = {{0, 0}, {ctx.width, ctx.height}};
-	vkCmdSetScissor(cmd, 0, 1, &scissor);
+	RIViewport viewport = {};
+	viewport.y        =  (float)ctx.height;
+	viewport.width    =  (float)ctx.width;
+	viewport.height   = -(float)ctx.height;
+	viewport.depthMax = 1.0f;
+	ctx.cmd->setViewport(&mpGraphics->device, viewport);
+	RIRect scissor = {};
+	scissor.width  = ctx.width;
+	scissor.height = ctx.height;
+	ctx.cmd->setScissor(&mpGraphics->device, scissor);
 
 	const RIGraphicsPipelineDesc pipelineDesc =
 	    MakePostEffectPipelineDesc(cGraphics::PogoColorFormat, false);
@@ -298,10 +308,10 @@ void cLuxPostEffect_MenuBackdrop::RenderDesaturate(const hpl::PostEffectRenderCt
 
 	MenuDesatPushConstants pc{};
 	pc.strength = mfStrength;
-	vkCmdPushConstants(cmd, m_desatProgram.getPipelineLayout(),
-	                   VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(pc), &pc);
+	ctx.cmd->vk_d3d12_setPushConstants(&mpGraphics->device, m_desatProgram, 0,
+	                                   sizeof(pc), &pc);
 
-	vkCmdDraw(cmd, 3, 1, 0, 0);
+	ctx.cmd->draw(&mpGraphics->device, 3, 1, 0, 0);
 	ctx.cmd->vk_d3d12_endRendering(&mpGraphics->device);
 }
 
@@ -311,7 +321,6 @@ void cLuxPostEffect_MenuBackdrop::RenderBlur(const hpl::PostEffectRenderCtx &ctx
 {
 	using namespace hpl;
 	EnsureScratch(ctx);
-	VkCommandBuffer cmd = ctx.cmd->vk.cmd;
 
 	// Plain value: the `pass` lambda below captures it by reference and it
 	// outlives every call, so there is no lifetime coupling to respect.
@@ -324,8 +333,14 @@ void cLuxPostEffect_MenuBackdrop::RenderBlur(const hpl::PostEffectRenderCtx &ctx
 	    eTextureWrap_ClampToEdge, eTextureFilter_Bilinear);
 
 	// Negative height: the engine convention shared with posteffect_fullscreen.vert.
-	VkViewport viewport = {0.0f, (float)ctx.height, (float)ctx.width, -(float)ctx.height, 0.0f, 1.0f};
-	VkRect2D   scissor  = {{0, 0}, {ctx.width, ctx.height}};
+	RIViewport viewport = {};
+	viewport.y        =  (float)ctx.height;
+	viewport.width    =  (float)ctx.width;
+	viewport.height   = -(float)ctx.height;
+	viewport.depthMax = 1.0f;
+	RIRect scissor = {};
+	scissor.width  = ctx.width;
+	scissor.height = ctx.height;
 
 	// One separable-blur pass. Writes either an owned scratch target (barriered
 	// here) or the composite's pogo output (barriered by the composite, like
@@ -363,8 +378,8 @@ void cLuxPostEffect_MenuBackdrop::RenderBlur(const hpl::PostEffectRenderCtx &ctx
 		beginDesc.colors     = &color;
 		ctx.cmd->vk_d3d12_beginRendering(&mpGraphics->device, beginDesc);
 
-		vkCmdSetViewport(cmd, 0, 1, &viewport);
-		vkCmdSetScissor(cmd, 0, 1, &scissor);
+		ctx.cmd->setViewport(&mpGraphics->device, viewport);
+		ctx.cmd->setScissor(&mpGraphics->device, scissor);
 
 		m_blurProgram.bindPipeline(&mpGraphics->device, ctx.cmd, kHash,
 		                           "MenuBackdrop.blur", pipelineDesc);
@@ -377,10 +392,10 @@ void cLuxPostEffect_MenuBackdrop::RenderBlur(const hpl::PostEffectRenderCtx &ctx
 		m_blurProgram.bindDescriptors(&mpGraphics->device, ctx.cmd, ctx.frameIndex, bindings, 2);
 
 		MenuBlurPushConstants pc = {{dirX, dirY}, {0.0f, 0.0f}};
-		vkCmdPushConstants(cmd, m_blurProgram.getPipelineLayout(),
-		                   VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(pc), &pc);
+		ctx.cmd->vk_d3d12_setPushConstants(&mpGraphics->device, m_blurProgram, 0,
+		                                   sizeof(pc), &pc);
 
-		vkCmdDraw(cmd, 3, 1, 0, 0);
+		ctx.cmd->draw(&mpGraphics->device, 3, 1, 0, 0);
 		ctx.cmd->vk_d3d12_endRendering(&mpGraphics->device);
 
 		if(dstScratch)

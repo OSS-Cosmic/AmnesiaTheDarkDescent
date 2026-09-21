@@ -9,6 +9,8 @@
 //   binding 0 : SamplerState inputSampler
 //   binding 1 : Texture2D<float4> sourceInput
 
+#include "../HostDefinitions.h"
+
 [vk::binding(0, 0)]
 SamplerState inputSampler;
 
@@ -23,7 +25,7 @@ struct RadialBlurPC
 };
 
 [vk::push_constant]
-RadialBlurPC gPushConstants;
+RadialBlurPC gPushConstants HPL_PUSH_CONSTANT_REGISTER;
 
 struct PSIn
 {

@@ -10,6 +10,8 @@
 // fragments emit the flat glow color (RGB additive, alpha 0). Pairs with
 // outline_alpha.vert.slang.
 
+#include "../HostDefinitions.h"
+
 [vk::binding(1, 0)]
 SamplerState alphaSampler;
 
@@ -24,7 +26,7 @@ struct OutlineAlphaPC
 };
 
 [vk::push_constant]
-OutlineAlphaPC gPushConstants;
+OutlineAlphaPC gPushConstants HPL_PUSH_CONSTANT_REGISTER;
 
 struct PSIn
 {

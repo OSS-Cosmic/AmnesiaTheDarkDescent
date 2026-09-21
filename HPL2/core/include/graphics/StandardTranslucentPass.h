@@ -5,6 +5,7 @@
 #include "graphics/TranslucentMeshPipelineDesc.h"
 #include "graphics/Graphics.h"
 #include "scene/Viewport.h"
+#include <functional>
 #include <memory>
 #include <span>
 
@@ -51,6 +52,13 @@ public:
     uint32_t *commandWords = nullptr;   // 5 per slot, starting at commandBase
     StandardCullTile *tileSlot = nullptr;
     StandardCullGroup *groupSlots = nullptr;
+    // Called once the pass has written every command word and before the cull
+    // dispatch reads them, with the byte range touched relative to the command
+    // buffer's start. The owner uses it to copy host staging into the
+    // device-local command buffer on backends that cannot map a UAV; it is
+    // unset (and unnecessary) where `commandWords` points at the buffer the
+    // kernel reads directly.
+    std::function<void(uint64_t byteOffset, uint64_t byteSize)> flushCommands;
     bool IsUsable() const {
       return pass != nullptr && capacity > 0 && candidateSlots != nullptr &&
              commandWords != nullptr && tileSlot != nullptr &&

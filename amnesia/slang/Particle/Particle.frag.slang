@@ -30,7 +30,7 @@ struct ParticlePushConstants
 };
 
 [vk::push_constant]
-ParticlePushConstants gPushConstants;
+ParticlePushConstants gPushConstants HPL_PUSH_CONSTANT_REGISTER;
 
 struct ParticleVSOut
 {

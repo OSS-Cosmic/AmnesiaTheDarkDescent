@@ -37,6 +37,7 @@ static inline bool RIIsTargetSelected(uint8_t targetApi);
 struct RIBuildBlasDesc;
 struct RIBuildTlasDesc;
 struct RICommandRingElement;
+struct RIQueryPool;
 namespace hpl {
 class RIProgram;
 struct RITimeline;
@@ -129,6 +130,10 @@ struct RIBeginRenderingDesc {
 #if (DEVICE_IMPL_D3D12)
 static constexpr uint32_t RI_D3D12_RTV_DESCRIPTOR_CAPACITY = 256u;
 static constexpr uint32_t RI_D3D12_DSV_DESCRIPTOR_CAPACITY = 128u;
+// UAV clears per command-list recording. The ray-traced path's largest burst is
+// the one-time denoiser/reservoir init (nine images in a single loop), so this
+// leaves ample headroom without reserving a meaningful amount of heap.
+static constexpr uint32_t RI_D3D12_UAV_CLEAR_DESCRIPTOR_CAPACITY = 64u;
 static constexpr uint32_t RI_D3D12_MAX_COLOR_ATTACHMENTS = 8u;
 struct RID3D12ActiveAttachment {
   ID3D12Resource *resource;
@@ -139,9 +144,14 @@ struct RID3D12ActiveAttachment {
   uint8_t storeOp;
   uint8_t stencilLoadOp;
   uint8_t stencilStoreOp;
+  // The caller declared the stencil aspect, i.e. the stencil load/store ops are
+  // meaningful. Distinct from planeCount, which is what the resource actually
+  // has: a D32S8 target is always two planes even when the pass only binds
+  // depth, and DiscardResource addresses planes, not aspects.
   bool hasStencil;
   bool depthWritable;
   bool stencilWritable;
+  uint8_t planeCount;
 };
 #endif
 
@@ -268,6 +278,36 @@ struct RICmd {
   // Not implemented on D3D12; the backend asserts.
   void clearStorageImage(struct RIDevice *device, struct RITexture *image,
                          const float color[4]);
+
+  // [vk] Reset `count` queries from `first` so they may be written again.
+  // Vulkan requires this on the command buffer before any of those queries is
+  // begun. D3D12 has no equivalent -- EndQuery simply overwrites the slot --
+  // and this is a documented no-op there. Call it on both backends so one call
+  // site serves both.
+  void vk_d3d12_resetQueryPool(struct RIDevice *device,
+                               struct RIQueryPool *pool, uint32_t first,
+                               uint32_t count);
+
+  // [vk/d3d12] Bracket the draws whose samples query `index` counts. At most
+  // one occlusion query may be open on a command buffer at a time, and the pair
+  // must sit inside the same rendering scope. The pool's type selects precise
+  // vs binary counting (VK_QUERY_CONTROL_PRECISE_BIT / D3D12_QUERY_TYPE_
+  // OCCLUSION vs BINARY_OCCLUSION).
+  void vk_d3d12_beginQuery(struct RIDevice *device, struct RIQueryPool *pool,
+                           uint32_t index);
+  void vk_d3d12_endQuery(struct RIDevice *device, struct RIQueryPool *pool,
+                         uint32_t index);
+
+  // [d3d12] Make `count` results from `first` host-readable. D3D12 can only
+  // read query data that has been resolved into a buffer; Vulkan reads the pool
+  // itself, so this is a no-op there. Record it after the last endQuery of the
+  // batch and outside any rendering scope, in the same submit -- then
+  // RIQueryPool::getResults is valid once that submit's timeline value
+  // completes. Resolving a query that was never ended yields undefined data on
+  // D3D12, so only cover the range actually recorded.
+  void vk_d3d12_resolveQueryPool(struct RIDevice *device,
+                                 struct RIQueryPool *pool, uint32_t first,
+                                 uint32_t count);
 
   // [vk/d3d12] Dynamic-rendering scope (vkCmdBeginRendering/EndRendering).
   void vk_d3d12_beginRendering(struct RIDevice *device,
@@ -495,6 +535,21 @@ struct RICmd {
       uint32_t dsvDescriptorSize;
       uint32_t rtvCount;
       uint32_t dsvCount;
+      // ClearUnorderedAccessView* needs the UAV in two places at once: a GPU
+      // handle in the bound shader-visible heap and a CPU handle in a
+      // non-shader-visible one. Neither can come from the device-wide descriptor
+      // arena (its release path quarantines a range until teardown unless a
+      // fence retires it), so clears carry their own pair of small command-owned
+      // heaps, bump-allocated and reset per recording like the RTV/DSV arenas
+      // above. clearStorageImage binds uavClearGpuHeap for the clear and
+      // restores the previous heaps afterwards.
+      ID3D12DescriptorHeap *uavClearCpuHeap;
+      ID3D12DescriptorHeap *uavClearGpuHeap;
+      D3D12_CPU_DESCRIPTOR_HANDLE uavClearCpuStart;
+      D3D12_CPU_DESCRIPTOR_HANDLE uavClearGpuHeapCpuStart;
+      D3D12_GPU_DESCRIPTOR_HANDLE uavClearGpuStart;
+      uint32_t uavClearDescriptorSize;
+      uint32_t uavClearCount;
       uint32_t activeColorCount;
       bool activeDepth;
       // Last D3D12 root-signature binding kind; selects Set*Root32BitConstants.

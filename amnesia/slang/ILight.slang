@@ -50,6 +50,28 @@ public interface ILight
     public float3 sampleSourcePoint(float3 shadingPosW, float3 dirToLight, float2 u);
 };
 
+// Reach window: UE-style (1 - (d/r)^4)^2, reaching EXACTLY zero at `radius` and
+// C1 there, so nothing pops when a light leaves a grid cell.
+//
+// This is what makes `radius` (the light-grid bin reach) a real quantity rather
+// than a bookkeeping number. Shading and LightGridBuildPass now cut off at the
+// same distance, which is the precondition for LightParameters.cpp clamping the
+// derived reach to kLightReachMaxScale x the authored radius. Before the window,
+// point/spot shading was a bare 1/d^2 with no cutoff at all, so the reach had to
+// be enormous (~8x the authored radius) to keep the grid boundary invisible --
+// and a single lamp then landed in a quarter of the grid's cells.
+//
+// radius <= 0 means "no reach authored"; the window is then a no-op, matching
+// the old unwindowed behaviour.
+public float lightReachWindow(float dist, float radius)
+{
+    if (radius <= 0.0) return 1.0;
+    float x  = dist / radius;
+    float x4 = (x * x) * (x * x);
+    float w  = saturate(1.0 - x4);
+    return w * w;
+}
+
 // Jittered point on a spherical source of `radius` at `center`, on a disk facing
 // the shading point (perpendicular to `dirToLight`). radius <= 0 => the center
 // (hard shadow). Shared by point and spot.
@@ -134,9 +156,10 @@ public extension PointLight : ILight
         return diskSourcePoint(position, sourceRadius, dirToLight, u);
     }
 
-    // Radiance = color · intensity · softened inverse-square. The attenuation is a
-    // plain inverse-square (no reach window) so radiance goes HDR (>1) near the
-    // source and blooms; the reach cutoff lives only in the grid binning, not here.
+    // Radiance = color · intensity · windowed softened inverse-square. Still HDR
+    // (>1) near the source so lights cross the bloom white point, but now cut off
+    // at exactly `radius` — the same distance LightGridBuildPass bins to, so
+    // shading and culling agree (see lightReachWindow).
     public bool sample(float3 shadingPosW, float surfaceFootprintW, out LightSample ls)
     {
         ls.Li = float3(0.0); ls.pdf = 1.0; ls.dir = float3(0,0,1); ls.distance = 0.0;
@@ -145,7 +168,9 @@ public extension PointLight : ILight
         if (dist <= 0.0) return false;
         float3 L      = toLight / dist;
         float  d2     = dist * dist;
-        float  atten  = 1.0 / (d2 + kPointLightSourceRadiusSq);            // softened inverse-square (HDR near source)
+        float  window = lightReachWindow(dist, radius);
+        if (window <= 0.0) return false;                                   // past the reach — nothing to shade or shadow
+        float  atten  = window / (d2 + kPointLightSourceRadiusSq);         // softened inverse-square (HDR near source)
 
         float3 gobo = float3(1.0);
         if (goboTextureIndex != kInvalidTextureIndex)
@@ -176,9 +201,9 @@ public extension SpotLight : ILight
         return diskSourcePoint(position, sourceRadius, dirToLight, u);
     }
 
-    // Radiance = color · intensity · softened inverse-square (same radial term as
-    // PointLight — plain inverse-square, HDR near source, no reach window; the
-    // cutoff is grid-only), times an angular cone term (analytic smoothstep from
+    // Radiance = color · intensity · windowed softened inverse-square (same radial
+    // term as PointLight, cut off at exactly `radius` to match the grid binning —
+    // see lightReachWindow), times an angular cone term (analytic smoothstep from
     // the FOV edge to the center, or a projected gobo via viewProjection when bound).
     public bool sample(float3 shadingPosW, float surfaceFootprintW, out LightSample ls)
     {
@@ -188,7 +213,9 @@ public extension SpotLight : ILight
         if (dist <= 0.0) return false;
         float3 L      = toLight / dist;
         float  d2     = dist * dist;
-        float  atten  = 1.0 / (d2 + kPointLightSourceRadiusSq);            // softened inverse-square (HDR near source)
+        float  window = lightReachWindow(dist, radius);
+        if (window <= 0.0) return false;                                   // past the reach — nothing to shade or shadow
+        float  atten  = window / (d2 + kPointLightSourceRadiusSq);         // softened inverse-square (HDR near source)
 
         float3 gobo = float3(1.0);
         float  cone = 1.0;
@@ -289,16 +316,11 @@ public extension RectLight : ILight
         float3 L     = toLight / dist;
         float  d2    = dist * dist;
 
-        // Softened inverse-square, windowed to 0 at the attenuation radius
-        // (UE-style (1 - (d/r)^4)^2 bound on visible influence).
-        float window = 1.0;
-        if (radius > 0.0)
-        {
-            float x  = dist / radius;
-            float x4 = (x * x) * (x * x);
-            float w  = saturate(1.0 - x4);
-            window   = w * w;
-        }
+        // Softened inverse-square, windowed to 0 at the attenuation radius.
+        // Point and spot now share this window (lightReachWindow) — this light
+        // had it first, which is why the shape is the house style.
+        float window = lightReachWindow(dist, radius);
+        if (window <= 0.0) return false;                   // past the reach
         float atten = window / (d2 + kPointLightSourceRadiusSq);
 
         // Intensity is averaged over the emitter surface (UE semantics).

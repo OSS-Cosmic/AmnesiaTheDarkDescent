@@ -73,14 +73,16 @@ SHARED_CONST uint kBindingBindlessSlotGeneration      = 38u;  // per object slot
 // Slot 39 held the retired per-surfel captured anchor generation and is free.
 SHARED_CONST uint kBindingLightGridCount              = 40u;  // RWStructuredBuffer<uint> (kLightGridCellCount) — world-space light grid
 SHARED_CONST uint kBindingLightGridList               = 41u;  // RWStructuredBuffer<uint> (kLightGridCellCount * kLightsPerCellMax)
+SHARED_CONST uint kBindingLightGridWeight             = 45u;  // RWStructuredBuffer<float> (kLightGridCellCount * kLightsPerCellMax) — per-cell sampling CDF, parallel to the list
 // Slot 42 (formerly kBindingFogAreas on set 0) is now free — fog moved to kWorldSet.
 // Slots 43/44 were the refracted / reflected per-bounce V-buffers; nothing
 // binds or declares them any more (water refraction clobbers gPackedHitInfo
 // like glass, water reflection moved to the raster water pass).
 SHARED_CONST uint kBindingPackedRefractionHitInfo     = 43u;  // RGBA32UI storage image — unused
 SHARED_CONST uint kBindingPackedReflectionHitInfo     = 44u;  // RGBA32UI storage image — unused
-// Slot 45 (formerly kBindingAttenuationLut, the light falloff LUT) is now free —
-// lighting is fully analytic (inverse-square radial + smoothstep spot cone).
+// Slot 45 (formerly kBindingAttenuationLut, the light falloff LUT) is now the
+// light-grid sampling CDF — see kBindingLightGridWeight above. Lighting itself
+// stays fully analytic (windowed inverse-square radial + smoothstep spot cone).
 // Slots 46/47 (formerly kBindingDecals / kBindingObjectDecalIndices on set 0)
 // are now free — decal data moved to the per-world set kWorldDecalSet, baked
 // static by cWorld::Compile. See kBindingWorldDecals below.
@@ -291,7 +293,13 @@ SHARED_CONST uint  kLightGridDim       = 32u;
 SHARED_CONST float kLightGridExtent    = float(kCellDimension) * kCellUnit;
 SHARED_CONST float kLightGridUnit      = kLightGridExtent / float(kLightGridDim);
 SHARED_CONST uint  kLightGridCellCount = kLightGridDim * kLightGridDim * kLightGridDim;  // 32768
-SHARED_CONST uint  kLightsPerCellMax   = 128u;                                           // per-cell light-list cap (list buffer = kLightGridCellCount·this·4B); lights past it are dropped by atomic order
+// Per-cell light-list cap. binLights keeps the TOP-K lights by estimated
+// contribution at the cell centre (not the first K by index) and writes a
+// parallel sampling CDF, so the NEE pick is importance-weighted rather than
+// uniform. K is therefore a quality knob, not a correctness cliff: the lights
+// dropped are by construction the dimmest ones at that cell. Cost is
+// kLightGridCellCount·K·4B per buffer, for the id list and the CDF each.
+SHARED_CONST uint  kLightsPerCellMax   = 8u;
 
 // Gameplay light probe (LightProbePass.cs) — an off-screen, world-space
 // illumination sensor read back on the CPU. One thread per probe in a single
@@ -420,19 +428,32 @@ SHARED_CONST float kSpatialRadius                  = 16.0f;   // spatial search 
 // `intensity` IS the light's radiance (the host uploads the authored engine
 // radius verbatim for both point and spot — one unit for every analytic light,
 // so direct and the GI NEE agree by construction). The shader emits
-// radiance = color · intensity · 1/(d² + sourceRadius²) — a softened
-// inverse-square that goes HDR (>1) near the source so lights cross the bloom
-// white point. Brightness tuning is an AUTHORING concern (light radius /
-// color), not a constant.
+// radiance = color · intensity · window(d, reach) / (d² + sourceRadius²) — a
+// softened inverse-square that goes HDR (>1) near the source so lights cross the
+// bloom white point, times a window that reaches exactly zero at the bin reach.
+// Brightness tuning is an AUTHORING concern (light radius / color), not a
+// constant.
 //
-// LightGridBuildPass bins each light out to the distance where its brightest
-// channel's radiance dims to kLightRadianceFloor:
-//   reach² = maxChannel(color) · intensity / kLightRadianceFloor − sourceRadius²
-// reach² ≤ 0 (peak below the floor) drops the light entirely. NOTE: this bin reach
-// also governs indirect/GI spread — the GI NEE only samples lights binned into a
-// hit's cell, so lowering the floor widens and brightens GI (and crowds the
-// per-cell light cap); it is not purely a grid-cost knob.
-SHARED_CONST float kLightRadianceFloor         = 0.005f;    // min per-channel radiance (linear) worth binning; reach² = maxC(color)·authoredRadius/floor − sourceRadiusSq (scale-independent)
+// The window is what makes `reach` a real quantity: shading and grid binning now
+// cut off at the SAME distance, so a light leaving a cell contributes ~0 at that
+// moment. Before the window, shading was a bare 1/d² with no cutoff and the grid
+// was the only bound, which forced the reach to be enormous to hide the seam.
+//
+// LightGridBuildPass bins each light out to `reach`, derived in
+// LightParameters.cpp as the distance where its brightest channel dims to
+// kLightRadianceFloor, CLAMPED to kLightReachMaxScale × the authored radius:
+//   reach = min(sqrt(maxChannel(color) · intensity / kLightRadianceFloor − sourceRadius²),
+//               kLightReachMaxScale · intensity)
+// reach ≤ 0 (peak below the floor) drops the light entirely.
+//
+// The CLAMP, not the floor, is what bounds grid occupancy. The floor alone gave
+// a radius-3 white light a 24.5-unit reach — a sphere covering ~8000 of the
+// 32768 cells — so every cell in a room held nearly every light in it and the
+// binning culled almost nothing. NOTE: bin reach also governs indirect/GI spread,
+// since the GI NEE only samples lights binned into a hit's cell; raising the
+// scale widens and brightens GI and crowds the per-cell top-K.
+SHARED_CONST float kLightRadianceFloor         = 0.005f;    // min per-channel radiance (linear) worth binning
+SHARED_CONST float kLightReachMaxScale         = 3.0f;      // hard cap on bin reach as a multiple of the authored radius (= `intensity`); the knob that actually bounds per-cell light count
 SHARED_CONST float kPointLightSourceRadiusSq   = 0.25f;  // soft source radius² (0.5m) — near-field softening + on-source peak cap (caps on-lamp radiance at color·intensity/this instead of 1/d²→∞; raise to soften lamp hotspots further)
 // Default soft-shadow source radius when a light authors none (GetSourceRadius()==0):
 // a fraction of the authored reach radius, so the penumbra scales with the lamp and
@@ -449,6 +470,31 @@ SHARED_CONST float kParalaxScale = 0.4f;
 // tex[3].y (Brdf.slang decodeMaterialRoughness).
 SHARED_CONST float kDefaultDiffuseRoughness = 1.0f;
 
+// -----------------------------------------------------------------------------
+// Standard renderer per-tile light culling (Standard.lightCull.cs.slang ->
+// Standard.light.3d.slang). The resolve used to loop every light in the level
+// for every pixel; the cull pass reduces each screen tile to the world-space
+// AABB of the surfaces actually visible in it and keeps only the lights whose
+// reach sphere touches that box.
+//
+// Buffer layout, kStandardLightTileStride uints per tile, tiles in row-major
+// order (tileX + tileY * tilesX):
+//   [0] point count for this tile, or kStandardLightTileOverflow
+//   [1] spot count for this tile
+//   [2 ...] point indices ascending, then spot indices ascending
+//
+// The lists are EXACT, never top-K: a tile that cannot fit its lights writes
+// kStandardLightTileOverflow and the resolve falls back to looping every light
+// for that tile, so the image is identical either way. Indices stay ascending
+// so the additive accumulation keeps the order it has today.
+// -----------------------------------------------------------------------------
+SHARED_CONST uint kStandardLightTileSize      = 16u;   // pixels per tile edge; also the dispatch group size
+SHARED_CONST uint kStandardLightTileMaxLights = 64u;   // point + spot entries a tile can hold before it falls back
+SHARED_CONST uint kStandardLightTileStride    = 66u;   // 2 + kStandardLightTileMaxLights
+SHARED_CONST uint kStandardLightTileOverflow  = 0xffffffffu;
+// Bitmask words the cull pass uses to order its per-tile emit; caps how many
+// lights of one type it can bin before falling back (32 * this).
+SHARED_CONST uint kStandardLightCullMaskWords = 16u;   // 512 lights per type
 
 HOST_NAMESPACE_END
 

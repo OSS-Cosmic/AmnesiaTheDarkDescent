@@ -12,6 +12,8 @@
 // leaves it off. Written pre-tonemap, so the tint is a straight linear
 // multiplier (no sRGB decode). Pairs with glow_object.vert.
 
+#include "../HostDefinitions.h"
+
 [vk::binding(1, 0)]
 SamplerState diffuseSampler;
 
@@ -26,7 +28,7 @@ struct OutlineAlphaPC
 };
 
 [vk::push_constant]
-OutlineAlphaPC gPushConstants;
+OutlineAlphaPC gPushConstants HPL_PUSH_CONSTANT_REGISTER;
 
 struct PSIn
 {

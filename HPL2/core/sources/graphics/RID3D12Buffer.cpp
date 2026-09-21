@@ -15,10 +15,12 @@
 namespace {
 
 // Registration is deliberately device-local and bounded by the fixed
-// geometry namespace.  A retired entry is kept until device teardown: the
-// public buffer-dispose API does not identify the submission fence that last
-// used the buffer, so neither the descriptor nor the native allocation can
-// safely be recycled at dispose time.
+// geometry namespace.  The public buffer-dispose API does not identify the
+// submission fence that last used the buffer, so a retired entry keeps the
+// native allocation alive until the frame it retired in has been sealed
+// against the graphics timeline (RID3D12_SealRetiredBuffers) and that value
+// has completed (RID3D12_ReclaimRetiredBuffers). Device teardown drains
+// whatever is left. The geometry descriptor slot itself is never reused.
 struct RID3D12BufferRegistration {
   RIDevice *device;
   hash_t cookie;
@@ -27,6 +29,10 @@ struct RID3D12BufferRegistration {
   RIDescriptorArenaAllocation descriptor;
   uint32_t owners;
   bool retired;
+  // Timeline value that must complete before the native references drop.
+  // Zero while retired but not yet sealed.
+  uint64_t retireValue;
+  uint64_t bytes;
 };
 
 static std::vector<RID3D12BufferRegistration> g_bufferRegistrations;
@@ -71,7 +77,8 @@ static bool ri_d3d12_track_buffer_resource(RIDevice &device, RIBuffer &buffer) {
     buffer.d3d12.allocation->AddRef();
   g_bufferRegistrations.push_back(
       {&device, buffer.cookie, buffer.d3d12.resource, buffer.d3d12.allocation,
-       {}, 1, false});
+       {}, 1, false, 0,
+       buffer.d3d12.allocation ? buffer.d3d12.allocation->GetSize() : 0});
   return true;
 }
 
@@ -314,7 +321,8 @@ int RID3D12_CreateBuffer(struct RIDevice &device, const struct RIBufferDesc &des
 
 void RID3D12_DisposeBuffer(struct RIDevice &device, struct RIBuffer &buffer) {
   // No queue-wide wait here.  The registration quarantine retains the native
-  // resource/allocation until device teardown, when all queues are idle.
+  // resource/allocation until the retiring frame's timeline value completes
+  // (or device teardown, for a device that never seals).
   if (buffer.d3d12.resource || buffer.d3d12.allocation)
     ri_d3d12_retire_buffer_registration(device, buffer);
   if (!buffer.d3d12.resource && !buffer.d3d12.allocation)
@@ -336,6 +344,46 @@ void RID3D12_DrainBufferRegistry(struct RIDevice &device) {
                        return entry.device == &device;
                      }),
       g_bufferRegistrations.end());
+}
+
+void RID3D12_SealRetiredBuffers(struct RIDevice &device,
+                                uint64_t timelineValue) {
+  for (RID3D12BufferRegistration &entry : g_bufferRegistrations) {
+    if (entry.device == &device && entry.retired && entry.retireValue == 0)
+      entry.retireValue = timelineValue;
+  }
+}
+
+void RID3D12_ReclaimRetiredBuffers(struct RIDevice &device,
+                                   uint64_t completedValue) {
+  const auto reclaimable = [&device, completedValue](
+                               const RID3D12BufferRegistration &entry) {
+    return entry.device == &device && entry.retired &&
+           entry.retireValue != 0 && entry.retireValue <= completedValue;
+  };
+  for (RID3D12BufferRegistration &entry : g_bufferRegistrations) {
+    if (reclaimable(entry))
+      ri_d3d12_release_registration_refs(entry);
+  }
+  g_bufferRegistrations.erase(
+      std::remove_if(g_bufferRegistrations.begin(), g_bufferRegistrations.end(),
+                     reclaimable),
+      g_bufferRegistrations.end());
+}
+
+void RID3D12_BufferRegistryStats(const struct RIDevice &device,
+                                 uint32_t *registered, uint64_t *retiredBytes) {
+  uint32_t count = 0;
+  uint64_t bytes = 0;
+  for (const RID3D12BufferRegistration &entry : g_bufferRegistrations) {
+    if (entry.device != &device)
+      continue;
+    ++count;
+    if (entry.retired)
+      bytes += entry.bytes;
+  }
+  *registered = count;
+  *retiredBytes = bytes;
 }
 
 void RID3D12_SetBufferDebugName(struct RIDevice &device, struct RIBuffer &buffer,
@@ -384,7 +432,7 @@ bool RID3D12_RegisterBufferShaderResource(struct RIDevice &device,
 
   // Track only buffers that enter the geometry SRV namespace. Ordinary
   // buffers have no published packed handle and can retain their normal
-  // disposal behavior instead of being quarantined until device teardown.
+  // disposal behavior instead of being quarantined behind the timeline.
   if (!ri_d3d12_find_buffer_registration(device, buffer) &&
       !ri_d3d12_track_buffer_resource(device, buffer))
     return false;

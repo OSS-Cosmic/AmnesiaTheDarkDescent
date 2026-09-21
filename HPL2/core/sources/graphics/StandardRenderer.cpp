@@ -9,6 +9,7 @@
 #include "graphics/DebugDraw.h"
 #include "graphics/Graphics.h"
 #include "graphics/RIRenderer.h"
+#include "graphics/RIResourceUploader.h"
 #include "graphics/RIVK.h"
 #include "graphics/GlobalManagedSets.h"
 #include "graphics/GBufferMRTPipelineDesc.h"
@@ -268,23 +269,14 @@ void MoveDepthSampleViews(cViewport::StandardViewportState &destination,
 }
 
 // Names an image for Vulkan validation messages and captures.
-static void NameStandardImage(cGraphics *graphics, const RITexture &texture,
+// RITexture::setDebugObjectName dispatches to vkSetDebugUtilsObjectNameEXT or
+// ID3D12Object::SetName, so both backends report the image by name instead of a
+// bare handle.
+static void NameStandardImage(cGraphics *graphics, RITexture &texture,
                               const char *name) {
-#if (DEVICE_IMPL_VULKAN)
-  if (!graphics || !name || vkSetDebugUtilsObjectNameEXT == nullptr ||
-      texture.vk.image == VK_NULL_HANDLE)
+  if (!graphics || !name || texture.isEmpty())
     return;
-  VkDebugUtilsObjectNameInfoEXT info = {
-      VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT};
-  info.objectType = VK_OBJECT_TYPE_IMAGE;
-  info.objectHandle = reinterpret_cast<uint64_t>(texture.vk.image);
-  info.pObjectName = name;
-  vkSetDebugUtilsObjectNameEXT(graphics->device.vk.device, &info);
-#else
-  (void)graphics;
-  (void)texture;
-  (void)name;
-#endif
+  texture.setDebugObjectName(&graphics->device, name);
 }
 
 static bool ClearStandardShadowFallback(cGraphics *graphics, RICmd *cmd,
@@ -552,10 +544,21 @@ static cMatrixf StandardCubeFaceView(const cVector3f &position, uint32_t face) {
   return cMath::MatrixInverse(world);
 }
 
+// Light records are partitioned, not filtered: every enabled light still
+// reaches the buffer, but the ones whose volume touches `frustum` are written
+// first and reported as `pointCount` / `spotCount`. The resolve, translucent
+// and particle passes loop only over that prefix -- a light whose volume misses
+// the camera frustum cannot light anything inside it. The water reflection
+// pass renders a view mirrored through the water plane, so its lights are not
+// a subset of the camera's; it loops over `pointCountTotal` / `spotCountTotal`
+// instead. Disabled lights are dropped outright (they previously occupied a
+// slot with radius 0, which the shader rejected per pixel anyway).
 static bool BuildStandardLights(
-    cWorld *world, cGraphics *graphics, RISharedPointer<RIBuffer> &pointBuffer,
+    cWorld *world, cGraphics *graphics, cFrustum *frustum,
+    RISharedPointer<RIBuffer> &pointBuffer,
     RISharedPointer<RIBuffer> &spotBuffer, RISharedPointer<RIBuffer> &boxBuffer,
     uint32_t &pointCount, uint32_t &spotCount, uint32_t &boxCount,
+    uint32_t &pointCountTotal, uint32_t &spotCountTotal,
     uint32_t &shadowCount, eShadowMapResolution shadowResolutionCap,
     bool shadowsAvailable,
     const std::vector<StandardShadowLightTiles> &shadowTiles) {
@@ -564,9 +567,18 @@ static bool BuildStandardLights(
   // uploader uses a deferred transfer queue.
   std::vector<StandardPointLightData> points;
   std::vector<StandardSpotLightData> spots;
+  // Enabled but outside the camera frustum: appended after the visible ones.
+  std::vector<StandardPointLightData> pointsOffscreen;
+  std::vector<StandardSpotLightData> spotsOffscreen;
   std::vector<std::pair<StandardBoxLightData, cLightBoxLegacy *>>
       boxesWithLights;
   shadowCount = 0;
+  // Cull on the bounding volume, never the origin: a large-radius light whose
+  // centre sits behind the camera can still light the view.
+  const auto touchesFrustum = [&](iLight *light) {
+    return !frustum || frustum->CollideBoundingVolume(
+                           light->GetBoundingVolume()) != eCollision_Outside;
+  };
   if (world) {
     for (iLight *light : *world->GetLightList()) {
       if (!light)
@@ -580,7 +592,34 @@ static bool BuildStandardLights(
                            light->IsLegacyRendererEnabled() &&
                            StandardFinite(radius) && radius > 0.0f;
       const cColor diffuse = light->GetDiffuseColor();
+      {
+        // TEMP [SlotDiag] -- bindless slot lifetime hunt; remove once found.
+        // Logs each light's textures the first time it is seen, and again if
+        // any of its slots changes afterwards.
+        static std::unordered_map<const iLight *, uint64_t> sLoggedSlots;
+        Image *falloff = light->GetFalloffImage();
+        Image *gobo = light->GetGoboImage();
+        Image *cone = light->GetLightType() == eLightType_Spot
+                          ? static_cast<iLightSpot *>(light)->GetSpotFalloffImage()
+                          : nullptr;
+        const uint32_t fs = falloff ? falloff->GetRawBindlessSlot() : 0xffffffffu;
+        const uint32_t gs = gobo ? gobo->GetRawBindlessSlot() : 0xffffffffu;
+        const uint32_t cs = cone ? cone->GetRawBindlessSlot() : 0xffffffffu;
+        const uint64_t key = (uint64_t(fs) * 1000003u) ^ (uint64_t(gs) << 21) ^ cs;
+        auto it = sLoggedSlots.find(light);
+        if (it == sLoggedSlots.end() || it->second != key) {
+          sLoggedSlots[light] = key;
+          Log("[SlotDiag] light '%s' type=%d falloff '%s' slot %u | cone '%s' "
+              "slot %u | gobo '%s' slot %u\n",
+              light->GetName().c_str(), static_cast<int>(light->GetLightType()),
+              falloff ? falloff->GetName().c_str() : "-", fs,
+              cone ? cone->GetName().c_str() : "-", cs,
+              gobo ? gobo->GetName().c_str() : "-", gs);
+        }
+      }
       if (light->GetLightType() == eLightType_Point) {
+        if (!enabled)
+          continue;
         StandardPointLightData data{};
         const cVector3f p = light->GetWorldPosition();
         data.position[0] = p.x;
@@ -616,8 +655,10 @@ static bool BuildStandardLights(
             (data.shadowIndex != kStandardInvalidShadow
                  ? kStandardLightHasShadow
                  : 0u);
-        points.push_back(data);
+        (touchesFrustum(light) ? points : pointsOffscreen).push_back(data);
       } else if (light->GetLightType() == eLightType_Spot) {
+        if (!enabled)
+          continue;
         iLightSpot *spot = static_cast<iLightSpot *>(light);
         StandardSpotLightData data{};
         const cVector3f p = spot->GetWorldPosition();
@@ -688,7 +729,9 @@ static bool BuildStandardLights(
             (data.shadowIndex != kStandardInvalidShadow
                  ? kStandardLightHasShadow
                  : 0u);
-        spots.push_back(data);
+        if (!spotEnabled)
+          continue;
+        (touchesFrustum(light) ? spots : spotsOffscreen).push_back(data);
       } else if (light->GetLightType() == eLightType_Box) {
         cLightBoxLegacy *box = static_cast<cLightBoxLegacy *>(light);
         const cVector3f size = box->GetSize();
@@ -735,8 +778,14 @@ static bool BuildStandardLights(
       break;
     boxes.push_back(pair.first);
   }
+  // The visible prefix is what the camera-view passes loop over; the offscreen
+  // remainder follows it so the mirrored reflection view can still reach it.
   pointCount = static_cast<uint32_t>(points.size());
   spotCount = static_cast<uint32_t>(spots.size());
+  points.insert(points.end(), pointsOffscreen.begin(), pointsOffscreen.end());
+  spots.insert(spots.end(), spotsOffscreen.begin(), spotsOffscreen.end());
+  pointCountTotal = static_cast<uint32_t>(points.size());
+  spotCountTotal = static_cast<uint32_t>(spots.size());
   boxCount = static_cast<uint32_t>(boxes.size());
   size_t pointCapacity = 0, spotCapacity = 0, boxCapacity = 0;
   const bool pointUpload =
@@ -747,6 +796,7 @@ static bool BuildStandardLights(
       UploadStandardLights(graphics, boxes, boxBuffer, boxCapacity);
   if (!pointUpload || !spotUpload || !boxUpload) {
     pointCount = spotCount = boxCount = 0;
+    pointCountTotal = spotCountTotal = 0;
     return false;
   }
   return true;
@@ -774,23 +824,32 @@ cStandardRenderer::cStandardRenderer(cGraphics *apGraphics,
   m_ambientOcclusion =
       std::make_unique<cStandardAmbientOcclusionPass>(mpGraphics, apResources);
   m_forceFallback = std::getenv("HPL_STANDARD_FORCE_FALLBACK") != nullptr;
+  if (const char *lightCull = std::getenv("HPL_STANDARD_LIGHT_CULL"))
+    m_lightFrustumCull = std::strcmp(lightCull, "0") != 0;
   RISegmentAllocDesc desc = {};
   desc.numSegments = RI_NUMBER_FRAMES_FLIGHT;
   desc.elementStride = sizeof(VkDrawIndirectCommand);
   desc.maxElements = kObjectSlotCapacity;
   m_indirectSegment = RISegmentAlloc<RI_NUMBER_FRAME_SEGMENTS>(&desc);
-  m_indirectDrawBuffer = detail::CreateBindlessSlotBuffer(
-      &mpGraphics->device, kObjectSlotCapacity, sizeof(VkDrawIndirectCommand),
-      RI_BUFFER_USAGE_INDIRECT, false);
+  // Host-built: the two-phase camera cull only rewrites each command's
+  // instanceCount word.
+  m_indirectDrawBuffer.Create(&mpGraphics->device, kObjectSlotCapacity,
+                              sizeof(VkDrawIndirectCommand),
+                              /*hostWritten*/ true,
+                              "StandardRenderer.indirectDraw");
+  m_indirectDrawFirstUse = true;
   RISegmentAllocDesc shadowDesc = {};
   shadowDesc.numSegments = RI_NUMBER_FRAMES_FLIGHT;
   shadowDesc.elementStride = sizeof(VkDrawIndirectCommand);
   shadowDesc.maxElements = kObjectSlotCapacity;
   m_shadowIndirectSegment =
       RISegmentAlloc<RI_NUMBER_FRAME_SEGMENTS>(&shadowDesc);
-  m_shadowIndirectBuffer = detail::CreateBindlessSlotBuffer(
-      &mpGraphics->device, kObjectSlotCapacity, sizeof(VkDrawIndirectCommand),
-      RI_BUFFER_USAGE_INDIRECT, false);
+  // Kernel-authored: both shadow cull modes write whole commands, so the host
+  // never maps this one.
+  m_shadowIndirectBuffer.Create(&mpGraphics->device, kObjectSlotCapacity,
+                                sizeof(VkDrawIndirectCommand),
+                                /*hostWritten*/ false,
+                                "StandardRenderer.shadowIndirect");
 
   CreateCullBuffers();
   // Like cRendererSimple: cGraphics::Init no longer loads renderers, and Draw
@@ -808,14 +867,21 @@ cStandardRenderer::cStandardRenderer(cGraphics *apGraphics,
 // and the GPU only reads them, so a staged device-local copy would add an
 // upload for no benefit.
 void cStandardRenderer::CreateCullBuffers() {
-#if (DEVICE_IMPL_D3D12)
-  // D3D12 upload heaps cannot carry UAV flags. The current Standard cull path
-  // depends on host-mapped buffers that compute also writes, so use the
-  // renderer's existing host-built indirect commands until that path owns
-  // explicit upload/default copies. Vulkan retains the GPU cull path below.
-  if (RIIsTargetSelected(RI_DEVICE_API_D3D12))
-    return;
-#endif
+  // Buffer classification matters here, because D3D12 upload heaps cannot carry
+  // UAV flags (RID3D12Buffer.cpp rejects HOST_UPLOAD + SHADER_RESOURCE_STORAGE
+  // outright). The cull kernel splits its set cleanly:
+  //
+  //   read-only  (StructuredBuffer,   t#) -- candidates, tiles, groups, cameras
+  //   read/write (RWStructuredBuffer, u#) -- indirect commands, counts, visibility
+  //
+  // The read-only ones stay host-mapped and ask only for SHADER_RESOURCE; both
+  // that and SHADER_RESOURCE_STORAGE map to VK_BUFFER_USAGE_STORAGE_BUFFER_BIT
+  // on Vulkan (RIVK.h), so this is a no-op there, and RIProgram picks SRV vs UAV
+  // from the reflected register class rather than the descriptor type, so the
+  // binding side is unchanged on both backends.
+  //
+  // The read/write ones must be device-local; they are seeded through the
+  // uploader / staged copies instead of direct host writes.
   const auto makeCullBuffer = [&](RISegmentAlloc<RI_NUMBER_FRAME_SEGMENTS> *segment,
                                   struct RIBuffer *buffer, uint32_t elements,
                                   uint32_t stride, uint32_t usage,
@@ -832,34 +898,44 @@ void cStandardRenderer::CreateCullBuffers() {
   };
   makeCullBuffer(&m_shadowCandidateSegment, &m_shadowCandidateBuffer,
                  kStandardShadowMaxCandidates, sizeof(StandardCullCandidate),
-                 RI_BUFFER_USAGE_SHADER_RESOURCE_STORAGE, false,
+                 RI_BUFFER_USAGE_SHADER_RESOURCE, false,
                  "StandardRenderer.shadowCullCandidates");
   makeCullBuffer(&m_shadowCullTileSegment, &m_shadowCullTileBuffer,
                  kStandardShadowMaxTiles, sizeof(StandardCullTile),
-                 RI_BUFFER_USAGE_SHADER_RESOURCE_STORAGE, false,
+                 RI_BUFFER_USAGE_SHADER_RESOURCE, false,
                  "StandardRenderer.shadowCullTiles");
   makeCullBuffer(&m_shadowCullGroupSegment, &m_shadowCullGroupBuffer,
                  kStandardShadowMaxCullGroups, sizeof(StandardCullGroup),
-                 RI_BUFFER_USAGE_SHADER_RESOURCE_STORAGE, false,
+                 RI_BUFFER_USAGE_SHADER_RESOURCE, false,
                  "StandardRenderer.shadowCullGroups");
   makeCullBuffer(&m_cullCameraSegment, &m_cullCameraBuffer,
                  kStandardCullMaxCameras, sizeof(StandardCullCamera),
-                 RI_BUFFER_USAGE_SHADER_RESOURCE_STORAGE, false,
+                 RI_BUFFER_USAGE_SHADER_RESOURCE, false,
                  "StandardRenderer.cullCameras");
-  makeCullBuffer(&m_translucentCommandSegment, &m_translucentCommandBuffer,
-                 kStandardTranslucentMaxDraws,
-                 sizeof(VkDrawIndexedIndirectCommand),
-                 RI_BUFFER_USAGE_INDIRECT |
-                     RI_BUFFER_USAGE_SHADER_RESOURCE_STORAGE,
-                 false,
-                 "StandardRenderer.translucentCommands");
+  // Written by the host and rewritten by the kernel, so it takes the staged
+  // path rather than makeCullBuffer's single host-mapped allocation.
+  {
+    RISegmentAllocDesc segmentDesc = {};
+    segmentDesc.numSegments = RI_NUMBER_FRAMES_FLIGHT;
+    segmentDesc.elementStride = sizeof(VkDrawIndexedIndirectCommand);
+    segmentDesc.maxElements = kStandardTranslucentMaxDraws;
+    m_translucentCommandSegment =
+        RISegmentAlloc<RI_NUMBER_FRAME_SEGMENTS>(&segmentDesc);
+    // Host-built: instance-mask mode rewrites one word of a command the host
+    // already sorted and wrote.
+    m_translucentCommandBuffer.Create(
+        &mpGraphics->device, kStandardTranslucentMaxDraws,
+        sizeof(VkDrawIndexedIndirectCommand), /*hostWritten*/ true,
+        "StandardRenderer.translucentCommands");
+    m_translucentCommandFirstUse = true;
+  }
   makeCullBuffer(&m_translucentCandidateSegment, &m_translucentCandidateBuffer,
                  kStandardTranslucentMaxDraws, sizeof(StandardCullCandidate),
-                 RI_BUFFER_USAGE_SHADER_RESOURCE_STORAGE, false,
+                 RI_BUFFER_USAGE_SHADER_RESOURCE, false,
                  "StandardRenderer.translucentCandidates");
   makeCullBuffer(&m_cameraCandidateSegment, &m_cameraCandidateBuffer,
                  kStandardCameraMaxDraws, sizeof(StandardCullCandidate),
-                 RI_BUFFER_USAGE_SHADER_RESOURCE_STORAGE, false,
+                 RI_BUFFER_USAGE_SHADER_RESOURCE, false,
                  "StandardRenderer.cameraCullCandidates");
   // Device-local: the counts are written by compute and consumed by
   // vkCmdDrawIndirectCount without ever being read back on the host.
@@ -869,19 +945,153 @@ void cStandardRenderer::CreateCullBuffers() {
                      RI_BUFFER_USAGE_SHADER_RESOURCE_STORAGE,
                  true,
                  "StandardRenderer.shadowDrawCounts");
-  // Persistent across frames, so no segment allocator. Host-mapped purely so it
-  // can be zeroed: every entry must start "not visible", which makes the first
-  // frame after a (re)create draw everything in phase 2 and nothing in phase 1.
+  // Persistent across frames, so no segment allocator. The kernel both reads
+  // and writes it (gCullVisibility is an RWStructuredBuffer), so it has to be
+  // device-local -- a host-mapped UAV is exactly what D3D12 upload heaps
+  // cannot express. Every entry must start "not visible", which makes the
+  // first frame after a (re)create draw everything in phase 2 and nothing in
+  // phase 1; the RI layer has no fillBuffer, so the seed is staged through the
+  // uploader the way cGpuParticleSystem::ClearSlice does.
   if (m_cullVisibilityBuffer.isEmpty()) {
     m_cullVisibilityBuffer = detail::CreateBindlessSlotBuffer(
         &mpGraphics->device, kStandardCullVisibilityKeys, sizeof(uint32_t),
-        RI_BUFFER_USAGE_SHADER_RESOURCE_STORAGE, false,
-        "StandardRenderer.cullVisibility");
-    if (m_cullVisibilityBuffer.mappedAddress)
-      std::memset(m_cullVisibilityBuffer.mappedAddress, 0,
-                  static_cast<size_t>(kStandardCullVisibilityKeys) *
-                      sizeof(uint32_t));
+        RI_BUFFER_USAGE_SHADER_RESOURCE_STORAGE |
+            RI_BUFFER_USAGE_TRANSFER_DST,
+        /*deviceLocalOnly*/ true, "StandardRenderer.cullVisibility");
+    ZeroCullVisibility();
   }
+}
+
+// Whether this device can express the Hi-Z build's combined read+write state.
+// Vulkan always can (VK_IMAGE_LAYOUT_GENERAL); D3D12 needs the enhanced-barrier
+// path, which pins a simultaneous-access texture's layout to COMMON.
+static bool HiZBarriersUsable(const RIDevice &device) {
+#if (DEVICE_IMPL_D3D12)
+  if (RIIsTargetSelected(RI_DEVICE_API_D3D12))
+    return device.physicalAdapter.isEnchancedBarrierSupported != 0;
+#endif
+  (void)device;
+  return true;
+}
+
+bool StagedIndirectBuffer::isEmpty() const {
+  if (staged)
+    return host.isEmpty() || host.mappedAddress == nullptr || device.isEmpty();
+  return host.isEmpty() && device.isEmpty();
+}
+
+bool StagedIndirectBuffer::Create(RIDevice *dev, uint64_t elements,
+                                  size_t stride, bool hostWritten,
+                                  const char *debugName) {
+  if (!isEmpty())
+    return true;
+  const uint32_t commandUsage = RI_BUFFER_USAGE_INDIRECT |
+                                RI_BUFFER_USAGE_SHADER_RESOURCE_STORAGE |
+                                RI_BUFFER_USAGE_TRANSFER_DST;
+
+  if (!hostWritten) {
+    // Kernel-authored commands: nothing maps it, so one device-local buffer
+    // serves both backends.
+    device = detail::CreateBindlessSlotBuffer(dev, elements, stride,
+                                              commandUsage,
+                                              /*deviceLocalOnly*/ true,
+                                              debugName);
+    staged = false;
+    return !isEmpty();
+  }
+
+  // Only D3D12 needs the split; Vulkan keeps the single host-mapped buffer the
+  // renderer has always used, so the shipping backend is untouched.
+  staged = false;
+#if (DEVICE_IMPL_D3D12)
+  staged = RIIsTargetSelected(RI_DEVICE_API_D3D12);
+#endif
+  // When staged the host side is pure staging: transfer source only, which an
+  // upload heap will accept alongside a mapping.
+  host = detail::CreateBindlessSlotBuffer(
+      dev, elements, stride,
+      staged ? RI_BUFFER_USAGE_TRANSFER_SRC : commandUsage,
+      /*deviceLocalOnly*/ false, debugName);
+  if (host.isEmpty())
+    return false;
+  if (staged)
+    device = detail::CreateBindlessSlotBuffer(dev, elements, stride,
+                                              commandUsage,
+                                              /*deviceLocalOnly*/ true,
+                                              debugName);
+  return !isEmpty();
+}
+
+void StagedIndirectBuffer::Defer(cGraphics *graphics) {
+  const auto retire = [&](RIBuffer *buffer) {
+    if (buffer->isEmpty())
+      return;
+    graphics->graphicsDefer.push(std::function<void()>(
+        [owned = std::move(*buffer), dev = &graphics->device]() mutable {
+          owned.dispose(dev);
+        }));
+    *buffer = {};
+  };
+  retire(&host);
+  retire(&device);
+  staged = false;
+}
+
+void StagedIndirectBuffer::Flush(RIDevice *dev, RICmd *cmd, uint64_t byteOffset,
+                                 uint64_t byteSize, bool firstUse,
+                                 bool cullFollows) {
+  if (!staged || byteSize == 0 || isEmpty())
+    return;
+  // A previous frame's draw left the buffer as draw arguments; a freshly
+  // created one has no contents worth preserving.
+  const uint32_t before = firstUse ? RI_RESOURCE_STATE_UNDEFINED
+                                   : RI_RESOURCE_STATE_INDIRECT_ARGUMENT;
+  const uint32_t beforeStage =
+      firstUse ? RI_STAGE_NONE : RI_STAGE_DRAW_INDIRECT;
+  cmd->vk_d3d12_bufferBarrier(RIBufferBarrier(&device, before,
+                                              RI_RESOURCE_STATE_COPY_DST,
+                                              beforeStage, RI_STAGE_COPY));
+  cmd->copyBuffer(dev, &host, byteOffset, &device, byteOffset, byteSize);
+  // A cull dispatch rewrites instanceCount next and its own closing barrier
+  // declares STORAGE_WRITE as the before-state; without one the draw reads the
+  // commands straight from here, so they have to land as arguments instead.
+  cmd->vk_d3d12_bufferBarrier(RIBufferBarrier(
+      &device, RI_RESOURCE_STATE_COPY_DST,
+      cullFollows ? RI_RESOURCE_STATE_STORAGE_WRITE
+                  : RI_RESOURCE_STATE_INDIRECT_ARGUMENT,
+      RI_STAGE_COPY,
+      cullFollows ? RI_STAGE_COMPUTE : RI_STAGE_DRAW_INDIRECT));
+}
+
+// Seeds the whole visibility buffer to zero. Separate from CreateCullBuffers so
+// the same path covers a fresh create and any later reset.
+void cStandardRenderer::ZeroCullVisibility() {
+  if (m_cullVisibilityBuffer.isEmpty())
+    return;
+  const size_t bytes =
+      static_cast<size_t>(kStandardCullVisibilityKeys) * sizeof(uint32_t);
+
+  RIResourceBufferTransaction transaction = {};
+  transaction.target = m_cullVisibilityBuffer;
+  transaction.size = bytes;
+  transaction.offset = 0;
+  // Freshly created (or about to be reinterpreted wholesale), so nothing in it
+  // needs to survive -- UNDEFINED lets the backend discard rather than preserve.
+  transaction.currentState = RI_RESOURCE_STATE_UNDEFINED;
+  transaction.currentStages = RI_STAGE_NONE;
+  transaction.postState = RI_RESOURCE_STATE_UNORDERED_ACCESS;
+  transaction.postStages = RI_STAGE_COMPUTE;
+  RI_ResourceBeginCopyBuffer(&mpGraphics->device, &mpGraphics->uploader,
+                             &transaction);
+  if (!transaction.mapped.data) {
+    Error("Standard renderer: could not stage the cull visibility seed (%zu "
+          "bytes); occlusion culling is off this run\n",
+          bytes);
+    return;
+  }
+  std::memset(transaction.mapped.data, 0, bytes);
+  RI_ResourceEndCopyBuffer(&mpGraphics->device, &mpGraphics->uploader,
+                           &transaction);
 }
 
 // Hands every cull buffer back through the deferral queue. Without this they
@@ -903,7 +1113,7 @@ void cStandardRenderer::DisposeCullBuffers() {
   retire(&m_shadowCullGroupBuffer);
   retire(&m_shadowDrawCountBuffer);
   retire(&m_cullCameraBuffer);
-  retire(&m_translucentCommandBuffer);
+  m_translucentCommandBuffer.Defer(mpGraphics);
   retire(&m_translucentCandidateBuffer);
   retire(&m_cameraCandidateBuffer);
   retire(&m_cullVisibilityBuffer);
@@ -936,19 +1146,19 @@ bool cStandardRenderer::LoadData() {
     return false;
   // The cull kernel is not optional: without it the shadow indirect range is
   // never written, so shadows are dropped rather than drawn from stale data.
-#if (DEVICE_IMPL_D3D12)
-  if (RIIsTargetSelected(RI_DEVICE_API_D3D12)) {
-    m_hiZLoaded = false;
-  } else
-#endif
-  {
-    m_hiZLoaded = m_hiZ && m_hiZ->LoadData();
-    if (!m_hiZLoaded)
-      Error("Standard renderer: HiZ pass failed to load; camera occlusion "
+  if (!loadPass(m_shadowCull && m_shadowCull->LoadData(), "shadow cull"))
+    return false;
+  // The pyramid is held in a combined SHADER_RESOURCE + UNORDERED_ACCESS state
+  // for the whole build, which only a COMMON-pinned simultaneous-access texture
+  // admits -- and only the enhanced-barrier path pins it (RID3D12Barrier.cpp).
+  // The legacy ResourceBarrier fallback has no equivalent, so the same build
+  // would be a genuine state conflict there. Camera occlusion culling degrades
+  // to frustum-only rather than reading a corrupt pyramid.
+  m_hiZLoaded = m_hiZ && HiZBarriersUsable(mpGraphics->device) &&
+                m_hiZ->LoadData();
+  if (!m_hiZLoaded)
+    Warning("Standard renderer: HiZ pass unavailable; camera occlusion "
             "culling is off this run\n");
-    if (!loadPass(m_shadowCull && m_shadowCull->LoadData(), "shadow cull"))
-      return false;
-  }
   // AO is optional: without it the light pass reads a cleared fallback.
   m_ambientOcclusionLoaded =
       m_ambientOcclusion && m_ambientOcclusion->LoadData();
@@ -961,10 +1171,11 @@ bool cStandardRenderer::LoadData() {
     desc.elementStride = sizeof(VkDrawIndirectCommand);
     desc.maxElements = kObjectSlotCapacity;
     m_indirectSegment = RISegmentAlloc<RI_NUMBER_FRAME_SEGMENTS>(&desc);
-    m_indirectDrawBuffer = detail::CreateBindlessSlotBuffer(
-        &mpGraphics->device, kObjectSlotCapacity, sizeof(VkDrawIndirectCommand),
-        RI_BUFFER_USAGE_INDIRECT,
-        false);
+    m_indirectDrawBuffer.Create(&mpGraphics->device, kObjectSlotCapacity,
+                                sizeof(VkDrawIndirectCommand),
+                                /*hostWritten*/ true,
+                                "StandardRenderer.indirectDraw");
+    m_indirectDrawFirstUse = true;
   }
   if (m_shadowIndirectBuffer.isEmpty()) {
     RISegmentAllocDesc desc = {};
@@ -972,10 +1183,10 @@ bool cStandardRenderer::LoadData() {
     desc.elementStride = sizeof(VkDrawIndirectCommand);
     desc.maxElements = kObjectSlotCapacity;
     m_shadowIndirectSegment = RISegmentAlloc<RI_NUMBER_FRAME_SEGMENTS>(&desc);
-    m_shadowIndirectBuffer = detail::CreateBindlessSlotBuffer(
-        &mpGraphics->device, kObjectSlotCapacity, sizeof(VkDrawIndirectCommand),
-        RI_BUFFER_USAGE_INDIRECT,
-        false);
+    m_shadowIndirectBuffer.Create(&mpGraphics->device, kObjectSlotCapacity,
+                                  sizeof(VkDrawIndirectCommand),
+                                  /*hostWritten*/ false,
+                                  "StandardRenderer.shadowIndirect");
   }
   // DestroyData hands these back, so a hot-reload has to rebuild them before
   // any pass binds them again.
@@ -1127,16 +1338,8 @@ void cStandardRenderer::DestroyData() {
           if (lighting)
             lighting->dispose(device);
         }));
-  if (!m_indirectDrawBuffer.isEmpty())
-    mpGraphics->graphicsDefer.push(std::function<void()>(
-        [buffer = std::move(m_indirectDrawBuffer),
-         device = &mpGraphics->device]() mutable { buffer.dispose(device); }));
-  m_indirectDrawBuffer = {};
-  if (!m_shadowIndirectBuffer.isEmpty())
-    mpGraphics->graphicsDefer.push(std::function<void()>(
-        [buffer = std::move(m_shadowIndirectBuffer),
-         device = &mpGraphics->device]() mutable { buffer.dispose(device); }));
-  m_shadowIndirectBuffer = {};
+  m_indirectDrawBuffer.Defer(mpGraphics);
+  m_shadowIndirectBuffer.Defer(mpGraphics);
   DisposeCullBuffers();
   m_visibilityLoaded = false;
   m_fallbackLoaded = false;
@@ -1771,7 +1974,7 @@ void cStandardRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
     return;
   }
   if (!mpGraphics || !apWorld || !viewport || !apFrustum ||
-      !m_indirectDrawBuffer.mappedAddress)
+      m_indirectDrawBuffer.isEmpty())
     return;
   // Standard keeps a separate legacy ABI: enhanced-world buffers are not
   // reusable because their radius/intensity and colour transfer functions are
@@ -1781,6 +1984,9 @@ void cStandardRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
   RISharedPointer<RIBuffer> spotLights;
   RISharedPointer<RIBuffer> boxLights;
   uint32_t pointLightCount = 0, spotLightCount = 0, boxLightCount = 0;
+  // Full buffer extents, including the lights culled from the camera view. Only
+  // the mirrored water-reflection view reads past the visible prefix.
+  uint32_t pointLightCountTotal = 0, spotLightCountTotal = 0;
   uint32_t shadowCount = 0;
   const eShadowMapResolution shadowResolutionCap =
       apSettings ? apSettings->mMaxShadowMapResolution
@@ -1937,8 +2143,6 @@ void cStandardRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
     return;
   static bool sLoggedD3D12MrtVerification = false;
   if (!sLoggedD3D12MrtVerification) {
-    Log("Standard renderer verification: viewport state ready (%ux%u, %zu solids)\n",
-        state->width, state->height, solids.size());
     sLoggedD3D12MrtVerification = true;
   }
 
@@ -1977,7 +2181,7 @@ void cStandardRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
   if (!solids.empty() &&
       m_indirectSegment.request(mpGraphics->frameIndex, solids.size(), &req)) {
     indirect = reinterpret_cast<VkDrawIndirectCommand *>(
-        static_cast<uint8_t *>(m_indirectDrawBuffer.mappedAddress) +
+        static_cast<uint8_t *>(m_indirectDrawBuffer.mapped()) +
         req.elementOffset * sizeof(VkDrawIndirectCommand));
   }
 
@@ -2001,7 +2205,7 @@ void cStandardRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
                                        &cameraCandidateReq);
   if (cameraCullReady) {
     phaseTwoIndirect = reinterpret_cast<VkDrawIndirectCommand *>(
-        static_cast<uint8_t *>(m_indirectDrawBuffer.mappedAddress) +
+        static_cast<uint8_t *>(m_indirectDrawBuffer.mapped()) +
         phaseTwoReq.elementOffset * sizeof(VkDrawIndirectCommand));
     cameraCandidates = reinterpret_cast<StandardCullCandidate *>(
         static_cast<uint8_t *>(m_cameraCandidateBuffer.mappedAddress) +
@@ -2107,6 +2311,26 @@ void cStandardRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
     }
     indirect[drawCount++] = {vertexCount, 1, 0, slot};
   }
+  // Every command for this Draw is now written on the host. Publish them to the
+  // device buffer once, here, rather than at each consumer: both the two-phase
+  // cull (which rewrites instanceCount) and the plain drawIndirect below read
+  // the device copy, and only one of the two paths runs. A no-op on Vulkan.
+  if (drawCount > 0) {
+    constexpr uint64_t kStride = sizeof(VkDrawIndirectCommand);
+    const uint64_t first =
+        cameraCullReady ? std::min(req.elementOffset, phaseTwoReq.elementOffset)
+                        : req.elementOffset;
+    const uint64_t last =
+        (cameraCullReady
+             ? std::max(req.elementOffset, phaseTwoReq.elementOffset)
+             : req.elementOffset) +
+        drawCount;
+    m_indirectDrawBuffer.Flush(&mpGraphics->device,
+                               &mpGraphics->primary.cmds[0], first * kStride,
+                               (last - first) * kStride, m_indirectDrawFirstUse,
+                               /*cullFollows*/ cameraCullReady);
+    m_indirectDrawFirstUse = false;
+  }
   mpGraphics->globalset->flushMirrors(&mpGraphics->device);
 
   // gPerFrame (set 1) is needed before any Standard program draws: the shadow
@@ -2148,7 +2372,6 @@ void cStandardRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
   std::vector<StandardShadowLightTiles> shadowLightTiles;
   if (!shadowSelection.empty() && m_shadow && m_shadowLoaded &&
       !m_shadowIndirectBuffer.isEmpty() &&
-      m_shadowIndirectBuffer.mappedAddress &&
       (!apSettings || apSettings->mbRenderShadows)) {
     const StandardShadowAtlasConfig atlasConfig{
         kStandardShadowAtlasCapTiles *
@@ -2635,7 +2858,7 @@ void cStandardRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
         cullBuffers.candidates = &m_shadowCandidateBuffer;
         cullBuffers.tiles = &m_shadowCullTileBuffer;
         cullBuffers.groups = &m_shadowCullGroupBuffer;
-        cullBuffers.indirect = &m_shadowIndirectBuffer;
+        cullBuffers.indirect = m_shadowIndirectBuffer.gpu();
         cullBuffers.drawCounts = &m_shadowDrawCountBuffer;
         cullBuffers.candidateCapacity = kStandardShadowMaxCandidates;
         cullBuffers.indirectCapacity = kObjectSlotCapacity;
@@ -2669,7 +2892,7 @@ void cStandardRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
         pagesRendered = m_shadow->RenderAtlas(
             cntx, &mpGraphics->primary.cmds[0], mpGraphics->frameIndex,
             standardShadowTexture.Get(), page, atlasConfig.atlasSize,
-            &m_shadowIndirectBuffer,
+            m_shadowIndirectBuffer.gpu(),
             m_shadowCull->UsesDrawIndirectCount() ? &m_shadowDrawCountBuffer
                                                   : nullptr,
             pageTiles, frameBinding);
@@ -2783,10 +3006,15 @@ void cStandardRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
   if (shadowTiles.isEmpty())
     return;
   shadowCount = 0;
-  if (!BuildStandardLights(apWorld, mpGraphics, pointLights, spotLights,
-                           boxLights, pointLightCount, spotLightCount,
-                           boxLightCount, shadowCount, shadowResolutionCap,
-                           shadowsAvailable, shadowLightTiles))
+  // A null frustum makes BuildStandardLights put every enabled light in the
+  // visible prefix -- the HPL_STANDARD_LIGHT_CULL=0 A/B path.
+  if (!BuildStandardLights(apWorld, mpGraphics,
+                           m_lightFrustumCull ? apFrustum : nullptr, pointLights,
+                           spotLights, boxLights, pointLightCount,
+                           spotLightCount, boxLightCount, pointLightCountTotal,
+                           spotLightCountTotal, shadowCount,
+                           shadowResolutionCap, shadowsAvailable,
+                           shadowLightTiles))
     return;
 
   const bool packedVisibility =
@@ -2798,8 +3026,6 @@ void cStandardRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
       !state->visibilityTexture[index].isEmpty() &&
       !state->visibilityView[index].isEmpty() &&
       !state->visibilityAttachmentView[index].isEmpty();
-  Log("Standard renderer verification: packed visibility=%u\n",
-      packedVisibility ? 1u : 0u);
   RITextureBarrier barriers[8] = {};
   barriers[0] =
       RI_PogoAttachmentBarrier(state->renderTarget[index].Get(), true);
@@ -2840,7 +3066,7 @@ void cStandardRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
                                                           barriers);
 
   RIRenderingAttachment color = {};
-  color.view = *state->renderTargetView[index];
+  color.view = *state->renderTargetAttachmentView[index];
   color.loadOp = RI_ATTACHMENT_LOAD_OP_CLEAR;
   color.storeOp = RI_ATTACHMENT_STORE_OP_STORE;
   const cColor clear = apSettings ? apSettings->mClearColor : cColor(0, 0);
@@ -2948,7 +3174,7 @@ void cStandardRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
       cameraCullBuffers.candidates = &m_cameraCandidateBuffer;
       cameraCullBuffers.tiles = &m_shadowCullTileBuffer;
       cameraCullBuffers.groups = &m_shadowCullGroupBuffer;
-      cameraCullBuffers.indirect = &m_indirectDrawBuffer;
+      cameraCullBuffers.indirect = m_indirectDrawBuffer.gpu();
       cameraCullBuffers.drawCounts = &m_shadowDrawCountBuffer;
       cameraCullBuffers.cameras = &m_cullCameraBuffer;
       cameraCullBuffers.visibility = &m_cullVisibilityBuffer;
@@ -3022,13 +3248,12 @@ void cStandardRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
     mpGraphics->primary.cmds[0].setViewport(&mpGraphics->device, vp);
     mpGraphics->primary.cmds[0].setScissor(&mpGraphics->device, sc);
     mpGraphics->primary.cmds[0].drawIndirect(
-        &mpGraphics->device, &m_indirectDrawBuffer,
+        &mpGraphics->device, m_indirectDrawBuffer.gpu(),
         req.elementOffset * sizeof(VkDrawIndirectCommand), drawCount,
         sizeof(VkDrawIndirectCommand));
   }
 
   mpGraphics->primary.cmds[0].vk_d3d12_endRendering(&mpGraphics->device);
-  Log("Standard renderer verification: primary geometry scope recorded\n");
 
   // ---------------------------------------------------------------------
   // Phase 2 of the camera cull.
@@ -3044,7 +3269,6 @@ void cStandardRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
   // output survives.
   // ---------------------------------------------------------------------
   if (cameraCullDispatched) {
-    Log("Standard renderer verification: entering phase 2 cull\n");
     RICmd *cameraCmd = &mpGraphics->primary.cmds[0];
     cameraCmd->vk_d3d12_textureBarrier(RITextureBarrier(
         state->depthTextures[index].Get(), RI_RESOURCE_STATE_DEPTH_WRITE,
@@ -3114,13 +3338,12 @@ void cStandardRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
       cameraCmd->setViewport(&mpGraphics->device, vp);
       cameraCmd->setScissor(&mpGraphics->device, sc);
       cameraCmd->drawIndirect(
-          &mpGraphics->device, &m_indirectDrawBuffer,
+          &mpGraphics->device, m_indirectDrawBuffer.gpu(),
           phaseTwoReq.elementOffset * sizeof(VkDrawIndirectCommand), drawCount,
           sizeof(VkDrawIndirectCommand));
       cameraCmd->vk_d3d12_endRendering(&mpGraphics->device);
     }
   }
-  Log("Standard renderer verification: phase 2 skipped/completed\n");
   if (!packedVisibility) {
     mpGraphics->primary.cmds[0].vk_d3d12_textureBarrier(
         RI_PogoShaderBarrier(state->materialColorTexture[index].Get(), false));
@@ -3146,25 +3369,21 @@ void cStandardRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
         state->visibilityTexture[index].Get(), RI_RESOURCE_STATE_RENDER_TARGET,
         RI_RESOURCE_STATE_SHADER_RESOURCE, RI_STAGE_FRAGMENT, RI_STAGE_FRAGMENT,
         RI_BARRIER_ASPECT_COLOR));
-  Log("Standard renderer verification: visibility barrier recorded\n");
   mpGraphics->primary.cmds[0].vk_d3d12_textureBarrier(RITextureBarrier(
       state->velocityTexture[index].Get(), RI_RESOURCE_STATE_RENDER_TARGET,
       RI_RESOURCE_STATE_SHADER_RESOURCE, RI_STAGE_FRAGMENT, RI_STAGE_FRAGMENT,
       RI_BARRIER_ASPECT_COLOR));
-  Log("Standard renderer verification: velocity barrier recorded\n");
 
   if (!packedVisibility)
     mpGraphics->primary.cmds[0].vk_d3d12_textureBarrier(RITextureBarrier(
         state->depthTextures[index].Get(), RI_RESOURCE_STATE_DEPTH_WRITE,
         RI_RESOURCE_STATE_SHADER_RESOURCE, RI_STAGE_FRAGMENT, RI_STAGE_FRAGMENT,
         RI_BARRIER_ASPECT_DEPTH));
-  Log("Standard renderer verification: fallback depth barrier recorded/skipped\n");
 
   // Decode the packed hit with a fullscreen graphics pass. All material
   // G-buffer outputs are written at native extent, so downstream geometric
   // normal consumers and lighting have real surfaces in the barycentric path.
   if (packedVisibility && m_reconstruct && m_reconstructLoaded) {
-    Log("Standard renderer verification: entering reconstruct\n");
     RITextureBarrier reconInputs[6] = {};
     auto makeReconOutputBarrier = [](RITexture *texture,
                                      RIResourceState_e before,
@@ -3255,7 +3474,6 @@ void cStandardRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
     mpGraphics->primary.cmds[0].setScissor(&mpGraphics->device, sc);
     mpGraphics->primary.cmds[0].draw(&mpGraphics->device, 3, 1, 0, 0);
     mpGraphics->primary.cmds[0].vk_d3d12_endRendering(&mpGraphics->device);
-    Log("Standard renderer verification: reconstruct recorded\n");
     mpGraphics->primary.cmds[0].vk_d3d12_textureBarrier(
         RI_PogoShaderBarrier(state->materialColorTexture[index].Get(), false));
     mpGraphics->primary.cmds[0].vk_d3d12_textureBarrier(
@@ -3269,12 +3487,10 @@ void cStandardRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
         RI_RESOURCE_STATE_SHADER_RESOURCE, RI_STAGE_FRAGMENT, RI_STAGE_FRAGMENT,
         RI_BARRIER_ASPECT_COLOR));
   }
-  Log("Standard renderer verification: reconstruction completed/skipped\n");
 
   // Project clustered decals after reconstruction/fallback and before
   // lighting. The pass writes an independent target, so a failed/empty pass
   // cannot corrupt the identity material color input.
-  Log("Standard renderer verification: entering clustered decals\n");
   bool decalsRendered = false;
   if (m_decals && m_decals->IsLoaded() && apWorld->GetDecalCount() > 0 &&
       !state->decalColorTexture[index].isEmpty()) {
@@ -3307,7 +3523,6 @@ void cStandardRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
     }
     state->decalColorInitialized[index] = true;
   }
-  Log("Standard renderer verification: clustered decals completed/skipped\n");
 
   // Type="Decal" meshes (dirt_floor / moist_wall / trails). The legacy
   // deferred renderer drew them into its albedo target (RendererDeferred.cpp
@@ -3316,7 +3531,6 @@ void cStandardRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
   // Hybrid composite. Both clear every frame so the resolve reads identity
   // when nothing draws.
   {
-    Log("Standard renderer verification: entering mesh decals\n");
     std::vector<iRenderable *> mulDecals, addDecals;
     for (iRenderable *o :
          m_rendererList.GetRenderableItems(eRenderListType_Decal)) {
@@ -3371,8 +3585,6 @@ void cStandardRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
     };
     const std::vector<MeshDecalDraw> mulDraws = submitDecals(mulDecals);
     const std::vector<MeshDecalDraw> addDraws = submitDecals(addDecals);
-    Log("Standard renderer verification: mesh decals submitted (%zu/%zu)\n",
-        mulDraws.size(), addDraws.size());
     if (!mulDraws.empty() || !addDraws.empty())
       mpGraphics->globalset->flushMirrors(&mpGraphics->device);
 
@@ -3444,22 +3656,18 @@ void cStandardRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
     };
     accumulate(state->decalMulTexture[index].Get(),
                state->decalMulAttachmentView[index].Get(), 1.0f, mulDraws);
-    Log("Standard renderer verification: multiply decal target recorded\n");
     accumulate(state->decalAddTexture[index].Get(),
                state->decalAddAttachmentView[index].Get(), 0.0f, addDraws);
-    Log("Standard renderer verification: additive decal target recorded\n");
-    cmd->vk_d3d12_textureBarrier(RITextureBarrier(
+      cmd->vk_d3d12_textureBarrier(RITextureBarrier(
         state->depthTextures[index].Get(), RI_RESOURCE_STATE_DEPTH_READ,
         RI_RESOURCE_STATE_SHADER_RESOURCE, RI_STAGE_NONE, RI_STAGE_FRAGMENT,
         RI_BARRIER_ASPECT_DEPTH));
   }
-  Log("Standard renderer verification: mesh decals completed\n");
 
   // Legacy RendererDeferred billboard halos: occluded-texel counts of each
   // halo's source box fade its glow (cStandardHaloPass). Resolved before the
   // particle pass so this frame draws the newest alpha.
   if (m_halo) {
-    Log("Standard renderer verification: entering halo pass\n");
     if (!state->haloQueries) {
       state->haloQueries = std::make_shared<StandardHaloQueryState>();
       state->haloQueries->graphics = mpGraphics;
@@ -3473,19 +3681,14 @@ void cStandardRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
                    state->depthView[index].Get(), state->width, state->height,
                    frameBinding, paneSalt);
   }
-  Log("Standard renderer verification: halo pass completed/skipped\n");
 
   bool aoRendered = false;
-  Log("Standard renderer verification: entering AO pass\n");
   if (apSettings && apSettings->mbSSAOActive && m_ambientOcclusion &&
       m_ambientOcclusionLoaded) {
     aoRendered = m_ambientOcclusion->Render(cntx, &mpGraphics->primary.cmds[0],
                                             mpGraphics->frameIndex, state,
                                             index, apFrustum, &frameBinding);
   }
-  Log("Standard renderer verification: AO pass completed/skipped (%u)\n",
-      aoRendered ? 1u : 0u);
-
   // From here on the render depth sits in SHADER_RESOURCE. Every exit must hand
   // it back in DEPTH_ATTACHMENT_OPTIMAL, the same contract as
   // cHybridRenderer::Draw: the viewport's post-translucence handlers
@@ -3504,8 +3707,6 @@ void cStandardRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
   RISharedPointer<RITexture> aoFallbackTexture;
   RISharedPointer<RITextureView> aoFallbackView;
   const bool useAoFallback = !aoRendered || state->aoView[index].isEmpty();
-  Log("Standard renderer verification: entering AO fallback (%u)\n",
-      useAoFallback ? 1u : 0u);
   if (useAoFallback) {
     RITextureDesc td{};
     td.type = RI_TEXTURE_2D;
@@ -3521,6 +3722,8 @@ void cStandardRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
     RITexture t = RITexture::create(&mpGraphics->device, td);
     aoFallbackTexture = RISharedPointer<RITexture>(&mpGraphics->device, t);
     if (!aoFallbackTexture.isEmpty()) {
+      NameStandardImage(mpGraphics, *aoFallbackTexture,
+                        "StandardRenderer.aoFallback");
       RITextureViewDesc vd{};
       vd.viewType = RI_VIEWTYPE_SHADER_RESOURCE_2D;
       vd.format = RI_FORMAT_R16_SFLOAT;
@@ -3547,13 +3750,11 @@ void cStandardRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
         mpGraphics->graphicsDefer.push(aoFallbackView);
     }
   }
-  Log("Standard renderer verification: AO fallback completed/skipped\n");
 
   // Resolve the reconstructed material inputs into the final HDR target.
   // The light buffers are immutable for this draw and are retired only after
   // the frame completes, allowing multiple panes and in-flight frames.
   {
-    Log("Standard renderer verification: entering light resolve\n");
     RIRenderingAttachment output = {};
     output.view = *state->renderTargetAttachmentView[index];
     output.loadOp = RI_ATTACHMENT_LOAD_OP_CLEAR;
@@ -3565,13 +3766,6 @@ void cStandardRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
     if (RIIsTargetSelected(RI_DEVICE_API_D3D12)) {
       const RITextureView &v = output.view;
       const D3D12_RESOURCE_DESC rd = v.d3d12.resource->GetDesc();
-      Log("Standard renderer verification: resolve view type=%u resource=%p "
-          "extent=%llux%u area=%dx%d mip=%u/%u layer=%u/%u\n",
-          v.d3d12.viewType, static_cast<void *>(v.d3d12.resource),
-          static_cast<unsigned long long>(rd.Width), rd.Height,
-          resolveBegin.renderArea.width, resolveBegin.renderArea.height,
-          v.d3d12.baseMip, v.d3d12.mipNum, v.d3d12.baseLayer,
-          v.d3d12.layerNum);
     }
 #endif
     resolveBegin.colorCount = 1;
@@ -3690,7 +3884,7 @@ void cStandardRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
         "standardAmbientOcclusionInput",
         RIDescriptor::sampledImage(&mpGraphics->device, aoInput));
 
-    RIProgram::DescriptorBinding resolveBindings[18] = {
+    RIProgram::DescriptorBinding resolveBindings[19] = {
         bindings[0], bindings[1],  bindings[2],        bindings[3],
         bindings[4], bindings[5],  bindings[6],        bindings[7],
         bindings[8], countBinding, samplerBindings[0], samplerBindings[1]};
@@ -3717,9 +3911,33 @@ void cStandardRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
             &mpGraphics->device, shadowTiles.Get(), 0,
             std::max<size_t>(shadowTileRecords.size(), 1u) *
                 sizeof(StandardShadowTileData)));
+    // The per-tile light list. Standard.lightCull.cs, which would fill it, is
+    // not wired up yet, so counts.lightTilesX stays 0 and psMain loops every
+    // light -- but the buffer is statically referenced by the shader, so a
+    // valid descriptor has to be here regardless of whether the tiled branch
+    // is reachable. One element holding the overflow sentinel: if lightTilesX
+    // is ever set before the cull pass exists, tile 0 degrades to the full
+    // loop rather than reading a light index out of uninitialised memory.
+    std::vector<uint32_t> tileLightFallback(1, kStandardLightTileOverflow);
+    RISharedPointer<RIBuffer> tileLights;
+    size_t tileLightCapacity = 0;
+    if (!UploadStandardLights(mpGraphics, tileLightFallback, tileLights,
+                              tileLightCapacity) ||
+        tileLights.isEmpty()) {
+      mpGraphics->primary.cmds[0].vk_d3d12_endRendering(&mpGraphics->device);
+      mpGraphics->primary.cmds[0].vk_d3d12_textureBarrier(
+          RI_PogoShaderBarrier(state->renderTarget[index].Get(), false));
+      handBackDepth();
+      return;
+    }
+    resolveBindings[18] = RIProgram::DescriptorBinding(
+        "standardTileLights",
+        RIDescriptor::storageBuffer(&mpGraphics->device, tileLights.Get(), 0,
+                                    tileLightFallback.size() *
+                                        sizeof(uint32_t)));
     m_lighting->bindDescriptors(&mpGraphics->device,
                                 &mpGraphics->primary.cmds[0],
-                                mpGraphics->frameIndex, resolveBindings, 18);
+                                mpGraphics->frameIndex, resolveBindings, 19);
     RIViewport vp;
     vp.x = 0;
     vp.y = float(state->height);
@@ -3739,7 +3957,6 @@ void cStandardRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
     mpGraphics->primary.cmds[0].vk_d3d12_textureBarrier(
         RI_PogoShaderBarrier(state->renderTarget[index].Get(), false));
   }
-  Log("Standard renderer verification: light resolve completed\n");
 
   if (m_environment && m_environment->LoadData() &&
       !state->environmentTexture[index].isEmpty()) {
@@ -3894,7 +4111,7 @@ void cStandardRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
         cull.buffers.candidates = &m_translucentCandidateBuffer;
         cull.buffers.tiles = &m_shadowCullTileBuffer;
         cull.buffers.groups = &m_shadowCullGroupBuffer;
-        cull.buffers.indirect = &m_translucentCommandBuffer;
+        cull.buffers.indirect = m_translucentCommandBuffer.gpu();
         cull.buffers.drawCounts = &m_shadowDrawCountBuffer;
         cull.buffers.cameras = &m_cullCameraBuffer;
         cull.buffers.hiZ = state->hiZ.sampleView[index].Get();
@@ -3920,8 +4137,14 @@ void cStandardRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
                 static_cast<uint8_t *>(
                     m_translucentCandidateBuffer.mappedAddress) +
                 candidateReq.elementOffset * sizeof(StandardCullCandidate));
-        cull.commandWords = reinterpret_cast<uint32_t *>(
-            m_translucentCommandBuffer.mappedAddress);
+        cull.commandWords =
+            reinterpret_cast<uint32_t *>(m_translucentCommandBuffer.mapped());
+        cull.flushCommands = [this](uint64_t byteOffset, uint64_t byteSize) {
+          m_translucentCommandBuffer.Flush(
+              &mpGraphics->device, &mpGraphics->primary.cmds[0], byteOffset,
+              byteSize, m_translucentCommandFirstUse, /*cullFollows*/ true);
+          m_translucentCommandFirstUse = false;
+        };
         cull.tileSlot = tileSlot;
         cull.groupSlots = reinterpret_cast<StandardCullGroup *>(
             static_cast<uint8_t *>(m_shadowCullGroupBuffer.mappedAddress) +
@@ -4041,8 +4264,9 @@ void cStandardRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
           m_water->RecordSurface(
               cntx, state, index, object, apFrustum, apWorld, &frameBinding,
               &fogBindings.front(), &pointLights, &spotLights, pointLightCount,
-              spotLightCount, standardShadowView.Get(),
-              m_rendererList.GetFogAreas(), &boxLights, boxLightCount);
+              spotLightCount, pointLightCountTotal, spotLightCountTotal,
+              standardShadowView.Get(), m_rendererList.GetFogAreas(),
+              &boxLights, boxLightCount);
         begin = i + 1;
         continue;
       }

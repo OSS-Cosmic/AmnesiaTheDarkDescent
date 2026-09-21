@@ -231,7 +231,8 @@ namespace hpl {
 		{
 
 			RIRenderingAttachment color = {};
-			color.view = *state.renderTargetView[mpGraphics->swapchainIndex];
+			color.view =
+				*state.renderTargetAttachmentView[mpGraphics->swapchainIndex];
 			color.loadOp = RI_ATTACHMENT_LOAD_OP_CLEAR;
 			color.storeOp = RI_ATTACHMENT_STORE_OP_STORE;
 			color.clearValue.color[0] = 0.0f;

@@ -247,6 +247,11 @@ int RID3D12_CreateTexture(struct RIDevice &device,
 
   if (desc.usage & RI_USAGE_SHADER_RESOURCE_STORAGE)
     rd.Flags |= D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS;
+  // Immutable layout, concurrent reads plus one write; see
+  // RI_USAGE_SIMULTANEOUS_ACCESS. Barriers on these textures carry
+  // D3D12_BARRIER_LAYOUT_COMMON at both ends and so never transition.
+  if (desc.usage & RI_USAGE_SIMULTANEOUS_ACCESS)
+    rd.Flags |= D3D12_RESOURCE_FLAG_ALLOW_SIMULTANEOUS_ACCESS;
   if (desc.usage & RI_USAGE_COLOR_ATTACHMENT)
     rd.Flags |= D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET;
   if (desc.usage & RI_USAGE_DEPTH_STENCIL_ATTACHMENT)
@@ -267,13 +272,37 @@ int RID3D12_CreateTexture(struct RIDevice &device,
   // which the legacy path also maps to COMMON as its before-state.
   const D3D12_RESOURCE_STATES initialState = D3D12_RESOURCE_STATE_COMMON;
 
+  // A clear value is only legal on a render-target / depth-stencil resource,
+  // and it must carry a TYPED format -- `rd.Format` is typeless for a sampled
+  // depth target (see the promotion above), so use the pre-promotion `format`.
+  // Without one, every clear takes the slow path and the debug layer reports
+  // CLEARRENDERTARGETVIEW/CLEARDEPTHSTENCILVIEW_MISMATCHINGCLEARVALUE.
+  const bool isAttachment =
+      (rd.Flags & (D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET |
+                   D3D12_RESOURCE_FLAG_ALLOW_DEPTH_STENCIL)) != 0;
+  D3D12_CLEAR_VALUE clearValue = {};
+  if (isAttachment) {
+    clearValue.Format = format;
+    if (rd.Flags & D3D12_RESOURCE_FLAG_ALLOW_DEPTH_STENCIL) {
+      // Every depth pass in the engine clears to 1.0 / stencil 0.
+      clearValue.DepthStencil.Depth =
+          desc.clearValue ? desc.clearValue->depth : 1.0f;
+      clearValue.DepthStencil.Stencil =
+          UINT8(desc.clearValue ? desc.clearValue->stencil : 0u);
+    } else if (desc.clearValue) {
+      memcpy(clearValue.Color, desc.clearValue->color, sizeof(clearValue.Color));
+    }
+    // Color without an explicit value stays {0,0,0,0}, which is what nearly
+    // every color pass clears to.
+  }
+
   D3D12MA::ALLOCATION_DESC allocationDesc = {};
   allocationDesc.Flags = D3D12MA::ALLOCATION_FLAG_NONE;
   allocationDesc.HeapType = D3D12_HEAP_TYPE_DEFAULT;
   allocationDesc.ExtraHeapFlags = D3D12_HEAP_FLAG_NONE;
   HRESULT hr = device.d3d12.allocator->CreateResource(
-      &allocationDesc, &rd, initialState, nullptr, &out.d3d12.allocation,
-      IID_PPV_ARGS(&out.d3d12.resource));
+      &allocationDesc, &rd, initialState, isAttachment ? &clearValue : nullptr,
+      &out.d3d12.allocation, IID_PPV_ARGS(&out.d3d12.resource));
   if (!D3D12_WrapResult(hr)) {
     ri_d3d12_release_texture(out);
     return RI_FAIL;
@@ -289,6 +318,10 @@ int RID3D12_CreateTexture(struct RIDevice &device,
   out.d3d12.layerNum = uint16_t(desc.layerNum ? desc.layerNum : 1);
   out.d3d12.sampleCount = uint16_t(desc.sampleCount ? desc.sampleCount : 1);
   out.d3d12.usage = desc.usage;
+  // Placed attachment resources are born uninitialized; see the field comment
+  // in RITexture.h. RID3D12_ResourceBarrier discards this one on its first
+  // barrier, which is the last point before any pass can read it.
+  out.d3d12.needsInitialization = isAttachment ? 1 : 0;
   return RI_SUCCESS;
 }
 

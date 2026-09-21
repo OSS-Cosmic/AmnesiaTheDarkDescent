@@ -7,6 +7,7 @@
 #include "graphics/RIPreamble.h"
 #include "graphics/RIPipeline.h" // RIBlendFactor_e, RICompareFunc_e, ... (ri_d3d12_*ToD3D12)
 
+#include <atomic>
 #include <cassert>
 
 #if DEVICE_IMPL_D3D12
@@ -25,8 +26,16 @@ struct RIMemoryBarrier;
 struct RIBufferBarrier;
 struct RITextureBarrier;
 
+struct RIMemoryStats;
+
 extern uint32_t g_riD3D12EnhancedBarrierCallCount;
 extern uint32_t g_riD3D12LegacyBarrierCallCount;
+// Live RIProgram D3D12 descriptor-cache entries summed over every program.
+// Each entry holds references on the resources it last bound, so steady growth
+// here means memory that graphicsDefer released is still pinned.
+extern std::atomic<uint32_t> g_riD3D12DescriptorCacheEntries;
+bool RID3D12_QueryMemoryStats(const struct RIDevice &device,
+                              struct RIMemoryStats *out);
 void RID3D12_ResourceBarrier(struct RICmd &cmd, uint32_t memoryBarrierNum,
                              const struct RIMemoryBarrier *memoryBarriers,
                              uint32_t bufferBarrierNum,
@@ -50,6 +59,16 @@ void RID3D12_DisposeDevice(struct RIDevice &device);
 // the current API, so the registry owns its extra native references until
 // this device-destroy point.
 void RID3D12_DrainBufferRegistry(struct RIDevice &device);
+// Frame-timeline reclaim for the same quarantine. Seal stamps every retired,
+// unsealed registration with the timeline value the current frame's submission
+// signals; Reclaim releases the native references of every sealed
+// registration whose value has completed. Same contract as FrameDeferral.
+void RID3D12_SealRetiredBuffers(struct RIDevice &device,
+                                uint64_t timelineValue);
+void RID3D12_ReclaimRetiredBuffers(struct RIDevice &device,
+                                   uint64_t completedValue);
+void RID3D12_BufferRegistryStats(const struct RIDevice &device,
+                                 uint32_t *registered, uint64_t *retiredBytes);
 // Drains pending debug-layer messages from the device's ID3D12InfoQueue to
 // stderr when the callback path (ID3D12InfoQueue1) is unavailable. Safe to
 // call unconditionally; a no-op when the debug layer is off or the
@@ -108,6 +127,22 @@ void RID3D12_SetComputeRootSignature(struct RICmd &cmd,
 void RID3D12_SetDescriptorHeaps(struct RICmd &cmd,
                                 ID3D12DescriptorHeap *resourceHeap,
                                 ID3D12DescriptorHeap *samplerHeap);
+
+// Drop every redundancy cache above, without touching the command list. Used
+// where the command list's own bindings are known to be gone, such as after a
+// Reset.
+void RID3D12_InvalidateCachedBindings(struct RICmd &cmd);
+
+// Put the command list back under engine control after third-party code was
+// handed the raw ID3D12GraphicsCommandList. ffx-api and XeSS both call
+// SetDescriptorHeaps and SetComputeRootSignature on it directly, which leaves
+// it bound to the SDK's heap and signature while the caches above still name
+// the engine's -- the next engine bind would be elided as redundant and the
+// dispatch would read descriptors computed against a heap that is no longer
+// bound. This drops those caches and re-binds the descriptor arena, restoring
+// the same state RID3D12_CmdBegin establishes. Call it immediately after any
+// such dispatch returns, on every path that reached the dispatch.
+void RID3D12_RestoreCachedBindings(struct RIDevice &device, struct RICmd &cmd);
 
 // Root-argument writes. Going through these keeps the command list's record
 // of which root parameters are live, which RID3D12_CheckRootArguments reads.
@@ -190,6 +225,25 @@ static inline D3D12_BLEND ri_d3d12_RIBlendFactorToD3D12(enum RIBlendFactor_e fac
   }
   assert(false);
   return D3D12_BLEND_ZERO;
+}
+
+// Same mapping for the SrcBlendAlpha / DestBlendAlpha slots, which D3D12
+// restricts: a factor derived from a colour channel is illegal there and makes
+// CreateGraphicsPipelineState fail with E_INVALIDARG, naming nothing unless the
+// debug layer happens to be on. Vulkan permits the same factor in an alpha slot
+// (it just uses the alpha component), so a desc written against Vulkan can
+// carry one across without anything complaining until the PSO build. Fail the
+// debug build at the point that knows which field is at fault.
+static inline D3D12_BLEND
+ri_d3d12_RIBlendFactorToD3D12Alpha(enum RIBlendFactor_e factor) {
+  const D3D12_BLEND blend = ri_d3d12_RIBlendFactorToD3D12(factor);
+  assert(blend != D3D12_BLEND_SRC_COLOR && blend != D3D12_BLEND_INV_SRC_COLOR &&
+         blend != D3D12_BLEND_DEST_COLOR &&
+         blend != D3D12_BLEND_INV_DEST_COLOR &&
+         blend != D3D12_BLEND_SRC1_COLOR &&
+         blend != D3D12_BLEND_INV_SRC1_COLOR &&
+         "D3D12 forbids a colour blend factor in an alpha blend slot");
+  return blend;
 }
 
 static inline D3D12_BLEND_OP ri_d3d12_RIBlendOpToD3D12(enum RIBlendOp_e op) {

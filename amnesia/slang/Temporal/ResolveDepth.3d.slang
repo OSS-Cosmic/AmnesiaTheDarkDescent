@@ -25,6 +25,8 @@
 //   binding 0 : SamplerState depthSampler (point, clamp)
 //   binding 1 : Texture2D<float> renderDepth (depth aspect only)
 
+#include "../HostDefinitions.h"
+
 [vk::binding(0, 0)]
 SamplerState depthSampler;
 
@@ -39,7 +41,7 @@ struct ResolveDepthPC
 };
 
 [vk::push_constant]
-ResolveDepthPC gPushConstants;
+ResolveDepthPC gPushConstants HPL_PUSH_CONSTANT_REGISTER;
 
 struct VSOut
 {

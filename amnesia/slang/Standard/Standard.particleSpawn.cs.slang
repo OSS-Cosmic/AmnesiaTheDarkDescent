@@ -28,7 +28,7 @@ struct ParticleSpawnPC
 };
 
 [vk::push_constant]
-ParticleSpawnPC gPushConstants;
+ParticleSpawnPC gPushConstants HPL_PUSH_CONSTANT_REGISTER;
 
 [shader("compute")]
 [numthreads(64, 1, 1)]

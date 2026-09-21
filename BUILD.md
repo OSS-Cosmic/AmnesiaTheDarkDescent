@@ -164,11 +164,14 @@ Requires a Visual Studio 2026 installation. The wrapper uses Premake `5.0.0-beta
 .\build-windows.ps1 debug                            # debug
 .\build-windows.ps1 debug -WithTest                  # build and run tests
 .\build-windows.ps1 release -Clean                   # wipe build-premake\
+.\build-windows.ps1 release -CompileCommands         # also export compile_commands.json
 .\build-windows.ps1 release -GameDir "C:\Program Files (x86)\Steam\steamapps\common\Amnesia The Dark Descent"
 .\build-windows.ps1 release -- --with-tools=no
 ```
 
-The script generates a Visual Studio solution under `build-premake\` with `premake5 vs2026`, then runs `msbuild` for `x64`. Unit-test projects are skipped unless `-WithTest` is supplied. Premake currently names the VS 2026 solution `Amnesia.slnx`; the wrapper also accepts `Amnesia.sln` for compatible generators. Stage assets with `.\deploy.ps1` (or `deploy.sh` from Git Bash/WSL). Additional `--foo` / `--foo=bar` arguments are forwarded to `premake5 vs2026` as Premake options, not to MSBuild. Generated project files and runtime output stay under `build-premake\`; runtime output is `build-premake\amnesia\<Config>\`.
+The script generates a Visual Studio solution under `build-premake\` with `premake5 vs2026`, then runs `msbuild` for `x64`. Unit-test projects are skipped unless `-WithTest` is supplied.
+
+`-CompileCommands` runs `premake5 export-compile-commands` between the generate and the MSBuild step, passing the same Premake options as the build so the database's defines and include directories match what is compiled. The export writes `build-premake\compile_commands\<config>.json` for both configurations; the wrapper then **copies** the selected one to `compile_commands.json` in the repository root. This differs from `build-linux-docker.sh --compile-commands`, which symlinks: Windows has no privilege-free `ln -sf` equivalent, so the root file is a snapshot and must be refreshed by re-running with `-CompileCommands` after changing Premake options or adding source files. The export reads the resolved Premake project model directly, so it needs no compile step, and every path it emits (`directory` and each `-I`) is absolute. Premake currently names the VS 2026 solution `Amnesia.slnx`; the wrapper also accepts `Amnesia.sln` for compatible generators. Stage assets with `.\deploy.ps1` (or `deploy.sh` from Git Bash/WSL). Additional `--foo` / `--foo=bar` arguments are forwarded to `premake5 vs2026` as Premake options, not to MSBuild. Generated project files and runtime output stay under `build-premake\`; runtime output is `build-premake\amnesia\<Config>\`.
 
 The Windows CI workflow ([`.github/workflows/windows-build.yml`](.github/workflows/windows-build.yml)) uses `premake5 vs2022` because its hosted runner provides Visual Studio 2022. Both `vs2022` and `vs2026` are valid here: [`premake5.lua`](premake5.lua) does not pin `_ACTION`, so they generate the same projects. CI builds with `msbuild` targeting `x64` as well.
 
@@ -208,8 +211,9 @@ On a Visual Studio 2022 installation, use `premake5 vs2022` instead; the generat
 
 ### Vulkan mapped-buffer smoke (Windows)
 
-The default Windows build uses Vulkan. The always-available manual target below
-is the startup-style VMA mapped-allocation flush check:
+The default Windows build runs DirectX 12, but always compiles Vulkan too, so
+this check is available either way. The always-available manual target below is
+the startup-style VMA mapped-allocation flush check:
 
 ```bat
 premake5 vs2022 --with-d3d12=no
@@ -221,19 +225,39 @@ It creates, maps, writes, flushes, invalidates, and disposes host buffers. This
 is the first check for a startup stack ending in `vmaFlushAllocation` from
 `cGraphics::Init`.
 
-### DirectX 12 bring-up (experimental, Windows only)
+### Choosing the graphics backend
 
-Ordinary generation uses the Vulkan runtime. On Windows, generation with `--with-d3d12=yes` uses the DirectX 12 runtime and D3D12MA. The opt-in backend currently ships adapter enumeration, device/queue/fence lifecycle, command allocator and command-list lifecycle, D3D12MA-backed buffer and texture resources, and partial swapchain create/dispose/acquire/present.
+Windows generation builds both the DirectX 12 and Vulkan backends, and the game
+runs **DirectX 12** by default. Every other platform is Vulkan-only. Override
+the default per run with a flag on the game's command line:
 
-Generate with `premake5 vs2022 --with-d3d12=yes` (or `premake5 vs2026 --with-d3d12=yes`) to use the DirectX 12 runtime and D3D12MA, then build with MSBuild as usual. Run the opt-in smoke test manually:
+```powershell
+Amnesia.exe              # DirectX 12 on Windows, Vulkan elsewhere
+Amnesia.exe --vulkan     # force Vulkan
+Amnesia.exe --d3d12      # force DirectX 12
+```
 
-Switching an existing checkout between the default Vulkan generation and
-`--with-d3d12=yes` is safe for incremental builds. The ABI-changing engine and
-consumer artifacts are kept in backend-specific mode directories, and the
-generated mode stamp changes when the backend changes so final executables are
-relinked. At runtime, explicitly requesting a backend that was omitted from
-the build returns `RI_FAIL`; the renderer never silently falls back to another
-backend.
+`cGraphics::Init` logs the backend it brought up as `Graphics API: <name>` in
+`hpl.log`; quote that line in bug reports. The flags combine with the optional
+init-config path, e.g. `Amnesia.exe --vulkan config/main_init.cfg`.
+
+Pass `--with-d3d12=no` at generation time for a Vulkan-only Windows build. In
+that build `--d3d12` stops with an error naming the flag to rebuild with: a
+backend that was omitted from the build is never silently replaced by another,
+at generation time or at runtime.
+
+The DirectX 12 backend currently ships adapter enumeration, device/queue/fence
+lifecycle, command allocator and command-list lifecycle, D3D12MA-backed buffer
+and texture resources, and partial swapchain create/dispose/acquire/present. It
+requires Shader Model 6.8; `cGraphics::Init` refuses up front on an adapter that
+reports less, and names Vulkan as the alternative.
+
+Switching an existing checkout between `--with-d3d12=yes` and `--with-d3d12=no`
+is safe for incremental builds. The ABI-changing engine and consumer artifacts
+are kept in backend-specific mode directories, and the generated mode stamp
+changes when the backend changes so final executables are relinked.
+
+Run the opt-in smoke test manually:
 
 ```powershell
 build-premake\tests\<Config>\RID3D12DeviceSmoke.exe
@@ -365,7 +389,7 @@ The options below are defined in [`premake/options.lua`](premake/options.lua). P
 | `--fsr-sdk-dir=PATH` | Unset; auto-acquire when FSR is enabled | Use a local FidelityFX SDK root containing `sdk/`. |
 | `--with-xess=yes\|no` | `yes` | Enable XeSS on Windows; ignored on Linux. |
 | `--xess-sdk-dir=PATH` | Unset; auto-acquire on Windows when XeSS is enabled | Use a local XeSS SDK root containing `inc/xess/xess_vk.h`. |
-| `--with-d3d12=yes\|no` | `no` | Windows only; ordinary generation uses Vulkan. With `--with-d3d12=yes`, use the DirectX 12 runtime and D3D12MA. |
+| `--with-d3d12=yes\|no` | `yes` on Windows, `no` elsewhere | Windows only. Windows generation builds both backends and the game runs DirectX 12 by default; pass `--with-d3d12=no` for a Vulkan-only build. |
 | `--d3d12ma-dir=PATH` | `HPL2/extern/D3D12MemoryAllocator` | Windows/DX12 only; use a local D3D12 Memory Allocator source root containing `include/` and `src/` instead of the bundled copy. |
 | `--agility-sdk-dir=PATH` | Unset; auto-acquire when DX12 is enabled | Windows only; use a locally extracted copy of the pinned `Microsoft.Direct3D.D3D12` 1.619.5 NuGet package instead of downloading. |
 | `--python=PATH` | Unset; find `python3`/`python` | Select the Python executable forwarded to the FidelityFX SDK wrapper and used by Premake Python test projects. |

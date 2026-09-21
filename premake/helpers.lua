@@ -90,6 +90,21 @@ function mathlib_use()
     filter {}
 end
 
+-- fmt is built as a static lib (premake/deps/fmt.lua); consumers call fmt_use() for its
+-- include dir. The FMT_USE_EXCEPTIONS define must match the one the library was built with:
+-- FMT_THROW is expanded inside fmt's inline/template code, so a lib/consumer disagreement
+-- is a silent ODR violation rather than a compile error. See premake/deps/fmt.lua.
+-- FMT_UNICODE must match too, and there it is a hard static_assert in fmt's base.h rather
+-- than a silent mismatch: the engine is built characterset "MBCS" without /utf-8.
+function fmt_use()
+    includedirs { DEPS_EXTERN .. "/fmt/include" }
+    filter "toolset:gcc or clang"
+        defines { "FMT_USE_EXCEPTIONS=0" }
+    filter "system:windows"
+        defines { "FMT_UNICODE=0" }
+    filter {}
+end
+
 -- Vulkan headers + VMA are header-only. Also emit the platform surface defines:
 -- volk is compiled here as a plain premake project, so nothing propagates them
 -- to its consumers automatically, and the
@@ -145,7 +160,7 @@ CMAKE = _OPTIONS["cmake"] or "cmake"
 -- linkgroups handles the circular static-lib references (vorbis<->ogg, etc.).
 function link_engine(target_layout)
     links {
-        "HPL2", "OALWrapper", "AngelScript", "Newton", "tinyxml2",
+        "HPL2", "OALWrapper", "AngelScript", "Newton", "tinyxml2", "fmt",
         "vorbisfile", "vorbis", "ogg", "freealut",
         "zlib", "volk", "IL", "png", "jpeg",
     }
@@ -154,8 +169,8 @@ function link_engine(target_layout)
     end
     link_sdl2()
     link_openal()
-    link_nrd()
-    link_fsr()
+    link_nrd(target_layout)
+    link_fsr(target_layout)
     link_xess(target_layout)
     memory_consumer()
     memory_rebuild_consumer()

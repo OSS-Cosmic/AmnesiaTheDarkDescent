@@ -2,6 +2,9 @@
 /// SPDX-License-Identifier: GPL-3.0
 
 // Final display delivery only. Keep the history-copy blit free of noise.
+
+#include "../HostDefinitions.h"
+
 [vk::binding(0, 0)] SamplerState inputSampler;
 [vk::binding(1, 0)] Texture2D<float4> sourceInput;
 
@@ -9,7 +12,7 @@ struct PresentConstants
 {
     float4 quantizationStep;
 };
-[[vk::push_constant]] ConstantBuffer<PresentConstants> gPushConstants;
+[[vk::push_constant]] ConstantBuffer<PresentConstants> gPushConstants HPL_PUSH_CONSTANT_REGISTER;
 
 struct PSIn
 {

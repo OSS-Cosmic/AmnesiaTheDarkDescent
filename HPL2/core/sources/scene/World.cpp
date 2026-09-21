@@ -1138,9 +1138,17 @@ void cWorld::BuildTlas(cGraphics::FrameContext *cntx, cFrustum *apFrustum) {
     trans.size =
         (size_t)instanceCount * sizeof(VkAccelerationStructureInstanceKHR);
     trans.offset = 0;
-    trans.currentState = RI_RESOURCE_STATE_ACCEL_READ;
+    // BUILD_INPUT, not ACCEL_READ: this is the instance-descriptor array the
+    // TLAS build consumes, not an acceleration structure. D3D12 rejects an AS
+    // access bit on a buffer that was not created as one.
+    //
+    // The before-state stays a real state rather than UNDEFINED -- the
+    // uploader's pre-barrier is what orders this frame's copy after the
+    // previous frame's TLAS build has finished reading the buffer, and
+    // UNDEFINED lowers to NO_ACCESS, which would drop that edge.
+    trans.currentState = RI_RESOURCE_STATE_ACCEL_BUILD_INPUT;
     trans.currentStages = RI_STAGE_ACCEL_BUILD;
-    trans.postState = RI_RESOURCE_STATE_ACCEL_READ;
+    trans.postState = RI_RESOURCE_STATE_ACCEL_BUILD_INPUT;
     trans.postStages = RI_STAGE_ACCEL_BUILD;
     RI_ResourceBeginCopyBuffer(&mpGraphics->device, &mpGraphics->uploader, &trans);
     std::memcpy(trans.mapped.data, tlasInstances.data(), trans.size);

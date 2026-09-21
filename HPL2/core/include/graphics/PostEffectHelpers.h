@@ -43,10 +43,15 @@ struct PostEffectColorTarget {
 // uncommon needs (e.g. TRANSFER_SRC for the ImageTrail accumulator).
 // Destroy via DestroyPostEffectColorTarget before exit; destruction is
 // deferred to graphicsDefer and is safe to call mid-frame.
+// `clearValue` is the value the target's passes clear it to; supplying it lets
+// D3D12 bake an optimized clear value into the resource so the clear takes the
+// fast path. Leave it unset for a target cleared to {0,0,0,0} (the default) or
+// never cleared at all.
 void CreatePostEffectColorTarget(PostEffectColorTarget &out, uint32_t width,
                                  uint32_t height, enum RI_Format_e format,
                                  uint32_t additionalUsage, // RITextureUsageBits_e
-                                 const char *debugName);
+                                 const char *debugName,
+                                 std::optional<RITextureClearValue> clearValue = {});
 
 void DestroyPostEffectColorTarget(PostEffectColorTarget &target);
 

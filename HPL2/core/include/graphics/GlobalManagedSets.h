@@ -289,6 +289,9 @@ public:
   // count + packed per-cell unified-light-index list.
   struct RIBuffer m_lightGridCountBuffer;
   struct RIBuffer m_lightGridListBuffer;
+  // Parallel to m_lightGridListBuffer: the per-cell sampling CDF binLights
+  // writes so NEE can importance-sample the cell rather than pick uniformly.
+  struct RIBuffer m_lightGridWeightBuffer;
 
   // Bindless material wiring (Falcor MaterialSystem model). One flat table of
   // fixed-size MaterialDataBlobs (m_materialBuffer, kBindingMaterials) indexed by

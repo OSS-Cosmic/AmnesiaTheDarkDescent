@@ -24,7 +24,7 @@ struct V { float3 viewPos:VIEWPOS; float2 uv:TEXCRD; float3 n:NORMAL; float3 t:T
 // clipPlane is the half-space the planar water reflection keeps. A zero normal
 // disables it, which is what the main viewport passes.
 struct Push { uint blendMode; float sceneAlpha; uint refractive; float lightLevel; uint reflectionOnly; float4 clipPlane; };
-[vk::push_constant] Push gPushConstants;
+[vk::push_constant] Push gPushConstants HPL_PUSH_CONSTANT_REGISTER;
 
 float3 safeN(float3 x, float3 fallback)
 {

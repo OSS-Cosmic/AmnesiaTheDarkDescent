@@ -47,7 +47,7 @@ struct LightProbePC
 };
 
 [vk::push_constant]
-LightProbePC gPushConstants;
+LightProbePC gPushConstants HPL_PUSH_CONSTANT_REGISTER;
 
 bool isExcluded(uint packedId)
 {

@@ -142,6 +142,11 @@ private:
 	bool ChangeRenderScale(iWidget* apWidget, const cGuiMessageData& aData);
 	kGuiCallbackDeclarationEnd(ChangeRenderScale);
 
+	bool ChangeRendererBackend(iWidget* apWidget, const cGuiMessageData& aData);
+	kGuiCallbackDeclarationEnd(ChangeRendererBackend);
+
+	void SyncRendererBackendCombo();
+
 	cGui *mpGui;
 
 	cGuiSkin *mpGuiSkin;
@@ -158,6 +163,8 @@ private:
 	cWidgetCheckBox *mpCBFastForward;
 
 	cWidgetComboBox *mpCBRenderScale;
+	cWidgetComboBox *mpCBRendererBackend;
+	hpl::eRendererBackend mLastSeenRendererBackend;
 	
 	tWidgetList mlstScriptOutputWidgets;
 

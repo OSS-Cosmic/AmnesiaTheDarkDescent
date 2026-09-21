@@ -142,6 +142,28 @@ void CheckTypedDescriptorTables(RIDevice *device, RIBuffer *buffer) {
   releaseDescriptorArena(device, &allocation, nullptr);
 }
 
+// Renderer backend toggles dispose every program and release its descriptor
+// tables. Ranges released with a graphics-queue fence must be reclaimed once
+// the fence passes; otherwise the 2048-entry sampler heap is exhausted after a
+// few toggles.
+void CheckFencedReleaseRecyclesRanges(RIDevice *device) {
+  RIQueue &queue = device->queues[RI_QUEUE_GRAPHICS];
+  uint32_t succeeded = 0;
+  const uint32_t iterations = 4096; // Twice the sampler heap capacity.
+  for (uint32_t i = 0; i < iterations; ++i) {
+    RIDescriptorArenaAllocation allocation = {};
+    if (!allocateDescriptorArena(device, 2, 1, &allocation))
+      break;
+    ++succeeded;
+    const RIDescriptorArenaFence retire = {queue.d3d12.fence,
+                                           queue.d3d12.nextFenceValue + 1};
+    releaseDescriptorArena(device, &allocation, &retire);
+    queue.waitIdle(device);
+  }
+  Require(succeeded == iterations,
+          "fence-released descriptor ranges are reclaimed and reused");
+}
+
 void RunCycle() {
   RIBackendInit init = {};
   init.api = RI_DEVICE_API_D3D12;
@@ -173,6 +195,7 @@ void RunCycle() {
           "global object/material/generation buffers are valid device-local RI buffers");
   RID3D12_RegisterBufferShaderResource(device, objectBuffer);
   CheckTypedDescriptorTables(&device, &objectBuffer);
+  CheckFencedReleaseRecyclesRanges(&device);
 
   RIResourceUploader uploader = {};
   RI_InitResourceUploader(&device, &uploader);

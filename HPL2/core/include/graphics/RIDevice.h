@@ -79,14 +79,46 @@ void ShutdownRIRenderer();
 // backend is non-null. Cheap check used by the smoke test.
 bool RIDeviceIsValid(const struct RIDevice *device);
 
-#if DEVICE_MULTI_BACKEND
-// Active backend (RIDeviceAPI_e); defined in RIRenderer.cpp. Only needed when
-// more than one backend is compiled in (otherwise it is known at compile time).
+// GPU memory residency snapshot, for spotting over-budget paging. Local is
+// VRAM on a discrete adapter; non-local is system memory the GPU reads across
+// the bus. Allocator bytes cover what the backend's allocator holds in heaps
+// (block) and how much of that is live allocations. Returns false when the
+// active backend does not report budgets.
+struct RIMemoryStats {
+  uint64_t localUsage;
+  uint64_t localBudget;
+  uint64_t nonLocalUsage;
+  uint64_t nonLocalBudget;
+  uint64_t allocatorBlockBytes;
+  uint64_t allocatorAllocationBytes;
+  // D3D12 raw-SRV buffer registry: live registrations, and the bytes still
+  // held by retired ones awaiting their frame's timeline value.
+  uint32_t registeredBuffers;
+  uint64_t retiredBufferBytes;
+};
+bool RIQueryMemoryStats(const struct RIDevice *device,
+                        struct RIMemoryStats *out);
+
+// Frame-timeline release of buffers the backend quarantines past dispose
+// (D3D12's raw-SRV buffer registry). Seal alongside FrameDeferral::seal with
+// the frame's timeline value; reclaim alongside FrameDeferral::drain with the
+// completed value. No-ops on backends without such a quarantine.
+void RISealRetiredBuffers(struct RIDevice *device, uint64_t timelineValue);
+void RIReclaimRetiredBuffers(struct RIDevice *device, uint64_t completedValue);
+
+// Active backend (RIDeviceAPI_e); defined in RIRenderer.cpp. Always available:
+// single-backend builds know the answer at compile time and use
+// RI_ACTIVE_BACKEND_API below for that, but callers that only need the value at
+// runtime -- the SDK loaders, which cache a verdict per backend -- would
+// otherwise have to repeat this #if at every call site.
 uint8_t RIActiveBackendApi();
-#elif DEVICE_IMPL_VULKAN
+
+#if !DEVICE_MULTI_BACKEND
+#if DEVICE_IMPL_VULKAN
 #define RI_ACTIVE_BACKEND_API RI_DEVICE_API_VK
 #elif DEVICE_IMPL_D3D12
 #define RI_ACTIVE_BACKEND_API RI_DEVICE_API_D3D12
+#endif
 #endif
 
 // True when the renderer's active backend matches `targetApi` (RIDeviceAPI_e).
@@ -106,6 +138,45 @@ static inline bool RIIsTargetSelected(uint8_t targetApi) {
 VkInstance RIGetVkInstance();
 #endif
 
+#if (DEVICE_IMPL_VULKAN)
+// Vulkan prerequisites contributed by a caller outside RI -- an upscaler SDK, a
+// capture layer -- that has to be accounted for while the instance or the
+// logical device is being built, because neither can be amended afterwards.
+//
+// RI knows nothing about who is asking. It merges what the instance or adapter
+// can actually satisfy, and when it cannot, it reports the first unmet
+// requirement through `onRejected` and carries on along the plain path. A
+// contribution is therefore never fatal: creation succeeds either way, and the
+// contributor learns from `onRejected` that its feature is off the table.
+//
+// Contributions are optional; a null array is exactly today's behaviour.
+struct RIVkInstanceRequirements {
+  const char *debugName; // log prefix, e.g. "XeSS"
+  void *userData;
+  // Borrowed for the duration of the call; must outlive InitRIRenderer.
+  const char *const *extensionNames;
+  uint32_t extensionCount;
+  uint32_t minInstanceApiVersion; // 0 = no minimum
+  void (*onRejected)(void *userData, const char *reason);
+};
+
+struct RIVkDeviceRequirements {
+  const char *debugName;
+  void *userData;
+  // Borrowed for the duration of the call; must outlive RIDevice::init.
+  const char *const *extensionNames;
+  uint32_t extensionCount;
+  // Optional (may be NULL). RI seeds *featureChain with its own
+  // VkPhysicalDeviceFeatures2 chain head and the contributor returns the merged
+  // head, so this is a callback rather than data: only RI owns the chain being
+  // seeded. Return false to withdraw. RI validates what comes back -- no
+  // engine-owned node may be dropped or substituted, and every bit requested
+  // must be one the adapter reported -- before it reaches vkCreateDevice.
+  bool (*mergeFeatureChain)(void *userData, void **featureChain);
+  void (*onRejected)(void *userData, const char *reason);
+};
+#endif
+
 struct RIBackendInit {
   uint8_t api; // RIDeviceAPI_e
   const char *applicationName;
@@ -116,6 +187,9 @@ struct RIBackendInit {
       size_t numFilterLayers;
       // Externally allocated; no call site writes this today.
       const char *const *filterLayers;
+      // Borrowed; see RIVkInstanceRequirements.
+      const struct RIVkInstanceRequirements *optionalRequirements;
+      size_t optionalRequirementCount;
     } vk;
 #endif
   };
@@ -358,9 +432,6 @@ struct RIDevice {
   void dispose();
   struct RIPhysicalAdapter physicalAdapter;
   struct RIQueue queues[RI_QUEUE_LEN];
-  // Provider query consumed by the XeSS upscaler adapter.
-  bool xessAvailable;
-  char xessUnavailableReason[128];
   // Logical-device state; distinct from physicalAdapter.isRayQuerySupported.
   bool rayTracingEnabled;
   bool accelerationStructureEnabled;

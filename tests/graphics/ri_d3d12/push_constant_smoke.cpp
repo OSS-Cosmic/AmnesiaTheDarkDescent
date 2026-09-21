@@ -72,7 +72,9 @@ void Run(const char *exe) {
   auto dir = std::filesystem::path(exe).parent_path() / "compiled_shaders" / "d3d12";
   hpl::cFileSearcher searcher; searcher.AddDirectory(hpl::cString::To16Char(dir.string()), "*", false);
   auto artifact = [&](const char *n) { auto a = hpl::RIProgram::loadShaderArtifact(&searcher, n); Require(!a.empty() && a.reflection, "push-constant artifact and reflection load"); return a; };
-  auto vs = artifact("push_constant.vert.dxil"), ps = artifact("push_constant.frag.dxil"), cs = artifact("push_constant.comp.dxil");
+  // loadShaderArtifact appends the backend's extension, so these are logical
+  // names without one -- spelling the ".dxil" here asked for "*.dxil.dxil".
+  auto vs = artifact("push_constant.vert"), ps = artifact("push_constant.frag"), cs = artifact("push_constant.comp");
 
   uint32_t count = 0; Require(EnumerateRIAdapters(nullptr, &count) == RI_SUCCESS && count, "D3D12 adapters enumerate");
   std::vector<RIPhysicalAdapter> adapters(count); Require(EnumerateRIAdapters(adapters.data(), &count) == RI_SUCCESS, "D3D12 adapter data populates");
@@ -86,6 +88,32 @@ void Run(const char *exe) {
   constexpr uint32_t kCount = 4; Require(graphics.getD3D12PushConstantRootParameter() != UINT32_MAX && compute.getD3D12PushConstantRootParameter() != UINT32_MAX, "graphics and compute expose root constants");
   Require(graphics.getD3D12PushConstantOffset() == 0 && compute.getD3D12PushConstantOffset() == 0 && graphics.getD3D12PushConstantSize() == kCount * 4 && compute.getD3D12PushConstantSize() == kCount * 4, "push-constant reflection reports the exact four-DWORD range");
   Require(!ValidWrite(4, 1, kCount) && !ValidWrite(0, 0, kCount) && !ValidWrite(3, 2, kCount), "invalid root-constant ranges are diagnosed without recording");
+
+  // A vertex/fragment pair compiled from SEPARATE files. slangc numbers
+  // registers per compilation unit, so the vertex stage -- which declares a
+  // constant buffer ahead of its push block -- would put gPushConstants on b1
+  // while the fragment stage puts it on b0. One root signature serves both, so
+  // initialize() aborts on the mismatch unless the register is pinned. This is
+  // the outline_alpha / glow_object shape; push_constant.slang keeps all three
+  // entry points in one file and so cannot reach it.
+  {
+    auto splitVs = artifact("split_push_constant.vert");
+    auto splitPs = artifact("split_push_constant.frag");
+    hpl::RIProgram split;
+    std::array<hpl::RIProgram::ModuleStage, 2> ss = {
+        hpl::RIProgram::ModuleStage(hpl::RIProgram::PROGRAM_STAGE_VERTEX, splitVs, "VSMain"),
+        hpl::RIProgram::ModuleStage(hpl::RIProgram::PROGRAM_STAGE_FRAGMENT, splitPs, "PSMain") };
+    // initialize() parses each stage's reflection, merges the push ranges and
+    // aborts with "conflicting reflected D3D12 push-constant ranges" if the two
+    // stages disagree -- so reaching the next line at all is the regression
+    // assertion. The getters then confirm the merged range is the real one.
+    split.initialize(&device, ss, {}, "split push-constant graphics");
+    Require(split.getD3D12PushConstantRootParameter() != UINT32_MAX,
+            "split-file vertex/fragment pair links into one root signature with root constants");
+    Require(split.getD3D12PushConstantOffset() == 0 && split.getD3D12PushConstantSize() == kCount * 4,
+            "split-file program reports the same four-DWORD range as its single-file twin");
+    split.dispose(&device);
+  }
 
   RIPool pool; pool.init(&device, &device.queues[RI_QUEUE_GRAPHICS]); RICmd cmd; cmd.init(&device, &pool); cmd.begin(&device); ID3D12GraphicsCommandList *list = cmd.d3d12.cmdList;
   D3D12_CLEAR_VALUE clear = {DXGI_FORMAT_R8G8B8A8_UNORM, {0,0,0,0}};

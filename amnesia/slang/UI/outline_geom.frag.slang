@@ -8,6 +8,8 @@
 // Output alpha is 0 so an RGB-only additive blend leaves the scene alpha
 // untouched. Pairs with outline_geom.vert.slang (same push constant block).
 
+#include "../HostDefinitions.h"
+
 struct OutlinePass
 {
     float4x4 viewProj;
@@ -24,7 +26,7 @@ struct OutlinePC
 };
 
 [vk::push_constant]
-OutlinePC gPushConstants;
+OutlinePC gPushConstants HPL_PUSH_CONSTANT_REGISTER;
 
 struct PSIn
 {

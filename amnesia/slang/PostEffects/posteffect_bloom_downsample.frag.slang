@@ -15,6 +15,8 @@
 //   binding 0 : SamplerState inputSampler  (bilinear, clamp)
 //   binding 1 : Texture2D<float4> sourceInput
 
+#include "../HostDefinitions.h"
+
 [vk::binding(0, 0)]
 SamplerState inputSampler;
 
@@ -30,7 +32,7 @@ struct BloomDownsamplePC
 };
 
 [vk::push_constant]
-BloomDownsamplePC gPushConstants;
+BloomDownsamplePC gPushConstants HPL_PUSH_CONSTANT_REGISTER;
 
 struct PSIn
 {

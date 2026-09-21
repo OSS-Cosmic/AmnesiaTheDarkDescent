@@ -19,6 +19,8 @@
 // two-quad (sharp-under, darkened-over) GUI crossfade now that the effect runs
 // live in the viewport post-effect chain.
 
+#include "../HostDefinitions.h"
+
 [vk::binding(0, 0)]
 SamplerState inputSampler;
 
@@ -32,7 +34,7 @@ struct InvPostPC
 };
 
 [vk::push_constant]
-InvPostPC gPushConstants;
+InvPostPC gPushConstants HPL_PUSH_CONSTANT_REGISTER;
 
 struct PSIn
 {

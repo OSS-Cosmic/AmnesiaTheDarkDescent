@@ -55,7 +55,7 @@ struct WaterPC
     uint _p1;
     uint _p2;
 };
-[vk::push_constant] WaterPC gPushConstants;
+[vk::push_constant] WaterPC gPushConstants HPL_PUSH_CONSTANT_REGISTER;
 
 struct WaterVSOut
 {

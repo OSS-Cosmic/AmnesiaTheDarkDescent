@@ -110,15 +110,20 @@ bool cTemporalPresentation::EnsureResolveDepthProgram() {
   // This is the same two-entry-point, one-SPIR-V load used by VBufferRaster:
   // reflection creates the sampler/texture descriptor set and push-constant
   // layout, while RIProgram owns the backend pipeline layout.
-  auto resolveDepthBin =
-      RIProgram::loadShaderStage(mpShaderFiles, "ResolveDepth.3d");
-  if (resolveDepthBin.empty())
+  // One source, two entry points: load per stage so D3D12 gets the per-entry
+  // executable rather than the lib_6_8 library a multi-entry source compiles
+  // to, which no graphics PSO can consume. Vulkan resolves both to the .spv.
+  auto resolveDepthVs =
+      RIProgram::loadShaderStage(mpShaderFiles, "ResolveDepth.3d", "vsMain");
+  auto resolveDepthPs =
+      RIProgram::loadShaderStage(mpShaderFiles, "ResolveDepth.3d", "psMain");
+  if (resolveDepthVs.empty() || resolveDepthPs.empty())
     return false;
 
   std::array<RIProgram::ModuleStage, 2> stages = {
-      RIProgram::ModuleStage{RIProgram::PROGRAM_STAGE_VERTEX, resolveDepthBin,
+      RIProgram::ModuleStage{RIProgram::PROGRAM_STAGE_VERTEX, resolveDepthVs,
                              "vsMain"},
-      RIProgram::ModuleStage{RIProgram::PROGRAM_STAGE_FRAGMENT, resolveDepthBin,
+      RIProgram::ModuleStage{RIProgram::PROGRAM_STAGE_FRAGMENT, resolveDepthPs,
                              "psMain"}};
 
   auto program = std::make_shared<RIProgram>();
@@ -134,16 +139,19 @@ bool cTemporalPresentation::EnsureSpatialFallbackProgram() {
   if (!mpShaderFiles)
     return false;
 
-  auto spatialFallbackBin =
-      RIProgram::loadShaderStage(mpShaderFiles, "SpatialFallback.3d");
-  if (spatialFallbackBin.empty())
+  // Per stage, for the same reason as ResolveDepth above.
+  auto spatialFallbackVs =
+      RIProgram::loadShaderStage(mpShaderFiles, "SpatialFallback.3d", "vsMain");
+  auto spatialFallbackPs =
+      RIProgram::loadShaderStage(mpShaderFiles, "SpatialFallback.3d", "psMain");
+  if (spatialFallbackVs.empty() || spatialFallbackPs.empty())
     return false;
 
   std::array<RIProgram::ModuleStage, 2> stages = {
       RIProgram::ModuleStage{RIProgram::PROGRAM_STAGE_VERTEX,
-                             spatialFallbackBin, "vsMain"},
+                             spatialFallbackVs, "vsMain"},
       RIProgram::ModuleStage{RIProgram::PROGRAM_STAGE_FRAGMENT,
-                             spatialFallbackBin, "psMain"}};
+                             spatialFallbackPs, "psMain"}};
 
   auto program = std::make_shared<RIProgram>();
   program->initialize(&Interface<cGraphics>::Get()->device, stages, {},
@@ -236,6 +244,8 @@ bool cTemporalPresentation::EnsureDisplayColor(
   const auto releaseColorAllocations = [&]() {
     for (uint32_t i = 0; i < RI_MAX_SWAPCHAIN_IMAGES; ++i) {
       graphics->graphicsDefer.push(std::move(m_displayColorViews[i]));
+      graphics->graphicsDefer.push(
+          std::move(m_displayColorAttachmentViews[i]));
       graphics->graphicsDefer.push(std::move(m_displayColorTextures[i]));
     }
     m_displayColorAllocated = false;
@@ -251,7 +261,11 @@ bool cTemporalPresentation::EnsureDisplayColor(
             RI_USAGE_COLOR_ATTACHMENT | RI_USAGE_SHADER_RESOURCE_STORAGE |
                 RI_USAGE_SHADER_RESOURCE | RI_USAGE_TRANSFER_SRC,
             &m_displayColorTextures[i], &m_displayColorViews[i],
-            "TemporalPresentation.displayColor")) {
+            "TemporalPresentation.displayColor") ||
+        !CreateViewportColorAttachmentView(
+            &graphics->device, &m_displayColorTextures[i],
+            cGraphics::PogoColorFormat,
+            &m_displayColorAttachmentViews[i])) {
       // Keep an already-recorded display depth valid for this call. Only the
       // incomplete color allocation is discarded; the caller will see the
       // provider failure and must not consume any stale color target.
@@ -295,6 +309,9 @@ bool cTemporalPresentation::RecordDepthResolve(
   // The display attachment has no prior consumer for this frame. Transition
   // depth and stencil separately because dynamic rendering binds them with
   // DEPTH_ATTACHMENT_OPTIMAL and STENCIL_ATTACHMENT_OPTIMAL respectively.
+  // D3D12 has no per-plane state for a bound DSV, so its barrier translation
+  // folds the pair back into one whole-resource transition; see
+  // ri_d3d12_IsBarrierSubsumed.
   RITextureBarrier displayDepthToAttachment(
       m_displayDepthTextures[imageIndex].Get(), RI_RESOURCE_STATE_UNDEFINED,
       RI_RESOURCE_STATE_DEPTH_WRITE, RI_STAGE_NONE, RI_STAGE_FRAGMENT,
@@ -433,7 +450,7 @@ bool cTemporalPresentation::RecordSpatialFallback(
   input.cmd->vk_d3d12_textureBarriers<2>(2, beginBarriers);
 
   RIRenderingAttachment color = {};
-  color.view = *m_displayColorViews[imageIndex];
+  color.view = *m_displayColorAttachmentViews[imageIndex];
   color.loadOp = RI_ATTACHMENT_LOAD_OP_DONT_CARE;
   color.storeOp = RI_ATTACHMENT_STORE_OP_STORE;
 
@@ -724,6 +741,7 @@ void cTemporalPresentation::Release(cGraphics::FrameContext *frameContext) {
     graphics->graphicsDefer.push(std::move(m_displayDepthSampleViews[i]));
     graphics->graphicsDefer.push(std::move(m_displayDepthTextures[i]));
     graphics->graphicsDefer.push(std::move(m_displayColorViews[i]));
+    graphics->graphicsDefer.push(std::move(m_displayColorAttachmentViews[i]));
     graphics->graphicsDefer.push(std::move(m_displayColorTextures[i]));
   }
 

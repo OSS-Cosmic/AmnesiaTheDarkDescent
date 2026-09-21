@@ -16,6 +16,8 @@
 //   binding 3 : Texture2D<float4> ampMap1
 //   binding 4 : Texture2D<float4> zoomMap
 
+#include "../HostDefinitions.h"
+
 [vk::binding(0, 0)]
 SamplerState inputSampler;
 
@@ -40,7 +42,7 @@ struct InsanityPC
 };
 
 [vk::push_constant]
-InsanityPC gPushConstants;
+InsanityPC gPushConstants HPL_PUSH_CONSTANT_REGISTER;
 
 struct PSIn
 {

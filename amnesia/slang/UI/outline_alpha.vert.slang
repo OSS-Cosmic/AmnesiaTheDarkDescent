@@ -8,6 +8,8 @@
 // Streams: position (binding 0) + texcoord (binding 1, .xy). Pairs with
 // outline_alpha.frag.slang.
 
+#include "../HostDefinitions.h"
+
 struct OutlinePass
 {
     float4x4 viewProj;
@@ -25,7 +27,7 @@ struct OutlineAlphaPC
 };
 
 [vk::push_constant]
-OutlineAlphaPC gPushConstants;
+OutlineAlphaPC gPushConstants HPL_PUSH_CONSTANT_REGISTER;
 
 struct VSIn
 {

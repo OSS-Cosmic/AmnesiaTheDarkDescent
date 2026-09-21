@@ -191,11 +191,22 @@ public RWStructuredBuffer<uint> gBindlessSlotGeneration : register(u0, space70);
 // same value getLight() decodes; stable across frames so a reservoir's persisted
 // id stays valid) for each cell, kLightsPerCellMax per cell; gLightGridCount is
 // the (capped) per-cell length.
+//
+// gLightGridWeight runs PARALLEL to gLightGridList, same indexing, and holds the
+// cell's sampling CDF: entry k is the running sum of estimated contribution over
+// entries 0..k, so the last valid entry is the total. It exists so a one-sample
+// NEE can importance-sample the cell instead of picking uniformly — with a
+// uniform pick, the odds of drawing the light that actually matters are 1/count,
+// and every miss still pays a full shadow-ray traversal.
 [vk::binding(kBindingLightGridCount, 0)]
 public RWStructuredBuffer<uint> gLightGridCount : register(u0, space72);
 
 [vk::binding(kBindingLightGridList, 0)]
 public RWStructuredBuffer<uint> gLightGridList : register(u0, space73);
+
+// space = 32 + binding (GlobalManagedSets.cpp), so kBindingLightGridWeight 45 → 77.
+[vk::binding(kBindingLightGridWeight, 0)]
+public RWStructuredBuffer<float> gLightGridWeight : register(u0, space77);
 
 // -----------------------------------------------------------------------------
 // Scene-object + per-material-variant tables. Slot-allocated by the same

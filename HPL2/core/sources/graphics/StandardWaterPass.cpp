@@ -107,7 +107,8 @@ bool cStandardWaterPass::RecordSurface(
     RIProgram::DescriptorBinding *fogBinding,
     RISharedPointer<RIBuffer> *pointLights,
     RISharedPointer<RIBuffer> *spotLights, uint32_t pointLightCount,
-    uint32_t spotLightCount, RITextureView *shadowView,
+    uint32_t spotLightCount, uint32_t pointLightCountTotal,
+    uint32_t spotLightCountTotal, RITextureView *shadowView,
     std::span<cFogArea *> visibleFogAreas, RISharedPointer<RIBuffer> *boxLights,
     uint32_t boxLightCount) {
   if (!m_loaded || !m_program || !m_reflection || !frame || !state ||
@@ -155,11 +156,13 @@ bool cStandardWaterPass::RecordSurface(
                                  RI_RESOURCE_STATE_SHADER_RESOURCE));
   cStandardWaterReflection::Sample reflection{};
   if (requestWorldReflection) {
+    // The capture is mirrored through the water plane, so a light the camera
+    // frustum rejected can still be visible in it. Pass the full extents.
     reflection = m_reflection->RecordSurface(
         frame, state, image, state->waterReflectionTexture[image].Get(), o,
         frustum, world, frameBinding, fogBinding, pointLights, spotLights,
-        pointLightCount, spotLightCount, shadowView, visibleFogAreas, boxLights,
-        boxLightCount);
+        pointLightCountTotal, spotLightCountTotal, shadowView, visibleFogAreas,
+        boxLights, boxLightCount);
   }
   bindings.emplace_back(
       "sceneDepthInput",

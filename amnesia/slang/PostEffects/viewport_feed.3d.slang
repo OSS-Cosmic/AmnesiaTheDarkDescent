@@ -18,6 +18,8 @@
 // in source-image pixel coordinates; the host must provide a non-empty,
 // in-bounds rectangle and a non-zero sourceExtent.
 
+#include "../HostDefinitions.h"
+
 [vk::binding(0, 0)]
 SamplerState sourceSampler;
 
@@ -32,7 +34,7 @@ struct ViewportFeedPC
 };
 
 [vk::push_constant]
-ViewportFeedPC gPushConstants;
+ViewportFeedPC gPushConstants HPL_PUSH_CONSTANT_REGISTER;
 
 struct VSOut
 {

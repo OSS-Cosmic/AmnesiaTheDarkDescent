@@ -7,6 +7,8 @@
 // up; the facing interior fades out. Additive, RGB-only (alpha 0). Pairs with
 // outline_geom.vert.slang (shared push constant block).
 
+#include "../HostDefinitions.h"
+
 struct OutlinePass
 {
     float4x4 viewProj;
@@ -23,7 +25,7 @@ struct OutlinePC
 };
 
 [vk::push_constant]
-OutlinePC gPushConstants;
+OutlinePC gPushConstants HPL_PUSH_CONSTANT_REGISTER;
 
 struct PSIn
 {

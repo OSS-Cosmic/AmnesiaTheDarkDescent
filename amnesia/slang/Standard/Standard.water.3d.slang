@@ -21,7 +21,7 @@ struct WaterPush
     uint cubeMapTextureIndex;
     float4x4 reflectionViewProjection;
 };
-[vk::push_constant] WaterPush gPushConstants;
+[vk::push_constant] WaterPush gPushConstants HPL_PUSH_CONSTANT_REGISTER;
 
 struct I { float3 p:POSITION; float3 n:NORMAL; float4 t:TANGENT; float4 c:COLOR; float2 uv:TEXCOORD0; };
 struct V { float3 p:POSITION; float2 uv:TEXCRD; float3 n:NORMAL; float3 t:TANGENT; float3 b:BITANGENT; float4 c:COLOR; nointerpolation uint id:OBJECTID; float4 h:SV_POSITION; };

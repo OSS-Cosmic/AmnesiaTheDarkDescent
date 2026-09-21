@@ -52,7 +52,7 @@ struct TranslucentPushConstants
 };
 
 [vk::push_constant]
-TranslucentPushConstants gPushConstants;
+TranslucentPushConstants gPushConstants HPL_PUSH_CONSTANT_REGISTER;
 
 struct TranslucentVSOut
 {

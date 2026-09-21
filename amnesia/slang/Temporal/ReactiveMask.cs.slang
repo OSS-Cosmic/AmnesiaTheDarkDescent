@@ -4,6 +4,8 @@
 // render extent. Behavior mirrors TemporalReactiveMaskEvaluate in
 // HPL2/core/include/graphics/TemporalReactiveMask.h.
 
+#include "../HostDefinitions.h"
+
 [vk::binding(0, 2)] Texture2D<float4>  gOpaqueColor;
 [vk::binding(1, 2)] Texture2D<float4>  gSceneColor;
 [vk::binding(2, 2)] RWTexture2D<float> gReactiveMask;
@@ -25,7 +27,7 @@ struct ReactiveMaskPC
 // Scalar-layout offsets: uint2 0, float2 8, uint 16, then five floats at
 // 20, 24, 28, 32, and 36; total push-constant size is 40 bytes.
 [vk::push_constant]
-ReactiveMaskPC gPushConstants;
+ReactiveMaskPC gPushConstants HPL_PUSH_CONSTANT_REGISTER;
 
 float sanitizeComponent(float c)
 {

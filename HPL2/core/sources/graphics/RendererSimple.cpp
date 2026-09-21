@@ -178,6 +178,9 @@ namespace hpl {
 					RI_USAGE_TRANSFER_SRC,
 				&renderTarget[i], &renderTargetView[i],
 				"SimpleViewportState.renderTarget");
+			CreateViewportColorAttachmentView(
+				&pGraphics->device, &renderTarget[i], cGraphics::PogoColorFormat,
+				&renderTargetAttachmentView[i]);
 
 			CreateViewportAttachmentTexture(
 				&pGraphics->device, w, h, cGraphics::DepthFormat,
@@ -194,6 +197,7 @@ namespace hpl {
 		{
     	pGraphics->graphicsDefer.push(renderTarget[i]);
     	pGraphics->graphicsDefer.push(renderTargetView[i]);
+    	pGraphics->graphicsDefer.push(renderTargetAttachmentView[i]);
     	
     	pGraphics->graphicsDefer.push(depthTextures[i]);
     	pGraphics->graphicsDefer.push(depthView[i]);
@@ -332,7 +336,8 @@ namespace hpl {
 		// Begin rendering into the state's render target at its 1:1 extent —
 		// no overscan; cScene's pogo feed consumes it afterwards.
 		{
-			RITextureView colorView = *state.renderTargetView[mpGraphics->swapchainIndex];
+			RITextureView colorView =
+				*state.renderTargetAttachmentView[mpGraphics->swapchainIndex];
 
 			RIRenderingAttachment color = {};
 			color.view = colorView;

@@ -139,13 +139,20 @@ cHybridRenderer::cHybridRenderer(cGraphics *apGraphics, cResources *apResources)
     const RIBindlessLayout externalLayouts[] = {
         mpGraphics->globalset->m_bindlessSet.layout()};
     {
-      // Gbuffer pass: one .spv, two entry points (vsMain / psMain).
-      auto gbuffer_bin = RIProgram::loadShaderStage(
-          apResources->GetFileSearcher(), "VBufferRaster.3d");
+      // Gbuffer pass: one source, two entry points (vsMain / psMain). Load it
+      // once per stage rather than sharing one blob: Vulkan can select an entry
+      // point at pipeline creation, but a multi-entry DXIL source compiles to a
+      // lib_6_8 library that no graphics PSO can consume, so each stage needs
+      // its own per-entry executable. loadShaderStage picks it from the entry
+      // name on D3D12 and resolves to the same .spv on Vulkan.
+      auto gbuffer_vs = RIProgram::loadShaderStage(
+          apResources->GetFileSearcher(), "VBufferRaster.3d", "vsMain");
+      auto gbuffer_ps = RIProgram::loadShaderStage(
+          apResources->GetFileSearcher(), "VBufferRaster.3d", "psMain");
       std::array<RIProgram::ModuleStage, 2> stages = {
-          RIProgram::ModuleStage{RIProgram::PROGRAM_STAGE_VERTEX, gbuffer_bin,
+          RIProgram::ModuleStage{RIProgram::PROGRAM_STAGE_VERTEX, gbuffer_vs,
                                  "vsMain"},
-          RIProgram::ModuleStage{RIProgram::PROGRAM_STAGE_FRAGMENT, gbuffer_bin,
+          RIProgram::ModuleStage{RIProgram::PROGRAM_STAGE_FRAGMENT, gbuffer_ps,
                                  "psMain"}};
       m_gbuffer.initialize(&mpGraphics->device, stages, externalLayouts, "Hybrid.gbuffer");
     }
@@ -161,8 +168,8 @@ cHybridRenderer::cHybridRenderer(cGraphics *apGraphics, cResources *apResources)
     // ModuleStage.
     auto loadSlangCompute = [&](RIProgram &prog, const char *name,
                                 const char *entryPoint) {
-      auto bin =
-          RIProgram::loadShaderStage(apResources->GetFileSearcher(), name);
+      auto bin = RIProgram::loadShaderStage(apResources->GetFileSearcher(),
+                                            name, entryPoint);
       std::array<RIProgram::ModuleStage, 1> stages = {RIProgram::ModuleStage{
           RIProgram::PROGRAM_STAGE_COMPUTE, bin, entryPoint}};
       prog.initialize(&mpGraphics->device, stages, externalLayouts, name);
@@ -556,6 +563,9 @@ void cViewport::HybridViewportState::Update(cGraphics::FrameContext *cntx,
             RI_USAGE_TRANSFER_DST,
         &renderTarget[i], &renderTargetView[i],
         "HybridViewportState.renderTarget");
+    CreateViewportColorAttachmentView(&pGraphics->device, &renderTarget[i],
+                                      cGraphics::PogoColorFormat,
+                                      &renderTargetAttachmentView[i]);
 
     // SAMPLED lets the compute passes bind the depth as `sampler2D depthMap`
     // after the gbuffer pass flips it to SHADER_READ_ONLY.
@@ -596,6 +606,9 @@ void cViewport::HybridViewportState::Update(cGraphics::FrameContext *cntx,
         RI_USAGE_COLOR_ATTACHMENT | RI_USAGE_SHADER_RESOURCE,
         RI_VIEWTYPE_SHADER_RESOURCE_2D, &visibilityTexture[i],
         &visibilityView[i], "HybridViewportState.visibility");
+    CreateViewportColorAttachmentView(&pGraphics->device, &visibilityTexture[i],
+                                      cGraphics::VisibilityFormat,
+                                      &visibilityAttachmentView[i]);
 
     // Packed visibility — RT pipeline storage write, sampled by the
     // path-tracing / direct / composite passes.
@@ -611,6 +624,9 @@ void cViewport::HybridViewportState::Update(cGraphics::FrameContext *cntx,
         RI_USAGE_COLOR_ATTACHMENT | RI_USAGE_SHADER_RESOURCE,
         RI_VIEWTYPE_SHADER_RESOURCE_2D, &velocityTexture[i], &velocityView[i],
         "HybridViewportState.velocity");
+    CreateViewportColorAttachmentView(&pGraphics->device, &velocityTexture[i],
+                                      cGraphics::VelocityFormat,
+                                      &velocityAttachmentView[i]);
 
     // Decal accumulators — Mul/MulX2 into decalMul, Add into decalAdd; the
     // composite applies albedo = albedo*decalMul + decalAdd before lighting.
@@ -621,11 +637,17 @@ void cViewport::HybridViewportState::Update(cGraphics::FrameContext *cntx,
         RI_USAGE_COLOR_ATTACHMENT | RI_USAGE_SHADER_RESOURCE,
         RI_VIEWTYPE_SHADER_RESOURCE_2D, &decalMulTexture[i], &decalMulView[i],
         "HybridViewportState.decalMul");
+    CreateViewportColorAttachmentView(&pGraphics->device, &decalMulTexture[i],
+                                      cGraphics::PogoColorFormat,
+                                      &decalMulAttachmentView[i]);
     CreateViewportAttachmentTexture(
         &pGraphics->device, renderW, renderH, cGraphics::PogoColorFormat,
         RI_USAGE_COLOR_ATTACHMENT | RI_USAGE_SHADER_RESOURCE,
         RI_VIEWTYPE_SHADER_RESOURCE_2D, &decalAddTexture[i], &decalAddView[i],
         "HybridViewportState.decalAdd");
+    CreateViewportColorAttachmentView(&pGraphics->device, &decalAddTexture[i],
+                                      cGraphics::PogoColorFormat,
+                                      &decalAddAttachmentView[i]);
   }
 
   // Ping-ponged ReSTIR DI surface key and reservoir.
@@ -720,26 +742,39 @@ void cViewport::HybridViewportState::Update(cGraphics::FrameContext *cntx,
   // NRD declares IN_MV as an output in temporal stabilization. Keep this
   // RG16F copy private to NRD; the shared velocity attachment remains a
   // read-only input for the rest of the frame.
+  //
+  // SIMULTANEOUS_ACCESS because REBLUR samples IN_MV in its temporal passes and
+  // stores to it in stabilization, with only memory barriers in between (see
+  // NrdIntegration's dispatch loop) -- the one texture the renderer deliberately
+  // leaves in a combined read+write state. Vulkan expresses that as GENERAL; on
+  // D3D12 no layout admits both accesses, so it needs the flag.
   CreateViewportAttachmentTexture(
       &pGraphics->device, renderW, renderH, cGraphics::VelocityFormat,
       RI_USAGE_SHADER_RESOURCE_STORAGE | RI_USAGE_SHADER_RESOURCE |
-          RI_USAGE_TRANSFER_DST,
+          RI_USAGE_TRANSFER_DST | RI_USAGE_SIMULTANEOUS_ACCESS,
       RI_VIEWTYPE_SHADER_RESOURCE_2D, &nrdMotionVectorsTexture,
       &nrdMotionVectorsView, "HybridViewportState.nrdMotionVectors");
 
   // The denoiser is per-viewport: NRD sizes its history and pools to one
   // extent, so sharing one instance across differently-sized viewports would
   // thrash both. Recreating on resize would also be wasteful, hence OnResize.
-  if (!nrd)
-    nrd = std::make_shared<NrdIntegration>(pGraphics);
-  nrd->OnResize(renderW, renderH);
-  if (!directNrd)
-    directNrd = std::make_shared<NrdIntegration>(
-        pGraphics, NrdDenoiserMode::DirectDiffuse);
-  directNrd->OnResize(renderW, renderH);
+  //
+  // NRD is runtime-loaded and may legitimately be absent (it ships separately
+  // under its own license). Both handles then stay null and Draw composites the
+  // undenoised lighting instead.
+  if (NrdIntegration::IsAvailable()) {
+    if (!nrd)
+      nrd = std::make_shared<NrdIntegration>(pGraphics);
+    nrd->OnResize(renderW, renderH);
+    if (!directNrd)
+      directNrd = std::make_shared<NrdIntegration>(
+          pGraphics, NrdDenoiserMode::DirectDiffuse);
+    directNrd->OnResize(renderW, renderH);
+  }
   // Resource recreation invalidates every temporal history.
   indirectHistoryReset = true;
   nrdInputInShaderResource = false;
+  indirectInShaderResource = false;
 
   // Intra-frame reservoir hand-off (temporal pass → spatial pass), RGBA32F.
   CreateViewportAttachmentTexture(
@@ -776,6 +811,13 @@ cViewport::HybridViewportState::~HybridViewportState() {
     pGraphics->graphicsDefer.push(velocityView[i]);
     pGraphics->graphicsDefer.push(decalMulView[i]);
     pGraphics->graphicsDefer.push(decalAddView[i]);
+
+    // Companion COLOR_ATTACHMENT views of the same images.
+    pGraphics->graphicsDefer.push(renderTargetAttachmentView[i]);
+    pGraphics->graphicsDefer.push(visibilityAttachmentView[i]);
+    pGraphics->graphicsDefer.push(velocityAttachmentView[i]);
+    pGraphics->graphicsDefer.push(decalMulAttachmentView[i]);
+    pGraphics->graphicsDefer.push(decalAddAttachmentView[i]);
   }
   // Ping-ponged ReSTIR surface key and reservoir.
   for (uint32_t i = 0; i < 2; i++) {
@@ -1182,6 +1224,18 @@ void cHybridRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
   perFrame.pointLightCount = apWorld->GetPointLightCount();
   perFrame.spotLightCount = apWorld->GetSpotLightCount();
   perFrame.areaLightCount = apWorld->GetAreaLightCount();
+  // Light-grid origin: this camera's position snapped DOWN to a whole cell, so
+  // the grid translates one cell at a time instead of sliding with the camera.
+  // binLights and getCellLights both read this, so it must be computed once
+  // here rather than derived independently on either side. floor (not round) so
+  // the mapping is monotonic and a point never jumps two cells at once.
+  const auto snapToCell = [](float v) {
+    return std::floor(v / kLightGridUnit) * kLightGridUnit;
+  };
+  perFrame.lightGridOriginW = float3(snapToCell(perFrame.posW.x),
+                                     snapToCell(perFrame.posW.y),
+                                     snapToCell(perFrame.posW.z));
+  perFrame._padLightGridOrigin = 0.0f;
   // Fog composition is order-dependent. Reuse the visible, back-to-front
   // list that RenderList builds for this camera, rather than treating the
   // world's upload order as draw order (or rendering editor-hidden areas).
@@ -1360,10 +1414,12 @@ void cHybridRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
   // static/uncovered pixels read zero motion. (uint vs float clear is
   // bit-identical at zero.)
   RIRenderingAttachment gbufferColorAttachments[2] = {};
-  gbufferColorAttachments[0].view = *state.visibilityView[mpGraphics->swapchainIndex];
+  gbufferColorAttachments[0].view =
+      *state.visibilityAttachmentView[mpGraphics->swapchainIndex];
   gbufferColorAttachments[0].loadOp = RI_ATTACHMENT_LOAD_OP_CLEAR;
   gbufferColorAttachments[0].storeOp = RI_ATTACHMENT_STORE_OP_STORE;
-  gbufferColorAttachments[1].view = *state.velocityView[mpGraphics->swapchainIndex];
+  gbufferColorAttachments[1].view =
+      *state.velocityAttachmentView[mpGraphics->swapchainIndex];
   gbufferColorAttachments[1].loadOp = RI_ATTACHMENT_LOAD_OP_CLEAR;
   gbufferColorAttachments[1].storeOp = RI_ATTACHMENT_STORE_OP_STORE;
 
@@ -1413,9 +1469,9 @@ void cHybridRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
   {
     // binLights writes are read by several consumers later this frame: the
     // path tracer's NEE (ray tracing), the direct-lighting pass (compute) and
-    // the MainCompositePass direct cull (fragment — evalAnalyticLight walks the
-    // per-cell light list). Every stage must be in dst or the fragment reads
-    // see an empty grid and drop every point/spot light.
+    // the MainCompositePass direct cull (fragment — walks the per-cell light
+    // list). Every stage must be in dst or the fragment reads see an empty grid
+    // and drop every point/spot light.
     mpGraphics->primary.cmds[0].vk_d3d12_memoryBarrier(
         {RI_RESOURCE_STATE_STORAGE_WRITE, RI_RESOURCE_STATE_STORAGE_READ,
          RI_STAGE_COMPUTE,
@@ -1865,8 +1921,10 @@ void cHybridRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
 
     if (!state.directLightingInit) {
       // First use: the direct target plus the ping-ponged key/reservoir
-      // textures UNDEFINED -> GENERAL + cleared so the history reads are
-      // defined; they stay GENERAL thereafter.
+      // textures UNDEFINED -> cleared, so the history reads are defined. The
+      // clears leave them in CLEAR_STORAGE; the barriers after the clear put
+      // each one into the state its role this frame needs, which is what the
+      // steady-state path below then maintains.
       RITextureBarrier toGen[6] = {
           {state.directLightingTexture.Get(), RI_RESOURCE_STATE_UNDEFINED,
            RI_RESOURCE_STATE_CLEAR_STORAGE},
@@ -1886,31 +1944,67 @@ void cHybridRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
       for (uint32_t i = 0; i < 6; ++i)
         mpGraphics->primary.cmds[0].clearStorageImage(&mpGraphics->device, toGen[i].texture, clr);
 
-      mpGraphics->primary.cmds[0].vk_d3d12_memoryBarrier(
-          {RI_RESOURCE_STATE_CLEAR_STORAGE,
-           RI_RESOURCE_STATE_SHADER_RESOURCE | RI_RESOURCE_STATE_STORAGE_WRITE,
-           RI_STAGE_NONE, RI_STAGE_COMPUTE});
+      // Establish the per-role states the two passes below expect. These used
+      // to be left in GENERAL behind a single memory barrier, which Vulkan
+      // accepts for both sampled and storage access but D3D12 does not: a
+      // sampled read needs a shader-resource layout, and UNORDERED_ACCESS
+      // cannot serve one.
+      RITextureBarrier toRole[6] = {
+          // Written by the spatial pass below.
+          {state.directLightingTexture.Get(), RI_RESOURCE_STATE_CLEAR_STORAGE,
+           RI_RESOURCE_STATE_STORAGE_WRITE, RI_STAGE_NONE, RI_STAGE_COMPUTE},
+          // History, sampled by the temporal pass.
+          {state.directKeyTexture[dlPrev].Get(), RI_RESOURCE_STATE_CLEAR_STORAGE,
+           RI_RESOURCE_STATE_SHADER_RESOURCE, RI_STAGE_NONE, RI_STAGE_COMPUTE},
+          {state.reservoirTexture[dlPrev].Get(), RI_RESOURCE_STATE_CLEAR_STORAGE,
+           RI_RESOURCE_STATE_SHADER_RESOURCE, RI_STAGE_NONE, RI_STAGE_COMPUTE},
+          // Written by the temporal pass, then sampled by the spatial pass.
+          {state.directKeyTexture[dlCur].Get(), RI_RESOURCE_STATE_CLEAR_STORAGE,
+           RI_RESOURCE_STATE_STORAGE_WRITE, RI_STAGE_NONE, RI_STAGE_COMPUTE},
+          {state.reservoirTemporalTexture.Get(), RI_RESOURCE_STATE_CLEAR_STORAGE,
+           RI_RESOURCE_STATE_STORAGE_WRITE, RI_STAGE_NONE, RI_STAGE_COMPUTE},
+          // Written by the spatial pass; starts read-side so the single
+          // pre-spatial barrier below is the same on every frame.
+          {state.reservoirTexture[dlCur].Get(), RI_RESOURCE_STATE_CLEAR_STORAGE,
+           RI_RESOURCE_STATE_SHADER_RESOURCE, RI_STAGE_NONE, RI_STAGE_COMPUTE}};
+      mpGraphics->primary.cmds[0].vk_d3d12_textureBarriers<6>(6, toRole);
       state.directLightingInit = true;
     } else {
       // Last frame's RELAX input becomes this frame's resolve output.
       mpGraphics->primary.cmds[0].vk_d3d12_textureBarrier(
           {state.directLightingTexture.Get(), RI_RESOURCE_STATE_SHADER_RESOURCE,
            RI_RESOURCE_STATE_STORAGE_WRITE, RI_STAGE_COMPUTE, RI_STAGE_COMPUTE});
-      // Make last frame's writes to the ping-pong textures visible (history
-      // sampled-read + current write-after-read/write). Both stay GENERAL.
-      mpGraphics->primary.cmds[0].vk_d3d12_memoryBarrier(
-          {RI_RESOURCE_STATE_STORAGE_WRITE | RI_RESOURCE_STATE_SHADER_RESOURCE,
-           RI_RESOURCE_STATE_SHADER_RESOURCE | RI_RESOURCE_STATE_STORAGE_WRITE,
-           RI_STAGE_COMPUTE, RI_STAGE_COMPUTE});
+      // Flip the ping-pong textures into this frame's roles. The indices swap
+      // every frame, so each texture alternates between being sampled as
+      // history and being written as the current target, and D3D12 needs a
+      // real layout transition for that -- a memory barrier alone (what this
+      // used to be) leaves a UAV layout that cannot serve a sampled read.
+      //
+      // Incoming states, all established by last frame's sequence below:
+      //   reservoir[dlPrev]   STORAGE_WRITE   (last frame's spatial output)
+      //   reservoirTemporal   SHADER_RESOURCE (read by last frame's spatial)
+      //   directKey[dlCur]    SHADER_RESOURCE (read by last frame's spatial)
+      //   directKey[dlPrev]   SHADER_RESOURCE (already correct, no transition)
+      //   reservoir[dlCur]    SHADER_RESOURCE (flipped before the spatial pass)
+      RITextureBarrier toRole[3] = {
+          {state.reservoirTexture[dlPrev].Get(), RI_RESOURCE_STATE_STORAGE_WRITE,
+           RI_RESOURCE_STATE_SHADER_RESOURCE, RI_STAGE_COMPUTE, RI_STAGE_COMPUTE},
+          {state.reservoirTemporalTexture.Get(), RI_RESOURCE_STATE_SHADER_RESOURCE,
+           RI_RESOURCE_STATE_STORAGE_WRITE, RI_STAGE_COMPUTE, RI_STAGE_COMPUTE},
+          {state.directKeyTexture[dlCur].Get(), RI_RESOURCE_STATE_SHADER_RESOURCE,
+           RI_RESOURCE_STATE_STORAGE_WRITE, RI_STAGE_COMPUTE, RI_STAGE_COMPUTE}};
+      mpGraphics->primary.cmds[0].vk_d3d12_textureBarriers<3>(3, toRole);
 
       if (historyResetForFrame) {
         // Invalidate the reservoir history; RELAX's history is reset below.
         // The passes below overwrite every current texel.
         RITextureBarrier resetToClear[2] = {
-            {state.directKeyTexture[dlPrev].Get(), RI_RESOURCE_STATE_GENERAL,
+            {state.directKeyTexture[dlPrev].Get(),
+             RI_RESOURCE_STATE_SHADER_RESOURCE,
              RI_RESOURCE_STATE_CLEAR_STORAGE, RI_STAGE_COMPUTE,
              RI_STAGE_NONE},
-            {state.reservoirTexture[dlPrev].Get(), RI_RESOURCE_STATE_GENERAL,
+            {state.reservoirTexture[dlPrev].Get(),
+             RI_RESOURCE_STATE_SHADER_RESOURCE,
              RI_RESOURCE_STATE_CLEAR_STORAGE, RI_STAGE_COMPUTE,
              RI_STAGE_NONE}};
         mpGraphics->primary.cmds[0].vk_d3d12_textureBarriers<2>(2,
@@ -1922,12 +2016,15 @@ void cHybridRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
         mpGraphics->primary.cmds[0].clearStorageImage(
             &mpGraphics->device, resetToClear[1].texture, clr);
 
+        // Back to the sampled state the temporal pass reads them in, not to
+        // GENERAL: these are history inputs and D3D12 samples only from a
+        // shader-resource layout.
         RITextureBarrier resetAfterClear[2] = {
             {state.directKeyTexture[dlPrev].Get(),
-             RI_RESOURCE_STATE_CLEAR_STORAGE, RI_RESOURCE_STATE_GENERAL,
+             RI_RESOURCE_STATE_CLEAR_STORAGE, RI_RESOURCE_STATE_SHADER_RESOURCE,
              RI_STAGE_NONE, RI_STAGE_COMPUTE},
             {state.reservoirTexture[dlPrev].Get(),
-             RI_RESOURCE_STATE_CLEAR_STORAGE, RI_RESOURCE_STATE_GENERAL,
+             RI_RESOURCE_STATE_CLEAR_STORAGE, RI_RESOURCE_STATE_SHADER_RESOURCE,
              RI_STAGE_NONE, RI_STAGE_COMPUTE}};
         mpGraphics->primary.cmds[0].vk_d3d12_textureBarriers<2>(2,
                                                                   resetAfterClear);
@@ -1965,11 +2062,11 @@ void cHybridRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
       bnd.emplace_back("gReservoirHistory",
                        RIDescriptor::sampledImage(
                            &mpGraphics->device, state.reservoirView[dlPrev].Get(),
-                           RI_RESOURCE_STATE_GENERAL));
+                           RI_RESOURCE_STATE_SHADER_RESOURCE));
       bnd.emplace_back("gDirectKeyHistory",
                        RIDescriptor::sampledImage(
                            &mpGraphics->device, state.directKeyView[dlPrev].Get(),
-                           RI_RESOURCE_STATE_GENERAL));
+                           RI_RESOURCE_STATE_SHADER_RESOURCE));
       bnd.emplace_back("gReservoirOut",
                        RIDescriptor::storageImage(
                            &mpGraphics->device, state.reservoirTemporalView.Get()));
@@ -1985,10 +2082,16 @@ void cHybridRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
                                   (renderHeight + 15u) / 16u, 1u);
     }
 
-    // Temporal reservoir + current key writes -> spatial pass sampled reads.
-    mpGraphics->primary.cmds[0].vk_d3d12_memoryBarrier(
-        {RI_RESOURCE_STATE_STORAGE_WRITE, RI_RESOURCE_STATE_SHADER_RESOURCE,
-         RI_STAGE_COMPUTE, RI_STAGE_COMPUTE});
+    // Temporal pass writes -> spatial pass sampled reads, plus the flip of
+    // reservoir[dlCur] from its read-side state into the spatial pass's output.
+    RITextureBarrier toSpatial[3] = {
+        {state.reservoirTemporalTexture.Get(), RI_RESOURCE_STATE_STORAGE_WRITE,
+         RI_RESOURCE_STATE_SHADER_RESOURCE, RI_STAGE_COMPUTE, RI_STAGE_COMPUTE},
+        {state.directKeyTexture[dlCur].Get(), RI_RESOURCE_STATE_STORAGE_WRITE,
+         RI_RESOURCE_STATE_SHADER_RESOURCE, RI_STAGE_COMPUTE, RI_STAGE_COMPUTE},
+        {state.reservoirTexture[dlCur].Get(), RI_RESOURCE_STATE_SHADER_RESOURCE,
+         RI_RESOURCE_STATE_STORAGE_WRITE, RI_STAGE_COMPUTE, RI_STAGE_COMPUTE}};
+    mpGraphics->primary.cmds[0].vk_d3d12_textureBarriers<3>(3, toSpatial);
 
     // ----------------------------------------------------------------
     // DirectSpatialReusePass — ReSTIR DI spatial reuse + resolve. Merges a few
@@ -2028,11 +2131,11 @@ void cHybridRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
       sb.emplace_back("gReservoirIn",
                       RIDescriptor::sampledImage(
                           &mpGraphics->device, state.reservoirTemporalView.Get(),
-                          RI_RESOURCE_STATE_GENERAL));
+                          RI_RESOURCE_STATE_SHADER_RESOURCE));
       sb.emplace_back("gDirectKey",
                       RIDescriptor::sampledImage(
                           &mpGraphics->device, state.directKeyView[dlCur].Get(),
-                          RI_RESOURCE_STATE_GENERAL));
+                          RI_RESOURCE_STATE_SHADER_RESOURCE));
       sb.emplace_back("gReservoirOut",
                       RIDescriptor::storageImage(
                           &mpGraphics->device, state.reservoirView[dlCur].Get()));
@@ -2048,8 +2151,10 @@ void cHybridRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
                                   (renderHeight + 15u) / 16u, 1u);
     }
 
-    // Resolved direct + final reservoir writes -> filter / next-frame reads
-    // (stays GENERAL).
+    // Make the spatial pass's writes visible. reservoir[dlCur] is deliberately
+    // left in STORAGE_WRITE: next frame it becomes dlPrev and the role flip at
+    // the top of this block transitions it to SHADER_RESOURCE from exactly
+    // that state.
     mpGraphics->primary.cmds[0].vk_d3d12_memoryBarrier(
         {RI_RESOURCE_STATE_STORAGE_WRITE, RI_RESOURCE_STATE_SHADER_RESOURCE,
          RI_STAGE_COMPUTE, RI_STAGE_COMPUTE});
@@ -2086,18 +2191,31 @@ void cHybridRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
          RI_RESOURCE_STATE_UNDEFINED, RI_RESOURCE_STATE_CLEAR_STORAGE},
         {state.nrdSpecularRadianceHitDistTexture.Get(),
          RI_RESOURCE_STATE_UNDEFINED, RI_RESOURCE_STATE_CLEAR_STORAGE},
+        // Kept last: barriered with the rest but deliberately not cleared. It is
+        // RI_USAGE_SIMULTANEOUS_ACCESS (REBLUR samples and stores IN_MV with no
+        // layout transition between), and such a texture can never be
+        // UAV-cleared -- D3D12 pins its layout to COMMON, and
+        // ClearUnorderedAccessView* rejects COMMON. The clear is only defensive
+        // in the first place: NrdPack writes gNrdMotionVectors in full every
+        // frame before any NRD dispatch reads it, so its contents are already
+        // defined at every read. Clearing the others still matters because a
+        // frame with no TLAS skips the path tracer that fills them.
         {state.nrdMotionVectorsTexture.Get(), RI_RESOURCE_STATE_UNDEFINED,
          RI_RESOURCE_STATE_CLEAR_STORAGE}};
     mpGraphics->primary.cmds[0].vk_d3d12_textureBarriers<9>(9, toGen);
 
     const float clr[4] = {0.0f, 0.0f, 0.0f, 0.0f};
-    for (uint32_t i = 0; i < 9; ++i)
+    for (uint32_t i = 0; i < 8; ++i)
       mpGraphics->primary.cmds[0].clearStorageImage(&mpGraphics->device, toGen[i].texture, clr);
 
     mpGraphics->primary.cmds[0].vk_d3d12_memoryBarrier(
         {RI_RESOURCE_STATE_CLEAR_STORAGE,
          RI_RESOURCE_STATE_SHADER_RESOURCE | RI_RESOURCE_STATE_STORAGE_WRITE,
          RI_STAGE_NONE, RI_STAGE_COMPUTE | RI_STAGE_RAY_TRACING});
+    // The clears leave these in CLEAR_STORAGE, which is already a UAV layout,
+    // so the path tracer can write them without a further transition. The
+    // sampled reads happen after the trace, via the barrier below.
+    state.indirectInShaderResource = false;
     state.indirectLightingInit = true;
     state.indirectHistoryReset = false;
   } else {
@@ -2106,17 +2224,35 @@ void cHybridRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
       // every frame — so there is nothing here to clear. All temporal state
       // lives inside NRD, which discards it via CLEAR_AND_RESTART on the next
       // Denoise call.
-      state.nrd->ResetHistory();
-      state.directNrd->ResetHistory();
+      if (state.nrd)
+        state.nrd->ResetHistory();
+      if (state.directNrd)
+        state.directNrd->ResetHistory();
       state.indirectHistoryReset = false;
     }
     // Make last frame's writes visible to this frame's RT write / pack read.
-    // All stay GENERAL.
     mpGraphics->primary.cmds[0].vk_d3d12_memoryBarrier(
         {RI_RESOURCE_STATE_STORAGE_WRITE | RI_RESOURCE_STATE_SHADER_RESOURCE,
          RI_RESOURCE_STATE_SHADER_RESOURCE | RI_RESOURCE_STATE_STORAGE_WRITE,
          RI_STAGE_COMPUTE | RI_STAGE_RAY_TRACING,
          RI_STAGE_COMPUTE | RI_STAGE_RAY_TRACING});
+  }
+
+  // Hand the four indirect targets back to the path tracer. Last frame ended
+  // with them in the sampled state for NrdPack; the trace writes them as
+  // storage, which on D3D12 is a different layout and needs a real transition.
+  if (state.indirectInShaderResource) {
+    RITextureBarrier toStorage[4] = {
+        {state.indirectRadianceTexture.Get(), RI_RESOURCE_STATE_SHADER_RESOURCE,
+         RI_RESOURCE_STATE_STORAGE_WRITE, RI_STAGE_COMPUTE, RI_STAGE_RAY_TRACING},
+        {state.indirectSpecularTexture.Get(), RI_RESOURCE_STATE_SHADER_RESOURCE,
+         RI_RESOURCE_STATE_STORAGE_WRITE, RI_STAGE_COMPUTE, RI_STAGE_RAY_TRACING},
+        {state.indirectKeyTexture.Get(), RI_RESOURCE_STATE_SHADER_RESOURCE,
+         RI_RESOURCE_STATE_STORAGE_WRITE, RI_STAGE_COMPUTE, RI_STAGE_RAY_TRACING},
+        {state.indirectKeyExtraTexture.Get(), RI_RESOURCE_STATE_SHADER_RESOURCE,
+         RI_RESOURCE_STATE_STORAGE_WRITE, RI_STAGE_COMPUTE, RI_STAGE_RAY_TRACING}};
+    mpGraphics->primary.cmds[0].vk_d3d12_textureBarriers<4>(4, toStorage);
+    state.indirectInShaderResource = false;
   }
 
   if (apWorld->GetTlas() != nullptr) {
@@ -2178,10 +2314,23 @@ void cHybridRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
     m_pathTrace.traceRays(&mpGraphics->primary.cmds[0], kPtHash, renderWidth,
                           renderHeight, 1u);
   }
-  // PathTracePass storage writes -> sampled read by the denoiser below.
-  mpGraphics->primary.cmds[0].vk_d3d12_memoryBarrier(
-      {RI_RESOURCE_STATE_STORAGE_WRITE, RI_RESOURCE_STATE_SHADER_RESOURCE,
-       RI_STAGE_RAY_TRACING, RI_STAGE_COMPUTE});
+  // PathTracePass storage writes -> sampled read by the denoiser below. The
+  // layout transition is unconditional even though the trace above is guarded
+  // on a TLAS: NrdPack samples these every frame, so they must end up in the
+  // sampled state whether or not anything was traced into them this frame.
+  {
+    RITextureBarrier toSampled[4] = {
+        {state.indirectRadianceTexture.Get(), RI_RESOURCE_STATE_STORAGE_WRITE,
+         RI_RESOURCE_STATE_SHADER_RESOURCE, RI_STAGE_RAY_TRACING, RI_STAGE_COMPUTE},
+        {state.indirectSpecularTexture.Get(), RI_RESOURCE_STATE_STORAGE_WRITE,
+         RI_RESOURCE_STATE_SHADER_RESOURCE, RI_STAGE_RAY_TRACING, RI_STAGE_COMPUTE},
+        {state.indirectKeyTexture.Get(), RI_RESOURCE_STATE_STORAGE_WRITE,
+         RI_RESOURCE_STATE_SHADER_RESOURCE, RI_STAGE_RAY_TRACING, RI_STAGE_COMPUTE},
+        {state.indirectKeyExtraTexture.Get(), RI_RESOURCE_STATE_STORAGE_WRITE,
+         RI_RESOURCE_STATE_SHADER_RESOURCE, RI_STAGE_RAY_TRACING, RI_STAGE_COMPUTE}};
+    mpGraphics->primary.cmds[0].vk_d3d12_textureBarriers<4>(4, toSampled);
+    state.indirectInShaderResource = true;
+  }
 
   // ----------------------------------------------------------------------
   // Denoise — NrdPack repacks this frame's lighting into NRD's layouts, then
@@ -2241,22 +2390,22 @@ void cHybridRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
         nb.emplace_back("gIndirectKey",
                         RIDescriptor::sampledImage(
                             &mpGraphics->device, state.indirectKeyView.Get(),
-                            RI_RESOURCE_STATE_GENERAL));
+                            RI_RESOURCE_STATE_SHADER_RESOURCE));
         nb.emplace_back("gIndirectKeyExtra",
                         RIDescriptor::sampledImage(
                             &mpGraphics->device,
                             state.indirectKeyExtraView.Get(),
-                            RI_RESOURCE_STATE_GENERAL));
+                            RI_RESOURCE_STATE_SHADER_RESOURCE));
         nb.emplace_back("gIndirectDiffuse",
                         RIDescriptor::sampledImage(
                             &mpGraphics->device,
                             state.indirectRadianceView.Get(),
-                            RI_RESOURCE_STATE_GENERAL));
+                            RI_RESOURCE_STATE_SHADER_RESOURCE));
         nb.emplace_back("gIndirectSpecular",
                         RIDescriptor::sampledImage(
                             &mpGraphics->device,
                             state.indirectSpecularView.Get(),
-                            RI_RESOURCE_STATE_GENERAL));
+                            RI_RESOURCE_STATE_SHADER_RESOURCE));
         nb.emplace_back("gVelocity",
                         RIDescriptor::sampledImage(
                             &mpGraphics->device,
@@ -2345,30 +2494,44 @@ void cHybridRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
       nrdInputs.specularRadianceHitDistance =
           state.nrdSpecularRadianceHitDistView.Get();
 
-      NrdDenoiseOutputs nrdOutputs = {};
-      {
-        RIGpuScope _gsNrdDenoise(&mpGraphics->profiler,
-                                 &mpGraphics->primary.cmds[0], "NRD.Denoise");
-        nrdOutputs = state.nrd->Denoise(&mpGraphics->primary.cmds[0], nrdFrame,
-                                   nrdInputs);
+      if (state.nrd) {
+        NrdDenoiseOutputs nrdOutputs = {};
+        {
+          RIGpuScope _gsNrdDenoise(&mpGraphics->profiler,
+                                   &mpGraphics->primary.cmds[0], "NRD.Denoise");
+          nrdOutputs = state.nrd->Denoise(&mpGraphics->primary.cmds[0], nrdFrame,
+                                     nrdInputs);
+        }
+        indirectResultView = nrdOutputs.diffuseRadianceHitDistance;
+        indirectSpecularResultView = nrdOutputs.specularRadianceHitDistance;
+      } else {
+        // NRD is absent: composite the packed radiance straight through. The
+        // pack targets already carry the YCoCg encoding the composite decodes
+        // (REBLUR preserves it), so only the noise differs.
+        indirectResultView = nrdInputs.diffuseRadianceHitDistance;
+        indirectSpecularResultView = nrdInputs.specularRadianceHitDistance;
       }
-      indirectResultView = nrdOutputs.diffuseRadianceHitDistance;
-      indirectSpecularResultView = nrdOutputs.specularRadianceHitDistance;
 
-      NrdDenoiseInputs directInputs = {};
-      directInputs.normalRoughness = state.nrdNormalRoughnessView.Get();
-      directInputs.viewZ = state.nrdViewZView.Get();
-      // RELAX does not modify motion vectors. Use the raster velocity, not
-      // REBLUR's private copy that its stabilization pass may have changed.
-      directInputs.motionVectors =
-          state.velocityView[mpGraphics->swapchainIndex].Get();
-      directInputs.diffuseRadianceHitDistance = state.directLightingView.Get();
-      {
-        RIGpuScope scope(&mpGraphics->profiler, &mpGraphics->primary.cmds[0],
-                         "NRD.DirectDenoise");
-        directResultView = state.directNrd->Denoise(
-            &mpGraphics->primary.cmds[0], nrdFrame, directInputs)
-                               .diffuseRadianceHitDistance;
+      if (state.directNrd) {
+        NrdDenoiseInputs directInputs = {};
+        directInputs.normalRoughness = state.nrdNormalRoughnessView.Get();
+        directInputs.viewZ = state.nrdViewZView.Get();
+        // RELAX does not modify motion vectors. Use the raster velocity, not
+        // REBLUR's private copy that its stabilization pass may have changed.
+        directInputs.motionVectors =
+            state.velocityView[mpGraphics->swapchainIndex].Get();
+        directInputs.diffuseRadianceHitDistance = state.directLightingView.Get();
+        {
+          RIGpuScope scope(&mpGraphics->profiler, &mpGraphics->primary.cmds[0],
+                           "NRD.DirectDenoise");
+          directResultView = state.directNrd->Denoise(
+              &mpGraphics->primary.cmds[0], nrdFrame, directInputs)
+                                 .diffuseRadianceHitDistance;
+        }
+      } else {
+        // RELAX takes and returns linear irradiance, so the undenoised
+        // ReSTIR resolve is a drop-in substitute here.
+        directResultView = state.directLightingView.Get();
       }
     }
   }
@@ -2421,7 +2584,9 @@ void cHybridRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
       return;
     mpGraphics->primary.cmds[0].vk_d3d12_textureBarrier(
         {state.depthTextures[mpGraphics->swapchainIndex].Get(),
-         RI_RESOURCE_STATE_SHADER_RESOURCE, RI_RESOURCE_STATE_DEPTH_READ,
+         RI_RESOURCE_STATE_SHADER_RESOURCE,
+         static_cast<RIResourceState_e>(RI_RESOURCE_STATE_DEPTH_READ |
+                                        RI_RESOURCE_STATE_SHADER_RESOURCE),
          RI_STAGE_FRAGMENT | RI_STAGE_COMPUTE, RI_STAGE_NONE,
          RI_BARRIER_ASPECT_DEPTH});
     depthFlippedForReadOnly = true;
@@ -2603,12 +2768,14 @@ void cHybridRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
 
     const float kIdentityMul[4] = {1.0f, 1.0f, 1.0f, 1.0f}; // ×1
     const float kIdentityAdd[4] = {0.0f, 0.0f, 0.0f, 0.0f}; // +0
-    renderDecalAccumulator(state.decalMulTexture[mpGraphics->swapchainIndex].Get(),
-                           *state.decalMulView[mpGraphics->swapchainIndex], kIdentityMul,
-                           mulDecals);
-    renderDecalAccumulator(state.decalAddTexture[mpGraphics->swapchainIndex].Get(),
-                           *state.decalAddView[mpGraphics->swapchainIndex], kIdentityAdd,
-                           addDecals);
+    renderDecalAccumulator(
+        state.decalMulTexture[mpGraphics->swapchainIndex].Get(),
+        *state.decalMulAttachmentView[mpGraphics->swapchainIndex], kIdentityMul,
+        mulDecals);
+    renderDecalAccumulator(
+        state.decalAddTexture[mpGraphics->swapchainIndex].Get(),
+        *state.decalAddAttachmentView[mpGraphics->swapchainIndex], kIdentityAdd,
+        addDecals);
   }
 
   // Composite compute pass — one thread per pixel writes the composite into the
@@ -2642,19 +2809,24 @@ void cHybridRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
                                                          apWorld->GetTlas()),
                      0, true);
     // Direct lighting is linear RGB. REBLUR's two indirect outputs are
-    // YCoCg-packed and decoded in the shader. All three remain GENERAL.
+    // YCoCg-packed and decoded in the shader. NRD owns its outputs and leaves
+    // all three in GENERAL. Without NRD these are the pack targets and the
+    // ReSTIR resolve instead, which the passes above left in SHADER_RESOURCE.
+    const RIResourceState_e lightingResultState =
+        state.nrd ? RI_RESOURCE_STATE_GENERAL
+                  : RI_RESOURCE_STATE_SHADER_RESOURCE;
     bnd.emplace_back("gDirectLighting",
                      RIDescriptor::sampledImage(&mpGraphics->device,
                                                 directResultView,
-                                                RI_RESOURCE_STATE_GENERAL));
+                                                lightingResultState));
     bnd.emplace_back("gIndirectLighting",
                      RIDescriptor::sampledImage(&mpGraphics->device,
                                                 indirectResultView,
-                                                RI_RESOURCE_STATE_GENERAL));
+                                                lightingResultState));
     bnd.emplace_back("gIndirectSpecular",
                      RIDescriptor::sampledImage(&mpGraphics->device,
                                                 indirectSpecularResultView,
-                                                RI_RESOURCE_STATE_GENERAL));
+                                                lightingResultState));
     // gOutput — the viewport render target bound as a storage image (GENERAL).
     bnd.emplace_back(
         "gOutput",
@@ -2881,15 +3053,13 @@ void cHybridRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
       }
       appendWorldLightFog(waterGraphicsBindings, apWorld);
 
-      VkImageView pogoReadView =
-          state.renderTargetView[mpGraphics->swapchainIndex]->vk.image;
       mpGraphics->primary.cmds[0].vk_d3d12_textureBarrier(
           RI_PogoAttachmentBarrier(
               state.renderTarget[mpGraphics->swapchainIndex].Get(),
               /*initial=*/false));
 
-      RITextureView colorView = {};
-      colorView.vk.image = pogoReadView;
+      RITextureView colorView =
+          *state.renderTargetAttachmentView[mpGraphics->swapchainIndex];
       RIRenderingAttachment color = {};
       color.view = colorView;
       color.loadOp = RI_ATTACHMENT_LOAD_OP_LOAD;
@@ -3067,6 +3237,11 @@ void cHybridRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
           std::vector<RIProgram::DescriptorBinding> graphicsBindings =
               waterGraphicsBindings;
           if (result.available) {
+            // The specular result is an NRD output, which NRD keeps in GENERAL
+            // for its whole lifetime; that stays legal on D3D12 because those
+            // textures are RI_USAGE_SIMULTANEOUS_ACCESS. The two guides are
+            // WaterReflectionPass's own and are left in the sampled state by
+            // the transitions at the end of its Build.
             graphicsBindings.emplace_back(
                 "gWaterReflectionSpecular",
                 RIDescriptor::sampledImage(
@@ -3076,12 +3251,12 @@ void cHybridRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
                 "gWaterReflectionGuidePosViewZ",
                 RIDescriptor::sampledImage(
                     &mpGraphics->device, result.halfPositionViewZ,
-                    RI_RESOURCE_STATE_GENERAL));
+                    RI_RESOURCE_STATE_SHADER_RESOURCE));
             graphicsBindings.emplace_back(
                 "gWaterReflectionGuideNormalWeight",
                 RIDescriptor::sampledImage(
                     &mpGraphics->device, result.halfNormalWeight,
-                    RI_RESOURCE_STATE_GENERAL));
+                    RI_RESOURCE_STATE_SHADER_RESOURCE));
           } else {
             // The shader branches before sampling when unavailable, but all
             // three reflected descriptors must still be valid and written.
@@ -3296,17 +3471,14 @@ void cHybridRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
       // anything that samples it, e.g. the menu/inventory screen capture)
       // carries particles too. Flip that half COLOR_ATTACHMENT for the draw,
       // then back to SHADER_READ after, so the tail blit below can sample it.
-      VkImage pogoReadImage = state.renderTarget[mpGraphics->swapchainIndex]->vk.image;
-      VkImageView pogoReadView =
-          state.renderTargetView[mpGraphics->swapchainIndex]->vk.image;
       const RI_Format_e particleTargetFormat = cGraphics::PogoColorFormat;
       {
         mpGraphics->primary.cmds[0].vk_d3d12_textureBarrier(RI_PogoAttachmentBarrier(
             state.renderTarget[mpGraphics->swapchainIndex].Get(), /*initial=*/false));
       }
 
-      RITextureView colorView = {};
-      colorView.vk.image = pogoReadView;
+      RITextureView colorView =
+          *state.renderTargetAttachmentView[mpGraphics->swapchainIndex];
       RIRenderingAttachment color = {};
       color.view = colorView;
       color.loadOp = RI_ATTACHMENT_LOAD_OP_LOAD;
@@ -3351,15 +3523,19 @@ void cHybridRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
         particleBindings.push_back(b);
       }
       // Soft particles: scene depth (opaque geometry) for the per-pixel fade.
-      // Runs after flipDepthToReadOnly() above, so the image is already in
-      // DEPTH_READ_ONLY_OPTIMAL — the same layout this sampled descriptor
-      // declares, and the depth attachment is read-only, so the feedback loop
-      // is legal with no extra barrier.
+      // Runs after flipDepthToReadOnly() above and declares the same combined
+      // state that barrier applies. The depth attachment is read-only, so the
+      // feedback loop is legal with no extra barrier. The shader-resource bit
+      // is required: D3D12 samples only from a layout that admits an SRV, and
+      // DEPTH_READ alone maps to DEPTH_STENCIL_READ, which does not. Vulkan is
+      // unaffected -- DEPTH_READ still wins the layout choice, so this stays
+      // DEPTH_READ_ONLY_OPTIMAL there.
       particleBindings.emplace_back(
           "gSceneDepth",
           RIDescriptor::sampledImage(
               &mpGraphics->device, state.depthSampleView[mpGraphics->swapchainIndex].Get(),
-              RI_RESOURCE_STATE_DEPTH_READ));
+              static_cast<RIResourceState_e>(RI_RESOURCE_STATE_DEPTH_READ |
+                                             RI_RESOURCE_STATE_SHADER_RESOURCE)));
       appendWorldLightFog(particleBindings, apWorld);
       m_particle.bindDescriptors(&mpGraphics->device, &mpGraphics->primary.cmds[0], mpGraphics->frameIndex,
                                  particleBindings.data(),
@@ -3574,9 +3750,6 @@ void cHybridRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
       // the particle pass ran above.
       flipDepthToReadOnly();
 
-      VkImage pogoReadImage = state.renderTarget[mpGraphics->swapchainIndex]->vk.image;
-      VkImageView pogoReadView =
-          state.renderTargetView[mpGraphics->swapchainIndex]->vk.image;
       const RI_Format_e meshTargetFormat = cGraphics::PogoColorFormat;
 
       // SHADER_READ_ONLY → COLOR_ATTACHMENT_OPTIMAL. If the particle pass
@@ -3589,8 +3762,8 @@ void cHybridRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
             state.renderTarget[mpGraphics->swapchainIndex].Get(), /*initial=*/false));
       }
 
-      RITextureView colorView = {};
-      colorView.vk.image = pogoReadView;
+      RITextureView colorView =
+          *state.renderTargetAttachmentView[mpGraphics->swapchainIndex];
       RIRenderingAttachment color = {};
       color.view = colorView;
       color.loadOp = RI_ATTACHMENT_LOAD_OP_LOAD;
@@ -3780,12 +3953,18 @@ void cHybridRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
   }
 
   // Restore depth to DEPTH_ATTACHMENT_OPTIMAL before yielding the command
-  // buffer: RI_VK_FillDepthAttachment hardcodes that layout, and depth ends
-  // here in either SHADER_READ_ONLY_OPTIMAL (compute-only) or
-  // DEPTH_READ_ONLY_OPTIMAL (flipDepthToReadOnly ran for particle/decal).
+  // buffer: RI_VK_FillDepthAttachment hardcodes that layout. Depth ends here
+  // either in SHADER_RESOURCE (compute-only) or, when flipDepthToReadOnly ran
+  // for particle/decal, in the combined depth-read + shader-resource state
+  // that lambda applies. The before-state must name that combination exactly:
+  // the two differ on D3D12 (DIRECT_QUEUE_GENERIC_READ, the only read layout
+  // admitting both depth-test and SRV, versus DEPTH_STENCIL_READ), and a
+  // mismatch here is rejected as INCOMPATIBLE_BARRIER_LAYOUT. On Vulkan both
+  // spell DEPTH_READ_ONLY_OPTIMAL, since DEPTH_READ wins the layout choice.
   {
     const uint32_t beforeState = depthFlippedForReadOnly
-                                     ? RI_RESOURCE_STATE_DEPTH_READ
+                                     ? (RI_RESOURCE_STATE_DEPTH_READ |
+                                        RI_RESOURCE_STATE_SHADER_RESOURCE)
                                      : RI_RESOURCE_STATE_SHADER_RESOURCE;
     const uint32_t beforeStages = depthFlippedForReadOnly
                                       ? RI_STAGE_NONE
@@ -3813,7 +3992,8 @@ void cHybridRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
          RI_RESOURCE_STATE_RENDER_TARGET_READ, RI_STAGE_FRAGMENT});
 
     {
-      RITextureView colorView = *state.renderTargetView[mpGraphics->swapchainIndex];
+      RITextureView colorView =
+          *state.renderTargetAttachmentView[mpGraphics->swapchainIndex];
       RIRenderingAttachment color = {};
       color.view = colorView;
       color.loadOp = RI_ATTACHMENT_LOAD_OP_LOAD;

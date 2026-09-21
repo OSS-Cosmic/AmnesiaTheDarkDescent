@@ -8,6 +8,7 @@
 
 #include <cassert>
 #include <algorithm>
+#include <cstdio>
 #include <cstdlib>
 #include <cstring>
 
@@ -257,6 +258,12 @@ RISwapchain RISwapchain::create( struct RIDevice *device, const struct RISwapcha
 				: resourceDesc.Dimension == D3D12_RESOURCE_DIMENSION_TEXTURE3D
 					? RI_TEXTURE_3D
 					: RI_TEXTURE_2D;
+
+			// Named so the debug layer reports "Swapchain.image[N]" rather than an
+			// "Unnamed ID3D12Resource Object" handle.
+			char debugName[32];
+			snprintf( debugName, sizeof( debugName ), "Swapchain.image[%u]", i );
+			texture.setDebugObjectName( device, debugName );
 
 			RITextureViewDesc viewDesc = {};
 			viewDesc.viewType = RI_VIEWTYPE_COLOR_ATTACHMENT;

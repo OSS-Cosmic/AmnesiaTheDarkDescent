@@ -16,7 +16,8 @@ namespace hpl {
 void CreatePostEffectColorTarget(PostEffectColorTarget &out, uint32_t width,
                                  uint32_t height, enum RI_Format_e format,
                                  uint32_t additionalUsage,
-                                 const char *debugName) {
+                                 const char *debugName,
+                                 std::optional<RITextureClearValue> clearValue) {
   cGraphics *pGraphics = Interface<cGraphics>::Get();
   out.width = width;
   out.height = height;
@@ -29,6 +30,7 @@ void CreatePostEffectColorTarget(PostEffectColorTarget &out, uint32_t width,
   desc.height = height;
   desc.usage =
       RI_USAGE_SHADER_RESOURCE | RI_USAGE_COLOR_ATTACHMENT | additionalUsage;
+  desc.clearValue = clearValue;
   out.texture = RITexture::create(&pGraphics->device, desc);
   if (out.texture.isEmpty())
     return;

@@ -1,11 +1,11 @@
 #include "graphics/RIRenderer.h"
 #include "graphics/RIGPUPreset.h"
 #include "graphics/RIProgram.h"
+#include "graphics/RIQuery.h"
 #include "graphics/RITypes.h"
 #include "graphics/RIVK.h"
 #include "graphics/RID3D12.h"
 #include "graphics/RITimeline.h"
-#include "graphics/XessVulkanSupport.h"
 #include "system/Hasher.h"
 #include "system/LowLevelSystem.h"
 #include "system/QStr.h"
@@ -21,12 +21,10 @@
 // RI*Renderer functions below, never by referencing this object directly.
 static RIRenderer g_renderer;
 
-#if DEVICE_MULTI_BACKEND
-// Backs the multi-backend path of RIIsTargetSelected (see RITypes.h). In
-// single-backend builds the active backend is known at compile time, so this is
-// not needed.
+// Backs the multi-backend path of RIIsTargetSelected (see RITypes.h). Defined
+// unconditionally: single-backend builds fold that check at compile time, but
+// callers that cache something per backend still need the value at runtime.
 uint8_t RIActiveBackendApi() { return g_renderer.api; }
-#endif
 
 #if (DEVICE_IMPL_VULKAN)
 
@@ -277,21 +275,24 @@ static bool __VK_SupportExtension(VkExtensionProperties *properties, size_t len,
   return false;
 }
 
-#if defined(HPL2_XESS_AVAILABLE) && HPL2_XESS_AVAILABLE
-static bool __VK_XessFeatureBitsSupported(const VkBool32 *requested,
-                                           const VkBool32 *supported,
-                                           size_t count, const char *name) {
+// Validation for a feature chain that came back from an outside contributor
+// (see RIVkDeviceRequirements). Nothing here knows which SDK is asking; the
+// contributor's name is only used to label the log line.
+static bool __VK_ForeignFeatureBitsSupported(const VkBool32 *requested,
+                                             const VkBool32 *supported,
+                                             size_t count, const char *name,
+                                             const char *debugName) {
   for (size_t i = 0; i < count; i++) {
     if (requested[i] != VK_FALSE && supported[i] == VK_FALSE) {
-      hpl::Log("XeSS: required device feature is unsupported in %s (field %u)\n",
-               name, (unsigned)i);
+      hpl::Log("%s: required device feature is unsupported in %s (field %u)\n",
+               debugName, name, (unsigned)i);
       return false;
     }
   }
   return true;
 }
 
-static bool __VK_ValidateXessFeatureChain(
+static bool __VK_ValidateForeignFeatureChain(
     const void *chain, const VkBaseOutStructure *const *engineNodes,
     size_t engineNodeCount, const char **reason) {
   const VkBaseOutStructure *node =
@@ -301,13 +302,13 @@ static bool __VK_ValidateXessFeatureChain(
   while (node) {
     if (seenNodeCount == sizeof(seenNodes) / sizeof(seenNodes[0])) {
       if (reason)
-        *reason = "XeSS returned an excessively long or cyclic feature chain";
+        *reason = "returned an excessively long or cyclic feature chain";
       return false;
     }
     for (size_t i = 0; i < seenNodeCount; i++) {
       if (seenNodes[i] == node) {
         if (reason)
-          *reason = "XeSS returned a duplicate or cyclic feature chain";
+          *reason = "returned a duplicate or cyclic feature chain";
         return false;
       }
     }
@@ -322,7 +323,7 @@ static bool __VK_ValidateXessFeatureChain(
     }
     if (!isEngineNode) {
       if (reason)
-        *reason = "XeSS returned a feature structure not owned by the engine";
+        *reason = "returned a feature structure not owned by the engine";
       return false;
     }
     node = node->pNext;
@@ -338,18 +339,19 @@ static bool __VK_ValidateXessFeatureChain(
     }
     if (!present) {
       if (reason)
-        *reason = "XeSS removed an engine-owned feature structure";
+        *reason = "removed an engine-owned feature structure";
       return false;
     }
   }
   return true;
 }
 
-#define VK_XESS_CHECK_FEATURES(type, firstMember, requested, supported)         \
-  __VK_XessFeatureBitsSupported(                                               \
+#define VK_FOREIGN_CHECK_FEATURES(type, firstMember, requested, supported,      \
+                                  debugName)                                   \
+  __VK_ForeignFeatureBitsSupported(                                            \
       &(requested).firstMember, &(supported).firstMember,                      \
-      (sizeof(type) - offsetof(type, firstMember)) / sizeof(VkBool32), #type)
-#endif
+      (sizeof(type) - offsetof(type, firstMember)) / sizeof(VkBool32), #type,  \
+      (debugName))
 
 #endif
 
@@ -973,28 +975,13 @@ int RIDevice::init(struct RIDeviceDesc *init) {
 #endif
 
 #if (DEVICE_IMPL_VULKAN)
-  hpl::cXessVulkanSupport &xessSupport =
-      hpl::XessVulkanSupportInstance();
-  auto setXessUnavailable = [&](const char *reason) {
-    xessSupport.SetUnavailable(reason);
-    strncpy(device->xessUnavailableReason, xessSupport.UnavailableReason(),
-            sizeof(device->xessUnavailableReason) - 1);
-    device->xessUnavailableReason[sizeof(device->xessUnavailableReason) - 1] =
-        '\0';
-    device->xessAvailable = false;
-  };
-  if (!xessSupport.IsAvailable()) {
-    setXessUnavailable(xessSupport.UnavailableReason());
-    hpl::Log("XeSS: device preflight unavailable: %s\n",
-             device->xessUnavailableReason);
-  }
-
   {
     const char **enabledExtensionNames = NULL;
-#if defined(HPL2_XESS_AVAILABLE) && HPL2_XESS_AVAILABLE
-    size_t xessPlainExtensionCount = 0;
-    bool xessRequirementsMerged = false;
-#endif
+    // Outside contributions (see RIVkDeviceRequirements) are merged once the
+    // engine's own extensions and feature chain are settled, and are dropped
+    // wholesale if vkCreateDevice then refuses them.
+    size_t plainExtensionCount = 0;
+    bool foreignRequirementsMerged = false;
 
     uint32_t extensionNum = 0;
     vkEnumerateDeviceExtensionProperties(physicalAdapter->vk.physicalDevice,
@@ -1451,239 +1438,245 @@ int RIDevice::init(struct RIDeviceDesc *init) {
     // actually enables is published after vkCreateDevice below, and the
     // adapter's backend-neutral capability bits were set during enumeration.
 
-#if defined(HPL2_XESS_AVAILABLE) && HPL2_XESS_AVAILABLE
-    // Keep copies of every engine-owned feature structure. XeSS may patch
-    // these structures and append SDK-owned structures to the chain; the
-    // copies let the ordinary Vulkan path be restored without querying the
-    // GPU again and accidentally replacing requirements with support bits.
-    xessPlainExtensionCount = arrlen(enabledExtensionNames);
-    void *xessFeatureChain = &features;
-    // Capture exact engine-owned nodes before XeSS mutates the chain. An SDK
-    // node must not be accepted just because it uses a known sType.
-    const VkBaseOutStructure *xessEngineFeatureNodes[32] = {};
-    size_t xessEngineFeatureNodeCount = 0;
+    // Keep copies of every engine-owned feature structure. A contributor may
+    // patch these structures and append its own to the chain; the copies let
+    // the ordinary Vulkan path be restored without querying the GPU again and
+    // accidentally replacing requirements with support bits.
+    plainExtensionCount = arrlen(enabledExtensionNames);
+    void *foreignFeatureChain = &features;
+    // Capture the exact engine-owned nodes before any contributor mutates the
+    // chain. A contributor's node must not be accepted just because it uses a
+    // known sType.
+    const VkBaseOutStructure *engineFeatureNodes[32] = {};
+    size_t engineFeatureNodeCount = 0;
     for (const VkBaseOutStructure *node =
              reinterpret_cast<const VkBaseOutStructure *>(&features);
-         node && xessEngineFeatureNodeCount <
-                     sizeof(xessEngineFeatureNodes) /
-                         sizeof(xessEngineFeatureNodes[0]);
+         node && engineFeatureNodeCount <
+                     sizeof(engineFeatureNodes) /
+                         sizeof(engineFeatureNodes[0]);
          node = node->pNext) {
-      xessEngineFeatureNodes[xessEngineFeatureNodeCount++] = node;
+      engineFeatureNodes[engineFeatureNodeCount++] = node;
     }
-    const VkPhysicalDeviceFeatures2 xessSupportedFeatures = features;
-    const VkPhysicalDeviceVulkan11Features xessSupportedFeatures11 = features11;
-    const VkPhysicalDeviceVulkan12Features xessSupportedFeatures12 = features12;
-    const VkPhysicalDeviceVulkan13Features xessSupportedFeatures13 = features13;
+    const VkPhysicalDeviceFeatures2 supportedFeatures = features;
+    const VkPhysicalDeviceVulkan11Features supportedFeatures11 = features11;
+    const VkPhysicalDeviceVulkan12Features supportedFeatures12 = features12;
+    const VkPhysicalDeviceVulkan13Features supportedFeatures13 = features13;
     const VkPhysicalDeviceMaintenance5FeaturesKHR
-        xessSupportedMaintenance5Features = maintenance5Features;
-    const VkPhysicalDevicePresentIdFeaturesKHR xessSupportedPresentIdFeatures =
+        supportedMaintenance5Features = maintenance5Features;
+    const VkPhysicalDevicePresentIdFeaturesKHR supportedPresentIdFeatures =
         presentIdFeatures;
     const VkPhysicalDevicePresentWaitFeaturesKHR
-        xessSupportedPresentWaitFeatures = presentWaitFeatures;
+        supportedPresentWaitFeatures = presentWaitFeatures;
     const VkPhysicalDeviceLineRasterizationFeaturesKHR
-        xessSupportedLineRasterizationFeatures = lineRasterizationFeatures;
+        supportedLineRasterizationFeatures = lineRasterizationFeatures;
     const VkPhysicalDeviceAccelerationStructureFeaturesKHR
-        xessSupportedAccelerationStructureFeatures =
+        supportedAccelerationStructureFeatures =
             accelerationStructureFeatures;
     const VkPhysicalDeviceRayTracingPipelineFeaturesKHR
-        xessSupportedRayTracingPipelineFeatures = rayTracingPipelineFeatures;
-    const VkPhysicalDeviceRayQueryFeaturesKHR xessSupportedRayQueryFeatures =
+        supportedRayTracingPipelineFeatures = rayTracingPipelineFeatures;
+    const VkPhysicalDeviceRayQueryFeaturesKHR supportedRayQueryFeatures =
         rayQueryFeatures;
     const VkPhysicalDeviceFragmentShaderBarycentricFeaturesKHR
-        xessSupportedFragmentBarycentricFeatures = fragmentBarycentricFeatures;
+        supportedFragmentBarycentricFeatures = fragmentBarycentricFeatures;
     const VkPhysicalDeviceCoherentMemoryFeaturesAMD
-        xessSupportedAmdCoherentMemoryFeatures = amdCoherentMemoryFeatures;
+        supportedAmdCoherentMemoryFeatures = amdCoherentMemoryFeatures;
 
-    auto restorePlainXessRequirements = [&]() {
-      arrsetlen(enabledExtensionNames, xessPlainExtensionCount);
-      features = xessSupportedFeatures;
-      features11 = xessSupportedFeatures11;
-      features12 = xessSupportedFeatures12;
-      features13 = xessSupportedFeatures13;
-      maintenance5Features = xessSupportedMaintenance5Features;
-      presentIdFeatures = xessSupportedPresentIdFeatures;
-      presentWaitFeatures = xessSupportedPresentWaitFeatures;
-      lineRasterizationFeatures = xessSupportedLineRasterizationFeatures;
-      accelerationStructureFeatures = xessSupportedAccelerationStructureFeatures;
-      rayTracingPipelineFeatures = xessSupportedRayTracingPipelineFeatures;
-      rayQueryFeatures = xessSupportedRayQueryFeatures;
-      fragmentBarycentricFeatures = xessSupportedFragmentBarycentricFeatures;
-      amdCoherentMemoryFeatures = xessSupportedAmdCoherentMemoryFeatures;
+    auto restorePlainRequirements = [&]() {
+      arrsetlen(enabledExtensionNames, plainExtensionCount);
+      foreignFeatureChain = &features;
+      features = supportedFeatures;
+      features11 = supportedFeatures11;
+      features12 = supportedFeatures12;
+      features13 = supportedFeatures13;
+      maintenance5Features = supportedMaintenance5Features;
+      presentIdFeatures = supportedPresentIdFeatures;
+      presentWaitFeatures = supportedPresentWaitFeatures;
+      lineRasterizationFeatures = supportedLineRasterizationFeatures;
+      accelerationStructureFeatures = supportedAccelerationStructureFeatures;
+      rayTracingPipelineFeatures = supportedRayTracingPipelineFeatures;
+      rayQueryFeatures = supportedRayQueryFeatures;
+      fragmentBarycentricFeatures = supportedFragmentBarycentricFeatures;
+      amdCoherentMemoryFeatures = supportedAmdCoherentMemoryFeatures;
     };
 
-    if (xessSupport.IsAvailable()) {
-      const auto getRequiredDeviceExtensions =
-          xessSupport.VKGetRequiredDeviceExtensions();
-      const auto getRequiredDeviceFeatures =
-          xessSupport.VKGetRequiredDeviceFeatures();
-      if (!getRequiredDeviceExtensions || !getRequiredDeviceFeatures) {
-        setXessUnavailable("required device query entry point is unavailable");
-        hpl::Log("XeSS: %s\n", device->xessUnavailableReason);
-      } else {
-      uint32_t requiredExtensionCount = 0;
-      const char *const *requiredExtensionNames = NULL;
-      xess_result_t xessResult =
-          getRequiredDeviceExtensions(
-              g_renderer.vk.instance, physicalAdapter->vk.physicalDevice,
-              &requiredExtensionCount, &requiredExtensionNames);
-      if (xessResult != XESS_RESULT_SUCCESS) {
-        char reason[128];
-        snprintf(reason, sizeof(reason),
-                 "required device extension query failed (%d)",
-                 (int)xessResult);
-        setXessUnavailable(reason);
-        hpl::Log("XeSS: %s\n", device->xessUnavailableReason);
-      } else if (requiredExtensionCount && !requiredExtensionNames) {
-        setXessUnavailable("required device extension query returned no names");
-        hpl::Log("XeSS: %s\n", device->xessUnavailableReason);
-      } else {
-        bool deviceExtensionsSupported = true;
-        for (uint32_t extensionIdx = 0; extensionIdx < requiredExtensionCount;
-             extensionIdx++) {
-          const char *requiredName = requiredExtensionNames[extensionIdx];
-          if (!init->requestRayTracing && requiredName &&
-              __VK_isExtensionNamesSupported(
-                  qCToStrRef(requiredName), RayTracingDeviceExtension,
-                  ARRAY_COUNT(RayTracingDeviceExtension))) {
-            setXessUnavailable(
-                "XeSS requested a ray-tracing extension prohibited in raster mode");
-            hpl::Log("XeSS: %s\n", device->xessUnavailableReason);
-            deviceExtensionsSupported = false;
-            break;
-          }
-          if (!requiredName ||
-              !__VK_isExtensionSupported(requiredName, extensionProperties,
-                                          extensionNum)) {
-            char reason[128];
-            snprintf(reason, sizeof(reason),
-                     "required device extension unsupported: %s",
-                     requiredName ? requiredName : "<null>");
-            setXessUnavailable(reason);
-            hpl::Log("XeSS: %s\n", device->xessUnavailableReason);
-            deviceExtensionsSupported = false;
-            break;
-          }
+    // Merges one contributor's extensions and feature chain, or declines it and
+    // leaves the chain untouched. Contributors are merged in order and share
+    // one chain, so a later one sees what an earlier one asked for.
+    auto mergeDeviceRequirements =
+        [&](const struct RIVkDeviceRequirements &req) -> bool {
+      const char *debugName = req.debugName ? req.debugName : "device requirement";
+      auto decline = [&](const char *reason) {
+        hpl::Log("%s: %s\n", debugName, reason);
+        if (req.onRejected)
+          req.onRejected(req.userData, reason);
+      };
+
+      if (req.extensionCount && !req.extensionNames) {
+        decline("required device extension list is missing");
+        return false;
+      }
+      for (uint32_t i = 0; i < req.extensionCount; i++) {
+        const char *requiredName = req.extensionNames[i];
+        // Raster mode never enables the ray-tracing extensions, so a request
+        // for one cannot be honoured however well the adapter supports it.
+        if (!init->requestRayTracing && requiredName &&
+            __VK_isExtensionNamesSupported(
+                qCToStrRef(requiredName), RayTracingDeviceExtension,
+                ARRAY_COUNT(RayTracingDeviceExtension))) {
+          decline("requested a ray-tracing extension prohibited in raster mode");
+          return false;
         }
-        if (deviceExtensionsSupported) {
-          for (uint32_t extensionIdx = 0; extensionIdx < requiredExtensionCount;
-               extensionIdx++) {
-            const char *requiredName = requiredExtensionNames[extensionIdx];
-            if (!__VK_isExtensionNamesSupported(
-                    qCToStrRef(requiredName), enabledExtensionNames,
-                    arrlen(enabledExtensionNames))) {
-              arrpush(enabledExtensionNames, requiredName);
-              hpl::Log("XeSS: enabled device extension %s\n", requiredName);
-            }
-          }
-
-          xessResult = getRequiredDeviceFeatures(
-              g_renderer.vk.instance, physicalAdapter->vk.physicalDevice,
-              &xessFeatureChain);
-          if (xessResult != XESS_RESULT_SUCCESS) {
-            char reason[128];
-            snprintf(reason, sizeof(reason),
-                     "required device feature query failed (%d)",
-                     (int)xessResult);
-            setXessUnavailable(reason);
-            hpl::Log("XeSS: %s\n", device->xessUnavailableReason);
-          } else if (!xessFeatureChain) {
-            setXessUnavailable("required device feature query returned no chain");
-            hpl::Log("XeSS: %s\n", device->xessUnavailableReason);
-          } else {
-            const char *chainReason = nullptr;
-            const bool chainValid = __VK_ValidateXessFeatureChain(
-                xessFeatureChain, xessEngineFeatureNodes,
-                xessEngineFeatureNodeCount, &chainReason);
-            if (!chainValid) {
-              setXessUnavailable(chainReason);
-              hpl::Log("XeSS: %s\n", device->xessUnavailableReason);
-            }
-            bool featuresSupported = __VK_XessFeatureBitsSupported(
-                reinterpret_cast<const VkBool32 *>(&features.features),
-                reinterpret_cast<const VkBool32 *>(&xessSupportedFeatures.features),
-                sizeof(VkPhysicalDeviceFeatures) / sizeof(VkBool32),
-                "VkPhysicalDeviceFeatures");
-            featuresSupported =
-                VK_XESS_CHECK_FEATURES(VkPhysicalDeviceVulkan11Features,
-                                       storageBuffer16BitAccess, features11,
-                                       xessSupportedFeatures11) &&
-                featuresSupported;
-            featuresSupported =
-                VK_XESS_CHECK_FEATURES(VkPhysicalDeviceVulkan12Features,
-                                       samplerMirrorClampToEdge, features12,
-                                       xessSupportedFeatures12) &&
-                featuresSupported;
-            featuresSupported =
-                VK_XESS_CHECK_FEATURES(VkPhysicalDeviceVulkan13Features,
-                                       robustImageAccess, features13,
-                                       xessSupportedFeatures13) &&
-                featuresSupported;
-            featuresSupported =
-                VK_XESS_CHECK_FEATURES(VkPhysicalDeviceMaintenance5FeaturesKHR,
-                                       maintenance5, maintenance5Features,
-                                       xessSupportedMaintenance5Features) &&
-                featuresSupported;
-            featuresSupported =
-                VK_XESS_CHECK_FEATURES(VkPhysicalDevicePresentIdFeaturesKHR,
-                                       presentId, presentIdFeatures,
-                                       xessSupportedPresentIdFeatures) &&
-                featuresSupported;
-            featuresSupported =
-                VK_XESS_CHECK_FEATURES(VkPhysicalDevicePresentWaitFeaturesKHR,
-                                       presentWait, presentWaitFeatures,
-                                       xessSupportedPresentWaitFeatures) &&
-                featuresSupported;
-            featuresSupported =
-                VK_XESS_CHECK_FEATURES(
-                    VkPhysicalDeviceLineRasterizationFeaturesKHR,
-                    rectangularLines, lineRasterizationFeatures,
-                    xessSupportedLineRasterizationFeatures) &&
-                featuresSupported;
-            featuresSupported =
-                VK_XESS_CHECK_FEATURES(
-                    VkPhysicalDeviceAccelerationStructureFeaturesKHR,
-                    accelerationStructure, accelerationStructureFeatures,
-                    xessSupportedAccelerationStructureFeatures) &&
-                featuresSupported;
-            featuresSupported =
-                VK_XESS_CHECK_FEATURES(
-                    VkPhysicalDeviceRayTracingPipelineFeaturesKHR,
-                    rayTracingPipeline, rayTracingPipelineFeatures,
-                    xessSupportedRayTracingPipelineFeatures) &&
-                featuresSupported;
-            featuresSupported =
-                VK_XESS_CHECK_FEATURES(VkPhysicalDeviceRayQueryFeaturesKHR,
-                                       rayQuery, rayQueryFeatures,
-                                       xessSupportedRayQueryFeatures) &&
-                featuresSupported;
-            featuresSupported =
-                VK_XESS_CHECK_FEATURES(
-                    VkPhysicalDeviceFragmentShaderBarycentricFeaturesKHR,
-                    fragmentShaderBarycentric, fragmentBarycentricFeatures,
-                    xessSupportedFragmentBarycentricFeatures) &&
-                featuresSupported;
-            featuresSupported =
-                VK_XESS_CHECK_FEATURES(
-                    VkPhysicalDeviceCoherentMemoryFeaturesAMD,
-                    deviceCoherentMemory, amdCoherentMemoryFeatures,
-                    xessSupportedAmdCoherentMemoryFeatures) &&
-                featuresSupported;
-
-            if (chainValid && featuresSupported) {
-              xessRequirementsMerged = true;
-              hpl::Log("XeSS: device extensions and feature requirements accepted\n");
-            } else {
-              setXessUnavailable("required device feature unsupported");
-              hpl::Log("XeSS: %s\n", device->xessUnavailableReason);
-            }
-          }
+        if (!requiredName ||
+            !__VK_isExtensionSupported(requiredName, extensionProperties,
+                                        extensionNum)) {
+          char reason[128];
+          snprintf(reason, sizeof(reason),
+                   "required device extension unsupported: %s",
+                   requiredName ? requiredName : "<null>");
+          decline(reason);
+          return false;
         }
       }
+
+      // Past this point the chain may be mutated, so a failure has to unwind
+      // through restorePlainRequirements rather than simply returning.
+      for (uint32_t i = 0; i < req.extensionCount; i++) {
+        const char *requiredName = req.extensionNames[i];
+        if (!__VK_isExtensionNamesSupported(qCToStrRef(requiredName),
+                                            enabledExtensionNames,
+                                            arrlen(enabledExtensionNames))) {
+          arrpush(enabledExtensionNames, requiredName);
+          hpl::Log("%s: enabled device extension %s\n", debugName, requiredName);
+        }
       }
-      if (!xessRequirementsMerged)
-        restorePlainXessRequirements();
+
+      if (!req.mergeFeatureChain) {
+        hpl::Log("%s: device extension requirements accepted\n", debugName);
+        return true;
+      }
+
+      if (!req.mergeFeatureChain(req.userData, &foreignFeatureChain)) {
+        decline("required device feature query failed");
+        return false;
+      }
+      if (!foreignFeatureChain) {
+        decline("required device feature query returned no chain");
+        return false;
+      }
+
+      const char *chainReason = nullptr;
+      const bool chainValid = __VK_ValidateForeignFeatureChain(
+          foreignFeatureChain, engineFeatureNodes, engineFeatureNodeCount,
+          &chainReason);
+      if (!chainValid)
+        decline(chainReason);
+
+      bool featuresSupported = __VK_ForeignFeatureBitsSupported(
+          reinterpret_cast<const VkBool32 *>(&features.features),
+          reinterpret_cast<const VkBool32 *>(&supportedFeatures.features),
+          sizeof(VkPhysicalDeviceFeatures) / sizeof(VkBool32),
+          "VkPhysicalDeviceFeatures", debugName);
+      featuresSupported =
+          VK_FOREIGN_CHECK_FEATURES(VkPhysicalDeviceVulkan11Features,
+                                    storageBuffer16BitAccess, features11,
+                                    supportedFeatures11, debugName) &&
+          featuresSupported;
+      featuresSupported =
+          VK_FOREIGN_CHECK_FEATURES(VkPhysicalDeviceVulkan12Features,
+                                    samplerMirrorClampToEdge, features12,
+                                    supportedFeatures12, debugName) &&
+          featuresSupported;
+      featuresSupported =
+          VK_FOREIGN_CHECK_FEATURES(VkPhysicalDeviceVulkan13Features,
+                                    robustImageAccess, features13,
+                                    supportedFeatures13, debugName) &&
+          featuresSupported;
+      featuresSupported =
+          VK_FOREIGN_CHECK_FEATURES(VkPhysicalDeviceMaintenance5FeaturesKHR,
+                                    maintenance5, maintenance5Features,
+                                    supportedMaintenance5Features, debugName) &&
+          featuresSupported;
+      featuresSupported =
+          VK_FOREIGN_CHECK_FEATURES(VkPhysicalDevicePresentIdFeaturesKHR,
+                                    presentId, presentIdFeatures,
+                                    supportedPresentIdFeatures, debugName) &&
+          featuresSupported;
+      featuresSupported =
+          VK_FOREIGN_CHECK_FEATURES(VkPhysicalDevicePresentWaitFeaturesKHR,
+                                    presentWait, presentWaitFeatures,
+                                    supportedPresentWaitFeatures, debugName) &&
+          featuresSupported;
+      featuresSupported =
+          VK_FOREIGN_CHECK_FEATURES(
+              VkPhysicalDeviceLineRasterizationFeaturesKHR, rectangularLines,
+              lineRasterizationFeatures, supportedLineRasterizationFeatures,
+              debugName) &&
+          featuresSupported;
+      featuresSupported =
+          VK_FOREIGN_CHECK_FEATURES(
+              VkPhysicalDeviceAccelerationStructureFeaturesKHR,
+              accelerationStructure, accelerationStructureFeatures,
+              supportedAccelerationStructureFeatures, debugName) &&
+          featuresSupported;
+      featuresSupported =
+          VK_FOREIGN_CHECK_FEATURES(
+              VkPhysicalDeviceRayTracingPipelineFeaturesKHR, rayTracingPipeline,
+              rayTracingPipelineFeatures, supportedRayTracingPipelineFeatures,
+              debugName) &&
+          featuresSupported;
+      featuresSupported =
+          VK_FOREIGN_CHECK_FEATURES(VkPhysicalDeviceRayQueryFeaturesKHR,
+                                    rayQuery, rayQueryFeatures,
+                                    supportedRayQueryFeatures, debugName) &&
+          featuresSupported;
+      featuresSupported =
+          VK_FOREIGN_CHECK_FEATURES(
+              VkPhysicalDeviceFragmentShaderBarycentricFeaturesKHR,
+              fragmentShaderBarycentric, fragmentBarycentricFeatures,
+              supportedFragmentBarycentricFeatures, debugName) &&
+          featuresSupported;
+      featuresSupported =
+          VK_FOREIGN_CHECK_FEATURES(VkPhysicalDeviceCoherentMemoryFeaturesAMD,
+                                    deviceCoherentMemory,
+                                    amdCoherentMemoryFeatures,
+                                    supportedAmdCoherentMemoryFeatures,
+                                    debugName) &&
+          featuresSupported;
+
+      if (!chainValid || !featuresSupported) {
+        if (chainValid)
+          decline("required device feature unsupported");
+        return false;
+      }
+      hpl::Log("%s: device extensions and feature requirements accepted\n",
+               debugName);
+      return true;
+    };
+
+    // Contributors accepted so far, so the vkCreateDevice fallback below can
+    // tell each of them that its contribution was dropped after all.
+    size_t mergedRequirementCount = 0;
+    for (size_t i = 0; i < init->optionalRequirementCount; i++) {
+      if (!mergeDeviceRequirements(init->optionalRequirements[i])) {
+        // A declined contributor may have left the shared feature chain
+        // half-patched, so unwind every contribution rather than trying to
+        // subtract just this one, and build a plain device. Anyone already
+        // accepted has to be told its contribution went with it.
+        restorePlainRequirements();
+        for (size_t j = 0; j < i; j++) {
+          const struct RIVkDeviceRequirements &dropped =
+              init->optionalRequirements[j];
+          if (dropped.onRejected)
+            dropped.onRejected(dropped.userData,
+                               "dropped alongside another contributor that "
+                               "could not be satisfied");
+        }
+        mergedRequirementCount = 0;
+        break;
+      }
+      mergedRequirementCount = i + 1;
     }
-#endif
+    foreignRequirementsMerged = mergedRequirementCount > 0;
 
     // Declared up front so the scalar-block-layout `goto vk_done` below
     // doesn't skip an initialization (MSVC C2362). Reused by both the
@@ -1702,11 +1695,8 @@ int RIDevice::init(struct RIDeviceDesc *init) {
       goto vk_done;
     }
 
-    deviceCreateInfo.pNext = &features;
-#if defined(HPL2_XESS_AVAILABLE) && HPL2_XESS_AVAILABLE
-    if (xessRequirementsMerged)
-      deviceCreateInfo.pNext = xessFeatureChain;
-#endif
+    deviceCreateInfo.pNext =
+        foreignRequirementsMerged ? foreignFeatureChain : (void *)&features;
     deviceCreateInfo.pQueueCreateInfos = deviceQueueCreateInfo;
     deviceCreateInfo.enabledExtensionCount =
         (uint32_t)arrlen(enabledExtensionNames);
@@ -1714,16 +1704,27 @@ int RIDevice::init(struct RIDeviceDesc *init) {
 
     result = vkCreateDevice(physicalAdapter->vk.physicalDevice,
                             &deviceCreateInfo, NULL, &device->vk.device);
-#if defined(HPL2_XESS_AVAILABLE) && HPL2_XESS_AVAILABLE
-    if (!VK_WrapResult(result) && xessRequirementsMerged) {
+    if (!VK_WrapResult(result) && foreignRequirementsMerged) {
+      // The adapter advertised everything the contributors asked for, yet the
+      // driver still refused. Drop every contribution and retry plain: a
+      // contributed feature is never worth failing device creation over.
       char reason[128];
       snprintf(reason, sizeof(reason),
-               "device creation with XeSS requirements failed (%d); fell back to plain device",
+               "device creation with contributed requirements failed (%d); "
+               "fell back to plain device",
                (int)result);
-      setXessUnavailable(reason);
-      hpl::Log("XeSS: %s\n", device->xessUnavailableReason);
-      restorePlainXessRequirements();
-      xessRequirementsMerged = false;
+      for (size_t i = 0; i < mergedRequirementCount; i++) {
+        const struct RIVkDeviceRequirements &dropped =
+            init->optionalRequirements[i];
+        hpl::Log("%s: %s\n",
+                 dropped.debugName ? dropped.debugName : "device requirement",
+                 reason);
+        if (dropped.onRejected)
+          dropped.onRejected(dropped.userData, reason);
+      }
+      restorePlainRequirements();
+      foreignRequirementsMerged = false;
+      mergedRequirementCount = 0;
       deviceCreateInfo.pNext = &features;
       deviceCreateInfo.enabledExtensionCount =
           (uint32_t)arrlen(enabledExtensionNames);
@@ -1731,7 +1732,6 @@ int RIDevice::init(struct RIDeviceDesc *init) {
       result = vkCreateDevice(physicalAdapter->vk.physicalDevice,
                               &deviceCreateInfo, NULL, &device->vk.device);
     }
-#endif
     if (!VK_WrapResult(result)) {
       riResult = RI_FAIL;
       goto vk_done;
@@ -1786,13 +1786,14 @@ int RIDevice::init(struct RIDeviceDesc *init) {
         amdCoherentMemoryFeatures.deviceCoherentMemory != 0;
     hpl::Log("Device coherent memory enabled: %u\n",
              (unsigned)device->vk.deviceCoherentMemoryEnabled);
-#if defined(HPL2_XESS_AVAILABLE) && HPL2_XESS_AVAILABLE
-    if (xessRequirementsMerged) {
-      device->xessAvailable = true;
-      device->xessUnavailableReason[0] = '\0';
-      hpl::Log("XeSS: Vulkan device created with XeSS requirements\n");
+    // The device came up with everything the contributors asked for. None of
+    // them was told otherwise, so each is free to assume its requirements hold.
+    for (size_t i = 0; i < mergedRequirementCount; i++) {
+      const struct RIVkDeviceRequirements &merged =
+          init->optionalRequirements[i];
+      hpl::Log("%s: Vulkan device created with contributed requirements\n",
+               merged.debugName ? merged.debugName : "device requirement");
     }
-#endif
 
     // Load device-direct entrypoints for the device we actually use. Without
     // this, volkLoadInstance left device functions dispatching through the
@@ -2063,83 +2064,68 @@ int InitRIRenderer(const struct RIBackendInit *init) {
       }
     }
 
-#if defined(HPL2_XESS_AVAILABLE) && HPL2_XESS_AVAILABLE
-    {
-      hpl::cXessVulkanSupport &xessSupport =
-          hpl::XessVulkanSupportInstance();
-      if (!xessSupport.IsAvailable()) {
-        hpl::Log("XeSS: instance preflight unavailable: %s\n",
-                 xessSupport.UnavailableReason());
-      } else {
-        const auto getRequiredInstanceExtensions =
-            xessSupport.VKGetRequiredInstanceExtensions();
-        if (!getRequiredInstanceExtensions) {
-          xessSupport.SetUnavailable(
-              "required instance query entry point is unavailable");
-          hpl::Log("XeSS: %s\n", xessSupport.UnavailableReason());
-        } else {
-        uint32_t requiredExtensionCount = 0;
-        uint32_t minVkApiVersion = 0;
-        const char *const *requiredExtensionNames = NULL;
-        xess_result_t xessResult =
-            getRequiredInstanceExtensions(
-                &requiredExtensionCount, &requiredExtensionNames,
-                &minVkApiVersion);
-        if (xessResult != XESS_RESULT_SUCCESS) {
+    // Instance prerequisites contributed from outside RI (see
+    // RIVkInstanceRequirements). Each is judged on its own: one contributor
+    // asking for something this instance cannot provide has no bearing on
+    // another, because nothing is mutated until every check has passed.
+    for (size_t reqIdx = 0; reqIdx < init->vk.optionalRequirementCount;
+         reqIdx++) {
+      const struct RIVkInstanceRequirements &req =
+          init->vk.optionalRequirements[reqIdx];
+      const char *debugName =
+          req.debugName ? req.debugName : "instance requirement";
+      auto decline = [&](const char *reason) {
+        hpl::Log("%s: %s\n", debugName, reason);
+        if (req.onRejected)
+          req.onRejected(req.userData, reason);
+      };
+
+      if (req.extensionCount && !req.extensionNames) {
+        decline("required instance extension list is missing");
+        continue;
+      }
+      if (req.minInstanceApiVersion > appInfo.apiVersion) {
+        char reason[128];
+        snprintf(reason, sizeof(reason),
+                 "required Vulkan API version %u exceeds requested %u",
+                 req.minInstanceApiVersion, appInfo.apiVersion);
+        decline(reason);
+        continue;
+      }
+
+      bool instanceExtensionsSupported = true;
+      for (uint32_t extensionIdx = 0; extensionIdx < req.extensionCount;
+           extensionIdx++) {
+        const char *requiredName = req.extensionNames[extensionIdx];
+        if (!requiredName ||
+            !__VK_isExtensionSupported(requiredName, extProperties,
+                                        extensionNum)) {
           char reason[128];
           snprintf(reason, sizeof(reason),
-                   "required instance extension query failed (%d)",
-                   (int)xessResult);
-          xessSupport.SetUnavailable(reason);
-          hpl::Log("XeSS: %s\n", xessSupport.UnavailableReason());
-        } else if (requiredExtensionCount && !requiredExtensionNames) {
-          xessSupport.SetUnavailable(
-              "required instance extension query returned no names");
-          hpl::Log("XeSS: %s\n", xessSupport.UnavailableReason());
-        } else if (minVkApiVersion > appInfo.apiVersion) {
-          char reason[128];
-          snprintf(reason, sizeof(reason),
-                   "required Vulkan API version %u exceeds requested %u",
-                   minVkApiVersion, appInfo.apiVersion);
-          xessSupport.SetUnavailable(reason);
-          hpl::Log("XeSS: %s\n", xessSupport.UnavailableReason());
-        } else {
-          bool instanceExtensionsSupported = true;
-          for (uint32_t extensionIdx = 0;
-               extensionIdx < requiredExtensionCount; extensionIdx++) {
-            const char *requiredName = requiredExtensionNames[extensionIdx];
-            if (!requiredName ||
-                !__VK_isExtensionSupported(requiredName, extProperties,
-                                            extensionNum)) {
-              char reason[128];
-              snprintf(reason, sizeof(reason),
-                       "required instance extension unsupported: %s",
-                       requiredName ? requiredName : "<null>");
-              xessSupport.SetUnavailable(reason);
-              hpl::Log("XeSS: %s\n", xessSupport.UnavailableReason());
-              instanceExtensionsSupported = false;
-              break;
-            }
-          }
-          if (instanceExtensionsSupported) {
-            for (uint32_t extensionIdx = 0;
-                 extensionIdx < requiredExtensionCount; extensionIdx++) {
-              const char *requiredName = requiredExtensionNames[extensionIdx];
-              if (!__VK_isExtensionNamesSupported(
-                      qCToStrRef(requiredName), enabledExtensionNames,
-                      arrlen(enabledExtensionNames))) {
-                arrpush(enabledExtensionNames, requiredName);
-                instanceCreateInfo.enabledExtensionCount++;
-                hpl::Log("XeSS: enabled instance extension %s\n", requiredName);
-              }
-            }
-            hpl::Log("XeSS: instance requirements accepted\n");
-          }
-        }
+                   "required instance extension unsupported: %s",
+                   requiredName ? requiredName : "<null>");
+          decline(reason);
+          instanceExtensionsSupported = false;
+          break;
         }
       }
+      if (!instanceExtensionsSupported)
+        continue;
+
+      for (uint32_t extensionIdx = 0; extensionIdx < req.extensionCount;
+           extensionIdx++) {
+        const char *requiredName = req.extensionNames[extensionIdx];
+        if (!__VK_isExtensionNamesSupported(qCToStrRef(requiredName),
+                                            enabledExtensionNames,
+                                            arrlen(enabledExtensionNames))) {
+          arrpush(enabledExtensionNames, requiredName);
+          instanceCreateInfo.enabledExtensionCount++;
+          hpl::Log("%s: enabled instance extension %s\n", debugName,
+                   requiredName);
+        }
+      }
+      hpl::Log("%s: instance requirements accepted\n", debugName);
     }
-#endif
 
     // stb_ds may relocate the extension array while the instance extensions
     // are being enumerated and while XeSS requirements are merged.
@@ -2802,6 +2788,35 @@ bool RIDeviceIsValid(const struct RIDevice *device) {
     return device->vk.device != NULL;
 #endif
   return false;
+}
+
+bool RIQueryMemoryStats(const struct RIDevice *device,
+                        struct RIMemoryStats *out) {
+  if (!device || !out)
+    return false;
+#if (DEVICE_IMPL_D3D12)
+  if (RIIsTargetSelected(RI_DEVICE_API_D3D12))
+    return RID3D12_QueryMemoryStats(*device, out);
+#endif
+  return false;
+}
+
+void RISealRetiredBuffers(struct RIDevice *device, uint64_t timelineValue) {
+#if (DEVICE_IMPL_D3D12)
+  if (device && RIIsTargetSelected(RI_DEVICE_API_D3D12))
+    RID3D12_SealRetiredBuffers(*device, timelineValue);
+#endif
+  (void)device;
+  (void)timelineValue;
+}
+
+void RIReclaimRetiredBuffers(struct RIDevice *device, uint64_t completedValue) {
+#if (DEVICE_IMPL_D3D12)
+  if (device && RIIsTargetSelected(RI_DEVICE_API_D3D12))
+    RID3D12_ReclaimRetiredBuffers(*device, completedValue);
+#endif
+  (void)device;
+  (void)completedValue;
 }
 
 void RIQueue::waitIdle(struct RIDevice *device) {
@@ -3673,12 +3688,9 @@ void RICmd::drawIndirect(struct RIDevice *device, struct RIBuffer *buffer,
     if (!signature || offset > buffer->d3d12.requestedSize ||
         required > buffer->d3d12.requestedSize - offset)
       return;
-    hpl::Log("D3D12 indirect verification: ExecuteIndirect draw count=%u stride=%u\n",
-             drawCount, stride);
     RID3D12_CheckRootArguments(*this, "drawIndirect");
     d3d12.cmdList->ExecuteIndirect(signature, drawCount,
                                    buffer->d3d12.resource, offset, nullptr, 0);
-    hpl::Log("D3D12 indirect verification: ExecuteIndirect recorded\n");
     return;
   }
 #endif
@@ -3867,6 +3879,109 @@ void RICmd::copyBuffer(struct RIDevice *device, struct RIBuffer *src,
   assert(false && "unhandled backend");
 }
 
+void RICmd::vk_d3d12_resetQueryPool(struct RIDevice *device,
+                                    struct RIQueryPool *pool, uint32_t first,
+                                    uint32_t count) {
+  if (!pool || pool->isEmpty() || count == 0 || first > pool->queryCount ||
+      count > pool->queryCount - first)
+    return;
+#if (DEVICE_IMPL_VULKAN)
+  if (RIIsTargetSelected(RI_DEVICE_API_VK)) {
+    vkCmdResetQueryPool(vk.cmd, pool->vk.pool, first, count);
+    return;
+  }
+#endif
+#if (DEVICE_IMPL_D3D12)
+  if (RIIsTargetSelected(RI_DEVICE_API_D3D12)) {
+    // D3D12 has no reset concept: EndQuery overwrites its slot unconditionally.
+    return;
+  }
+#endif
+  assert(false && "unhandled backend");
+}
+
+void RICmd::vk_d3d12_beginQuery(struct RIDevice *device,
+                                struct RIQueryPool *pool, uint32_t index) {
+  if (!pool || pool->isEmpty() || index >= pool->queryCount)
+    return;
+#if (DEVICE_IMPL_VULKAN)
+  if (RIIsTargetSelected(RI_DEVICE_API_VK)) {
+    vkCmdBeginQuery(vk.cmd, pool->vk.pool, index,
+                    pool->isPrecise() ? VK_QUERY_CONTROL_PRECISE_BIT : 0);
+    return;
+  }
+#endif
+#if (DEVICE_IMPL_D3D12)
+  if (RIIsTargetSelected(RI_DEVICE_API_D3D12)) {
+    if (!d3d12.cmdList)
+      return;
+    d3d12.cmdList->BeginQuery(pool->d3d12.heap,
+                              pool->isPrecise()
+                                  ? D3D12_QUERY_TYPE_OCCLUSION
+                                  : D3D12_QUERY_TYPE_BINARY_OCCLUSION,
+                              index);
+    return;
+  }
+#endif
+  assert(false && "unhandled backend");
+}
+
+void RICmd::vk_d3d12_endQuery(struct RIDevice *device,
+                              struct RIQueryPool *pool, uint32_t index) {
+  if (!pool || pool->isEmpty() || index >= pool->queryCount)
+    return;
+#if (DEVICE_IMPL_VULKAN)
+  if (RIIsTargetSelected(RI_DEVICE_API_VK)) {
+    vkCmdEndQuery(vk.cmd, pool->vk.pool, index);
+    return;
+  }
+#endif
+#if (DEVICE_IMPL_D3D12)
+  if (RIIsTargetSelected(RI_DEVICE_API_D3D12)) {
+    if (!d3d12.cmdList)
+      return;
+    d3d12.cmdList->EndQuery(pool->d3d12.heap,
+                            pool->isPrecise()
+                                ? D3D12_QUERY_TYPE_OCCLUSION
+                                : D3D12_QUERY_TYPE_BINARY_OCCLUSION,
+                            index);
+    return;
+  }
+#endif
+  assert(false && "unhandled backend");
+}
+
+void RICmd::vk_d3d12_resolveQueryPool(struct RIDevice *device,
+                                      struct RIQueryPool *pool, uint32_t first,
+                                      uint32_t count) {
+  if (!pool || pool->isEmpty() || count == 0 || first > pool->queryCount ||
+      count > pool->queryCount - first)
+    return;
+#if (DEVICE_IMPL_VULKAN)
+  if (RIIsTargetSelected(RI_DEVICE_API_VK)) {
+    // The pool is host-readable directly; nothing to resolve.
+    return;
+  }
+#endif
+#if (DEVICE_IMPL_D3D12)
+  if (RIIsTargetSelected(RI_DEVICE_API_D3D12)) {
+    if (!d3d12.cmdList || !pool->d3d12.readback.d3d12.resource)
+      return;
+    // The readback heap lives permanently in COPY_DEST, so no barrier is
+    // needed around the resolve.
+    d3d12.cmdList->ResolveQueryData(
+        pool->d3d12.heap,
+        pool->isPrecise() ? D3D12_QUERY_TYPE_OCCLUSION
+                          : D3D12_QUERY_TYPE_BINARY_OCCLUSION,
+        first, count, pool->d3d12.readback.d3d12.resource,
+        (uint64_t)first * sizeof(uint64_t));
+    pool->resolvedCount = first + count;
+    return;
+  }
+#endif
+  assert(false && "unhandled backend");
+}
+
 void RICmd::copyBufferToTexture(struct RIDevice *device, struct RIBuffer *src,
                                 struct RITexture *dst,
                                 const struct RIBufferTextureCopyDesc &desc) {
@@ -3930,9 +4045,26 @@ void RICmd::copyBufferToTexture(struct RIDevice *device, struct RIBuffer *src,
       rowPitch = RIFormatBlockCount(rowLength, props->blockWidth) *
                  props->stride;
     }
-    assert(rowPitch != 0 &&
-           rowPitch % D3D12_TEXTURE_DATA_PITCH_ALIGNMENT == 0);
-    assert(desc.bufferOffset % D3D12_TEXTURE_DATA_PLACEMENT_ALIGNMENT == 0);
+    // These were asserts, which NDEBUG removes from the Release build that
+    // ships -- so a misaligned footprint produced a silently wrong copy
+    // (garbage texels) in exactly the configuration nobody could diagnose.
+    // D3D12 requires the placed-footprint row pitch to be a multiple of 256
+    // and the buffer offset a multiple of 512; skipping the copy leaves the
+    // destination untouched, which is both visible and reportable.
+    if (rowPitch == 0 ||
+        rowPitch % D3D12_TEXTURE_DATA_PITCH_ALIGNMENT != 0) {
+      hpl::Warning("RI D3D12: copyBufferToTexture rejected: row pitch %u is "
+                   "zero or not a multiple of %u\n",
+                   rowPitch, unsigned(D3D12_TEXTURE_DATA_PITCH_ALIGNMENT));
+      return;
+    }
+    if (desc.bufferOffset % D3D12_TEXTURE_DATA_PLACEMENT_ALIGNMENT != 0) {
+      hpl::Warning("RI D3D12: copyBufferToTexture rejected: buffer offset "
+                   "%llu is not a multiple of %u\n",
+                   (unsigned long long)desc.bufferOffset,
+                   unsigned(D3D12_TEXTURE_DATA_PLACEMENT_ALIGNMENT));
+      return;
+    }
 
     D3D12_TEXTURE_COPY_LOCATION srcLoc = {};
     srcLoc.pResource = src->d3d12.resource;
@@ -4222,13 +4354,80 @@ void RICmd::clearStorageImage(struct RIDevice *device, struct RITexture *image,
 #endif
 #if (DEVICE_IMPL_D3D12)
   if (RIIsTargetSelected(RI_DEVICE_API_D3D12)) {
-    // TODO: D3D12 clearStorageImage uses
-    // ClearUnorderedAccessViewFloat/Uint through a bound UAV in a shader-
-    // visible descriptor heap. Requires the descriptor heap/UAV plumbing
-    // that lands with the texture-view descriptor work.
-    (void)image;
-    (void)color;
-    assert(false && "d3d12 clearStorageImage not implemented");
+    if (!d3d12.cmdList || !device->d3d12.device || !image ||
+        !image->d3d12.resource)
+      return;
+    // A simultaneous-access texture's layout is pinned to COMMON, and
+    // ClearUnorderedAccessView* requires UNORDERED_ACCESS, so the two can never
+    // be combined. Say so rather than letting the debug layer report it as an
+    // incompatible layout far from the cause.
+    if (image->d3d12.usage & RI_USAGE_SIMULTANEOUS_ACCESS) {
+      hpl::Error("D3D12 clearStorageImage: a RI_USAGE_SIMULTANEOUS_ACCESS "
+                 "texture cannot be UAV-cleared (its layout is pinned to "
+                 "COMMON); initialize it with a copy or a shader write\n");
+      return;
+    }
+    if (!d3d12.uavClearCpuHeap || !d3d12.uavClearGpuHeap ||
+        d3d12.uavClearCount >= RI_D3D12_UAV_CLEAR_DESCRIPTOR_CAPACITY) {
+      hpl::Error("D3D12 clearStorageImage: no UAV-clear descriptor slot "
+                 "available (%u used of %u)\n",
+                 d3d12.uavClearCount, RI_D3D12_UAV_CLEAR_DESCRIPTOR_CAPACITY);
+      return;
+    }
+    // Full first-mip, first-layer clear, matching the Vulkan path's
+    // subresource range of {COLOR, mip 0, 1 level, layer 0, 1 layer}.
+    D3D12_UNORDERED_ACCESS_VIEW_DESC uav = {};
+    uav.Format = static_cast<DXGI_FORMAT>(image->d3d12.format);
+    if (image->d3d12.layerNum > 1) {
+      uav.ViewDimension = D3D12_UAV_DIMENSION_TEXTURE2DARRAY;
+      uav.Texture2DArray.MipSlice = 0;
+      uav.Texture2DArray.FirstArraySlice = 0;
+      uav.Texture2DArray.ArraySize = image->d3d12.layerNum;
+    } else {
+      uav.ViewDimension = D3D12_UAV_DIMENSION_TEXTURE2D;
+      uav.Texture2D.MipSlice = 0;
+    }
+
+    // The same descriptor has to exist in both heaps: the API reads the clear
+    // parameters through the CPU handle and addresses the resource through the
+    // GPU one.
+    const uint32_t slot = d3d12.uavClearCount++;
+    const SIZE_T offset = SIZE_T(slot) * d3d12.uavClearDescriptorSize;
+    D3D12_CPU_DESCRIPTOR_HANDLE cpuHandle = d3d12.uavClearCpuStart;
+    cpuHandle.ptr += offset;
+    D3D12_CPU_DESCRIPTOR_HANDLE gpuHeapCpuHandle =
+        d3d12.uavClearGpuHeapCpuStart;
+    gpuHeapCpuHandle.ptr += offset;
+    D3D12_GPU_DESCRIPTOR_HANDLE gpuHandle = d3d12.uavClearGpuStart;
+    gpuHandle.ptr += UINT64(offset);
+    device->d3d12.device->CreateUnorderedAccessView(image->d3d12.resource,
+                                                    nullptr, &uav, cpuHandle);
+    device->d3d12.device->CreateUnorderedAccessView(
+        image->d3d12.resource, nullptr, &uav, gpuHeapCpuHandle);
+
+    // ClearUnorderedAccessView* reads the GPU handle out of the *currently
+    // bound* heap, so swap to the clear heap and put the caller's heaps back
+    // afterwards. RID3D12_SetDescriptorHeaps invalidates descriptor-table root
+    // arguments on a heap change, so the next dispatch rebinds its tables.
+    ID3D12DescriptorHeap *previousResourceHeap = d3d12.boundResourceHeap;
+    ID3D12DescriptorHeap *previousSamplerHeap = d3d12.boundSamplerHeap;
+    RID3D12_SetDescriptorHeaps(*this, d3d12.uavClearGpuHeap,
+                               previousSamplerHeap);
+    // An integer-format UAV must be cleared through the Uint entry point; the
+    // float one is undefined on it. Every current caller clears a float format.
+    const struct RIFormatProps *props = GetRIFormatProps(image->format);
+    if (props && props->isInteger) {
+      const UINT value[4] = {UINT(color[0]), UINT(color[1]), UINT(color[2]),
+                             UINT(color[3])};
+      d3d12.cmdList->ClearUnorderedAccessViewUint(
+          gpuHandle, cpuHandle, image->d3d12.resource, value, 0, nullptr);
+    } else {
+      d3d12.cmdList->ClearUnorderedAccessViewFloat(
+          gpuHandle, cpuHandle, image->d3d12.resource, color, 0, nullptr);
+    }
+    if (previousResourceHeap)
+      RID3D12_SetDescriptorHeaps(*this, previousResourceHeap,
+                                 previousSamplerHeap);
     return;
   }
 #endif
@@ -4492,14 +4691,24 @@ static void ri_d3d12_WarnViewportConvention() {
              "be Y-flipped.\n");
 }
 
+// Note: there is deliberately no beginRendering-time fallback for an attachment
+// that never received its initializing discard (see
+// RITexture::d3d12.needsInitialization). Reaching the owning RITexture from here
+// would mean following RITextureView::resource, and that back-pointer is not
+// safe to dereference -- RITextureView::create stores the address it was handed,
+// and callers such as CreateViewportColorTexture pass a stack temporary that is
+// copied into a RISharedPointer afterwards. RID3D12_ResourceBarrier is the one
+// place that holds a live RITexture, so it is the only place that discards.
+
+// Discards the depth plane, the stencil plane, or both. A combined
+// depth/stencil resource is two D3D12 planes and each is its own subresource,
+// so the two aspects discard independently -- the only thing that is genuinely
+// subresource-wide is a single plane. (For a color attachment there is one
+// plane and `discardDepth` is simply "discard it".)
 static void ri_d3d12_discard(RICmd &cmd,
                              const RID3D12ActiveAttachment &a,
                              bool discardDepth, bool discardStencil) {
   if (!a.resource || (!discardDepth && !discardStencil)) return;
-  // D3D12 discard is subresource-wide; never discard a depth/stencil
-  // subresource when either aspect is read-only or must be preserved.
-  if (a.hasStencil && (!a.depthWritable || !a.stencilWritable ||
-                       discardDepth != discardStencil)) return;
   D3D12_RESOURCE_DESC rd = a.resource->GetDesc();
   const uint32_t mipLevels = rd.MipLevels;
   const uint32_t arraySize = rd.Dimension == D3D12_RESOURCE_DIMENSION_TEXTURE3D
@@ -4514,22 +4723,35 @@ static void ri_d3d12_discard(RICmd &cmd,
   const bool wholeSubresource = a.x == 0 && a.y == 0 &&
                                 uint64_t(a.width) >= mipWidth &&
                                 a.height >= mipHeight;
-  for (uint32_t i = 0; i < count; ++i) {
-    UINT subresource = a.baseMip +
-                       (rd.Dimension == D3D12_RESOURCE_DIMENSION_TEXTURE3D
-                            ? 0u : (a.baseLayer + i) * mipLevels);
-    D3D12_DISCARD_REGION region = {};
-    const int64_t right = static_cast<int64_t>(a.x) +
-                          static_cast<int64_t>(a.width);
-    const int64_t bottom = static_cast<int64_t>(a.y) +
-                           static_cast<int64_t>(a.height);
-    D3D12_RECT rect = {a.x, a.y, static_cast<LONG>(right),
-                       static_cast<LONG>(bottom)};
-    region.NumRects = wholeSubresource ? 0u : 1u;
-    region.pRects = wholeSubresource ? nullptr : &rect;
-    region.NumSubresources = 1;
-    region.FirstSubresource = subresource;
-    cmd.d3d12.cmdList->DiscardResource(a.resource, &region);
+  // A 3D texture is never planar; anything else is two planes only when the
+  // resource format carries stencil.
+  const uint32_t planeCount =
+      rd.Dimension == D3D12_RESOURCE_DIMENSION_TEXTURE3D
+          ? 1u : std::max<uint32_t>(1, a.planeCount);
+  for (uint32_t plane = 0; plane < planeCount; ++plane) {
+    // Plane 1 exists only on depth/stencil, where it is the stencil aspect.
+    const bool discardPlane = (planeCount > 1 && plane == 1) ? discardStencil
+                                                             : discardDepth;
+    if (!discardPlane)
+      continue;
+    for (uint32_t i = 0; i < count; ++i) {
+      UINT subresource = a.baseMip +
+                         (rd.Dimension == D3D12_RESOURCE_DIMENSION_TEXTURE3D
+                              ? 0u : (a.baseLayer + i) * mipLevels) +
+                         plane * mipLevels * arraySize;
+      D3D12_DISCARD_REGION region = {};
+      const int64_t right = static_cast<int64_t>(a.x) +
+                            static_cast<int64_t>(a.width);
+      const int64_t bottom = static_cast<int64_t>(a.y) +
+                             static_cast<int64_t>(a.height);
+      D3D12_RECT rect = {a.x, a.y, static_cast<LONG>(right),
+                         static_cast<LONG>(bottom)};
+      region.NumRects = wholeSubresource ? 0u : 1u;
+      region.pRects = wholeSubresource ? nullptr : &rect;
+      region.NumSubresources = 1;
+      region.FirstSubresource = subresource;
+      cmd.d3d12.cmdList->DiscardResource(a.resource, &region);
+    }
   }
 }
 #endif
@@ -4685,6 +4907,7 @@ void RICmd::vk_d3d12_beginRendering(struct RIDevice *device,
       active.loadOp = desc.colors[i].loadOp;
       active.storeOp = desc.colors[i].storeOp;
       active.hasStencil = false;
+      active.planeCount = 1;
       ri_d3d12_discard(*this, active, active.loadOp == RI_ATTACHMENT_LOAD_OP_DONT_CARE, false);
       if (active.loadOp == RI_ATTACHMENT_LOAD_OP_CLEAR) {
         const bool clearWholeView =
@@ -4708,11 +4931,13 @@ void RICmd::vk_d3d12_beginRendering(struct RIDevice *device,
       active.storeOp = a.storeOp;
       active.stencilLoadOp = a.stencilLoadOp;
       active.stencilStoreOp = a.stencilStoreOp;
-      // A DSV for a stencil-capable format is read-only for stencil even
-      // when the RI caller did not expose that aspect. DiscardResource is
-      // whole-subresource, so retain that fact in the command snapshot.
-      active.hasStencil = a.hasStencil ||
-                          ri_d3d12_formatHasStencil((DXGI_FORMAT)a.view.d3d12.format);
+      // hasStencil stays the caller's: it says whether the stencil load/store
+      // ops are meaningful. The resource's plane count is tracked separately,
+      // because ri_d3d12_discard addresses planes and a stencil-capable format
+      // has two of them whether or not the pass binds the aspect.
+      active.hasStencil = a.hasStencil;
+      active.planeCount =
+          ri_d3d12_formatHasStencil((DXGI_FORMAT)a.view.d3d12.format) ? 2 : 1;
       active.depthWritable = ri_d3d12_depthWritable(a);
       active.stencilWritable = ri_d3d12_stencilWritable(a);
       ri_d3d12_discard(*this, active,

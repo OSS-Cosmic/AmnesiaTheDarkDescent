@@ -1,12 +1,15 @@
 // Authored spotlight shadow map raster.  Depth is Vulkan's explicit [0,1]
 // convention, matching MatrixPerspectiveProjection(..., false).
+
+#include "../HostDefinitions.h"
+
 import MaterialRaster;
 import StandardRaster;
 import SceneTypes;
 import bindless;
 
 struct ShadowConstants { float4x4 viewProjection; uint variabilityMask; };
-[[vk::push_constant]] ShadowConstants gPushConstants;
+[[vk::push_constant]] ShadowConstants gPushConstants HPL_PUSH_CONSTANT_REGISTER;
 struct V { float4 posH : SV_POSITION; float2 uv : TEXCOORD0;
             nointerpolation uint objectID : OBJECT_ID;
             nointerpolation uint materialID : MATERIAL_ID; };

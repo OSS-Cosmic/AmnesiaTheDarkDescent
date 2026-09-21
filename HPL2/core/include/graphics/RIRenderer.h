@@ -22,6 +22,14 @@ struct RIDeviceDesc {
   // Inline ray query in any shader stage; DXR tier 2 / VK_KHR_ray_query.
   // Implies requestRayTracing, which provides the structures it traces.
   uint32_t requestRayQuery : 1;
+#if (DEVICE_IMPL_VULKAN)
+  // Vulkan prerequisites from outside RI that have to be folded into
+  // vkCreateDevice; see RIVkDeviceRequirements in RIDevice.h. Optional: a NULL
+  // array leaves device creation exactly as it would be without contributors,
+  // and a contribution RI cannot satisfy is declined rather than fatal.
+  const struct RIVkDeviceRequirements *optionalRequirements;
+  size_t optionalRequirementCount;
+#endif
 };
 
 #if DEVICE_IMPL_VULKAN

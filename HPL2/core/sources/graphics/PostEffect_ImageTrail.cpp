@@ -85,9 +85,13 @@ void cPostEffect_ImageTrail::RenderEffect(const PostEffectRenderCtx &ctx) {
   if (!m_accum.valid || m_accum.width != ctx.width ||
       m_accum.height != ctx.height) {
     DestroyPostEffectColorTarget(m_accum);
+    // Matches the opaque-black clear the blend pass below issues on the first
+    // frame after a (re)create, so D3D12 can take the fast clear path.
+    RITextureClearValue accumClear = {};
+    accumClear.color[3] = 1.0f;
     CreatePostEffectColorTarget(m_accum, ctx.width, ctx.height,
                                 cGraphics::PogoColorFormat, RI_USAGE_NONE,
-                                "PostEffect_ImageTrail.accum");
+                                "PostEffect_ImageTrail.accum", accumClear);
     mbClearAccum = true;
   }
 

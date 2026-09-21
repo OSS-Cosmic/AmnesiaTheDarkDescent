@@ -382,6 +382,7 @@ cLuxBase::cLuxBase()
 	///////////////////////////////
 	// Init variables
 	mbPTestActivated = false;
+	mRenderApi = eRenderApiPreference_Auto;
 
 	///////////////////////////////
 	// HARDMODE
@@ -641,11 +642,76 @@ bool cLuxBase::ParseCommandLine(const tString &asCommandline)
 {
 	msDefaultInitConfigFile = _W("config/main_init.cfg");
 
-	if(asCommandline == "ptest")
+	//////////////////////////////////
+	// Split into tokens so a flag can be recognised next to a config path. The
+	// keywords below used to be matched against the whole command line; as
+	// tokens they still fire on their own, and now also combine with the rest.
+	tStringVec vTokens;
+	tString sSeparators = " \t";
+	cString::GetStringVec(asCommandline, vTokens, &sSeparators);
+
+	tString sRemainder = "";
+	bool bPTest = false;
+	for(size_t i=0; i<vTokens.size(); ++i)
 	{
-		mbPTestActivated = true;
+		const tString& sToken = vTokens[i];
+
+		//////////////////////////////////
+		// Graphics backend override. Last one wins; the engine turns Auto into
+		// the platform default (D3D12 on Windows, Vulkan elsewhere) and fails
+		// with a named error if the build has no such backend.
+		// Matched case-insensitively, and with one or two dashes, because these
+		// get typed by hand into shortcuts. The keywords below stay
+		// case-sensitive so they behave exactly as the old whole-line compare.
+		const tString sLower = cString::ToLowerCase(sToken);
+		if(sLower == "--d3d12" || sLower == "-d3d12")
+		{
+			mRenderApi = eRenderApiPreference_D3D12;
+			continue;
+		}
+		if(sLower == "--vulkan" || sLower == "-vulkan")
+		{
+			mRenderApi = eRenderApiPreference_Vulkan;
+			continue;
+		}
+
+		// ptest pins its own encrypted config path; it is resolved after the
+		// loop rather than returning here, so a backend flag placed after it
+		// still takes effect.
+		if(sToken == "ptest")
+		{
+			mbPTestActivated = true;
+			bPTest = true;
+			continue;
+		}
+
+		//////////////////////////////////
+		// HARDMODE
+		if(sToken == "hardmode")
+		{
+			mbHardMode = true;
+			continue;
+		}
+
+		// An unknown "--" switch would otherwise be folded into the path below
+		// and surface much later as a missing config file. Say so here instead.
+		// Only "--" is claimed: single-dash tokens (-cwd, -psn... reach us on
+		// Windows, where WinMain forwards the raw command line) keep falling
+		// through exactly as they did before.
+		if(sToken.compare(0, 2, "--") == 0)
+		{
+			Warning("Unknown command line option '%s', ignoring.\n", sToken.c_str());
+			continue;
+		}
+
+		if(sRemainder.empty() == false) sRemainder.append(" ");
+		sRemainder.append(sToken);
+	}
+
+	if(bPTest)
+	{
 		msInitConfigFile = cString::To16Char(DecryptString((char*)gv_main_init_str)); //_W("config/ptest_main_init.cfg");
-		
+
 		/*#ifndef SKIP_PTEST_TESTS
 			msErrorMessage = cString::To16Char(DecryptString((char*)gv_error_mess_str));
 			unsigned int lCRC = GetFileCRC(msInitConfigFile, 0x11af54e2);
@@ -659,19 +725,12 @@ bool cLuxBase::ParseCommandLine(const tString &asCommandline)
 	}
 
 	//////////////////////////////////
-	// HARDMODE
-	if(asCommandline == "hardmode")
-	{
-		msInitConfigFile = msDefaultInitConfigFile;
-		mbHardMode = true;
-		return true;
-	}
-
-	//////////////////////////////////
 	//Main Init config file
-	// TODO: Parse the command line better?
-	msInitConfigFile = cString::To16Char(asCommandline);
-	if(msInitConfigFile==_W("")) 
+	// Whatever was not a recognised token is the path, rejoined. Runs of
+	// consecutive spaces in it are collapsed -- quoting is already gone by the
+	// time the command line reaches us (see hplMain in LowLevelSystemSDL.cpp).
+	msInitConfigFile = cString::To16Char(sRemainder);
+	if(msInitConfigFile==_W(""))
 		msInitConfigFile = msDefaultInitConfigFile;
 
 	return true;
@@ -1105,6 +1164,7 @@ bool cLuxBase::InitEngine()
 	vars.mGraphics.mbFullscreen = mpConfigHandler->mbFullscreen;
 	vars.mGraphics.mbVsync = mpConfigHandler->mbVSync;
 	vars.mGraphics.mRendererBackend = mpConfigHandler->mRendererBackend;
+	vars.mGraphics.mRenderApi = mRenderApi;
 	vars.mGraphics.msWindowCaption = msGameName + " Loading...";
 	vars.mSound.mlSoundDeviceID = mpConfigHandler->mlSoundDevID;
 	vars.mSound.mlMaxChannels = mpConfigHandler->mlMaxSoundChannels;

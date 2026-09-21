@@ -204,7 +204,7 @@ void cLuxHelpFuncs::DrawSetToScreen(bool abClearScreen, const cColor &aCol,
 
 	  if (Interface<cGraphics>::Get()->primary.pool == NULL || Interface<cGraphics>::Get()->primary.cmds == NULL)
 	  {
-		  FatalError("Failed to acquire Vulkan primary command buffer!\n");
+		  FatalError("Failed to acquire the primary command buffer!\n");
 		  return;
 	  }
 
@@ -212,11 +212,12 @@ void cLuxHelpFuncs::DrawSetToScreen(bool abClearScreen, const cColor &aCol,
 	  Interface<cGraphics>::Get()->primary.cmds[0].begin(&Interface<cGraphics>::Get()->device);
   }
 
-  VkCommandBuffer cmd = Interface<cGraphics>::Get()->primary.cmds[0].vk.cmd;
-
-  if (cmd == VK_NULL_HANDLE)
+  // isEmpty() rather than a direct vk.cmd test: the Vulkan and D3D12 command
+  // handles share union storage, so reading vk.cmd under D3D12 reinterprets an
+  // ID3D12GraphicsCommandList pointer as a VkCommandBuffer.
+  if (Interface<cGraphics>::Get()->primary.cmds[0].isEmpty())
   {
-	  FatalError("Vulkan primary command buffer is null!\n");
+	  FatalError("Primary command buffer is null!\n");
 	  return;
   }
 

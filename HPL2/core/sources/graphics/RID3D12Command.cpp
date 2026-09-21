@@ -8,6 +8,9 @@
 #include "graphics/RIRenderer.h"
 #include "system/LowLevelSystem.h"
 
+#include <algorithm>
+#include <cstdio>
+
 void RID3D12_PoolInit(RIDevice &device, RIPool &pool, RIQueue &queue) {
   memset(&pool.d3d12, 0, sizeof(pool.d3d12));
   pool.d3d12.queue = queue.d3d12.queue;
@@ -93,6 +96,32 @@ void RID3D12_CmdInit(RIDevice &device, RICmd &cmd, RIPool &pool) {
     memset(&cmd.d3d12, 0, sizeof(cmd.d3d12));
     return;
   }
+  // UAV-clear scratch: a CPU-only heap for ClearUnorderedAccessView*'s
+  // ViewCPUHandle and a shader-visible one for its ViewGPUHandleInCurrentHeap.
+  // Failure here is not fatal — clearStorageImage checks for the heaps and
+  // reports a clear it cannot perform rather than taking the whole device down.
+  heapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
+  heapDesc.NumDescriptors = RI_D3D12_UAV_CLEAR_DESCRIPTOR_CAPACITY;
+  heapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_NONE;
+  if (D3D12_WrapResult(device.d3d12.device->CreateDescriptorHeap(
+          &heapDesc, IID_PPV_ARGS(&cmd.d3d12.uavClearCpuHeap)))) {
+    heapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
+    if (D3D12_WrapResult(device.d3d12.device->CreateDescriptorHeap(
+            &heapDesc, IID_PPV_ARGS(&cmd.d3d12.uavClearGpuHeap)))) {
+      cmd.d3d12.uavClearCpuStart =
+          cmd.d3d12.uavClearCpuHeap->GetCPUDescriptorHandleForHeapStart();
+      cmd.d3d12.uavClearGpuHeapCpuStart =
+          cmd.d3d12.uavClearGpuHeap->GetCPUDescriptorHandleForHeapStart();
+      cmd.d3d12.uavClearGpuStart =
+          cmd.d3d12.uavClearGpuHeap->GetGPUDescriptorHandleForHeapStart();
+      cmd.d3d12.uavClearDescriptorSize =
+          device.d3d12.device->GetDescriptorHandleIncrementSize(
+              D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+    } else {
+      cmd.d3d12.uavClearCpuHeap->Release();
+      cmd.d3d12.uavClearCpuHeap = nullptr;
+    }
+  }
   cmd.d3d12.rtvStart = cmd.d3d12.rtvHeap->GetCPUDescriptorHandleForHeapStart();
   cmd.d3d12.dsvStart = cmd.d3d12.dsvHeap->GetCPUDescriptorHandleForHeapStart();
   cmd.d3d12.rtvDescriptorSize =
@@ -105,24 +134,8 @@ void RID3D12_CmdInit(RIDevice &device, RICmd &cmd, RIPool &pool) {
   cmd.d3d12.cmdList->Close();
 }
 
-void RID3D12_CmdBegin(RIDevice &device, RICmd &cmd) {
-  if (!cmd.d3d12.cmdList || !cmd.d3d12.allocator)
-    return;
-  if (!D3D12_WrapResult(cmd.d3d12.allocator->Reset()))
-    return;
-  if (!D3D12_WrapResult(cmd.d3d12.cmdList->Reset(cmd.d3d12.allocator, nullptr)))
-    return;
-  cmd.d3d12.rtvCount = 0;
-  cmd.d3d12.dsvCount = 0;
-  cmd.d3d12.activeColorCount = 0;
-  cmd.d3d12.activeDepth = false;
-  cmd.d3d12.vertexBufferCacheValidMask = 0;
-  // Reset the root-binding kind together with the command-list state.  A
-  // command list can be reused after Reset(), and root parameters from the
-  // previous recording are no longer valid until a pipeline is bound again.
+void RID3D12_InvalidateCachedBindings(RICmd &cmd) {
   cmd.d3d12.computePipelineBound = false;
-  // Reset() also drops the bound root signature and descriptor heaps, so the
-  // redundancy caches for both must start empty.
   cmd.d3d12.boundGraphicsRootSignature = nullptr;
   cmd.d3d12.boundComputeRootSignature = nullptr;
   cmd.d3d12.boundResourceHeap = nullptr;
@@ -135,6 +148,12 @@ void RID3D12_CmdBegin(RIDevice &device, RICmd &cmd) {
   cmd.d3d12.computeRootArgsRequired = 0;
   cmd.d3d12.rootArgsReported = 0;
   cmd.d3d12.boundPipelineDebugName = nullptr;
+}
+
+void RID3D12_RestoreCachedBindings(RIDevice &device, RICmd &cmd) {
+  if (!cmd.d3d12.cmdList)
+    return;
+  RID3D12_InvalidateCachedBindings(cmd);
   ID3D12DescriptorHeap *resourceHeap = nullptr;
   ID3D12DescriptorHeap *samplerHeap = nullptr;
   // Copy command lists cannot carry root tables and do not need shader-visible
@@ -143,6 +162,28 @@ void RID3D12_CmdBegin(RIDevice &device, RICmd &cmd) {
   if (cmd.d3d12.cmdList->GetType() != D3D12_COMMAND_LIST_TYPE_COPY &&
       getDescriptorArenaHeaps(&device, &resourceHeap, &samplerHeap))
     RID3D12_SetDescriptorHeaps(cmd, resourceHeap, samplerHeap);
+}
+
+void RID3D12_CmdBegin(RIDevice &device, RICmd &cmd) {
+  if (!cmd.d3d12.cmdList || !cmd.d3d12.allocator)
+    return;
+  if (!D3D12_WrapResult(cmd.d3d12.allocator->Reset()))
+    return;
+  if (!D3D12_WrapResult(cmd.d3d12.cmdList->Reset(cmd.d3d12.allocator, nullptr)))
+    return;
+  cmd.d3d12.rtvCount = 0;
+  cmd.d3d12.dsvCount = 0;
+  cmd.d3d12.uavClearCount = 0;
+  cmd.d3d12.activeColorCount = 0;
+  cmd.d3d12.activeDepth = false;
+  cmd.d3d12.vertexBufferCacheValidMask = 0;
+  // Reset the root-binding kind together with the command-list state.  A
+  // command list can be reused after Reset(), and root parameters from the
+  // previous recording are no longer valid until a pipeline is bound again.
+  // Reset() also drops the bound root signature and descriptor heaps, so the
+  // redundancy caches for both must start empty. That is the same state an SDK
+  // recording behind our back leaves behind, so both go through one path.
+  RID3D12_RestoreCachedBindings(device, cmd);
 }
 
 // Setting a root signature invalidates every root argument on the command
@@ -247,19 +288,35 @@ void RID3D12_CheckRootArguments(RICmd &cmd, const char *what) {
   if (!missing)
     return;
   cmd.d3d12.rootArgsReported |= missing;
+  // Collect every missing parameter into one message and fail once afterwards.
+  // Failing inside the loop would report only the lowest-numbered parameter
+  // before the process stopped, hiding the rest of the picture.
+  // All 64 parameters spell out to ~244 characters, so size for the worst case
+  // and clamp regardless: snprintf reports the length it would have written,
+  // which would otherwise walk the cursor past the end.
+  char parameters[320] = {};
+  size_t cursor = 0;
   for (uint32_t parameter = 0; parameter < 64; ++parameter) {
     if (!(missing & (1ull << parameter)))
       continue;
     ++g_riD3D12MissingRootArgumentCount;
-    hpl::Error("RI D3D12: %s needs root parameter %u but nothing has bound it "
-               "since the last root-signature change (pipeline '%s'). Bind the "
-               "pipeline before the descriptors, or rebind the descriptors "
-               "after every pipeline bind.\n",
-               what, parameter,
-               cmd.d3d12.boundPipelineDebugName
-                   ? cmd.d3d12.boundPipelineDebugName
-                   : "<unnamed>");
+    if (cursor >= sizeof(parameters))
+      continue;
+    const int written =
+        snprintf(parameters + cursor, sizeof(parameters) - cursor, "%s%u",
+                 cursor ? ", " : "", parameter);
+    if (written > 0)
+      cursor = std::min(cursor + (size_t)written, sizeof(parameters) - 1);
   }
+  hpl::ValidationFailed(
+      "RI D3D12: %s needs root parameter%s %s but nothing has bound %s since "
+      "the last root-signature change (pipeline '%s'). Bind the pipeline "
+      "before the descriptors, or rebind the descriptors after every pipeline "
+      "bind.\n",
+      what, (missing & (missing - 1)) ? "s" : "", parameters,
+      (missing & (missing - 1)) ? "them" : "it",
+      cmd.d3d12.boundPipelineDebugName ? cmd.d3d12.boundPipelineDebugName
+                                       : "<unnamed>");
 }
 
 // Changing descriptor heaps invalidates descriptor-table root arguments the
@@ -418,6 +475,14 @@ void RID3D12_CmdDispose(RIDevice &device, RICmd &cmd) {
   if (cmd.d3d12.dsvHeap) {
     cmd.d3d12.dsvHeap->Release();
     cmd.d3d12.dsvHeap = nullptr;
+  }
+  if (cmd.d3d12.uavClearCpuHeap) {
+    cmd.d3d12.uavClearCpuHeap->Release();
+    cmd.d3d12.uavClearCpuHeap = nullptr;
+  }
+  if (cmd.d3d12.uavClearGpuHeap) {
+    cmd.d3d12.uavClearGpuHeap->Release();
+    cmd.d3d12.uavClearGpuHeap = nullptr;
   }
   if (cmd.d3d12.allocator) {
     cmd.d3d12.allocator->Release();

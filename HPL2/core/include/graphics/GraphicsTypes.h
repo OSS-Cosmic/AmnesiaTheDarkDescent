@@ -82,6 +82,17 @@ namespace hpl {
 
 	//-----------------------------------------
 
+	// Which RHI to bring up. A different axis from eRendererBackend, which picks
+	// the scene renderer (Standard vs RayTraced) on top of whichever RHI runs.
+	enum eRenderApiPreference
+	{
+		eRenderApiPreference_Auto,		// D3D12 where compiled in, else Vulkan
+		eRenderApiPreference_Vulkan,
+		eRenderApiPreference_D3D12,
+	};
+
+	//-----------------------------------------
+
 	enum eMatrix
 	{
 		eMatrix_ModelView,

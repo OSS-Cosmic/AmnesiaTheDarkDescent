@@ -13,13 +13,24 @@
 
 #include <NRD.h>
 
+// NRD is resolved at runtime rather than linked; see NrdApi below.
+#if defined(_WIN32)
+#include <windows.h>
+#else
+#include <dlfcn.h>
+#endif
+
 #include <algorithm>
+#include <atomic>
 #include <cassert>
+#include <cstdio>
 #include <cstring>
+#include <deque>
 #include <limits>
 #include <memory>
 #include <optional>
 #include <span>
+#include <string>
 #include <utility>
 #include <vector>
 
@@ -166,13 +177,21 @@ static NrdTexture CreateNrdTexture(cGraphics *graphics, uint32_t width,
   textureDesc.mipNum = 1;
   textureDesc.layerNum = 1;
   textureDesc.sampleCount = RI_SAMPLE_COUNT_1;
+  // These are sampled and stored with no layout transition between -- see
+  // MakeTextureDescriptor, which deliberately binds the sampled view in
+  // GENERAL for the texture's whole lifetime. Vulkan expresses that with
+  // VK_IMAGE_LAYOUT_GENERAL; on D3D12 no ordinary layout admits both accesses,
+  // so it needs the flag, exactly as nrdMotionVectors does. The cost is lost
+  // compression and no UAV clears; NRD never clears these.
   textureDesc.usage = RI_USAGE_SHADER_RESOURCE |
-                      RI_USAGE_SHADER_RESOURCE_STORAGE;
+                      RI_USAGE_SHADER_RESOURCE_STORAGE |
+                      RI_USAGE_SIMULTANEOUS_ACCESS;
 
   NrdTexture result;
   result.texture = RISharedPointer<RITexture>(
       &graphics->device, RITexture::create(&graphics->device, textureDesc));
   NrdRequire(!result.texture.isEmpty(), name);
+  result.texture->setDebugObjectName(&graphics->device, name);
 
   RITextureViewDesc viewDesc = {};
   viewDesc.viewType = RI_VIEWTYPE_SHADER_RESOURCE_2D;
@@ -200,6 +219,131 @@ static uint32_t NrdTextureExtent(uint32_t extent, uint16_t downsampleFactor) {
          static_cast<uint32_t>(downsampleFactor);
 }
 
+struct NrdApi {
+  decltype(&nrd::CreateInstance) CreateInstance = nullptr;
+  decltype(&nrd::DestroyInstance) DestroyInstance = nullptr;
+  decltype(&nrd::GetLibraryDesc) GetLibraryDesc = nullptr;
+  decltype(&nrd::GetInstanceDesc) GetInstanceDesc = nullptr;
+  decltype(&nrd::SetCommonSettings) SetCommonSettings = nullptr;
+  decltype(&nrd::SetDenoiserSettings) SetDenoiserSettings = nullptr;
+  decltype(&nrd::GetComputeDispatches) GetComputeDispatches = nullptr;
+  decltype(&nrd::GetResourceTypeString) GetResourceTypeString = nullptr;
+  decltype(&nrd::GetDenoiserString) GetDenoiserString = nullptr;
+
+  bool available = false;
+  char unavailableReason[128] = {};
+};
+
+static void NrdSetUnavailable(NrdApi &api, const char *reason) {
+  api.available = false;
+  if (!reason || !reason[0])
+    reason = "unspecified reason";
+  std::strncpy(api.unavailableReason, reason,
+               sizeof(api.unavailableReason) - 1);
+  api.unavailableReason[sizeof(api.unavailableReason) - 1] = '\0';
+}
+
+static void NrdLoadApi(NrdApi &api) {
+  NrdSetUnavailable(api, "NRD has not been loaded");
+
+#if defined(_WIN32)
+  // The staging project puts NRD.dll next to the executable, which is the
+  // first directory the default search order looks in.
+  const char *libraryName = "NRD.dll";
+  HMODULE library = LoadLibraryA(libraryName);
+#else
+  const char *libraryName = "libNRD.so";
+  // The game and tools link with -Wl,-rpath,'$ORIGIN/libs', where the staging
+  // project puts it. RTLD_LOCAL keeps NRD's symbols out of the global scope.
+  void *library = dlopen(libraryName, RTLD_NOW | RTLD_LOCAL);
+#endif
+  if (!library) {
+    char reason[128];
+    snprintf(reason, sizeof(reason),
+             "%s could not be loaded; the denoiser is disabled", libraryName);
+    NrdSetUnavailable(api, reason);
+    return;
+  }
+
+  // The library is deliberately never unloaded: NRD's embedded shader blobs are
+  // read straight out of its data segment, and NRD state lives for the process.
+#if defined(_WIN32)
+#define NRD_LOAD_SYMBOL(member, name)                                          \
+  api.member =                                                                 \
+      reinterpret_cast<decltype(api.member)>(GetProcAddress(library, name));
+#else
+#define NRD_LOAD_SYMBOL(member, name)                                          \
+  api.member = reinterpret_cast<decltype(api.member)>(dlsym(library, name));
+#endif
+
+#define NRD_REQUIRE_SYMBOL(member, name)                                       \
+  NRD_LOAD_SYMBOL(member, name)                                                \
+  if (!api.member) {                                                           \
+    char reason[128];                                                          \
+    snprintf(reason, sizeof(reason), "%s is missing the symbol %s",            \
+             libraryName, name);                                               \
+    NrdSetUnavailable(api, reason);                                            \
+    return;                                                                    \
+  }
+
+  NRD_REQUIRE_SYMBOL(CreateInstance, "CreateInstance");
+  NRD_REQUIRE_SYMBOL(DestroyInstance, "DestroyInstance");
+  NRD_REQUIRE_SYMBOL(GetLibraryDesc, "GetLibraryDesc");
+  NRD_REQUIRE_SYMBOL(GetInstanceDesc, "GetInstanceDesc");
+  NRD_REQUIRE_SYMBOL(SetCommonSettings, "SetCommonSettings");
+  NRD_REQUIRE_SYMBOL(SetDenoiserSettings, "SetDenoiserSettings");
+  NRD_REQUIRE_SYMBOL(GetComputeDispatches, "GetComputeDispatches");
+  NRD_REQUIRE_SYMBOL(GetResourceTypeString, "GetResourceTypeString");
+  NRD_REQUIRE_SYMBOL(GetDenoiserString, "GetDenoiserString");
+
+#undef NRD_REQUIRE_SYMBOL
+#undef NRD_LOAD_SYMBOL
+
+  // The library is now a separately shipped file that can drift from the
+  // headers this was built against -- something a static link made impossible.
+  // The descriptor layouts and enum values are version-specific, so a mismatch
+  // has to disable the denoiser rather than corrupt NRD's structs.
+  const nrd::LibraryDesc *desc = api.GetLibraryDesc();
+  if (!desc) {
+    NrdSetUnavailable(api, "NRD library description is null");
+    return;
+  }
+  if (desc->versionMajor != NRD_VERSION_MAJOR ||
+      desc->versionMinor != NRD_VERSION_MINOR) {
+    char reason[128];
+    snprintf(reason, sizeof(reason),
+             "%s is version %u.%u, expected %u.%u", libraryName,
+             static_cast<unsigned>(desc->versionMajor),
+             static_cast<unsigned>(desc->versionMinor),
+             static_cast<unsigned>(NRD_VERSION_MAJOR),
+             static_cast<unsigned>(NRD_VERSION_MINOR));
+    NrdSetUnavailable(api, reason);
+    return;
+  }
+
+  api.available = true;
+  api.unavailableReason[0] = '\0';
+}
+
+// Resolved once on first use. The reason is logged here, so a build running
+// without NRD says so exactly once instead of on every denoiser construction.
+static const NrdApi &Nrd() {
+  static const NrdApi api = [] {
+    NrdApi loaded;
+    NrdLoadApi(loaded);
+    if (loaded.available)
+      Log("NrdIntegration: NRD %u.%u loaded\n",
+          static_cast<unsigned>(NRD_VERSION_MAJOR),
+          static_cast<unsigned>(NRD_VERSION_MINOR));
+    else
+      Warning("NrdIntegration: %s\n", loaded.unavailableReason);
+    return loaded;
+  }();
+  return api;
+}
+
+std::atomic<uint32_t> g_nrdInstancesCreated{0};
+
 } // namespace
 
 struct NrdIntegration::Impl {
@@ -212,6 +356,11 @@ struct NrdIntegration::Impl {
                            : nrd::Denoiser::REBLUR_DIFFUSE_SPECULAR),
         denoiserIdentifier(static_cast<nrd::Identifier>(denoiser)) {
     NrdRequire(graphics != nullptr, "graphics is null");
+    // Callers are required to gate on NrdIntegration::IsAvailable(); reaching
+    // here without the library is a bug in the caller, not a missing file.
+    NrdRequire(Nrd().available,
+               "constructed while NRD is unavailable -- callers must check "
+               "NrdIntegration::IsAvailable()");
 
     // Keep NRD's C++ normalization settings in lockstep with the shader-side
     // REBLUR_FrontEnd_GetNormHitDist parameters.
@@ -241,7 +390,7 @@ struct NrdIntegration::Impl {
           nrd::HitDistanceReconstructionMode::AREA_3X3;
     }
 
-    const nrd::LibraryDesc *libraryDesc = nrd::GetLibraryDesc();
+    const nrd::LibraryDesc *libraryDesc = Nrd().GetLibraryDesc();
     NrdRequire(libraryDesc != nullptr, "NRD library description is null");
     library = *libraryDesc;
 
@@ -251,10 +400,11 @@ struct NrdIntegration::Impl {
     nrd::InstanceCreationDesc creationDesc = {};
     creationDesc.denoisers = &denoiserDesc;
     creationDesc.denoisersNum = 1;
-    NrdRequire(nrd::CreateInstance(creationDesc, instance) == nrd::Result::SUCCESS,
+    NrdRequire(Nrd().CreateInstance(creationDesc, instance) ==
+                   nrd::Result::SUCCESS,
                "failed to create NRD instance");
 
-    const nrd::InstanceDesc *desc = nrd::GetInstanceDesc(*instance);
+    const nrd::InstanceDesc *desc = Nrd().GetInstanceDesc(*instance);
     NrdRequire(desc != nullptr, "NRD instance description is null");
     instanceDesc = *desc;
 
@@ -265,6 +415,7 @@ struct NrdIntegration::Impl {
                "NRD resource set is outside RIProgram's four-set limit");
 
     BuildPrograms();
+    ++g_nrdInstancesCreated;
   }
 
   ~Impl() {
@@ -274,31 +425,139 @@ struct NrdIntegration::Impl {
         program->dispose(&graphics->device);
     }
     if (instance) {
-      nrd::DestroyInstance(*instance);
+      Nrd().DestroyInstance(*instance);
       instance = nullptr;
     }
+  }
+
+  // True when NRD's DXIL blobs are the ones to feed RIProgram. NRD ships every
+  // container it was built with, so this follows the active backend rather than
+  // whichever happens to be populated.
+  static bool UseDxilShaders() {
+#if (DEVICE_IMPL_D3D12)
+    return RIIsTargetSelected(RI_DEVICE_API_D3D12);
+#else
+    return false;
+#endif
+  }
+
+  const char *EntryPoint() const {
+    return instanceDesc.shaderEntryPoint ? instanceDesc.shaderEntryPoint
+                                         : "main";
+  }
+
+  // D3D12 binds NRD's descriptors by name rather than by (space, register).
+  // RIProgram::findReflectionBySlot keys on (set, register) alone, and DXIL
+  // keeps the native registers -- no SPIR-V shifts -- so t0 and u0 both land on
+  // (resourcesSpaceIndex, 0), as do b0 and s0 in the sampler space. Those shifts
+  // are exactly what keeps the two apart on Vulkan. The names are ours to pick,
+  // so this scheme makes every binding unique by construction, and it is shared
+  // with the reflection below so the two cannot drift apart.
+  static std::string BindingName(RIProgram::ShaderRegisterClass registerClass,
+                                 uint32_t registerIndex,
+                                 uint32_t registerSpace) {
+    const char letter =
+        registerClass == RIProgram::ShaderRegisterClass::CBV     ? 'b'
+        : registerClass == RIProgram::ShaderRegisterClass::SRV   ? 't'
+        : registerClass == RIProgram::ShaderRegisterClass::UAV   ? 'u'
+                                                                 : 's';
+    char name[64];
+    snprintf(name, sizeof(name), "%c%u_space%u", letter,
+             static_cast<unsigned>(registerIndex),
+             static_cast<unsigned>(registerSpace));
+    return name;
+  }
+
+  // NRD's shaders carry no reflection: they are embedded blobs with no sidecar,
+  // and NRD compiles them with --stripReflection. The D3D12 path needs one
+  // anyway, because that is what its root signature is built from. NRD's layout
+  // is uniform and fully described by its own API, so it can be reconstructed
+  // exactly rather than recovered from the container.
+  std::shared_ptr<const RIProgram::ShaderReflection>
+  SynthesizeReflection(const nrd::PipelineDesc &pipelineDesc) const {
+    auto reflection = std::make_shared<RIProgram::ShaderReflection>();
+    reflection->entryPoint = EntryPoint();
+    // Must match ri_stageName(PROGRAM_STAGE_COMPUTE); initialize() compares the
+    // two directly for a non-library artifact.
+    reflection->stage = "compute";
+    // NRD passes its parameters in a constant buffer, never as root constants.
+    reflection->pushConstants.present = false;
+
+    const auto add = [&](RIProgram::ShaderRegisterClass registerClass,
+                         uint32_t registerIndex, uint32_t registerSpace) {
+      RIProgram::ShaderResourceReflection resource;
+      resource.name = BindingName(registerClass, registerIndex, registerSpace);
+      resource.stage = reflection->stage;
+      resource.registerClass = registerClass;
+      resource.registerIndex = registerIndex;
+      resource.registerSpace = registerSpace;
+      resource.arrayCount = 1;
+      resource.used = true;
+      reflection->resources.push_back(std::move(resource));
+    };
+
+    // Ranges are ordered inputs-then-outputs, and SRVs and UAVs are separate
+    // register namespaces in HLSL, so both count up from the same base.
+    for (uint32_t rangeIndex = 0; rangeIndex < pipelineDesc.resourceRangesNum;
+         ++rangeIndex) {
+      const nrd::ResourceRangeDesc &range = pipelineDesc.resourceRanges[rangeIndex];
+      const RIProgram::ShaderRegisterClass registerClass =
+          range.descriptorType == nrd::DescriptorType::TEXTURE
+              ? RIProgram::ShaderRegisterClass::SRV
+              : RIProgram::ShaderRegisterClass::UAV;
+      for (uint32_t i = 0; i < range.descriptorsNum; ++i)
+        add(registerClass, instanceDesc.resourcesBaseRegisterIndex + i,
+            instanceDesc.resourcesSpaceIndex);
+    }
+    for (uint32_t i = 0; i < instanceDesc.samplersNum; ++i)
+      add(RIProgram::ShaderRegisterClass::Sampler,
+          instanceDesc.samplersBaseRegisterIndex + i,
+          instanceDesc.constantBufferAndSamplersSpaceIndex);
+    if (pipelineDesc.hasConstantData)
+      add(RIProgram::ShaderRegisterClass::CBV,
+          instanceDesc.constantBufferRegisterIndex,
+          instanceDesc.constantBufferAndSamplersSpaceIndex);
+    return reflection;
   }
 
   void BuildPrograms() {
     NrdRequire(instanceDesc.pipelines != nullptr || instanceDesc.pipelinesNum == 0,
                "NRD pipeline description is null");
+    const bool dxil = UseDxilShaders();
     programs.resize(instanceDesc.pipelinesNum);
     for (uint32_t i = 0; i < instanceDesc.pipelinesNum; ++i) {
       const nrd::PipelineDesc &pipelineDesc = instanceDesc.pipelines[i];
-      NrdRequire(pipelineDesc.computeShaderSPIRV.bytecode != nullptr &&
-                     pipelineDesc.computeShaderSPIRV.size != 0,
-                 "NRD pipeline has no SPIR-V compute shader");
+      const nrd::ComputeShaderDesc &shader = dxil
+                                                 ? pipelineDesc.computeShaderDXIL
+                                                 : pipelineDesc.computeShaderSPIRV;
+      // An empty container means NRD was configured without it -- see
+      // NRD_EMBEDS_*_SHADERS in premake/external.lua -- so say which one is
+      // missing rather than letting it surface later as a format error.
+      NrdRequire(shader.bytecode != nullptr && shader.size != 0,
+                 dxil ? "NRD was built without DXIL shaders (needs "
+                        "NRD_EMBEDS_DXIL_SHADERS=ON)"
+                      : "NRD was built without SPIR-V shaders (needs "
+                        "NRD_EMBEDS_SPIRV_SHADERS=ON)");
 
       auto program = std::make_unique<RIProgram>();
       RIProgram::ModuleStage stage = {};
       stage.stage = RIProgram::PROGRAM_STAGE_COMPUTE;
       stage.data = std::span<char>(
-          static_cast<char *>(const_cast<void *>(
-              pipelineDesc.computeShaderSPIRV.bytecode)),
-          static_cast<size_t>(pipelineDesc.computeShaderSPIRV.size));
-      stage.entryPoint = instanceDesc.shaderEntryPoint
-                             ? instanceDesc.shaderEntryPoint
-                             : "main";
+          static_cast<char *>(const_cast<void *>(shader.bytecode)),
+          static_cast<size_t>(shader.size));
+      stage.entryPoint = EntryPoint();
+      if (dxil) {
+        // D3D12 refuses a module with no retained reflection, so the bytes and
+        // the synthesized reflection travel together as an artifact. `json`
+        // stays null, which is what makes initialize() keep this reflection
+        // instead of re-parsing one.
+        stage.artifact.bytes = std::make_shared<const std::vector<char>>(
+            stage.data.begin(), stage.data.end());
+        stage.artifact.format = RIShaderArtifactFormat::Dxil;
+        stage.artifact.reflection = SynthesizeReflection(pipelineDesc);
+        stage.data = stage.artifact;
+        stage.format = stage.artifact.format;
+      }
       program->initialize(&graphics->device, std::span<RIProgram::ModuleStage>(
                                                    &stage, 1),
                           {}, pipelineDesc.shaderIdentifier);
@@ -466,7 +725,7 @@ struct NrdIntegration::Impl {
     }
     assert(false && "NrdIntegration: unsupported resource type");
     FatalError("NrdIntegration: unsupported NRD resource type %u (%s)\n",
-               static_cast<unsigned>(type), nrd::GetResourceTypeString(type));
+               static_cast<unsigned>(type), Nrd().GetResourceTypeString(type));
     return nullptr;
   }
 
@@ -518,6 +777,25 @@ struct NrdIntegration::Impl {
                : MakeInputDescriptor(view, type, descriptorType);
   }
 
+  // One binding, addressed the way the active backend's reflection indexes it:
+  // by name on D3D12 (see BindingName), by the SPIR-V-shifted (set, binding)
+  // slot on Vulkan. Both callers below go through this so the register
+  // arithmetic exists in exactly one place.
+  RIProgram::DescriptorBinding
+  MakeBinding(RIProgram::ShaderRegisterClass registerClass,
+              uint32_t registerIndex, uint32_t registerSpace,
+              uint32_t spirvOffset, const RIDescriptor &descriptor) {
+    if (UseDxilShaders()) {
+      nameStorage.push_back(
+          BindingName(registerClass, registerIndex, registerSpace));
+      return RIProgram::DescriptorBinding(nameStorage.back().c_str(),
+                                          descriptor);
+    }
+    return RIProgram::DescriptorBinding(registerSpace,
+                                        registerIndex + spirvOffset,
+                                        descriptor);
+  }
+
   void AppendSamplers(std::vector<RIProgram::DescriptorBinding> &bindings) {
     const uint32_t set = instanceDesc.constantBufferAndSamplersSpaceIndex;
     for (uint32_t i = 0; i < instanceDesc.samplersNum; ++i) {
@@ -538,10 +816,11 @@ struct NrdIntegration::Impl {
           eTextureWrap_ClampToEdge, eTextureWrap_ClampToEdge,
           eTextureWrap_ClampToEdge, filter);
       NrdRequire(sampler.has_value(), "failed to create NRD sampler");
-      bindings.emplace_back(
-          set, instanceDesc.samplersBaseRegisterIndex +
-                   library.spirvBindingOffsets.samplerOffset + i,
-          *sampler);
+      bindings.push_back(MakeBinding(RIProgram::ShaderRegisterClass::Sampler,
+                                     instanceDesc.samplersBaseRegisterIndex + i,
+                                     set,
+                                     library.spirvBindingOffsets.samplerOffset,
+                                     *sampler));
     }
   }
 
@@ -558,6 +837,8 @@ struct NrdIntegration::Impl {
 
     std::vector<RIProgram::DescriptorBinding> bindings;
     bindings.reserve(dispatchDesc.resourcesNum + instanceDesc.samplersNum + 1);
+    // The names handed out below only need to outlive this dispatch.
+    nameStorage.clear();
 
     uint32_t resourceIndex = 0;
     for (uint32_t rangeIndex = 0;
@@ -573,16 +854,18 @@ struct NrdIntegration::Impl {
         NrdRequire(resource.descriptorType == range.descriptorType,
                    "NRD dispatch resource range type does not match pipeline");
 
+        const bool isTexture =
+            range.descriptorType == nrd::DescriptorType::TEXTURE;
         const uint32_t bindingOffset =
-            range.descriptorType == nrd::DescriptorType::TEXTURE
-                ? library.spirvBindingOffsets.textureOffset
-                : library.spirvBindingOffsets.storageTextureAndBufferOffset;
-        const uint32_t binding = instanceDesc.resourcesBaseRegisterIndex +
-                                 bindingOffset + rangeElement;
-        bindings.emplace_back(instanceDesc.resourcesSpaceIndex, binding,
-                              MakeResourceDescriptor(
-                                  resource.type, resource.indexInPool,
-                                  resource.descriptorType, inputs));
+            isTexture ? library.spirvBindingOffsets.textureOffset
+                      : library.spirvBindingOffsets.storageTextureAndBufferOffset;
+        bindings.push_back(MakeBinding(
+            isTexture ? RIProgram::ShaderRegisterClass::SRV
+                      : RIProgram::ShaderRegisterClass::UAV,
+            instanceDesc.resourcesBaseRegisterIndex + rangeElement,
+            instanceDesc.resourcesSpaceIndex, bindingOffset,
+            MakeResourceDescriptor(resource.type, resource.indexInPool,
+                                   resource.descriptorType, inputs)));
       }
     }
     NrdRequire(resourceIndex == dispatchDesc.resourcesNum,
@@ -611,11 +894,12 @@ struct NrdIntegration::Impl {
         previousConstantBuffer = constantBuffer;
         hasPreviousConstantBuffer = true;
       }
-      bindings.emplace_back(
-          instanceDesc.constantBufferAndSamplersSpaceIndex,
-          instanceDesc.constantBufferRegisterIndex +
-              library.spirvBindingOffsets.constantBufferOffset,
-          constantBuffer);
+      bindings.push_back(
+          MakeBinding(RIProgram::ShaderRegisterClass::CBV,
+                      instanceDesc.constantBufferRegisterIndex,
+                      instanceDesc.constantBufferAndSamplersSpaceIndex,
+                      library.spirvBindingOffsets.constantBufferOffset,
+                      constantBuffer));
     }
 
     const hash_t pipelineHash =
@@ -677,10 +961,10 @@ struct NrdIntegration::Impl {
         historyReset ? nrd::AccumulationMode::CLEAR_AND_RESTART
                      : nrd::AccumulationMode::CONTINUE;
 
-    NrdRequire(nrd::SetCommonSettings(*instance, commonSettings) ==
+    NrdRequire(Nrd().SetCommonSettings(*instance, commonSettings) ==
                    nrd::Result::SUCCESS,
                "SetCommonSettings failed");
-    NrdRequire(nrd::SetDenoiserSettings(*instance, denoiserIdentifier,
+    NrdRequire(Nrd().SetDenoiserSettings(*instance, denoiserIdentifier,
                                         denoiser == nrd::Denoiser::RELAX_DIFFUSE
                                             ? static_cast<const void *>(&relaxSettings)
                                             : static_cast<const void *>(&reblurSettings)) == nrd::Result::SUCCESS,
@@ -691,13 +975,13 @@ struct NrdIntegration::Impl {
 
     const nrd::DispatchDesc *dispatchDescs = nullptr;
     uint32_t dispatchDescsNum = 0;
-    NrdRequire(nrd::GetComputeDispatches(*instance, &denoiserIdentifier, 1,
+    NrdRequire(Nrd().GetComputeDispatches(*instance, &denoiserIdentifier, 1,
                                          dispatchDescs,
                                          dispatchDescsNum) == nrd::Result::SUCCESS,
                "GetComputeDispatches failed");
 
     RIGpuScope denoiseScope(&graphics->profiler, cmd,
-                            nrd::GetDenoiserString(denoiser));
+                            Nrd().GetDenoiserString(denoiser));
     RIDescriptor previousConstantBuffer;
     bool hasPreviousConstantBuffer = false;
     for (uint32_t i = 0; i < dispatchDescsNum; ++i) {
@@ -742,6 +1026,13 @@ struct NrdIntegration::Impl {
   nrd::ReblurSettings reblurSettings = {};
   nrd::RelaxSettings relaxSettings = {};
   std::vector<std::unique_ptr<RIProgram>> programs;
+  // Backing store for the names MakeBinding hands to DescriptorBinding on
+  // D3D12. DescriptorBindingID keeps the `const char *` rather than copying it,
+  // so the string has to outlive the bindDescriptors call. A deque, not a
+  // vector: these names are short enough for the small-string optimization, and
+  // a vector reallocation would move the inline buffer out from under a pointer
+  // already handed out. Cleared at the top of each BindDispatch.
+  std::deque<std::string> nameStorage;
   std::vector<NrdTexture> permanentPool;
   std::vector<NrdTexture> transientPool;
   NrdTexture diffuseOutput;
@@ -751,6 +1042,10 @@ struct NrdIntegration::Impl {
   bool texturesInGeneral = false;
   bool historyReset = true;
 };
+
+bool NrdIntegration::IsAvailable() { return Nrd().available; }
+
+uint32_t NrdIntegration::InstancesCreated() { return g_nrdInstancesCreated; }
 
 NrdIntegration::NrdIntegration(cGraphics *graphics, NrdDenoiserMode mode)
     : m_impl(std::make_unique<Impl>(graphics, mode)) {}

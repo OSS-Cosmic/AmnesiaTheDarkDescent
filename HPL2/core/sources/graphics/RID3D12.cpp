@@ -4,6 +4,7 @@
 
 uint32_t g_riD3D12EnhancedBarrierCallCount = 0;
 uint32_t g_riD3D12LegacyBarrierCallCount = 0;
+std::atomic<uint32_t> g_riD3D12DescriptorCacheEntries{0};
 
 #include "graphics/RIRenderer.h"
 #include "graphics/RIDevice.h"
@@ -482,6 +483,9 @@ int RID3D12_InitDevice(struct RIDevice &device, const struct RIDeviceDesc *init)
     device.rayQueryEnabled = init->requestRayQuery != 0;
     device.rayTracingEnabled = device.accelerationStructureEnabled &&
                                device.rayTracingPipelineEnabled;
+    // D3D12_QUERY_TYPE_OCCLUSION always returns exact sample counts; there is
+    // no equivalent of Vulkan's occlusionQueryPrecise feature gate.
+    device.occlusionQueryPreciseEnabled = true;
     if (tier >= 1) {
       device.physicalAdapter.rayTracingShaderGroupIdentifierSize =
           D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES;
@@ -602,8 +606,9 @@ int RID3D12_InitDevice(struct RIDevice &device, const struct RIDeviceDesc *init)
       device.d3d12.infoQueue = nullptr;
     }
   }
-  device.xessAvailable = false;
-  device.xessUnavailableReason[0] = '\0';
+  // D3D12 has no equivalent of RIVkDeviceRequirements: there is nothing to
+  // negotiate before device creation, so an SDK that needs D3D12 decides on its
+  // own whether it can run once this device exists.
   return RI_SUCCESS;
 }
 
@@ -677,6 +682,28 @@ void RID3D12_DrainDeviceMessages(struct RIDevice &device) {
 
 bool RID3D12_DeviceIsValid(const struct RIDevice &device) {
   return device.d3d12.device != nullptr;
+}
+
+bool RID3D12_QueryMemoryStats(const struct RIDevice &device,
+                              struct RIMemoryStats *out) {
+  if (!out || !device.d3d12.allocator)
+    return false;
+  // GetBudget is the cheap query: D3D12MA refreshes it from
+  // QueryVideoMemoryInfo, so usage counts every process-wide resource, not only
+  // the allocator's own.
+  D3D12MA::Budget local = {};
+  D3D12MA::Budget nonLocal = {};
+  device.d3d12.allocator->GetBudget(&local, &nonLocal);
+  out->localUsage = local.UsageBytes;
+  out->localBudget = local.BudgetBytes;
+  out->nonLocalUsage = nonLocal.UsageBytes;
+  out->nonLocalBudget = nonLocal.BudgetBytes;
+  out->allocatorBlockBytes = local.Stats.BlockBytes + nonLocal.Stats.BlockBytes;
+  out->allocatorAllocationBytes =
+      local.Stats.AllocationBytes + nonLocal.Stats.AllocationBytes;
+  RID3D12_BufferRegistryStats(device, &out->registeredBuffers,
+                              &out->retiredBufferBytes);
+  return true;
 }
 
 static const char *ri_d3d12_removed_reason_name(HRESULT hr) {

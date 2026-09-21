@@ -11,6 +11,8 @@
 // RI.UpdateFrameUBO) and the per-object model matrix + glow color via a push
 // constant. The view-space normal is forwarded for the enemy rim term.
 
+#include "../HostDefinitions.h"
+
 struct OutlinePass
 {
     float4x4 viewProj;
@@ -27,7 +29,7 @@ struct OutlinePC
 };
 
 [vk::push_constant]
-OutlinePC gPushConstants;
+OutlinePC gPushConstants HPL_PUSH_CONSTANT_REGISTER;
 
 struct VSIn
 {

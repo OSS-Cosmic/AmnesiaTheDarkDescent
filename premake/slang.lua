@@ -309,8 +309,12 @@ function slang_dxil_prebuild(spec)
             end
             table.insert(win_commands, string.format(
                 '> "%s.meta" (%s)', output, metadata))
+            -- -D DXIL must match the Windows command above: fixtures whose
+            -- include_dirs reach amnesia/slang rely on it for the pinned
+            -- registers (gPerFrame's b3, gPushConstants' space9). Without it
+            -- those pins silently vanish and the stages disagree again.
             table.insert(nix_commands, string.format(
-                '"%s" "%s" -target dxil -profile sm_6_6 -matrix-layout-column-major -entry "%s" -stage "%s"%s -o "%s"%s',
+                '"%s" "%s" -D DXIL -target dxil -profile sm_6_6 -matrix-layout-column-major -entry "%s" -stage "%s"%s -o "%s"%s',
                 slangc, entry.path, entry.entry, entry.stage, include_flags, output,
                 entry.reflection and string.format(' -reflection-json "%s"', reflection) or ""))
             local nix_metadata = 'HPL2_SHADER_ARTIFACT\\nversion=1\\nformat=dxil\\n'
@@ -490,6 +494,24 @@ function slang_dxil_production_prebuild()
         filter {}
     end
 
+    -- Stage the DXIL next to the SPIR-V that slang_prebuild copies, so a run
+    -- from an ATDD_DIR install can resolve `<name>.dxil` the same way it
+    -- resolves `<name>.spv`. core/shaders is a flat resource dir and the
+    -- loader picks the extension from the active backend, so both backends'
+    -- artifacts coexist there. The .reflection-v1.json is not optional: the
+    -- D3D12 arm of RIProgram::initialize fatals on a stage with no retained
+    -- reflection, and the .meta sidecar names that JSON by filename.
+    filter "system:windows"
+        postbuildcommands {
+            'if not "$(ATDD_DIR)"=="" if not exist "$(ATDD_DIR)\\core\\shaders" mkdir "$(ATDD_DIR)\\core\\shaders"',
+            string.format('if not "$(ATDD_DIR)"=="" if exist "%s\\*.dxil" copy /Y "%s\\*.dxil" "$(ATDD_DIR)\\core\\shaders\\" >nul',
+                winpath(out), winpath(out)),
+            string.format('if not "$(ATDD_DIR)"=="" if exist "%s\\*.dxil.meta" copy /Y "%s\\*.dxil.meta" "$(ATDD_DIR)\\core\\shaders\\" >nul',
+                winpath(out), winpath(out)),
+            string.format('if not "$(ATDD_DIR)"=="" if exist "%s\\*.reflection-v1.json" copy /Y "%s\\*.reflection-v1.json" "$(ATDD_DIR)\\core\\shaders\\" >nul',
+                winpath(out), winpath(out)),
+        }
+    filter {}
 end
 
 -- The D3D12 mip shader is private to HPL2. Compile each entry separately and

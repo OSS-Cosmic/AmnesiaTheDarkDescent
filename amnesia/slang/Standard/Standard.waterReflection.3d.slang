@@ -15,7 +15,7 @@ import bindless;
 [vk::binding(13,2)] StructuredBuffer<StandardBoxLight> standardBoxLights;
 
 struct ReflectionPush { float4 plane; };
-[vk::push_constant] ReflectionPush gPushConstants;
+[vk::push_constant] ReflectionPush gPushConstants HPL_PUSH_CONSTANT_REGISTER;
 struct I { float3 p:POSITION; float3 n:NORMAL; float4 t:TANGENT; float4 c:COLOR; float2 uv:TEXCOORD0; };
 struct V { float3 p:POSITION; float3 n:NORMAL; float2 uv:TEXCOORD0; nointerpolation uint id:OBJECTID; float4 h:SV_POSITION; };
 struct ReflectionOutputs { float4 color:SV_TARGET0; float4 position:SV_TARGET1; };

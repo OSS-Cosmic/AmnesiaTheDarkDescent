@@ -43,7 +43,7 @@ struct ParticleExpandPC
 };
 
 [vk::push_constant]
-ParticleExpandPC gPushConstants;
+ParticleExpandPC gPushConstants HPL_PUSH_CONSTANT_REGISTER;
 
 // iParticleEmitter::BuildViewportVertices' fade prologue (ParticleEmitter.cpp:337).
 // Distances are compared squared, exactly as the host does.

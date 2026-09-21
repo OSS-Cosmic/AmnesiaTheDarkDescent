@@ -60,7 +60,7 @@ struct StandardCullPC {
 };
 
 [vk::push_constant]
-StandardCullPC gPushConstants;
+StandardCullPC gPushConstants HPL_PUSH_CONSTANT_REGISTER;
 
 // VkDrawIndirectCommand is four consecutive uints under scalar layout, so a
 // uint4 is the command. firstInstance carries the object slot, which the vertex

@@ -38,6 +38,16 @@ enum RIResourceState_e {
   RI_RESOURCE_STATE_ACCEL_READ         = 0x08000, // acceleration structure read
   RI_RESOURCE_STATE_ACCEL_WRITE        = 0x10000, // acceleration structure build write
   RI_RESOURCE_STATE_CLEAR_STORAGE      = 0x20000, // GENERAL, vkCmdClear* transfer write
+  // Read of the buffers an acceleration-structure BUILD consumes -- instance
+  // descriptors, vertex, index, transform -- as opposed to a read of an
+  // acceleration structure itself, which is ACCEL_READ.
+  //
+  // Vulkan covers both with VK_ACCESS_2_ACCELERATION_STRUCTURE_READ_BIT, so
+  // the two states map identically there. D3D12 does not: its AS access bits
+  // are legal only on a resource created as an acceleration structure, and a
+  // build input is an ordinary buffer, so it must use SHADER_RESOURCE. One
+  // shared state cannot express that, which is why this bit exists.
+  RI_RESOURCE_STATE_ACCEL_BUILD_INPUT  = 0x40000, // buffer only
 };
 
 // Optional per-side stage narrowing; 0 derives a conservative mask from the
@@ -237,7 +247,10 @@ static inline VkAccessFlags2 ri_vk_RIResourceStateToAccess(uint32_t state) {
     access |= VK_ACCESS_2_INDEX_READ_BIT;
   if (state & RI_RESOURCE_STATE_CONSTANT_BUFFER)
     access |= VK_ACCESS_2_UNIFORM_READ_BIT;
-  if (state & RI_RESOURCE_STATE_ACCEL_READ)
+  // A build reading its inputs takes the same Vulkan access as a read of the
+  // structure itself; only D3D12 needs them apart.
+  if (state & (RI_RESOURCE_STATE_ACCEL_READ |
+               RI_RESOURCE_STATE_ACCEL_BUILD_INPUT))
     access |= VK_ACCESS_2_ACCELERATION_STRUCTURE_READ_BIT_KHR;
   if (state & RI_RESOURCE_STATE_ACCEL_WRITE)
     access |= VK_ACCESS_2_ACCELERATION_STRUCTURE_WRITE_BIT_KHR;
@@ -249,7 +262,8 @@ static inline VkAccessFlags2 ri_vk_RIResourceStateToAccess(uint32_t state) {
 static inline bool ri_vk_RIBarrierStateSupported(
     uint32_t state, const RIBarrierCapabilities &capabilities) {
   const uint32_t accelStates = RI_RESOURCE_STATE_ACCEL_READ |
-                               RI_RESOURCE_STATE_ACCEL_WRITE;
+                               RI_RESOURCE_STATE_ACCEL_WRITE |
+                               RI_RESOURCE_STATE_ACCEL_BUILD_INPUT;
   return (state & accelStates) == 0 ||
          capabilities.accelerationStructureEnabled;
 }
@@ -285,10 +299,12 @@ static inline VkPipelineStageFlags2 ri_vk_RIStageMaskFromState(
     flags |= VK_PIPELINE_STAGE_2_DRAW_INDIRECT_BIT;
   if (state & (RI_RESOURCE_STATE_VERTEX_BUFFER | RI_RESOURCE_STATE_INDEX_BUFFER))
     flags |= VK_PIPELINE_STAGE_2_VERTEX_INPUT_BIT;
-  // Both AS reads and writes are synchronized at the AS build stage. An AS
-  // read does not imply that a ray-tracing pipeline is enabled: AS-only
-  // devices legitimately use acceleration structures for build/compaction.
-  if (state & (RI_RESOURCE_STATE_ACCEL_READ | RI_RESOURCE_STATE_ACCEL_WRITE))
+  // AS reads, AS writes and reads of a build's inputs are all synchronized at
+  // the AS build stage. An AS read does not imply that a ray-tracing pipeline
+  // is enabled: AS-only devices legitimately use acceleration structures for
+  // build/compaction.
+  if (state & (RI_RESOURCE_STATE_ACCEL_READ | RI_RESOURCE_STATE_ACCEL_WRITE |
+               RI_RESOURCE_STATE_ACCEL_BUILD_INPUT))
     flags |= VK_PIPELINE_STAGE_2_ACCELERATION_STRUCTURE_BUILD_BIT_KHR;
   if (state & RI_RESOURCE_STATE_CLEAR_STORAGE)
     flags |= VK_PIPELINE_STAGE_2_CLEAR_BIT;
@@ -440,6 +456,11 @@ ri_d3d12_RIResourceStateToStates(uint32_t state) {
   if (state & (RI_RESOURCE_STATE_ACCEL_READ |
                RI_RESOURCE_STATE_ACCEL_WRITE))
     states |= D3D12_RESOURCE_STATE_RAYTRACING_ACCELERATION_STRUCTURE;
+  // A build's input buffers are ordinary resources that the build reads as
+  // shader resources. The RAYTRACING_ACCELERATION_STRUCTURE state is reserved
+  // for the structures themselves and is rejected on anything else.
+  if (state & RI_RESOURCE_STATE_ACCEL_BUILD_INPUT)
+    states |= D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE;
   return states;
 }
 
@@ -479,6 +500,13 @@ ri_d3d12_RIResourceStateToBarrierAccess(uint32_t state) {
     access |= D3D12_BARRIER_ACCESS_RAYTRACING_ACCELERATION_STRUCTURE_READ;
   if (state & RI_RESOURCE_STATE_ACCEL_WRITE)
     access |= D3D12_BARRIER_ACCESS_RAYTRACING_ACCELERATION_STRUCTURE_WRITE;
+  // Deliberately NOT an AS access bit. Those two are valid only on a resource
+  // created with D3D12_RESOURCE_FLAG_RAYTRACING_ACCELERATION_STRUCTURE or the
+  // matching legacy initial state; a build input -- the TLAS instance-descriptor
+  // array, a BLAS vertex/index buffer -- is neither, and the debug layer
+  // rejects the barrier outright (INCOMPATIBLE_BARRIER_ACCESS).
+  if (state & RI_RESOURCE_STATE_ACCEL_BUILD_INPUT)
+    access |= D3D12_BARRIER_ACCESS_SHADER_RESOURCE;
   return access ? access : D3D12_BARRIER_ACCESS_COMMON;
 }
 
@@ -521,6 +549,31 @@ ri_d3d12_RIResourceStateToBarrierLayout(uint32_t state) {
   return D3D12_BARRIER_LAYOUT_UNDEFINED;
 }
 
+// D3D12 permits only a restricted sync set alongside the acceleration-structure
+// access bits: no VERTEX_SHADING, no PIXEL_SHADING, no DRAW. Vulkan has no such
+// rule -- a pixel shader running an inline ray query is an ordinary
+// FRAGMENT-stage AS read, which several shaders here do (Translucent.frag,
+// Water*.frag, via traceShadowRay) -- so RI stage hints legitimately name those
+// stages, and it is this translation that has to fold them into the coarse
+// ALL_SHADING bucket. The compatibility table does allow that one, and it still
+// covers pixel shading, so nothing is lost but precision.
+//
+// Keyed on ACCEL_READ / ACCEL_WRITE only. ACCEL_BUILD_INPUT is deliberately
+// excluded: its access is SHADER_RESOURCE, which pairs with PIXEL_SHADING
+// perfectly well, and coarsening it would give up precision for no reason.
+static inline D3D12_BARRIER_SYNC
+ri_d3d12_AccelCompatibleSync(D3D12_BARRIER_SYNC sync, uint32_t state) {
+  if (!(state & (RI_RESOURCE_STATE_ACCEL_READ | RI_RESOURCE_STATE_ACCEL_WRITE)))
+    return sync;
+  const D3D12_BARRIER_SYNC graphicsSync = D3D12_BARRIER_SYNC_VERTEX_SHADING |
+                                          D3D12_BARRIER_SYNC_PIXEL_SHADING |
+                                          D3D12_BARRIER_SYNC_DRAW;
+  if (sync & graphicsSync)
+    sync = (D3D12_BARRIER_SYNC)((sync & ~graphicsSync) |
+                                D3D12_BARRIER_SYNC_ALL_SHADING);
+  return sync;
+}
+
 static inline D3D12_BARRIER_SYNC
 ri_d3d12_RIStageMaskFromStateBarrier(uint32_t state) {
   D3D12_BARRIER_SYNC sync = D3D12_BARRIER_SYNC_NONE;
@@ -539,10 +592,17 @@ ri_d3d12_RIStageMaskFromStateBarrier(uint32_t state) {
     sync |= D3D12_BARRIER_SYNC_EXECUTE_INDIRECT;
   if (state & (RI_RESOURCE_STATE_VERTEX_BUFFER | RI_RESOURCE_STATE_INDEX_BUFFER))
     sync |= D3D12_BARRIER_SYNC_INDEX_INPUT;
-  if (state & (RI_RESOURCE_STATE_ACCEL_READ | RI_RESOURCE_STATE_ACCEL_WRITE))
+  // Build inputs join the AS states here: the build is what reads them, so it
+  // is the build that has to be synchronized against, even though the access
+  // bit above is SHADER_RESOURCE rather than an AS one.
+  if (state & (RI_RESOURCE_STATE_ACCEL_READ | RI_RESOURCE_STATE_ACCEL_WRITE |
+               RI_RESOURCE_STATE_ACCEL_BUILD_INPUT))
     sync |= D3D12_BARRIER_SYNC_BUILD_RAYTRACING_ACCELERATION_STRUCTURE;
   if (state & RI_RESOURCE_STATE_CLEAR_STORAGE)
     sync |= D3D12_BARRIER_SYNC_CLEAR_UNORDERED_ACCESS_VIEW;
+  // A shader-readable state ORed with an accel state lands the graphics sync
+  // bits from above next to an AS access bit, which is the illegal pairing.
+  sync = ri_d3d12_AccelCompatibleSync(sync, state);
   return sync ? sync : (state == RI_RESOURCE_STATE_UNDEFINED ?
                          D3D12_BARRIER_SYNC_NONE : D3D12_BARRIER_SYNC_ALL);
 }
@@ -577,7 +637,12 @@ ri_d3d12_RIStageBitsToBarrierSync(uint32_t stageBits, uint32_t stateFallback) {
   if (stageBits & RI_STAGE_CLEAR) sync |= D3D12_BARRIER_SYNC_CLEAR_UNORDERED_ACCESS_VIEW;
   if (stageBits & RI_STAGE_ACCEL_BUILD)
     sync |= D3D12_BARRIER_SYNC_BUILD_RAYTRACING_ACCELERATION_STRUCTURE;
-  return sync;
+  // The same rejection the attachment case above guards against, for the
+  // acceleration-structure access bits: an RI_STAGE_FRAGMENT hint on an
+  // ACCEL_READ barrier -- which is what publishing a freshly built TLAS to
+  // fragment-stage ray queries asks for -- would pair PIXEL_SHADING with an AS
+  // access and be refused.
+  return ri_d3d12_AccelCompatibleSync(sync, stateFallback);
 }
 
 // Return the plane index used for typed depth-stencil subresource transitions.

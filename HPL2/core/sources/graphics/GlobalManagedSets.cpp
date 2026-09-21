@@ -136,6 +136,7 @@ bool GlobalManagedSets::initialize(RIDevice *device,
         kBindingBindlessSlotGeneration,
         kBindingLightGridCount,
         kBindingLightGridList,
+        kBindingLightGridWeight,
     };
     const VkShaderStageFlags kGridSlotStageFlags =
         kSharedStages | (device->rayTracingPipelineEnabled ? kRtStages : 0);
@@ -262,6 +263,12 @@ bool GlobalManagedSets::initialize(RIDevice *device,
   m_lightGridListBuffer = detail::CreateBindlessSlotBuffer(
       device, lightGridListSlots, sizeof(uint32_t),
       kStorage, /*deviceLocalOnly*/ true);
+  // Per-cell sampling CDF, parallel to the list (same indexing, same length),
+  // so single-sample NEE can draw a light proportional to its contribution
+  // instead of uniformly. Written by binLights alongside the ids.
+  m_lightGridWeightBuffer = detail::CreateBindlessSlotBuffer(
+      device, lightGridListSlots, sizeof(float),
+      kStorage, /*deviceLocalOnly*/ true);
 
   // Slot-reuse generation buffer (see m_bindlessSlotGenerationBuffer). Starts
   // at 0; the host bumps a slot's generation to a unique nonzero value the
@@ -326,6 +333,10 @@ bool GlobalManagedSets::initialize(RIDevice *device,
          uint64_t(kLightGridCellCount) * uint64_t(kLightsPerCellMax) *
              sizeof(uint32_t),
          sizeof(uint32_t)},
+        {kBindingLightGridWeight, &m_lightGridWeightBuffer,
+         uint64_t(kLightGridCellCount) * uint64_t(kLightsPerCellMax) *
+             sizeof(float),
+         sizeof(float)},
         {kBindingSceneObjects, &m_objectBuffer,
          kObjectSlotCapacity * sizeof(UniformObject), sizeof(UniformObject)},
         {kBindingMaterials, &m_materialBuffer,
@@ -375,7 +386,8 @@ bool GlobalManagedSets::initialize(RIDevice *device,
 
   const RIBuffer *ownedBuffers[] = {
       &m_objectBuffer, &m_bindlessSlotGenerationBuffer,
-      &m_lightGridCountBuffer, &m_lightGridListBuffer, &m_materialBuffer,
+      &m_lightGridCountBuffer, &m_lightGridListBuffer,
+      &m_lightGridWeightBuffer, &m_materialBuffer,
       &m_animTexBuffer};
   for (const RIBuffer *buffer : ownedBuffers) {
     if (buffer->isEmpty()) {
@@ -792,9 +804,10 @@ void GlobalManagedSets::destroy(RIDevice *device) {
   // Everything initialize() created — a missed entry here trips the VMA
   // leak assert in vmaDestroyAllocator at device teardown.
   RIBuffer *ownedBuffers[] = {
-      &m_objectBuffer,         &m_bindlessSlotGenerationBuffer,
-      &m_lightGridCountBuffer, &m_lightGridListBuffer,
-      &m_materialBuffer,       &m_animTexBuffer,
+      &m_objectBuffer,          &m_bindlessSlotGenerationBuffer,
+      &m_lightGridCountBuffer,  &m_lightGridListBuffer,
+      &m_lightGridWeightBuffer, &m_materialBuffer,
+      &m_animTexBuffer,
   };
   // Point/spot/area light buffers + the fog buffer are owned + disposed by cWorld.
   for (RIBuffer *buf : ownedBuffers) {

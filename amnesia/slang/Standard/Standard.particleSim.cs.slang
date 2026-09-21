@@ -33,7 +33,7 @@ struct ParticleSimPC
 };
 
 [vk::push_constant]
-ParticleSimPC gPushConstants;
+ParticleSimPC gPushConstants HPL_PUSH_CONSTANT_REGISTER;
 
 // Screen-space collision. Projects the particle with the PREVIOUS frame's
 // matrices (this pass runs before the current frame's depth exists) and treats
