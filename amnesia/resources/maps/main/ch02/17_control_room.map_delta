@@ -38,9 +38,6 @@
     <Modify Category="Primitives" ID="2919" Name="Plane_39">
         <SetAttr Rotation="-1.10715 -1.5708 -0.463653" />
     </Modify>
-    <Modify Category="Entities" ID="365" Name="BoxLight_1">
-        <SetAttr RendererMask="1" />
-    </Modify>
     <Modify Category="Entities" ID="711" Name="PointLight_3">
         <SetAttr RendererMask="1" />
     </Modify>

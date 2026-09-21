@@ -1,7 +1,4 @@
 <MapDelta Version="1" Target="maps/main/ch02/18_cistern.map">
-    <Modify Category="Entities" ID="709" Name="BoxLight_1">
-        <SetAttr RendererMask="1" />
-    </Modify>
     <Modify Category="Entities" ID="753" Name="PointLight_13">
         <SetAttr RendererMask="1" />
     </Modify>

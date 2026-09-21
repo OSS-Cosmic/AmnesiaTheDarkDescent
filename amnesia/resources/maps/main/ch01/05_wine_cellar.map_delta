@@ -1,7 +1,4 @@
 <MapDelta Version="1" Target="maps/main/ch01/05_wine_cellar.map">
-    <Modify Category="Entities" ID="1327" Name="BoxLight_1">
-        <SetAttr RendererMask="1" />
-    </Modify>
     <Modify Category="Entities" ID="1704" Name="PointLight_2">
         <SetAttr RendererMask="1" />
     </Modify>
@@ -15,9 +12,6 @@
         <SetAttr RendererMask="1" />
     </Modify>
     <Modify Category="Entities" ID="1868" Name="PointLight_14">
-        <SetAttr RendererMask="1" />
-    </Modify>
-    <Modify Category="Entities" ID="1966" Name="BoxLight_2">
         <SetAttr RendererMask="1" />
     </Modify>
     <Modify Category="Entities" ID="2057" Name="PointLight_17">

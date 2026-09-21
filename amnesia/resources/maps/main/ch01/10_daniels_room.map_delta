@@ -1,7 +1,4 @@
 <MapDelta Version="1" Target="maps/main/ch01/10_daniels_room.map">
-    <Modify Category="Entities" ID="275" Name="BoxLight_1">
-        <SetAttr RendererMask="1" />
-    </Modify>
     <Modify Category="Entities" ID="562" Name="PointLight_1">
         <SetAttr RendererMask="1" />
     </Modify>

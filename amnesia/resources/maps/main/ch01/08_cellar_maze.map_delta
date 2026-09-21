@@ -1,7 +1,4 @@
 <MapDelta Version="1" Target="maps/main/ch01/08_cellar_maze.map">
-    <Modify Category="Entities" ID="701" Name="BoxLight_2">
-        <SetAttr RendererMask="1" />
-    </Modify>
     <Modify Category="Entities" ID="1195" Name="PointLight_13">
         <SetAttr Re_Intensity="2.5" Re_Radius="22.3551" Re_SourceRadius="0.35" Re_FlickerOffIntensity="0" />
     </Modify>

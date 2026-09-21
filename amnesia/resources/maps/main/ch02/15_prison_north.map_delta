@@ -164,9 +164,6 @@
     <Modify Category="Entities" ID="1655" Name="PointLight_7">
         <SetAttr RendererMask="1" />
     </Modify>
-    <Modify Category="Entities" ID="1787" Name="BoxLight_1">
-        <SetAttr RendererMask="1" />
-    </Modify>
     <Modify Category="Entities" ID="2142" Name="PointLight_15">
         <SetAttr RendererMask="1" />
     </Modify>
