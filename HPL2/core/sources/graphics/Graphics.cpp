@@ -305,6 +305,27 @@ void cGraphics::Init(const cEngineInitVars::cGraphicsVars &aVars,
     const char *pBackendDisplayName =
         (requestedApi == RI_DEVICE_API_D3D12) ? "Direct3D 12" : "Vulkan";
 
+#if (DEVICE_IMPL_D3D12)
+    if (requestedApi == RI_DEVICE_API_D3D12) {
+      // HPL_D3D12_VALIDATION=1 enables the debug layer; =2 adds GPU-based
+      // validation, which slows the GPU enough to trip a TDR on full maps.
+      const char *pValidationEnv = getenv("HPL_D3D12_VALIDATION");
+      const int lValidationLevel = pValidationEnv ? atoi(pValidationEnv) : 0;
+      backendInit.d3d12.validationLevel =
+          lValidationLevel >= 2   ? RI_D3D12_VALIDATION_LEVEL_GPU_BASED
+          : lValidationLevel == 1 ? RI_D3D12_VALIDATION_LEVEL_STANDARD
+                                  : RI_D3D12_VALIDATION_LEVEL_NONE;
+
+      // HPL_D3D12_DRED=0/1 overrides RI's default (on with the debug layer or
+      // in debug builds).
+      const char *pDredEnv = getenv("HPL_D3D12_DRED");
+      backendInit.d3d12.dredMode =
+          !pDredEnv              ? RI_D3D12_DRED_DEFAULT
+          : atoi(pDredEnv) != 0 ? RI_D3D12_DRED_ON
+                                : RI_D3D12_DRED_OFF;
+    }
+#endif
+
 #if (DEVICE_IMPL_VULKAN)
     if (requestedApi == RI_DEVICE_API_VK) {
       // OFF unless the user opts in with HPL_VK_VALIDATION=1, in any build.

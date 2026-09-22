@@ -311,7 +311,10 @@ void cEditorWindowViewport::Load(tinyxml2::XMLElement* apElement)
 
 	mCamera.SetTargetPosition(GetAttributeVector3f(apElement,"CameraTarget"));
 	mCamera.SetCameraPosition(GetAttributeVector3f(apElement,"CameraPosition"));
-	float fZoom = GetAttributeFloat(apElement,"Zoom");
+	// Save writes "CameraZoom"; "Zoom" is kept as a fallback for older sessions.
+	float fZoom = GetAttributeFloat(apElement,"CameraZoom");
+	if(fZoom==0)
+		fZoom = GetAttributeFloat(apElement,"Zoom");
 	if(fZoom==0)
 		fZoom = mCamera.GetZoomFunc()->GetZoomFromDistToTarget((mCamera.GetCameraPosition()-mCamera.GetTargetPosition()).Length());
 

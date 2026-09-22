@@ -9,6 +9,7 @@
 #include <D3D12MemAlloc.h>
 
 #include <algorithm>
+#include <cassert>
 #include <cstring>
 #include <vector>
 
@@ -20,7 +21,8 @@ namespace {
 // native allocation alive until the frame it retired in has been sealed
 // against the graphics timeline (RID3D12_SealRetiredBuffers) and that value
 // has completed (RID3D12_ReclaimRetiredBuffers). Device teardown drains
-// whatever is left. The geometry descriptor slot itself is never reused.
+// whatever is left. The geometry descriptor slot is recycled at that same
+// point, never earlier.
 struct RID3D12BufferRegistration {
   RIDevice *device;
   hash_t cookie;
@@ -104,9 +106,9 @@ static void ri_d3d12_retire_buffer_registration(RIDevice &device,
   if (--entry->owners)
     return;
 
-  // Geometry descriptor slots are intentionally monotonic and are not
-  // reused.  Release through the arena's geometry path so live ownership is
-  // removed, while the registry-held native references remain quarantined.
+  // Drop live ownership of the geometry slot now; the slot itself (and the
+  // registry-held native references) stay quarantined until
+  // RID3D12_ReclaimRetiredBuffers sees the retire value complete.
   releaseGeometryDescriptorArena(&device, &entry->descriptor);
   entry->retired = true;
 }
@@ -158,71 +160,50 @@ int RID3D12_CreateBuffer(struct RIDevice &device, const struct RIBufferDesc &des
   out = RIBuffer{};
   out.cookie = cookie;
 
-  const uint32_t forbiddenHostUsage =
-      RI_BUFFER_USAGE_SHADER_RESOURCE_STORAGE |
+  // Descriptor validity is the caller's contract: violations are programming
+  // errors, so they assert in debug and are not re-checked in release.
+  // Upload heaps cannot carry ALLOW_UNORDERED_ACCESS. Storage usage is still
+  // allowed there as a read-only SRV (host-written, GPU-read cull inputs);
+  // binding such a buffer as a UAV is rejected at descriptor-write time.
+  [[maybe_unused]] constexpr uint32_t forbiddenHostUsage =
       RI_BUFFER_USAGE_ACCELERATION_STRUCTURE_STORAGE | RI_BUFFER_USAGE_SCRATCH;
-  if (desc.size == 0) {
-    hpl::Warning("RI D3D12: buffer size must be non-zero\n");
-    return RI_FAIL;
-  }
-  if (desc.alignment != 0 &&
-      ((desc.alignment & (desc.alignment - 1)) != 0 ||
-      desc.alignment > kRiD3D12BufferGpuVaAlignment)) {
-    hpl::Warning(
-        "RI D3D12: buffer alignment must be a power of two no larger than "
-        "the D3D12MA buffer GPU-VA alignment contract (256 bytes)\n");
-    return RI_FAIL;
-  }
-  if (desc.location == RI_MEMORY_HOST_UPLOAD &&
-      (desc.usage & forbiddenHostUsage)) {
-    hpl::Warning("RI D3D12: upload buffers cannot use storage, acceleration structure, or scratch usage\n");
-    return RI_FAIL;
-  }
+  [[maybe_unused]] constexpr uint32_t rawViewUsage =
+      RI_BUFFER_USAGE_SHADER_RESOURCE_STORAGE | RI_BUFFER_USAGE_DEVICE_ADDRESS;
+  assert(desc.size != 0 && "RI D3D12: buffer size must be non-zero");
+  assert((desc.alignment == 0 ||
+          ((desc.alignment & (desc.alignment - 1)) == 0 &&
+           desc.alignment <= kRiD3D12BufferGpuVaAlignment)) &&
+         "RI D3D12: buffer alignment must be a power of two no larger than "
+         "the D3D12MA buffer GPU-VA alignment contract (256 bytes)");
+  assert((desc.location == RI_MEMORY_DEVICE ||
+          desc.location == RI_MEMORY_HOST_UPLOAD ||
+          desc.location == RI_MEMORY_HOST_READBACK) &&
+         "RI D3D12: invalid buffer memory location");
+  assert(!(desc.location == RI_MEMORY_HOST_UPLOAD &&
+           (desc.usage & forbiddenHostUsage)) &&
+         "RI D3D12: upload buffers cannot use acceleration-structure or "
+         "scratch usage");
+  assert(!(desc.location == RI_MEMORY_HOST_READBACK &&
+           (desc.usage & ~(RI_BUFFER_USAGE_TRANSFER_SRC |
+                           RI_BUFFER_USAGE_TRANSFER_DST))) &&
+         "RI D3D12: readback buffers may only use transfer source/destination "
+         "usage");
+  assert(!(desc.location != RI_MEMORY_DEVICE &&
+           (desc.usage & RI_BUFFER_USAGE_ACCELERATION_STRUCTURE_STORAGE)) &&
+         "RI D3D12: acceleration-structure storage requires device memory");
   // DEVICE_ADDRESS is published as the same raw ByteAddressBuffer SRV on
   // D3D12.  Raw views address DWORDs, so the complete registered resource
   // must satisfy the raw-view alignment/range contract as well.
-  if ((desc.usage & (RI_BUFFER_USAGE_SHADER_RESOURCE_STORAGE |
-                     RI_BUFFER_USAGE_DEVICE_ADDRESS)) &&
-      (desc.size < 4 || (desc.size % 4) != 0)) {
-    hpl::Warning("RI D3D12: raw geometry buffers must be a multiple of 4 bytes\n");
-    return RI_FAIL;
-  }
-  if ((desc.usage & (RI_BUFFER_USAGE_SHADER_RESOURCE_STORAGE |
-                     RI_BUFFER_USAGE_DEVICE_ADDRESS)) &&
-      desc.size / 4ull > UINT_MAX) {
-    hpl::Warning("RI D3D12: raw geometry buffer is too large for a D3D12 SRV\n");
-    return RI_FAIL;
-  }
-  if ((desc.usage & RI_BUFFER_USAGE_CONSTANT_BUFFER) &&
-      desc.size > UINT64_MAX - 255ull) {
-    hpl::Warning("RI D3D12: constant buffer size overflows 256-byte alignment\n");
-    return RI_FAIL;
-  }
-  if (desc.location == RI_MEMORY_HOST_READBACK &&
-      ((desc.usage & forbiddenHostUsage) ||
-       (desc.usage & ~(RI_BUFFER_USAGE_TRANSFER_SRC | RI_BUFFER_USAGE_TRANSFER_DST)))) {
-    hpl::Warning("RI D3D12: readback buffers may only use transfer source/destination usage\n");
-    return RI_FAIL;
-  }
-  if (desc.location != RI_MEMORY_DEVICE &&
-      (desc.usage & RI_BUFFER_USAGE_ACCELERATION_STRUCTURE_STORAGE)) {
-    hpl::Warning("RI D3D12: acceleration-structure storage requires device memory\n");
-    return RI_FAIL;
-  }
-  if (!device.d3d12.device) {
-    hpl::Warning("RI D3D12: cannot create buffer without a device\n");
-    return RI_FAIL;
-  }
-  if (!device.d3d12.allocator) {
-    hpl::Warning("RI D3D12: cannot create buffer without a memory allocator\n");
-    return RI_FAIL;
-  }
-  if (desc.location != RI_MEMORY_DEVICE &&
-      desc.location != RI_MEMORY_HOST_UPLOAD &&
-      desc.location != RI_MEMORY_HOST_READBACK) {
-    hpl::Warning("RI D3D12: invalid buffer memory location\n");
-    return RI_FAIL;
-  }
+  assert(!((desc.usage & rawViewUsage) &&
+           (desc.size < 4 || (desc.size % 4) != 0)) &&
+         "RI D3D12: raw geometry buffers must be a multiple of 4 bytes");
+  assert(!((desc.usage & rawViewUsage) && desc.size / 4ull > UINT_MAX) &&
+         "RI D3D12: raw geometry buffer is too large for a D3D12 SRV");
+  assert(!((desc.usage & RI_BUFFER_USAGE_CONSTANT_BUFFER) &&
+           desc.size > UINT64_MAX - 255ull) &&
+         "RI D3D12: constant buffer size overflows 256-byte alignment");
+  assert(device.d3d12.device);
+  assert(device.d3d12.allocator);
 
   D3D12_RESOURCE_DESC rd = {};
   rd.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER;
@@ -237,9 +218,10 @@ int RID3D12_CreateBuffer(struct RIDevice &device, const struct RIBufferDesc &des
   rd.SampleDesc = {1, 0};
   rd.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
   rd.Flags = D3D12_RESOURCE_FLAG_NONE;
-  if (desc.usage & (RI_BUFFER_USAGE_SHADER_RESOURCE_STORAGE |
-                    RI_BUFFER_USAGE_SCRATCH |
-                    RI_BUFFER_USAGE_ACCELERATION_STRUCTURE_STORAGE))
+  if (desc.location == RI_MEMORY_DEVICE &&
+      (desc.usage & (RI_BUFFER_USAGE_SHADER_RESOURCE_STORAGE |
+                     RI_BUFFER_USAGE_SCRATCH |
+                     RI_BUFFER_USAGE_ACCELERATION_STRUCTURE_STORAGE)))
     rd.Flags |= D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS;
   rd.Width = desc.size;
   if (desc.usage & RI_BUFFER_USAGE_CONSTANT_BUFFER)
@@ -266,20 +248,23 @@ int RID3D12_CreateBuffer(struct RIDevice &device, const struct RIBufferDesc &des
   HRESULT hr = device.d3d12.allocator->CreateResource(
       &allocationDesc, &rd, initialState, nullptr, &out.d3d12.allocation,
       IID_PPV_ARGS(&out.d3d12.resource));
-  if (!D3D12_WrapResult(hr)) {
-    ri_d3d12_release_buffer(out);
-    return RI_FAIL;
+  if (FAILED(hr)) {
+    HRESULT reason = hr;
+    if (hr == DXGI_ERROR_DEVICE_REMOVED)
+      reason = device.d3d12.device->GetDeviceRemovedReason();
+    hpl::FatalError(
+        "RI D3D12: failed to create buffer (size %llu, usage 0x%x, location %u): "
+        "HRESULT 0x%08lX (reason 0x%08lX)\n",
+        (unsigned long long)desc.size, desc.usage, (unsigned)desc.location,
+        (unsigned long)hr, (unsigned long)reason);
   }
 
   if (desc.alignment != 0 &&
-      out.d3d12.resource->GetGPUVirtualAddress() % desc.alignment != 0) {
-    hpl::Warning(
+      out.d3d12.resource->GetGPUVirtualAddress() % desc.alignment != 0)
+    hpl::FatalError(
         "RI D3D12: allocator buffer GPU address does not satisfy requested "
         "alignment of %llu bytes\n",
         (unsigned long long)desc.alignment);
-    ri_d3d12_release_buffer(out);
-    return RI_FAIL;
-  }
 
   out.d3d12.requestedSize = desc.size;
   out.d3d12.allocationSize = out.d3d12.resource->GetDesc().Width;
@@ -295,27 +280,22 @@ int RID3D12_CreateBuffer(struct RIDevice &device, const struct RIBufferDesc &des
     hr = out.d3d12.resource->Map(
         0, desc.location == RI_MEMORY_HOST_UPLOAD ? &readRange : nullptr,
         &mapped);
-    if (!D3D12_WrapResult(hr)) {
-      ri_d3d12_release_buffer(out);
-      return RI_FAIL;
-    }
+    if (FAILED(hr))
+      hpl::FatalError(
+          "RI D3D12: failed to map host buffer (size %llu): HRESULT 0x%08lX\n",
+          (unsigned long long)desc.size, (unsigned long)hr);
     out.mappedAddress = mapped;
   }
 
-  // Register only after every fallible resource initialization step. This
-  // keeps failure cleanup local to the resource/allocation pair and avoids
-  // leaking a descriptor-arena allocation if persistent mapping fails.
   // DEVICE_ADDRESS is the cross-backend geometry-pull contract: Vulkan uses
   // a BDA while D3D12 publishes the same buffer as a raw ByteAddressBuffer
-  // SRV. This also covers host-upload particle scratch rings.
-  if (desc.usage & (RI_BUFFER_USAGE_SHADER_RESOURCE_STORAGE |
-                    RI_BUFFER_USAGE_DEVICE_ADDRESS)) {
-    if (!RID3D12_RegisterBufferShaderResource(device, out)) {
-      ri_d3d12_retire_buffer_registration(device, out);
-      ri_d3d12_release_buffer(out);
-      return RI_FAIL;
-    }
-  }
+  // SRV. This also covers host-upload particle scratch rings. Geometry slots
+  // are recycled once retired, so running out means a leak.
+  if ((desc.usage & rawViewUsage) &&
+      !RID3D12_RegisterBufferShaderResource(device, out))
+    hpl::FatalError(
+        "RI D3D12: failed to register geometry SRV for buffer (size %llu)\n",
+        (unsigned long long)desc.size);
   return RI_SUCCESS;
 }
 
@@ -362,8 +342,13 @@ void RID3D12_ReclaimRetiredBuffers(struct RIDevice &device,
            entry.retireValue != 0 && entry.retireValue <= completedValue;
   };
   for (RID3D12BufferRegistration &entry : g_bufferRegistrations) {
-    if (reclaimable(entry))
-      ri_d3d12_release_registration_refs(entry);
+    if (!reclaimable(entry))
+      continue;
+    // The retire value has completed, so no submitted frame can still read
+    // this geometry slot; hand it back for reuse.
+    if (entry.descriptor.resourceCount)
+      recycleGeometryDescriptorArena(&device, &entry.descriptor);
+    ri_d3d12_release_registration_refs(entry);
   }
   g_bufferRegistrations.erase(
       std::remove_if(g_bufferRegistrations.begin(), g_bufferRegistrations.end(),
@@ -451,8 +436,15 @@ bool RID3D12_RegisterBufferShaderResource(struct RIDevice &device,
   }
 
   RIDescriptorArenaAllocation allocation = {};
-  if (!allocateGeometryDescriptorArena(&device, 1, &allocation))
+  if (!allocateGeometryDescriptorArena(&device, 1, &allocation)) {
+    static bool warned = false;
+    if (!warned) {
+      warned = true;
+      hpl::Warning("RI D3D12: geometry descriptor namespace exhausted (%u slots)\n",
+                   RI_D3D12_GEOMETRY_DESCRIPTOR_CAPACITY);
+    }
     return false;
+  }
   const uint32_t index = allocation.resourceOffset;
   if (index >= RI_D3D12_GEOMETRY_DESCRIPTOR_CAPACITY) {
     releaseGeometryDescriptorArena(&device, &allocation);

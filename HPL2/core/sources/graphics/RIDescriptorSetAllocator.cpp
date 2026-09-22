@@ -7,6 +7,7 @@
 #if ( DEVICE_IMPL_D3D12 )
 #include "graphics/RIDevice.h"
 #include <algorithm>
+#include <unordered_map>
 #include <vector>
 
 namespace {
@@ -25,6 +26,18 @@ struct PendingRange {
 	RIDescriptorArenaAllocation allocation;
 	RIDescriptorArenaFence fence;
 };
+// A content-keyed sampler table shared by every program table that carries
+// the same samplers. The descs are kept so a hash hit can be confirmed before
+// two different tables alias. lastRelease is the fence of the most recent
+// release; an unreferenced table is evicted behind it.
+struct SamplerTable {
+	uint32_t offset = 0;
+	uint32_t count = 0;
+	uint32_t refs = 0;
+	bool unfenced = false;
+	RIDescriptorArenaFence lastRelease = {};
+	std::vector<D3D12_SAMPLER_DESC> descs;
+};
 struct ArenaState {
 	RIDevice *device = nullptr;
 	ID3D12DescriptorHeap *resourceHeap = nullptr;
@@ -34,6 +47,9 @@ struct ArenaState {
 	uint32_t nextSampler = 0;
 	std::vector<ArenaRange> freeResources;
 	std::vector<ArenaRange> freeSamplers;
+	// Geometry slots whose buffers have been retired against the D3D12
+	// timeline (see recycleGeometryDescriptorArena).
+	std::vector<ArenaRange> freeGeometry;
 	// Ranges released without a queue fence are quarantined until arena
 	// teardown. They are never eligible for immediate reuse.
 	std::vector<ArenaRange> retiredResources;
@@ -43,6 +59,7 @@ struct ArenaState {
 	// partially overlapping ranges from entering a free list.
 	std::vector<RIDescriptorArenaAllocation> live;
 	std::vector<RIDescriptorArenaAllocation> liveGeometry;
+	std::unordered_map<uint64_t, SamplerTable> samplerTables;
 };
 static std::vector<ArenaState> g_arenas;
 
@@ -367,6 +384,122 @@ void reclaimDescriptorArena( struct RIDevice *device )
 	}
 }
 
+// Hands every unreferenced shared sampler table back to the heap behind the
+// fence of its last release, then reclaims whatever has already retired.
+// Returns whether anything was evicted.
+static bool evictUnreferencedSamplerTables( RIDevice *device, ArenaState *arena )
+{
+	bool evicted = false;
+	for( auto it = arena->samplerTables.begin(); it != arena->samplerTables.end(); ) {
+		SamplerTable &table = it->second;
+		if( table.refs ) { ++it; continue; }
+		RIDescriptorArenaAllocation allocation = {};
+		allocation.samplerOffset = table.offset;
+		allocation.samplerCount = table.count;
+		if( !table.unfenced && table.lastRelease.fence ) {
+			// The table's reference to the fence moves into the pending entry.
+			arena->pending.push_back( { allocation, table.lastRelease } );
+		} else {
+			if( table.lastRelease.fence ) table.lastRelease.fence->Release();
+			mergeRange( arena->retiredSamplers, { table.offset, table.count } );
+		}
+		it = arena->samplerTables.erase( it );
+		evicted = true;
+	}
+	if( evicted ) reclaimDescriptorArena( device );
+	return evicted;
+}
+
+// Claims a sampler range, from the free list first and the bump cursor second.
+// Nothing needs rolling back on failure.
+static bool claimSamplers( ArenaState *arena, uint32_t count, uint32_t *offset )
+{
+	if( takeRange( arena->freeSamplers, count, offset ) ) return true;
+	if( arena->nextSampler > kSamplerCapacity || count > kSamplerCapacity - arena->nextSampler )
+		return false;
+	*offset = arena->nextSampler;
+	arena->nextSampler += count;
+	return true;
+}
+
+bool acquireSamplerTableArena( struct RIDevice *device,
+	const D3D12_SAMPLER_DESC *descs, uint32_t count,
+	uint32_t *outOffset, uint64_t *outKey )
+{
+	if( !outOffset || !outKey || !count || !descs ) return false;
+	*outOffset = 0;
+	*outKey = 0;
+	if( !initDescriptorArena( device ) ) return false;
+	ArenaState *arena = findArena( device );
+	const size_t bytes = sizeof( D3D12_SAMPLER_DESC ) * count;
+	uint64_t key = hash_data( hash_u64( HASH_INITIAL_VALUE, count ), descs, bytes );
+	// Key 0 means "no table" to callers; a collision probes to the next key.
+	for( ;; ++key ) {
+		if( !key ) continue;
+		auto it = arena->samplerTables.find( key );
+		if( it == arena->samplerTables.end() ) break;
+		SamplerTable &table = it->second;
+		if( table.count == count && memcmp( table.descs.data(), descs, bytes ) == 0 ) {
+			table.refs++;
+			*outOffset = table.offset;
+			*outKey = key;
+			return true;
+		}
+	}
+	reclaimDescriptorArena( device );
+	uint32_t offset = 0;
+	if( !claimSamplers( arena, count, &offset ) &&
+		!( evictUnreferencedSamplerTables( device, arena ) &&
+		   claimSamplers( arena, count, &offset ) ) )
+		return false;
+#ifndef NDEBUG
+	for( const RIDescriptorArenaAllocation &other : arena->live )
+		assert( !( other.samplerCount && offset < other.samplerOffset + other.samplerCount &&
+			other.samplerOffset < offset + count ) &&
+			"shared sampler table overlaps a live sampler range" );
+	for( const auto &other : arena->samplerTables )
+		assert( !( offset < other.second.offset + other.second.count &&
+			other.second.offset < offset + count ) &&
+			"shared sampler table overlaps another shared table" );
+#endif
+	const UINT stride = device->d3d12.device->GetDescriptorHandleIncrementSize(
+		D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER );
+	D3D12_CPU_DESCRIPTOR_HANDLE cpu = arena->samplerHeap->GetCPUDescriptorHandleForHeapStart();
+	cpu.ptr += SIZE_T( offset ) * stride;
+	for( uint32_t i = 0; i < count; ++i, cpu.ptr += stride )
+		device->d3d12.device->CreateSampler( &descs[i], cpu );
+	SamplerTable table;
+	table.offset = offset;
+	table.count = count;
+	table.refs = 1;
+	table.descs.assign( descs, descs + count );
+	arena->samplerTables.emplace( key, std::move( table ) );
+	*outOffset = offset;
+	*outKey = key;
+	return true;
+}
+
+void releaseSamplerTableArena( struct RIDevice *device, uint64_t key,
+	const struct RIDescriptorArenaFence *fence )
+{
+	ArenaState *arena = findArena( device );
+	if( !arena || !key ) return;
+	auto it = arena->samplerTables.find( key );
+	if( it == arena->samplerTables.end() || !it->second.refs ) return;
+	SamplerTable &table = it->second;
+	// Track the latest release fence: the timeline only moves forward, so it
+	// covers every earlier submission that referenced the table. A null fence
+	// carries no completion proof, so once one is seen the table retires
+	// permanently on eviction whatever later releases supply.
+	if( !fence || !fence->fence || !fence->value ) table.unfenced = true;
+	else {
+		fence->fence->AddRef();
+		if( table.lastRelease.fence ) table.lastRelease.fence->Release();
+		table.lastRelease = *fence;
+	}
+	table.refs--;
+}
+
 bool allocateDescriptorArena( struct RIDevice *device, uint32_t resourceCount,
 	uint32_t samplerCount, struct RIDescriptorArenaAllocation *out )
 {
@@ -390,25 +523,40 @@ bool allocateDescriptorArena( struct RIDevice *device, uint32_t resourceCount,
 		resourceOffset = arena->nextResource;
 		arena->nextResource += resourceCount;
 	}
-	if( !takeRange( arena->freeSamplers, samplerCount, &samplerOffset ) ) {
-		if( arena->nextSampler > kSamplerCapacity || samplerCount > kSamplerCapacity - arena->nextSampler ) {
-			// Roll back the resource claim.  It is not fence-gated yet.  A bump
-			// claim must rewind the bump cursor; returning it only to the free
-			// list would leave the cursor above the restored range and makes the
-			// ownership invariant needlessly fragile.
-			if( resourceFromFree )
-				mergeRange( arena->freeResources, { resourceOffset, resourceCount } );
-			else
-				arena->nextResource = resourceOffset;
-			return false;
-		}
-		samplerOffset = arena->nextSampler;
-		arena->nextSampler += samplerCount;
+	if( !claimSamplers( arena, samplerCount, &samplerOffset ) &&
+		!( evictUnreferencedSamplerTables( device, arena ) &&
+		   claimSamplers( arena, samplerCount, &samplerOffset ) ) ) {
+		// Roll back the resource claim.  It is not fence-gated yet.  A bump
+		// claim must rewind the bump cursor; returning it only to the free
+		// list would leave the cursor above the restored range and makes the
+		// ownership invariant needlessly fragile.
+		if( resourceFromFree )
+			mergeRange( arena->freeResources, { resourceOffset, resourceCount } );
+		else
+			arena->nextResource = resourceOffset;
+		return false;
 	}
 	out->resourceOffset = resourceOffset;
 	out->samplerOffset = samplerOffset;
 	out->resourceCount = resourceCount;
 	out->samplerCount = samplerCount;
+#ifndef NDEBUG
+	// A range handed out twice lets one table silently overwrite another's
+	// descriptors; catch it where the second owner is created.
+	auto overlaps = []( uint32_t aOffset, uint32_t aCount, uint32_t bOffset, uint32_t bCount ) {
+		return aCount && bCount && uint64_t( aOffset ) < uint64_t( bOffset ) + bCount &&
+			uint64_t( bOffset ) < uint64_t( aOffset ) + aCount;
+	};
+	for( const RIDescriptorArenaAllocation &other : arena->live ) {
+		assert( !overlaps( resourceOffset, resourceCount, other.resourceOffset, other.resourceCount ) &&
+			"descriptor arena resource range handed out twice" );
+		assert( !overlaps( samplerOffset, samplerCount, other.samplerOffset, other.samplerCount ) &&
+			"descriptor arena sampler range handed out twice" );
+	}
+	for( const auto &table : arena->samplerTables )
+		assert( !overlaps( samplerOffset, samplerCount, table.second.offset, table.second.count ) &&
+			"descriptor arena sampler range overlaps a shared sampler table" );
+#endif
 	arena->live.push_back(*out);
 	return true;
 }
@@ -423,14 +571,17 @@ bool allocateGeometryDescriptorArena( struct RIDevice *device,
 	ArenaState *arena = findArena(device);
 	reclaimDescriptorArena(device);
 	// Geometry indices are embedded in UniformObject payloads and buffers can
-	// be destroyed while previously submitted frames still execute.  Do not
-	// recycle this namespace without a queue-retirement protocol: monotonic
-	// allocation makes stale handles unable to alias a later buffer.
-	if (arena->nextGeometry > RI_D3D12_GEOMETRY_DESCRIPTOR_CAPACITY ||
-	    resourceCount > RI_D3D12_GEOMETRY_DESCRIPTOR_CAPACITY - arena->nextGeometry)
-		return false;
-	const uint32_t offset = arena->nextGeometry;
-	arena->nextGeometry += resourceCount;
+	// be destroyed while previously submitted frames still execute.  Slots are
+	// only returned to freeGeometry once the owning buffer's retire value has
+	// completed on the timeline, so no in-flight frame can see an alias.
+	uint32_t offset = 0;
+	if (!takeRange(arena->freeGeometry, resourceCount, &offset)) {
+		if (arena->nextGeometry > RI_D3D12_GEOMETRY_DESCRIPTOR_CAPACITY ||
+		    resourceCount > RI_D3D12_GEOMETRY_DESCRIPTOR_CAPACITY - arena->nextGeometry)
+			return false;
+		offset = arena->nextGeometry;
+		arena->nextGeometry += resourceCount;
+	}
 	// Geometry allocations are represented in the common allocation type, but
 	// are released through the geometry entry point so a range can never be
 	// returned to the ordinary-table free list by mistake.
@@ -450,9 +601,23 @@ void releaseGeometryDescriptorArena( struct RIDevice *device,
 		return;
 	if (allocation->samplerCount || !eraseLive(arena->liveGeometry, *allocation))
 		return;
-	// Intentionally not reusable.  See allocateGeometryDescriptorArena: a
-	// release has no queue fence and must not make a stale packed handle alias a
-	// newly-created raw SRV.  The arena is reclaimed with the D3D12 device.
+	// Not reusable yet: a release has no queue fence and must not make a stale
+	// packed handle alias a newly-created raw SRV.  The slot becomes reusable
+	// through recycleGeometryDescriptorArena once the timeline retires it.
+}
+
+void recycleGeometryDescriptorArena( struct RIDevice *device,
+	const struct RIDescriptorArenaAllocation *allocation )
+{
+	ArenaState *arena = findArena(device);
+	if (!arena || !allocation || !allocation->resourceCount || allocation->samplerCount) return;
+	if (allocation->resourceOffset >= RI_D3D12_GEOMETRY_DESCRIPTOR_CAPACITY ||
+	    allocation->resourceCount > RI_D3D12_GEOMETRY_DESCRIPTOR_CAPACITY - allocation->resourceOffset)
+		return;
+	// A slot still owned by a live buffer must never re-enter the free list.
+	for (const RIDescriptorArenaAllocation &live : arena->liveGeometry)
+		if (sameAllocation(live, *allocation)) return;
+	mergeRange(arena->freeGeometry, { allocation->resourceOffset, allocation->resourceCount });
 }
 
 void releaseDescriptorArena( struct RIDevice *device,
@@ -508,6 +673,11 @@ bool getDescriptorArenaStats( struct RIDevice *device, struct RIDescriptorArenaS
 		out->resourceLive += a.resourceCount;
 		out->samplerLive += a.samplerCount;
 	}
+	for( const auto &[key, table] : arena->samplerTables ) {
+		out->samplerLive += table.count;
+		out->samplerTables++;
+		if( table.refs ) out->samplerTablesReferenced++;
+	}
 	for( const PendingRange &p : arena->pending ) {
 		out->resourcePending += p.allocation.resourceCount;
 		out->samplerPending += p.allocation.samplerCount;
@@ -527,6 +697,9 @@ void freeDescriptorArena( struct RIDevice *device )
 	for( size_t i = 0; i < g_arenas.size(); ++i ) {
 		if( g_arenas[i].device != device ) continue;
 		if( !g_arenas[i].pending.empty() ) return;
+		for( auto &[key, table] : g_arenas[i].samplerTables )
+			if( table.lastRelease.fence ) table.lastRelease.fence->Release();
+		g_arenas[i].samplerTables.clear();
 		if( g_arenas[i].resourceHeap ) g_arenas[i].resourceHeap->Release();
 		if( g_arenas[i].samplerHeap ) g_arenas[i].samplerHeap->Release();
 		g_arenas.erase( g_arenas.begin() + i );

@@ -24,6 +24,7 @@ std::atomic<uint32_t> g_riD3D12DescriptorCacheEntries{0};
 
 bool g_riD3D12EnableDebugLayer = false;
 static bool g_riD3D12DredEnabled = false;
+static uint8_t g_riD3D12DredMode = RI_D3D12_DRED_DEFAULT; // RID3D12DredMode_e
 
 static std::mutex g_riD3D12AdapterMutex;
 static std::vector<IDXGIAdapter4 *> g_riD3D12Adapters;
@@ -225,11 +226,12 @@ static bool ri_d3d12_populate_adapter(IDXGIAdapter4 *src, bool isWarp,
 
 int RID3D12_InitRenderer(struct RIRenderer &renderer,
                          const struct RIBackendInit *init) {
-  (void)init;
   memset(&renderer.d3d12, 0, sizeof(renderer.d3d12));
-  const char *validationEnv = getenv("HPL_D3D12_VALIDATION");
-  if (validationEnv && atoi(validationEnv) != 0)
+  const uint8_t validationLevel =
+      init ? init->d3d12.validationLevel : RI_D3D12_VALIDATION_LEVEL_NONE;
+  if (validationLevel != RI_D3D12_VALIDATION_LEVEL_NONE)
     g_riD3D12EnableDebugLayer = true;
+  g_riD3D12DredMode = init ? init->d3d12.dredMode : RI_D3D12_DRED_DEFAULT;
   HRESULT hr = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
   if (hr == S_OK)
     g_riD3D12OwnsCOM = true;
@@ -276,15 +278,17 @@ int RID3D12_InitRenderer(struct RIRenderer &renderer,
       else
         hpl::Log("RI D3D12: current process D3D12SDKVersion unavailable\n");
 
-      ID3D12Debug1 *debug1 = nullptr;
-      hr = renderer.d3d12.debug->QueryInterface(IID_PPV_ARGS(&debug1));
-      if (D3D12_WrapResult(hr)) {
-        debug1->SetEnableGPUBasedValidation(TRUE);
-        renderer.d3d12.enableGpuValidation = 1;
-        debug1->Release();
-      } else {
-        hpl::Warning("RI D3D12: GPU-based validation unavailable; continuing without it\n");
-        renderer.d3d12.enableGpuValidation = 0;
+      renderer.d3d12.enableGpuValidation = 0;
+      if (validationLevel >= RI_D3D12_VALIDATION_LEVEL_GPU_BASED) {
+        ID3D12Debug1 *debug1 = nullptr;
+        hr = renderer.d3d12.debug->QueryInterface(IID_PPV_ARGS(&debug1));
+        if (D3D12_WrapResult(hr)) {
+          debug1->SetEnableGPUBasedValidation(TRUE);
+          renderer.d3d12.enableGpuValidation = 1;
+          debug1->Release();
+        } else {
+          hpl::Warning("RI D3D12: GPU-based validation unavailable; continuing without it\n");
+        }
       }
     } else {
       hpl::Warning("RI D3D12: debug layer unavailable\n");
@@ -401,16 +405,15 @@ int RID3D12_EnumerateAdapters(struct RIRenderer &renderer,
 // DRED (Device Removed Extended Data) records auto-breadcrumbs and page-fault
 // allocation history so a device removal can name the faulting command list
 // and resource.  The settings are process-global and must be applied before
-// D3D12CreateDevice.  Enabled with the debug layer, HPL_D3D12_DRED=1, or in
-// debug builds; the overhead is small.
+// D3D12CreateDevice.  Enabled with the debug layer or in debug builds unless
+// RIBackendInit::d3d12.dredMode forces it; the overhead is small.
 static void ri_d3d12_enable_dred() {
   bool want = g_riD3D12EnableDebugLayer;
 #ifdef _DEBUG
   want = true;
 #endif
-  const char *dredEnv = getenv("HPL_D3D12_DRED");
-  if (dredEnv)
-    want = atoi(dredEnv) != 0;
+  if (g_riD3D12DredMode != RI_D3D12_DRED_DEFAULT)
+    want = g_riD3D12DredMode == RI_D3D12_DRED_ON;
   g_riD3D12DredEnabled = false;
   if (!want)
     return;

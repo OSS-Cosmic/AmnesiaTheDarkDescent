@@ -33,6 +33,19 @@ enum RIPresetLevel_e {
   RI_GPU_PRESET_COUNT
 };
 
+enum RID3D12ValidationLevel_e {
+  RI_D3D12_VALIDATION_LEVEL_NONE = 0,
+  RI_D3D12_VALIDATION_LEVEL_STANDARD,
+  RI_D3D12_VALIDATION_LEVEL_GPU_BASED,
+};
+
+// DEFAULT enables DRED with the debug layer or in debug builds; ON/OFF force it.
+enum RID3D12DredMode_e {
+  RI_D3D12_DRED_DEFAULT = 0,
+  RI_D3D12_DRED_OFF,
+  RI_D3D12_DRED_ON,
+};
+
 enum RIAdapterType_e {
   RI_ADAPTER_TYPE_OTHER,
   RI_ADAPTER_TYPE_CPU,
@@ -181,6 +194,12 @@ struct RIBackendInit {
   uint8_t api; // RIDeviceAPI_e
   const char *applicationName;
   union {
+#if (DEVICE_IMPL_D3D12)
+    struct {
+      uint8_t validationLevel; // RID3D12ValidationLevel_e
+      uint8_t dredMode;        // RID3D12DredMode_e
+    } d3d12;
+#endif
 #if (DEVICE_IMPL_VULKAN)
     struct {
       uint32_t enableValidationLayer : 1;

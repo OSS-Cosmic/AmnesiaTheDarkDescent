@@ -534,10 +534,12 @@ void cVertexBuffer::SubmitToGPU(RIDevice *device) {
       // freed handle, then take the new one by value.
       if (!element.buffer.isEmpty())
         pGraphics->graphicsDefer.push(element.buffer);
-      element.buffer = RISharedPointer<RIBuffer>(
-          &pGraphics->device, allocBuffer(needed, usage, elementTypeName(element.type)));
-      element.m_internalBufferSize = needed;
+      RIBuffer created = allocBuffer(needed, usage, elementTypeName(element.type));
+      if(created.isEmpty())
+        hpl::FatalError("RI D3D12: failed to create buffer\n");
       reallocated = true;
+      element.buffer = RISharedPointer<RIBuffer>(&pGraphics->device, created);
+      element.m_internalBufferSize = needed;
     }
     // Always upload on (re)alloc; otherwise only when the caller flagged this
     // stream dirty via UpdateData().
@@ -559,10 +561,12 @@ void cVertexBuffer::SubmitToGPU(RIDevice *device) {
     if (needsAlloc) {
       if (!m_indexBuffer.isEmpty())
         pGraphics->graphicsDefer.push(m_indexBuffer);
-      m_indexBuffer =
-          RISharedPointer<RIBuffer>(&pGraphics->device, allocBuffer(needed, idxUsage, "Index"));
-      m_indexBufferCapacity = needed;
+      RIBuffer created = allocBuffer(needed, idxUsage, "Index");
+      if(created.isEmpty())
+        hpl::FatalError("RI D3D12: failed to create index buffer\n");
       reallocated = true;
+      m_indexBuffer = RISharedPointer<RIBuffer>(&pGraphics->device, created);
+      m_indexBufferCapacity = needed;
     }
     if (needsAlloc || m_updateIndices) {
       stageUpload(m_indexBuffer.Get(), needed, m_indices.data(),
@@ -577,6 +581,7 @@ void cVertexBuffer::SubmitToGPU(RIDevice *device) {
 
   // Dirty flags only drive the *partial* upload path above; clear them so the
   // next submit (after a future UpdateData) re-uploads only the touched streams.
+  // A failed stream keeps a zero capacity, so it is re-allocated on retry.
   m_updateFlags = 0;
   m_updateIndices = false;
   m_lastSubmitted = m_generation;

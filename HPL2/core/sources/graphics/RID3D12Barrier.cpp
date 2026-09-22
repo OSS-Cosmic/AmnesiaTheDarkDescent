@@ -348,6 +348,14 @@ void RID3D12_ResourceBarrier(RICmd &cmd, uint32_t memoryBarrierNum,
       if (src.texture->d3d12.usage & RI_USAGE_SIMULTANEOUS_ACCESS) {
         dst.LayoutBefore = D3D12_BARRIER_LAYOUT_COMMON;
         dst.LayoutAfter = D3D12_BARRIER_LAYOUT_COMMON;
+        // An UNDEFINED before-state maps to NO_ACCESS, which D3D12 only pairs
+        // with LAYOUT_UNDEFINED or SYNC_NONE (#1331). With the layout pinned,
+        // a barrier that must wait on earlier work (SYNC_NONE is rejected once
+        // the texture has been accessed in the list, #1417) expresses the
+        // discard as ACCESS_COMMON: every access the COMMON layout admits.
+        if (dst.AccessBefore == D3D12_BARRIER_ACCESS_NO_ACCESS &&
+            dst.SyncBefore != D3D12_BARRIER_SYNC_NONE)
+          dst.AccessBefore = D3D12_BARRIER_ACCESS_COMMON;
       }
       dst.pResource = src.texture->d3d12.resource;
       dst.Subresources.IndexOrFirstMipLevel = range.baseMip;

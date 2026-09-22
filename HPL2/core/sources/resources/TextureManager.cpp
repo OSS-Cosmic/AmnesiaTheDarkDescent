@@ -576,10 +576,6 @@ void cTextureManager::AssignBindlessSlot(Image *apImage, bool abCube) {
   }
   apImage->SetBindlessSlot(id, /*cube*/ isArray ? false : abCube,
                            /*array*/ isArray);
-  // TEMP [SlotDiag] -- bindless slot lifetime hunt; remove once found.
-  Log("[SlotDiag] assign %s slot %u '%s'\n",
-      isArray ? "array" : (abCube ? "cube" : "2d"), id,
-      apImage->GetName().c_str());
   WriteImageDescriptor(
       apImage); // view cookie was 0 → forces the one-time write
 }
@@ -730,15 +726,8 @@ void ReleaseImageBindlessSlot(Image *apImage) {
   const bool cube = apImage->IsBindlessCube();
   const bool arr = apImage->IsBindlessArray();
   apImage->SetBindlessSlot(kInvalidTextureIndex, cube, arr);
-  // TEMP [SlotDiag] -- bindless slot lifetime hunt; remove once found.
-  Log("[SlotDiag] release-request %s slot %u '%s'\n",
-      arr ? "array" : (cube ? "cube" : "2d"), slot, apImage->GetName().c_str());
   Interface<cGraphics>::Get()->graphicsDefer.push(std::function<void()>(
       [slot, cube, arr, name = apImage->GetName()]() {
-    // Look up the manager at drain time; null at engine shutdown, in which
-    // case leaking the index is harmless (the pool is being destroyed).
-    Log("[SlotDiag] release-drain %s slot %u '%s'\n",
-        arr ? "array" : (cube ? "cube" : "2d"), slot, name.c_str());
     if (cTextureManager *mgr = g_textureManager)
       mgr->ReturnBindlessSlot(slot, cube, arr);
   }));

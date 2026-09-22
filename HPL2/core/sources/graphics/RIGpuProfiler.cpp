@@ -4,7 +4,9 @@
 
 #include <cfloat>
 #include <cstring>
+#include <cwchar>
 #include <cmath>
+#include <iterator>
 #include <vector>
 
 namespace hpl {
@@ -219,12 +221,20 @@ void RIGpuProfiler::beginScope(struct RICmd *cmd, const char *name) {
 #endif
 #if (DEVICE_IMPL_D3D12)
   if (RIIsTargetSelected(RI_DEVICE_API_D3D12) && cmd && cmd->d3d12.cmdList) {
-    const char *label = name ? name : "";
-    // Metadata 1 = WINPIX_EVENT_ANSI_VERSION. 0 declares a wchar_t payload,
-    // which the debug layer reports as a corrupted parameter for char labels.
-    constexpr UINT kPixEventAnsiVersion = 1;
-    cmd->d3d12.cmdList->BeginEvent(kPixEventAnsiVersion, label,
-                                   (UINT)(std::strlen(label) + 1));
+    // Metadata 0 = WINPIX_EVENT_UNICODE_VERSION with a wchar_t payload. DRED
+    // records breadcrumb context strings only for Unicode events, so this is
+    // what lets a device-removal dump name the scope that hung.
+    wchar_t label[128] = {};
+    const int length = name ? MultiByteToWideChar(CP_UTF8, 0, name, -1, label,
+                                                  int(std::size(label)))
+                            : 0;
+    if (length <= 0)
+      label[0] = L'\0';
+    label[std::size(label) - 1] = L'\0';
+    constexpr UINT kPixEventUnicodeVersion = 0;
+    cmd->d3d12.cmdList->BeginEvent(
+        kPixEventUnicodeVersion, label,
+        (UINT)((std::wcslen(label) + 1) * sizeof(wchar_t)));
     ++m_openLabelCount;
   }
 #endif

@@ -123,15 +123,37 @@ bool allocateGeometryDescriptorArena( struct RIDevice *device,
 	uint32_t resourceCount, struct RIDescriptorArenaAllocation *out );
 void releaseGeometryDescriptorArena( struct RIDevice *device,
 	const struct RIDescriptorArenaAllocation *allocation );
+// Returns a released geometry slot for reuse.  Only call once every submission
+// that could reference the slot has completed (timeline-retired).
+void recycleGeometryDescriptorArena( struct RIDevice *device,
+	const struct RIDescriptorArenaAllocation *allocation );
 void releaseDescriptorArena( struct RIDevice *device,
 	const struct RIDescriptorArenaAllocation *allocation,
 	const struct RIDescriptorArenaFence *fence );
 void reclaimDescriptorArena( struct RIDevice *device );
+#if ( DEVICE_IMPL_D3D12 )
+// Sampler tables are shared device-wide by content. The shader-visible sampler
+// heap holds only 2048 entries, and nearly every cached program table carries
+// the same few samplers, so giving each table its own copy exhausts the heap
+// long before the resource heap fills. acquire returns a table whose contents
+// equal descs[0..count), writing it on first use; *outKey identifies it for
+// the matching release. A table whose last reference is released stays cached
+// for the next caller and is only handed back to the heap, behind the fence of
+// its last release, when an allocation would otherwise fail.
+bool acquireSamplerTableArena( struct RIDevice *device,
+	const D3D12_SAMPLER_DESC *descs, uint32_t count,
+	uint32_t *outOffset, uint64_t *outKey );
+void releaseSamplerTableArena( struct RIDevice *device, uint64_t key,
+	const struct RIDescriptorArenaFence *fence );
+#endif
 // Diagnostic snapshot of the ordinary-table arena (geometry sub-range excluded).
 struct RIDescriptorArenaStats {
 	uint32_t resourceCapacity, resourceBumped, resourceLive, resourceFree, resourcePending, resourceRetired;
 	uint32_t samplerCapacity, samplerBumped, samplerLive, samplerFree, samplerPending, samplerRetired;
 	uint32_t liveAllocations, pendingAllocations;
+	// Shared sampler tables (see acquireSamplerTableArena); their slots are
+	// included in samplerLive.
+	uint32_t samplerTables, samplerTablesReferenced;
 };
 bool getDescriptorArenaStats( struct RIDevice *device, struct RIDescriptorArenaStats *out );
 // utility

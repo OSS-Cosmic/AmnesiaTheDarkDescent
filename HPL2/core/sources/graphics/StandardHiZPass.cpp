@@ -78,10 +78,12 @@ bool cStandardHiZPass::Build(RICmd *cmd, uint32_t frameIndex,
 
   // From UNDEFINED, not from the previous frame's SHADER_RESOURCE: every texel
   // of every level is overwritten below, so discarding the old contents is
-  // correct and saves tracking per-image initialization.
+  // correct and saves tracking per-image initialization. The sync still waits
+  // on compute: the cull may have sampled this pyramid earlier in the same
+  // command list, and D3D12 rejects SyncBefore NONE for an accessed resource.
   cmd->vk_d3d12_textureBarrier(RITextureBarrier(
       pyramid.texture[image].Get(), RI_RESOURCE_STATE_UNDEFINED,
-      RI_RESOURCE_STATE_UNORDERED_ACCESS, RI_STAGE_NONE, RI_STAGE_COMPUTE,
+      RI_RESOURCE_STATE_UNORDERED_ACCESS, RI_STAGE_COMPUTE, RI_STAGE_COMPUTE,
       RI_BARRIER_ASPECT_COLOR));
 
   struct PushConstants {

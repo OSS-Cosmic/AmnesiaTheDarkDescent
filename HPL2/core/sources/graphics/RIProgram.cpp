@@ -119,6 +119,14 @@ ri_d3d12_gpu(ID3D12DescriptorHeap *heap, uint32_t index, uint32_t stride) {
   return h;
 }
 
+// A buffer UAV needs ALLOW_UNORDERED_ACCESS, which upload/readback heaps can
+// never carry. Host-written storage buffers must be declared read-only
+// (StructuredBuffer / ByteAddressBuffer) in the shader.
+[[maybe_unused]] static bool ri_d3d12_bufferAllowsUav(ID3D12Resource *resource) {
+  return resource && (resource->GetDesc().Flags &
+                      D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS);
+}
+
 struct RID3D12BufferShape {
   bool raw = false;
   uint32_t stride = 0;
@@ -1898,36 +1906,32 @@ void RIProgram::bindDescriptors(struct RIDevice *device, struct RICmd *cmd,
     // the entry's arena range and retains the bound resources. Used for both
     // fresh and recycled entries; on failure the caller drops the entry.
     auto writeEntry = [&](D3D12DescriptorCacheEntry &entry) -> bool {
-      ID3D12DescriptorHeap *rh = nullptr, *sh = nullptr;
-      if (!getDescriptorArenaHeaps(device, &rh, &sh))
+      ID3D12DescriptorHeap *rh = nullptr;
+      if (!getDescriptorArenaHeaps(device, &rh, nullptr))
         return false;
       const uint32_t rs =
           device->d3d12.device->GetDescriptorHandleIncrementSize(
               D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
-      const uint32_t ss =
-          device->d3d12.device->GetDescriptorHandleIncrementSize(
-              D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER);
+      // Samplers are assembled here and written once into a shared table
+      // below. Every slot starts as a valid point-clamp sampler so an absent
+      // optional binding never exposes uninitialized heap memory.
+      D3D12_SAMPLER_DESC defaultSampler = {};
+      defaultSampler.Filter = D3D12_FILTER_MIN_MAG_MIP_POINT;
+      defaultSampler.AddressU = defaultSampler.AddressV =
+          defaultSampler.AddressW = D3D12_TEXTURE_ADDRESS_MODE_CLAMP;
+      defaultSampler.MinLOD = 0.0f;
+      defaultSampler.MaxLOD = D3D12_FLOAT32_MAX;
+      std::vector<D3D12_SAMPLER_DESC> samplerDescs(entry.samplerCount,
+                                                   defaultSampler);
       // Every reflected slot gets a valid null descriptor first. Optional
       // bindings can therefore remain absent without exposing uninitialized
       // shader-visible heap memory; supplied payloads overwrite these slots.
       for (const BindingReflection &r : bindingReflection) {
-        if (r.d3d12External)
+        if (r.d3d12External || r.d3d12Sampler)
           continue;
         const uint32_t count = std::max(1u, r.descriptorCount);
         for (uint32_t element = 0; element < count; ++element) {
-          if (r.d3d12Sampler) {
-            D3D12_SAMPLER_DESC desc = {};
-            desc.Filter = D3D12_FILTER_MIN_MAG_MIP_POINT;
-            desc.AddressU = desc.AddressV = desc.AddressW =
-                D3D12_TEXTURE_ADDRESS_MODE_CLAMP;
-            desc.MinLOD = 0.0f;
-            desc.MaxLOD = D3D12_FLOAT32_MAX;
-            device->d3d12.device->CreateSampler(
-                &desc, ri_d3d12_cpu(sh,
-                                    entry.allocation.samplerOffset +
-                                        r.d3d12DescriptorOffset + element,
-                                    ss));
-          } else {
+          {
             D3D12_CPU_DESCRIPTOR_HANDLE cpu =
                 ri_d3d12_cpu(rh,
                              entry.allocation.resourceOffset +
@@ -2050,7 +2054,7 @@ void RIProgram::bindDescriptors(struct RIDevice *device, struct RICmd *cmd,
             r->d3d12DescriptorOffset >
                 UINT32_MAX - bindings[i].registerOffset ||
             r->d3d12DescriptorOffset + bindings[i].registerOffset >=
-                (r->d3d12Sampler ? entry.allocation.samplerCount
+                (r->d3d12Sampler ? entry.samplerCount
                                  : entry.allocation.resourceCount)) {
           Error("RIProgram: D3D12 reflected descriptor offset exceeds "
                 "allocated table\n");
@@ -2064,9 +2068,7 @@ void RIProgram::bindDescriptors(struct RIDevice *device, struct RICmd *cmd,
                   "descriptor\n");
             return false;
           }
-          device->d3d12.device->CreateSampler(
-              &d.payload.sampler.d3d12Desc,
-              ri_d3d12_cpu(sh, entry.allocation.samplerOffset + n, ss));
+          samplerDescs[n] = d.payload.sampler.d3d12Desc;
         } else {
           D3D12_CPU_DESCRIPTOR_HANDLE cpu =
               ri_d3d12_cpu(rh, entry.allocation.resourceOffset + n, rs);
@@ -2139,6 +2141,8 @@ void RIProgram::bindDescriptors(struct RIDevice *device, struct RICmd *cmd,
               v.Buffer.StructureByteStride = shape.raw ? 0 : shape.stride;
               v.Buffer.Flags = shape.raw ? D3D12_BUFFER_UAV_FLAG_RAW
                                          : D3D12_BUFFER_UAV_FLAG_NONE;
+              assert(ri_d3d12_bufferAllowsUav(resource) &&
+                     "RIProgram: storage buffer bound as a UAV was created without UAV support (host-mapped buffers are read-only)");
               device->d3d12.device->CreateUnorderedAccessView(resource, nullptr,
                                                               &v, cpu);
             }
@@ -2165,8 +2169,45 @@ void RIProgram::bindDescriptors(struct RIDevice *device, struct RICmd *cmd,
         ri_d3d12_replace_slot(entry.resources[slot], entry.allocations[slot],
                               resource, allocation);
       }
+      // Acquire the new sampler table before dropping the old one, so a
+      // recycled entry whose samplers did not change keeps its table rather
+      // than bouncing it through eviction.
+      uint32_t samplerOffset = 0;
+      uint64_t samplerKey = 0;
+      if (!samplerDescs.empty() &&
+          !acquireSamplerTableArena(device, samplerDescs.data(),
+                                    entry.samplerCount, &samplerOffset,
+                                    &samplerKey)) {
+        if (!d3d12ArenaExhaustedReported) {
+          d3d12ArenaExhaustedReported = true;
+          RIDescriptorArenaStats s;
+          getDescriptorArenaStats(device, &s);
+          Error("RIProgram: D3D12 sampler heap exhausted (%u samplers "
+                "requested; %u/%u sampler slots live across %u shared "
+                "tables, %u referenced)\n",
+                entry.samplerCount, s.samplerLive, s.samplerCapacity,
+                s.samplerTables, s.samplerTablesReferenced);
+        }
+        return false;
+      }
+      const RIDescriptorArenaFence retire =
+          ri_d3d12_graphics_retire_fence(device);
+      releaseSamplerTableArena(device, entry.samplerKey, &retire);
+      entry.samplerOffset = samplerOffset;
+      entry.samplerKey = samplerKey;
       return true;
     };
+
+    // TEMP DIAGNOSTIC (ortho panes blank after a map load): with
+    // HPL_D3D12_NO_TABLE_CACHE=1 every bind misses, so each table is freshly
+    // written. The dropped entry keeps its range and is recycled by the sweep
+    // below once no in-flight frame can reference it.
+    static const bool kNoTableCache = [] {
+      const char *env = getenv("HPL_D3D12_NO_TABLE_CACHE");
+      return env && atoi(env) != 0;
+    }();
+    if (kNoTableCache)
+      d3d12DescriptorIndex.erase(hash);
 
     uint32_t entryIndex = UINT32_MAX;
     if (auto indexed = d3d12DescriptorIndex.find(hash);
@@ -2211,9 +2252,10 @@ void RIProgram::bindDescriptors(struct RIDevice *device, struct RICmd *cmd,
             (d3d12DescriptorRecycleCursor + step) % cacheSize;
         const D3D12DescriptorCacheEntry &entry =
             d3d12DescriptorCache[candidate];
+        // Only the resource range must fit; writeEntry reacquires the shared
+        // sampler table for whatever samplers the new binding set carries.
         if (frameIndex > entry.lastUsedFrame + RI_NUMBER_FRAMES_FLIGHT &&
-            entry.allocation.resourceCount == resourceCount &&
-            entry.allocation.samplerCount == samplerCount) {
+            entry.allocation.resourceCount == resourceCount) {
           entryIndex = candidate;
           d3d12DescriptorRecycleCursor = (candidate + 1) % cacheSize;
           break;
@@ -2225,14 +2267,14 @@ void RIProgram::bindDescriptors(struct RIDevice *device, struct RICmd *cmd,
         ri_d3d12_release_cache_refs(entry.resources, entry.allocations);
       } else {
         D3D12DescriptorCacheEntry entry;
-        if (!allocateDescriptorArena(device, resourceCount, samplerCount,
+        if (!allocateDescriptorArena(device, resourceCount, 0,
                                      &entry.allocation)) {
           if (!d3d12ArenaExhaustedReported) {
             d3d12ArenaExhaustedReported = true;
             Error(
-                "RIProgram: D3D12 descriptor arena exhausted (%u resource / %u "
-                "sampler descriptors requested, %zu tables cached)\n",
-                resourceCount, samplerCount, d3d12DescriptorCache.size());
+                "RIProgram: D3D12 resource descriptor arena exhausted (%u "
+                "descriptors requested, %zu tables cached)\n",
+                resourceCount, d3d12DescriptorCache.size());
             RIDescriptorArenaStats s;
             if (getDescriptorArenaStats(device, &s))
               Error("RIProgram: D3D12 arena usage — resources: bumped %u/%u, "
@@ -2255,11 +2297,13 @@ void RIProgram::bindDescriptors(struct RIDevice *device, struct RICmd *cmd,
       }
       D3D12DescriptorCacheEntry &entry = d3d12DescriptorCache[entryIndex];
       entry.hash = hash;
+      entry.samplerCount = samplerCount;
       if (!writeEntry(entry)) {
         ri_d3d12_release_cache_refs(entry.resources, entry.allocations);
         const RIDescriptorArenaFence retire =
             ri_d3d12_graphics_retire_fence(device);
         releaseDescriptorArena(device, &entry.allocation, &retire);
+        releaseSamplerTableArena(device, entry.samplerKey, &retire);
         // Swap-remove, keeping the moved entry's index current.
         const uint32_t last =
             static_cast<uint32_t>(d3d12DescriptorCache.size() - 1);
@@ -2281,7 +2325,7 @@ void RIProgram::bindDescriptors(struct RIDevice *device, struct RICmd *cmd,
     const RIDescriptorArenaAllocation &allocation = cached.allocation;
     ID3D12DescriptorHeap *heaps[] = {nullptr, nullptr};
     const bool hasResourceTable = allocation.resourceCount != 0;
-    const bool hasSamplerTable = allocation.samplerCount != 0;
+    const bool hasSamplerTable = cached.samplerCount != 0;
     if (hasResourceTable || hasSamplerTable) {
       if (!getDescriptorArenaHeaps(device, &heaps[0], &heaps[1]))
         return;
@@ -2306,7 +2350,7 @@ void RIProgram::bindDescriptors(struct RIDevice *device, struct RICmd *cmd,
       if (impl.d3d12.samplerRootParameter != UINT32_MAX && hasSamplerTable)
         RID3D12_SetComputeRootDescriptorTable(
             *cmd, impl.d3d12.samplerRootParameter,
-            ri_d3d12_gpu(heaps[1], allocation.samplerOffset, ss));
+            ri_d3d12_gpu(heaps[1], cached.samplerOffset, ss));
     } else {
       cmd->d3d12.computePipelineBound = false;
       RID3D12_SetGraphicsRootSignature(*cmd, impl.d3d12.rootSignature);
@@ -2317,7 +2361,7 @@ void RIProgram::bindDescriptors(struct RIDevice *device, struct RICmd *cmd,
       if (impl.d3d12.samplerRootParameter != UINT32_MAX && hasSamplerTable)
         RID3D12_SetGraphicsRootDescriptorTable(
             *cmd, impl.d3d12.samplerRootParameter,
-            ri_d3d12_gpu(heaps[1], allocation.samplerOffset, ss));
+            ri_d3d12_gpu(heaps[1], cached.samplerOffset, ss));
     }
     return;
   }
@@ -3580,6 +3624,9 @@ bool RIBindlessDescriptorSet::writeDescriptors(
           desc.Buffer.StructureByteStride = raw ? 0 : stride;
           desc.Buffer.Flags =
               raw ? D3D12_BUFFER_UAV_FLAG_RAW : D3D12_BUFFER_UAV_FLAG_NONE;
+          assert(ri_d3d12_bufferAllowsUav(
+                     descriptor.payload.buffer.nativeResource) &&
+                 "RIProgram: storage buffer bound as a UAV was created without UAV support (host-mapped buffers are read-only)");
           device->d3d12.device->CreateUnorderedAccessView(
               descriptor.payload.buffer.nativeResource, nullptr, &desc, cpu);
         }
@@ -4016,6 +4063,42 @@ static bool ri_create_reflected_d3d12_root_signature(
   };
   enforceUnboundedRangeOrder(resources, "resource");
   enforceUnboundedRangeOrder(samplers, "sampler");
+  // Debug-layer reports name a table slot only as "Index of Descriptor Range";
+  // log the layout once per program so that index maps to a binding name.
+  if (g_riD3D12EnableDebugLayer) {
+    auto rangeName = [&](const D3D12_DESCRIPTOR_RANGE1 &range) -> const char * {
+      for (const Key &key : keys)
+        if (key.table != KeyTable::External && key.reg == range.BaseShaderRegister &&
+            key.space == range.RegisterSpace &&
+            (key.cls == RIProgram::ShaderRegisterClass::Sampler) ==
+                (range.RangeType == D3D12_DESCRIPTOR_RANGE_TYPE_SAMPLER) &&
+            (key.cls == RIProgram::ShaderRegisterClass::UAV) ==
+                (range.RangeType == D3D12_DESCRIPTOR_RANGE_TYPE_UAV) &&
+            (key.cls == RIProgram::ShaderRegisterClass::CBV) ==
+                (range.RangeType == D3D12_DESCRIPTOR_RANGE_TYPE_CBV))
+          return key.name.c_str();
+      return "?";
+    };
+    auto typeName = [](D3D12_DESCRIPTOR_RANGE_TYPE type) {
+      switch (type) {
+      case D3D12_DESCRIPTOR_RANGE_TYPE_CBV: return "CBV";
+      case D3D12_DESCRIPTOR_RANGE_TYPE_SRV: return "SRV";
+      case D3D12_DESCRIPTOR_RANGE_TYPE_UAV: return "UAV";
+      default: return "Sampler";
+      }
+    };
+    auto dump = [&](const std::vector<D3D12_DESCRIPTOR_RANGE1> &ranges,
+                    const char *table) {
+      for (size_t i = 0; i < ranges.size(); ++i)
+        Log("RIProgram '%s': %s table range %zu = %s (%s reg %u space %u count %u)\n",
+            programName ? programName : "<unnamed>", table, i,
+            rangeName(ranges[i]), typeName(ranges[i].RangeType),
+            ranges[i].BaseShaderRegister, ranges[i].RegisterSpace,
+            ranges[i].NumDescriptors);
+    };
+    dump(resources, "resource");
+    dump(samplers, "sampler");
+  }
   *geometryParameter = UINT32_MAX;
   *geometryRangeOffset = UINT32_MAX;
   *geometryRangeCount = 0;
@@ -5226,6 +5309,7 @@ void RIProgram::dispose(RIDevice *device) {
     for (auto &entry : d3d12DescriptorCache) {
       ri_d3d12_release_cache_refs(entry.resources, entry.allocations);
       releaseDescriptorArena(device, &entry.allocation, &retire);
+      releaseSamplerTableArena(device, entry.samplerKey, &retire);
     }
     g_riD3D12DescriptorCacheEntries -=
         static_cast<uint32_t>(d3d12DescriptorCache.size());

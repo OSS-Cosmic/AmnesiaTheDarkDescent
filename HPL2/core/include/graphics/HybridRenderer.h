@@ -56,7 +56,9 @@ private:
   // at init; detail::BindVertexStreams binds them in the raster passes.
 
   RISegmentAlloc<RI_NUMBER_FRAME_SEGMENTS> m_indirectSegment;
-  struct RIBuffer m_indirectDrawBuffer;
+  // Host-built opaque commands whose instanceCount the two-phase cull owns.
+  StagedIndirectBuffer m_indirectDrawBuffer;
+  bool m_indirectDrawFirstUse = true;
 
   // ---------------------------------------------------------------------
   // GPU occlusion cull for the translucent families.
@@ -80,7 +82,8 @@ private:
   RISegmentAlloc<RI_NUMBER_FRAME_SEGMENTS> m_cullCandidateSegment;
   struct RIBuffer m_cullCandidateBuffer;
   RISegmentAlloc<RI_NUMBER_FRAME_SEGMENTS> m_cullCommandSegment;
-  struct RIBuffer m_cullCommandBuffer;
+  StagedIndirectBuffer m_cullCommandBuffer;
+  bool m_cullCommandFirstUse = true;
   RISegmentAlloc<RI_NUMBER_FRAME_SEGMENTS> m_cullTileSegment;
   struct RIBuffer m_cullTileBuffer;
   RISegmentAlloc<RI_NUMBER_FRAME_SEGMENTS> m_cullGroupSegment;
@@ -89,10 +92,9 @@ private:
   struct RIBuffer m_cullCameraBuffer;
   RISegmentAlloc<RI_NUMBER_FRAME_SEGMENTS> m_cullDrawCountSegment;
   struct RIBuffer m_cullDrawCountBuffer;
-  // Bound because the kernel reflects gCullVisibility on every dispatch; the
-  // two-phase visibility modes are the only ones that index it and this
-  // renderer never runs them, so one element is enough. Anything here that
-  // starts using a visibility mode must grow this first.
+  // Persistent visibility table for the opaque two-phase cull. Device-local:
+  // the kernel reads and writes it, which a host-mapped D3D12 buffer cannot
+  // express. Seeded to zero through the uploader.
   struct RIBuffer m_cullVisibilityBuffer;
   // Opaque two-phase camera cull: per-frame candidates, and the opt-in gate.
   RISegmentAlloc<RI_NUMBER_FRAME_SEGMENTS> m_cameraCandidateSegment;

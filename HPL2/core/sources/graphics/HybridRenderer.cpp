@@ -270,25 +270,35 @@ cHybridRenderer::cHybridRenderer(cGraphics *apGraphics, cResources *apResources)
     indirectDesc.elementStride = sizeof(VkDrawIndirectCommand);
     indirectDesc.maxElements = kObjectSlotCapacity;
     m_indirectSegment = RISegmentAlloc<RI_NUMBER_FRAME_SEGMENTS>(&indirectDesc);
-    m_indirectDrawBuffer = detail::CreateBindlessSlotBuffer(
-        &mpGraphics->device, indirectDesc.maxElements, sizeof(VkDrawIndirectCommand),
-        RI_BUFFER_USAGE_INDIRECT | RI_BUFFER_USAGE_TRANSFER_DST);
+    // Host-built, with the opaque cull rewriting instanceCount -- staged on
+    // D3D12, where an upload heap cannot be a UAV.
+    m_indirectDrawBuffer.Create(&mpGraphics->device, indirectDesc.maxElements,
+                                sizeof(VkDrawIndirectCommand),
+                                /*hostWritten*/ true,
+                                "HybridRenderer.indirectDraws");
+    m_indirectDrawFirstUse = true;
 
     // --- GPU occlusion cull for the translucent families -----------------
     //
-    // Host-mapped, not device-local: the host writes each of these linearly
-    // once per Draw and the GPU only reads them, so a staged copy would buy
-    // nothing.
-    const auto makeCullBuffer =
+    // Host-mapped where the host writes and the GPU only reads, so a staged
+    // copy would buy nothing. Anything the kernel writes is device-local or a
+    // StagedIndirectBuffer instead: D3D12 upload heaps cannot be UAVs.
+    const auto makeSegment =
         [&](RISegmentAlloc<RI_NUMBER_FRAME_SEGMENTS> *segment, uint32_t elements,
-            uint32_t stride, uint32_t usage, const char *debugName) {
+            uint32_t stride) {
           RISegmentAllocDesc desc = {};
           desc.numSegments = RI_NUMBER_FRAMES_FLIGHT;
           desc.elementStride = static_cast<uint16_t>(stride);
           desc.maxElements = elements;
           *segment = RISegmentAlloc<RI_NUMBER_FRAME_SEGMENTS>(&desc);
+        };
+    const auto makeCullBuffer =
+        [&](RISegmentAlloc<RI_NUMBER_FRAME_SEGMENTS> *segment, uint32_t elements,
+            uint32_t stride, uint32_t usage, const char *debugName,
+            bool deviceLocal = false) {
+          makeSegment(segment, elements, stride);
           return detail::CreateBindlessSlotBuffer(&mpGraphics->device, elements,
-                                                  stride, usage, false,
+                                                  stride, usage, deviceLocal,
                                                   debugName);
         };
     m_cullCandidateBuffer =
@@ -300,11 +310,13 @@ cHybridRenderer::cHybridRenderer(cGraphics *apGraphics, cResources *apResources)
     // non-indexed draws alike: every draw is its own drawIndirect with
     // drawCount 1, so Vulkan never reads the stride and a uniform one keeps
     // the kernel's word arithmetic trivial.
-    m_cullCommandBuffer = makeCullBuffer(
-        &m_cullCommandSegment, kHybridCullMaxDraws,
-        sizeof(VkDrawIndexedIndirectCommand),
-        RI_BUFFER_USAGE_INDIRECT | RI_BUFFER_USAGE_SHADER_RESOURCE_STORAGE,
-        "HybridRenderer.cullCommands");
+    makeSegment(&m_cullCommandSegment, kHybridCullMaxDraws,
+                sizeof(VkDrawIndexedIndirectCommand));
+    m_cullCommandBuffer.Create(&mpGraphics->device, kHybridCullMaxDraws,
+                               sizeof(VkDrawIndexedIndirectCommand),
+                               /*hostWritten*/ true,
+                               "HybridRenderer.cullCommands");
+    m_cullCommandFirstUse = true;
     m_cullTileBuffer =
         makeCullBuffer(&m_cullTileSegment, kHybridCullMaxTiles,
                        sizeof(StandardCullTile),
@@ -323,19 +335,35 @@ cHybridRenderer::cHybridRenderer(cGraphics *apGraphics, cResources *apResources)
     m_cullDrawCountBuffer = makeCullBuffer(
         &m_cullDrawCountSegment, kHybridCullMaxTiles, sizeof(uint32_t),
         RI_BUFFER_USAGE_INDIRECT | RI_BUFFER_USAGE_SHADER_RESOURCE_STORAGE,
-        "HybridRenderer.cullDrawCounts");
+        "HybridRenderer.cullDrawCounts", /*deviceLocal*/ true);
     // Persistent across frames -- phase 1 reads what the previous frame's phase
-    // 2 wrote -- so it gets no segment allocator. Host-mapped only so it can be
-    // zeroed: every entry must start "not visible", which makes the first frame
-    // draw everything in phase 2 and nothing in phase 1.
+    // 2 wrote -- so it gets no segment allocator. The kernel reads and writes
+    // it, so it is device-local and the zero seed is staged through the
+    // uploader: every entry must start "not visible", which makes the first
+    // frame draw everything in phase 2 and nothing in phase 1.
     m_cullVisibilityBuffer = detail::CreateBindlessSlotBuffer(
         &mpGraphics->device, kHybridCullVisibilityKeys, sizeof(uint32_t),
-        RI_BUFFER_USAGE_SHADER_RESOURCE_STORAGE, false,
-        "HybridRenderer.cullVisibility");
-    if (m_cullVisibilityBuffer.mappedAddress)
-      std::memset(m_cullVisibilityBuffer.mappedAddress, 0,
-                  static_cast<size_t>(kHybridCullVisibilityKeys) *
-                      sizeof(uint32_t));
+        RI_BUFFER_USAGE_SHADER_RESOURCE_STORAGE | RI_BUFFER_USAGE_TRANSFER_DST,
+        /*deviceLocalOnly*/ true, "HybridRenderer.cullVisibility");
+    if (!m_cullVisibilityBuffer.isEmpty()) {
+      const size_t bytes =
+          static_cast<size_t>(kHybridCullVisibilityKeys) * sizeof(uint32_t);
+      RIResourceBufferTransaction seed = {};
+      seed.target = m_cullVisibilityBuffer;
+      seed.size = bytes;
+      seed.offset = 0;
+      seed.currentState = RI_RESOURCE_STATE_UNDEFINED;
+      seed.currentStages = RI_STAGE_NONE;
+      seed.postState = RI_RESOURCE_STATE_UNORDERED_ACCESS;
+      seed.postStages = RI_STAGE_COMPUTE;
+      RI_ResourceBeginCopyBuffer(&mpGraphics->device, &mpGraphics->uploader,
+                                 &seed);
+      if (seed.mapped.data) {
+        std::memset(seed.mapped.data, 0, bytes);
+        RI_ResourceEndCopyBuffer(&mpGraphics->device, &mpGraphics->uploader,
+                                 &seed);
+      }
+    }
     m_cameraCandidateBuffer = makeCullBuffer(
         &m_cameraCandidateSegment, kHybridCameraMaxDraws,
                        sizeof(StandardCullCandidate),
@@ -383,7 +411,7 @@ bool cHybridRenderer::ReserveCull(uint32_t worstCase,
       !m_cullTileSegment.request(frame, 1, &tileReq) ||
       !m_cullGroupSegment.request(frame, groupCount, &groupReq))
     return false;
-  if (!m_cullCandidateBuffer.mappedAddress || !m_cullCommandBuffer.mappedAddress ||
+  if (!m_cullCandidateBuffer.mappedAddress || !m_cullCommandBuffer.mapped() ||
       !m_cullTileBuffer.mappedAddress || !m_cullGroupBuffer.mappedAddress)
     return false;
 
@@ -400,7 +428,7 @@ bool cHybridRenderer::ReserveCull(uint32_t worstCase,
               sizeof(StandardCullCandidate));
   out.commandWords =
       reinterpret_cast<uint32_t *>(
-          static_cast<uint8_t *>(m_cullCommandBuffer.mappedAddress) +
+          static_cast<uint8_t *>(m_cullCommandBuffer.mapped()) +
           static_cast<size_t>(commandReq.elementOffset) *
               sizeof(VkDrawIndexedIndirectCommand));
   out.tile = reinterpret_cast<StandardCullTile *>(
@@ -500,7 +528,7 @@ bool cHybridRenderer::DispatchCull(RICmd *cmd, TranslucentCull &cull,
   buffers.candidates = &m_cullCandidateBuffer;
   buffers.tiles = &m_cullTileBuffer;
   buffers.groups = &m_cullGroupBuffer;
-  buffers.indirect = &m_cullCommandBuffer;
+  buffers.indirect = m_cullCommandBuffer.gpu();
   buffers.drawCounts = &m_cullDrawCountBuffer;
   buffers.cameras = &m_cullCameraBuffer;
   buffers.visibility = &m_cullVisibilityBuffer;
@@ -524,9 +552,25 @@ bool cHybridRenderer::DispatchCull(RICmd *cmd, TranslucentCull &cull,
   // holds a DISJOINT ring range: RISegmentAlloc hands out non-overlapping
   // slices, so there is no write-after-read on any word. Dispatch's own closing
   // barrier covers the write-then-read this family needs.
-  return m_cull->Dispatch(cmd, mpGraphics->frameIndex, buffers, cull.tileBase,
-                          1u, cull.groupBase, groupCount,
-                          kStandardCullModeInstanceMask);
+  // D3D12 only: land this family's host-written commands in the device copy
+  // the kernel rewrites and the draw reads.
+  m_cullCommandBuffer.Flush(
+      &mpGraphics->device, cmd,
+      static_cast<uint64_t>(cull.commandBase) * sizeof(VkDrawIndexedIndirectCommand),
+      static_cast<uint64_t>(cull.commandCount) * sizeof(VkDrawIndexedIndirectCommand),
+      m_cullCommandFirstUse, /*cullFollows*/ true);
+  m_cullCommandFirstUse = false;
+  const bool dispatched =
+      m_cull->Dispatch(cmd, mpGraphics->frameIndex, buffers, cull.tileBase, 1u,
+                       cull.groupBase, groupCount, kStandardCullModeInstanceMask);
+  // Flush left the device copy in STORAGE_WRITE for the kernel; without it the
+  // caller draws directly, so restore the state every later Flush assumes.
+  if (!dispatched && m_cullCommandBuffer.staged)
+    cmd->vk_d3d12_bufferBarrier(RIBufferBarrier(
+        m_cullCommandBuffer.gpu(), RI_RESOURCE_STATE_STORAGE_WRITE,
+        RI_RESOURCE_STATE_INDIRECT_ARGUMENT, RI_STAGE_COPY,
+        RI_STAGE_DRAW_INDIRECT));
+  return dispatched;
 }
 
 void cViewport::HybridViewportState::Update(cGraphics::FrameContext *cntx,
@@ -1213,7 +1257,7 @@ void cHybridRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
       m_indirectSegment.request(mpGraphics->frameIndex, solids.size(), &indirectReq);
   assert(indirectOk);
   auto *indirectDst = reinterpret_cast<VkDrawIndirectCommand *>(
-      static_cast<uint8_t *>(m_indirectDrawBuffer.mappedAddress) +
+      static_cast<uint8_t *>(m_indirectDrawBuffer.mapped()) +
       (size_t)indirectReq.elementOffset * sizeof(VkDrawIndirectCommand));
   uint32_t writtenDraws = 0;
 
@@ -1279,7 +1323,7 @@ void cHybridRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
       m_cameraCandidateBuffer.mappedAddress != nullptr;
   if (opaqueCullReady) {
     opaquePhaseTwoDst = reinterpret_cast<VkDrawIndirectCommand *>(
-        static_cast<uint8_t *>(m_indirectDrawBuffer.mappedAddress) +
+        static_cast<uint8_t *>(m_indirectDrawBuffer.mapped()) +
         static_cast<size_t>(opaquePhaseTwoReq.elementOffset) *
             sizeof(VkDrawIndirectCommand));
     opaqueCandidates = reinterpret_cast<StandardCullCandidate *>(
@@ -1565,6 +1609,7 @@ void cHybridRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
   // Phase 1 of the opaque cull: mark the commands that were visible last frame.
   // Recorded before the scope opens -- a dispatch cannot run inside one.
   bool opaqueCullDispatched = false;
+  bool opaqueIndirectFlushed = false;
   uint32_t opaqueCommandWordDelta = 0;
   RISegmentReq opaqueTileReq = {};
   RISegmentReq opaqueCameraReq = {};
@@ -1625,7 +1670,7 @@ void cHybridRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
       opaqueCullBuffers.candidates = &m_cameraCandidateBuffer;
       opaqueCullBuffers.tiles = &m_cullTileBuffer;
       opaqueCullBuffers.groups = &m_cullGroupBuffer;
-      opaqueCullBuffers.indirect = &m_indirectDrawBuffer;
+      opaqueCullBuffers.indirect = m_indirectDrawBuffer.gpu();
       opaqueCullBuffers.drawCounts = &m_cullDrawCountBuffer;
       opaqueCullBuffers.cameras = &m_cullCameraBuffer;
       opaqueCullBuffers.visibility = &m_cullVisibilityBuffer;
@@ -1646,13 +1691,42 @@ void cHybridRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
           (opaquePhaseTwoReq.elementOffset - indirectReq.elementOffset) *
           (sizeof(VkDrawIndirectCommand) / sizeof(uint32_t)));
 
+      // Both phases' ranges go over in one copy; the kernel rewrites
+      // instanceCount in each.
+      const uint64_t first =
+          std::min(indirectReq.elementOffset, opaquePhaseTwoReq.elementOffset);
+      const uint64_t last =
+          std::max(indirectReq.elementOffset, opaquePhaseTwoReq.elementOffset) +
+          writtenDraws;
+      m_indirectDrawBuffer.Flush(
+          &mpGraphics->device, &mpGraphics->primary.cmds[0],
+          first * sizeof(VkDrawIndirectCommand),
+          (last - first) * sizeof(VkDrawIndirectCommand),
+          m_indirectDrawFirstUse, /*cullFollows*/ true);
+      m_indirectDrawFirstUse = false;
+      opaqueIndirectFlushed = true;
       opaqueCullDispatched = m_cull->Dispatch(
           &mpGraphics->primary.cmds[0], mpGraphics->frameIndex,
           opaqueCullBuffers,
           static_cast<uint32_t>(opaqueTileReq.elementOffset), 1u,
           static_cast<uint32_t>(opaqueGroupReq.elementOffset), groupCount,
           kStandardCullModeVisibilityReplay);
+      if (!opaqueCullDispatched && m_indirectDrawBuffer.staged)
+        mpGraphics->primary.cmds[0].vk_d3d12_bufferBarrier(RIBufferBarrier(
+            m_indirectDrawBuffer.gpu(), RI_RESOURCE_STATE_STORAGE_WRITE,
+            RI_RESOURCE_STATE_INDIRECT_ARGUMENT, RI_STAGE_COPY,
+            RI_STAGE_DRAW_INDIRECT));
     }
+  }
+  // No cull this frame: the draw reads the host's commands as written.
+  if (!opaqueIndirectFlushed && writtenDraws > 0) {
+    m_indirectDrawBuffer.Flush(
+        &mpGraphics->device, &mpGraphics->primary.cmds[0],
+        static_cast<uint64_t>(indirectReq.elementOffset) *
+            sizeof(VkDrawIndirectCommand),
+        static_cast<uint64_t>(writtenDraws) * sizeof(VkDrawIndirectCommand),
+        m_indirectDrawFirstUse, /*cullFollows*/ false);
+    m_indirectDrawFirstUse = false;
   }
 
   RIBeginRenderingDesc gbufferBeginDesc = {};
@@ -1689,7 +1763,7 @@ void cHybridRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
                                           &mpGraphics->globalset->m_bindlessSet, uint32_t(0));
       m_gbuffer.bindDescriptors(&mpGraphics->device, &mpGraphics->primary.cmds[0], mpGraphics->frameIndex,
                                 bindings.data(), bindings.size());
-      mpGraphics->primary.cmds[0].drawIndirect(&mpGraphics->device, &m_indirectDrawBuffer,
+      mpGraphics->primary.cmds[0].drawIndirect(&mpGraphics->device, m_indirectDrawBuffer.gpu(),
                                       (VkDeviceSize)indirectReq.elementOffset *
                                           sizeof(VkDrawIndirectCommand),
                                       writtenDraws,
@@ -1770,7 +1844,7 @@ void cHybridRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
       m_gbuffer.bindDescriptors(&mpGraphics->device, opaqueCmd,
                                 mpGraphics->frameIndex, bindings.data(),
                                 bindings.size());
-      opaqueCmd->drawIndirect(&mpGraphics->device, &m_indirectDrawBuffer,
+      opaqueCmd->drawIndirect(&mpGraphics->device, m_indirectDrawBuffer.gpu(),
                               (VkDeviceSize)opaquePhaseTwoReq.elementOffset *
                                   sizeof(VkDrawIndirectCommand),
                               writtenDraws,
@@ -3302,7 +3376,7 @@ void cHybridRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
                                         draw.commandSlot + pass) *
                   sizeof(VkDrawIndexedIndirectCommand);
               mpGraphics->primary.cmds[0].drawIndexedIndirect(
-                  &mpGraphics->device, &m_cullCommandBuffer, offset, 1,
+                  &mpGraphics->device, m_cullCommandBuffer.gpu(), offset, 1,
                   sizeof(VkDrawIndexedIndirectCommand));
             } else {
               mpGraphics->primary.cmds[0].drawIndexed(
@@ -3596,7 +3670,7 @@ void cHybridRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
               static_cast<uint64_t>(particleCull.commandBase + draw.commandSlot) *
               sizeof(VkDrawIndexedIndirectCommand);
           mpGraphics->primary.cmds[0].drawIndirect(
-              &mpGraphics->device, &m_cullCommandBuffer, offset, 1,
+              &mpGraphics->device, m_cullCommandBuffer.gpu(), offset, 1,
               sizeof(VkDrawIndexedIndirectCommand));
         } else {
           mpGraphics->primary.cmds[0].draw(&mpGraphics->device, (uint32_t)indexCount, 1u, 0u, slot);
@@ -3900,7 +3974,7 @@ void cHybridRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
               static_cast<uint64_t>(meshCull.commandBase + draw.commandSlot) *
               sizeof(VkDrawIndexedIndirectCommand);
           mpGraphics->primary.cmds[0].drawIndexedIndirect(
-              &mpGraphics->device, &m_cullCommandBuffer, offset, 1,
+              &mpGraphics->device, m_cullCommandBuffer.gpu(), offset, 1,
               sizeof(VkDrawIndexedIndirectCommand));
         } else {
           mpGraphics->primary.cmds[0].drawIndexed(&mpGraphics->device, (uint32_t)indexCount, 1u, 0u,
@@ -3937,7 +4011,7 @@ void cHybridRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
                                       1u) *
                 sizeof(VkDrawIndexedIndirectCommand);
             mpGraphics->primary.cmds[0].drawIndexedIndirect(
-                &mpGraphics->device, &m_cullCommandBuffer, offset, 1,
+                &mpGraphics->device, m_cullCommandBuffer.gpu(), offset, 1,
                 sizeof(VkDrawIndexedIndirectCommand));
           } else {
             mpGraphics->primary.cmds[0].drawIndexed(&mpGraphics->device, (uint32_t)indexCount, 1u,
@@ -4066,15 +4140,19 @@ cHybridRenderer::~cHybridRenderer() {
   m_cull.reset();
   m_cullLoaded = false;
 
-  // Per-frame indirect-draw args buffer (INDIRECT | TRANSFER_DST).
-  m_indirectDrawBuffer.dispose(&mpGraphics->device);
-  m_indirectDrawBuffer = {};
+  // Staged indirect buffers: both halves (host staging + device copy).
+  for (StagedIndirectBuffer *staged :
+       {&m_indirectDrawBuffer, &m_cullCommandBuffer}) {
+    staged->host.dispose(&mpGraphics->device);
+    staged->device.dispose(&mpGraphics->device);
+    *staged = {};
+  }
 
   // The cull rings: the translucent families' plus the opaque two-phase
   // candidate ring and its persistent visibility table. Anything created in the
   // constructor has to appear here or it outlives the device.
   RIBuffer *cullBuffers[] = {
-      &m_cullCandidateBuffer,  &m_cullCommandBuffer,   &m_cullTileBuffer,
+      &m_cullCandidateBuffer,  &m_cullTileBuffer,
       &m_cullGroupBuffer,      &m_cullCameraBuffer,    &m_cullDrawCountBuffer,
       &m_cullVisibilityBuffer, &m_cameraCandidateBuffer};
   for (RIBuffer *b : cullBuffers) {

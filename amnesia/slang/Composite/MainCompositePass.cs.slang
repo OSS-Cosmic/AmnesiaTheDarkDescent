@@ -40,7 +40,6 @@ import Material;                    // loadMaterialHeader (shadow-flag overlay's
 import Grid;                         // gridCellPos / gridFlattenCellIndex / gridCellValid (decal grid lookup)
 import Utils.Color.ColorHelpers;     // linearToSRGB / sRGBToLinear (legacy display-space decal blend)
 import BlendModes;                   // blendDisplaySpaceExact (raw eMaterialBlendMode numbering)
-import BoxFill;                      // evaluateBoxFill (legacy box lights as global fill)
 
 struct MainCompositePushConstants
 {

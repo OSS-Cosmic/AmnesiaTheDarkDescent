@@ -592,31 +592,6 @@ static bool BuildStandardLights(
                            light->IsLegacyRendererEnabled() &&
                            StandardFinite(radius) && radius > 0.0f;
       const cColor diffuse = light->GetDiffuseColor();
-      {
-        // TEMP [SlotDiag] -- bindless slot lifetime hunt; remove once found.
-        // Logs each light's textures the first time it is seen, and again if
-        // any of its slots changes afterwards.
-        static std::unordered_map<const iLight *, uint64_t> sLoggedSlots;
-        Image *falloff = light->GetFalloffImage();
-        Image *gobo = light->GetGoboImage();
-        Image *cone = light->GetLightType() == eLightType_Spot
-                          ? static_cast<iLightSpot *>(light)->GetSpotFalloffImage()
-                          : nullptr;
-        const uint32_t fs = falloff ? falloff->GetRawBindlessSlot() : 0xffffffffu;
-        const uint32_t gs = gobo ? gobo->GetRawBindlessSlot() : 0xffffffffu;
-        const uint32_t cs = cone ? cone->GetRawBindlessSlot() : 0xffffffffu;
-        const uint64_t key = (uint64_t(fs) * 1000003u) ^ (uint64_t(gs) << 21) ^ cs;
-        auto it = sLoggedSlots.find(light);
-        if (it == sLoggedSlots.end() || it->second != key) {
-          sLoggedSlots[light] = key;
-          Log("[SlotDiag] light '%s' type=%d falloff '%s' slot %u | cone '%s' "
-              "slot %u | gobo '%s' slot %u\n",
-              light->GetName().c_str(), static_cast<int>(light->GetLightType()),
-              falloff ? falloff->GetName().c_str() : "-", fs,
-              cone ? cone->GetName().c_str() : "-", cs,
-              gobo ? gobo->GetName().c_str() : "-", gs);
-        }
-      }
       if (light->GetLightType() == eLightType_Point) {
         if (!enabled)
           continue;

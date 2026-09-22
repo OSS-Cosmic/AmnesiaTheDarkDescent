@@ -708,7 +708,13 @@ private:
   struct D3D12DescriptorCacheEntry {
     hash_t hash = HASH_INITIAL_VALUE;
     uint32_t lastUsedFrame = 0;
+    // Resource range only; samplers live in a shared table (see
+    // acquireSamplerTableArena) so identical sampler sets across entries and
+    // programs occupy the 2048-entry sampler heap once.
     RIDescriptorArenaAllocation allocation{};
+    uint32_t samplerOffset = 0;
+    uint32_t samplerCount = 0;
+    uint64_t samplerKey = 0;
     std::vector<ID3D12Resource *> resources;
     std::vector<D3D12MA::Allocation *> allocations;
   };
