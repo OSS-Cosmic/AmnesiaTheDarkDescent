@@ -201,6 +201,7 @@ private:
 	// Hardware blend state varies per blend mode — one pipeline per mode is
 	// stamped on demand via the program's PipelineSlot cache.
 	RIProgram m_particle;
+  RIProgram m_particleColorSpace; // In-place scene encode/decode around particles.
 
 	// Non-particle translucent meshes (glass, lamp glass, decals tagged
 	// translucent, etc.). Renders in its own pass after the particle pass into

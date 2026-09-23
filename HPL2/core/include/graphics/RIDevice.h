@@ -134,16 +134,11 @@ uint8_t RIActiveBackendApi();
 #endif
 #endif
 
-// True when the renderer's active backend matches `targetApi` (RIDeviceAPI_e).
-// static inline so single-backend builds fold it to a compile-time constant and
-// the optimizer drops the dead backend branch at every call site.
 static inline bool RIIsTargetSelected(uint8_t targetApi) {
 #if DEVICE_MULTI_BACKEND
   return targetApi == RIActiveBackendApi();
 #else
-  assert(targetApi == RI_ACTIVE_BACKEND_API); // single backend: must match
-  (void)targetApi;
-  return true;
+  return targetApi == RI_ACTIVE_BACKEND_API;
 #endif
 }
 

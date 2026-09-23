@@ -70,58 +70,12 @@
 
 // @todo redo this prototype to take a tStringVec instead
 
-#ifndef IGNORE_HPL_MAIN
-extern int hplMain(const hpl::tString &asCommandLine);
-
-#ifdef _WIN32
-#include <windows.h>
-int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance,
-                   _In_ LPSTR lpCmdLine, _In_ int nCmdShow) {
-  return hplMain(lpCmdLine);
-}
-#else
-int main(int argc, char *argv[]) {
-#ifdef __linux__
-  if (!std::setlocale(LC_CTYPE, "")) {
-    fprintf(stderr,
-            "Can't set the specified locale! Check LANG, LC_CTYPE, LC_ALL.\n");
-    return 1;
-  }
-  char *charset = nl_langinfo(CODESET);
-  bool utf8_mode = (strcasecmp(charset, "UTF-8") == 0);
-  if (!utf8_mode) {
-    fprintf(stderr,
-            "UTF-8 Charset %s available.\nCurrent LANG is %s\nCharset: %s\n",
-            utf8_mode ? "is" : "not", getenv("LANG"), charset);
-  }
-#endif
-
-  bool cwd = false;
-  hpl::tString cmdline = "";
-  for (int i = 1; i < argc; i++) {
-    if (strcmp(argv[i], "-cwd") == 0) {
-      cwd = true;
-    } else if (strncmp(argv[i], "-psn", 4) == 0) {
-      // skip "finder" process number
-    } else {
-      if (cmdline.length() > 0) {
-        cmdline.append(" ").append(argv[i]);
-      } else {
-        cmdline.append(argv[i]);
-      }
-    }
-  }
-
-  if (!cwd) {
-    hpl::tString dataDir = hpl::cPlatform::GetDataDir();
-
-    chdir(dataDir.c_str());
-  }
-
-  return hplMain(cmdline);
-}
-#endif
-#endif
+// The process entry point (main / WinMain) used to live here. It now has its
+// own translation unit, HplMainShim.cpp: a static archive is linked object by
+// object, so keeping it beside the log writer and the SDL system meant every
+// program linking libHPL2 got an entry point whether it wanted one or not.
+// On ELF that collides with a test's own main; on Windows it never did,
+// because there the symbol is WinMain.
 
 namespace hpl {
 

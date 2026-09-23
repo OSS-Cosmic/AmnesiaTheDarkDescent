@@ -26,6 +26,8 @@
 #include "graphics/RIProgramHelpers.h"
 #include "system/Hasher.h"
 
+#include "graphics/ToneMapBackendParams.h"
+
 namespace hpl {
 
 namespace {
@@ -34,6 +36,7 @@ struct ToneMapPushConstants {
     float shadowLift;
     float gamma;
     float shoulder;
+    float saturation;
 };
 } // namespace
 
@@ -68,8 +71,9 @@ cPostEffect_ToneMap::cPostEffect_ToneMap(cGraphics *apGraphics,
 cPostEffect_ToneMap::~cPostEffect_ToneMap() {}
 
 void cPostEffect_ToneMap::RenderEffect(const PostEffectRenderCtx &ctx) {
-    // Single fullscreen pass: sample the (bloom-composited) HDR pogo input, ACES
-    // tonemap to linear [0,1], write the pogo output. The composite handles the
+    // Single fullscreen pass: sample the (bloom-composited) HDR pogo input,
+    // sRGB-encode it (with a display-space Reinhard shoulder and chroma scale on
+    // the ray-traced backend), write the pogo output. The composite handles the
     // pogo toggle / barriers around this call.
     RIRenderingAttachment color = {};
     color.view    = ctx.outputView;
@@ -117,13 +121,15 @@ void cPostEffect_ToneMap::RenderEffect(const PostEffectRenderCtx &ctx) {
     ToneMapPushConstants pc{};
     pc.exposure = mParams.mfExposure;
     pc.shadowLift = mParams.mfShadowLift;
-    // User display-gamma setting, applied in-shader as the final encode step
-    // (replaces the deprecated SDL window-brightness ramp). Authored by the
-    // game's cLuxConfigHandler and pushed in via the tonemap params.
-    pc.gamma = mParams.mfGamma;
-    // The Standard backend reproduces the base game's 8-bit buffer, which
-    // clipped highlights at white; the ray-traced backend rolls them off.
-    pc.shoulder = mpGraphics->GetRendererBackend() == eRendererBackend_Standard ? 0.0f : 1.0f;
+    // Everything that depends on which backend drew the frame. Standard is the
+    // identity case on all three fields; the ray-traced path takes a gamma
+    // bias, a highlight shoulder and a chroma pull-down. See
+    // ToneMapBackendParams.cpp for why each one is there.
+    const cToneMapBackendParams backend =
+        ResolveToneMapBackendParams(mpGraphics->GetRendererBackend(), mParams.mfGamma);
+    pc.gamma      = backend.mfGamma;
+    pc.shoulder   = backend.mfShoulder;
+    pc.saturation = backend.mfSaturation;
     ctx.cmd->vk_d3d12_setPushConstants(
         &mpGraphics->device, mpToneMapType->m_program, 0, sizeof(pc), &pc);
 

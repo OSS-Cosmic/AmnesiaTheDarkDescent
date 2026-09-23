@@ -1,4 +1,4 @@
-"""Lock the legacy particle alpha test into both particle fragment shaders.
+"""Preserve particle cutouts without clipping continuous alpha fades.
 
 The original engine's translucency_particle.frag ends with
 ``if(finalColor.a < 0.01) { discard; }``. That test is NOT an optimisation:
@@ -9,7 +9,10 @@ retail textures that store their cutout in alpha (ps_glass_piece on Add,
 ps_glass_shards on MulX2) therefore emitted their transparent-region RGB across
 the whole quad and rendered as solid squares on the STUDY map.
 
-These source checks guard the shared threshold and the conditional discard
+Alpha/PremulAlpha consume opacity in hardware blending and must fade below
+0.01 without a hard cutoff, especially over dark HDR backgrounds.
+
+These source checks guard the shared threshold and the mode-dependent discard
 on the result of blend modulation. They do not execute the GPU shader or
 validate the blend equations.
 """
@@ -50,21 +53,23 @@ class ParticleAlphaDiscardSource(unittest.TestCase):
             msg="threshold must stay at the legacy translucency_particle.frag 0.01",
         )
 
-    def test_both_particle_shaders_discard_low_modulated_alpha(self):
+    def test_both_particle_shaders_restrict_cutoff_to_non_alpha_blends(self):
         # Match the actual assignment and conditional statement, ignoring
         # comments and allowing either braced or unbraced discard bodies.
         pattern = (
             r"\bfloat4\s+(?P<color>\w+)\s*=\s*applyBlendModulation\s*\([^;]+\)\s*;"
-            r"\s*if\s*\(\s*(?P=color)\s*\.\s*a\s*<\s*"
+            r"\s*if\s*\(\s*gPushConstants\.blendMode\s*!=\s*kBlendModeAlpha\s*&&"
+            r"\s*gPushConstants\.blendMode\s*!=\s*kBlendModePremulAlpha\s*&&"
+            r"\s*(?P=color)\s*\.\s*a\s*<\s*"
             + THRESHOLD_NAME
-            + r"\s*\)\s*(?:discard\s*;|\{\s*discard\s*;\s*\})\s*return\b"
+            + r"\s*\)\s*(?:discard\s*;|\{\s*discard\s*;\s*\})"
         )
         for shader in SHADERS:
             with self.subTest(shader=shader.name):
                 self.assertRegex(
                     without_comments(shader.read_text()),
                     pattern,
-                    "discard must test post-modulation alpha < the shared threshold before return",
+                    "only non-alpha blend modes may discard at the shared threshold",
                 )
 
 

@@ -243,9 +243,14 @@ void cGraphics::Init(const cEngineInitVars::cGraphicsVars &aVars,
   apResources->AddResourceDir(_W("core/shaders"), false);
   apResources->AddResourceDir(_W("core/textures"), false);
   apResources->AddResourceDir(_W("core/models"), false);
-  apResources->AddResourceDir(_W("compiled_shaders"), false);
   // Each backend's artifacts live in their own child directory. Resource
   // directories are indexed non-recursively, so register each one explicitly.
+  //
+  // The flat compiled_shaders/ is deliberately absent. Nothing has written it
+  // since the per-backend split, but a tree built before that still has the old
+  // artifacts sitting in it, and registering it ahead of these served those in
+  // preference to the current ones -- stale shaders, silently, on any machine
+  // that had built once before the move.
   apResources->AddResourceDir(_W("compiled_shaders/vk"), false);
 #if DEVICE_IMPL_D3D12
   apResources->AddResourceDir(_W("compiled_shaders/d3d12"), false);

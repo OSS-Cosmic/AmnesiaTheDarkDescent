@@ -278,6 +278,10 @@ set(FSR_STAGED_MESSAGE_SOURCE "${_fsr_temp_stage_dir}/sdk/src/shared/ffx_message
 set(FFX_API_STAGED_PROVIDER_SOURCE "${_fsr_temp_stage_dir}/ffx-api/src/ffx_provider.cpp")
 set(FFX_API_STAGED_BACKENDS_SOURCE "${_fsr_temp_stage_dir}/ffx-api/src/backends.cpp")
 set(FFX_API_STAGED_HEADER "${_fsr_temp_stage_dir}/ffx-api/include/ffx_api/ffx_api.h")
+set(FFX_API_STAGED_PROVIDER_HEADER "${_fsr_temp_stage_dir}/ffx-api/src/ffx_provider.h")
+set(FFX_API_STAGED_BACKENDS_HEADER "${_fsr_temp_stage_dir}/ffx-api/src/backends.h")
+set(FFX_API_STAGED_FSR3UPSCALE_SOURCE
+    "${_fsr_temp_stage_dir}/ffx-api/src/ffx_provider_fsr3upscale.cpp")
 set(FFX_API_STAGED_DX12_HEADER
     "${_fsr_temp_stage_dir}/ffx-api/include/ffx_api/dx12/ffx_api_dx12.h")
 include("${CMAKE_CURRENT_SOURCE_DIR}/patches/portable_sdk.cmake")
@@ -439,7 +443,6 @@ function(ffx_add_upscaler_module target backend_api backend_source generated_sha
     target_compile_definitions(${target} PRIVATE
         FFX_FSR3UPSCALER
         FFX_BACKEND_${backend_api}=1
-        FFX_BUILD_AS_DLL
         FFXDLL_VERSION_MAJOR=1
         FFXDLL_VERSION_MINOR=0
         FFXDLL_VERSION_PATCH=1
@@ -464,7 +467,31 @@ function(ffx_add_upscaler_module target backend_api backend_source generated_sha
 
     if(MSVC)
         target_compile_options(${target} PRIVATE /W3)
-        target_compile_definitions(${target} PRIVATE _CRT_SECURE_NO_WARNINGS)
+
+        # FFX_BUILD_AS_DLL is MSVC-only, and the guard that reads it is the
+        # reason why. sdk/include/FidelityFX/host/ffx_types.h spells it
+        #
+        #     #if defined(FFX_GCC) || !defined(FFX_BUILD_AS_DLL)
+        #     #define FFX_API
+        #     #else
+        #     #define FFX_API __declspec(dllexport)
+        #
+        # and FFX_GCC is defined by nothing: not the SDK, not the compiler, not
+        # this build. So on GCC and Clang the only reachable way out of that
+        # guard is leaving FFX_BUILD_AS_DLL undefined; defining it there feeds
+        # every FFX_API declaration a bare __declspec and the translation unit
+        # dies at the first one. The static archive above has always compiled
+        # this way on every platform.
+        #
+        # Nothing is lost by it. FFX_API decorates the SDK's internal entry
+        # points, which ffx_provider_fsr3upscale.cpp and backends.cpp call from
+        # inside this same module; the module's actual export surface is the
+        # five FFX_API_ENTRY functions, which portable_ffx_api.cmake rewrites to
+        # __attribute__((visibility("default"))) and which the visibility
+        # settings above are there to keep alone.
+        target_compile_definitions(${target} PRIVATE
+            _CRT_SECURE_NO_WARNINGS
+            FFX_BUILD_AS_DLL)
     else()
         target_compile_options(${target} PRIVATE
             "-include${CMAKE_CURRENT_SOURCE_DIR}/ffx_portability.h")

@@ -20,7 +20,7 @@
  */
 
 #include "scene/World.h"
-#include "graphics/RayTracedLightColor.h"
+#include "graphics/Color.h"
 
 #include <tinyxml2.h>
 
@@ -537,10 +537,9 @@ static PointLight BuildPointLight(iLight *pLight) {
   pl.position[1] = pos.y;
   pl.position[2] = pos.z;
   const cColor c = pLight->GetDiffuseColor();
-  const auto linearColor = RayTracedLightColorToLinear(c.r, c.g, c.b);
-  pl.color[0] = linearColor[0];
-  pl.color[1] = linearColor[1];
-  pl.color[2] = linearColor[2];
+  pl.color[0] = sRGBToLinear(c.r);
+  pl.color[1] = sRGBToLinear(c.g);
+  pl.color[2] = sRGBToLinear(c.b);
   pl.intensity = pLight->GetIntensity();
   pl.radius = pLight->GetRadius();
   pl.sourceRadius = pLight->GetSourceRadius();
@@ -584,10 +583,9 @@ static SpotLight BuildSpotLight(iLight *pLight) {
   }
   sl.cosOuterAngle = std::cos(pSpot->GetFOV() * 0.5f);
   const cColor c = pSpot->GetDiffuseColor();
-  const auto linearColor = RayTracedLightColorToLinear(c.r, c.g, c.b);
-  sl.color[0] = linearColor[0];
-  sl.color[1] = linearColor[1];
-  sl.color[2] = linearColor[2];
+  sl.color[0] = sRGBToLinear(c.r);
+  sl.color[1] = sRGBToLinear(c.g);
+  sl.color[2] = sRGBToLinear(c.b);
   sl.intensity = pSpot->GetIntensity();
   sl.radius = pSpot->GetRadius();
   sl.sourceRadius = pSpot->GetSourceRadius();
@@ -609,10 +607,9 @@ static RectLight BuildRectLight(iLight *pLight) {
   al.position[1] = pos.y;
   al.position[2] = pos.z;
   const cColor c = pArea->GetDiffuseColor();
-  const auto linearColor = RayTracedLightColorToLinear(c.r, c.g, c.b);
-  al.color[0] = linearColor[0];
-  al.color[1] = linearColor[1];
-  al.color[2] = linearColor[2];
+  al.color[0] = sRGBToLinear(c.r);
+  al.color[1] = sRGBToLinear(c.g);
+  al.color[2] = sRGBToLinear(c.b);
   al.intensity = pArea->GetIntensity();
   al.radius = pArea->GetRadius();
   al.width = pArea->GetWidth();

@@ -10,9 +10,10 @@
 // here. This brings the scene in line with the GUI, which is authored to write
 // display-encoded values directly to the same UNORM swapchain.
 //
-// ACES was previously removed because it crushed low-mids of a scene whose
-// diffuse was capped at ≤1; with PBR lights pushing values >1 the filmic
-// shoulder is wanted again. Tune `exposure` if mids read dim.
+// ACESFitted() below is NOT part of this pass -- it is kept for reference only.
+// The operator that actually runs is: exposure multiply, sRGB encode, optional
+// display-space Reinhard shoulder, optional chroma scale, user gamma. Tune
+// `exposure` if mids read dim.
 //
 // Bindings (set 0):
 //   binding 0 : SamplerState inputSampler
@@ -22,7 +23,9 @@
 // identity) applied as the final encode step — replaces the base game's SDL
 // window-brightness ramp, which was identity at 1.0 too; shoulder (1 = roll
 // highlights off above kToneMapShoulder, 0 = clip at display white like the
-// base game's 8-bit buffer; the Standard backend uses 0).
+// base game's 8-bit buffer; the Standard backend uses 0); saturation (chroma
+// scale toward Rec.709 luma, sourced from kRayTracedSaturation; the Standard
+// backend uses 1.0, which this pass treats as an exact no-op).
 //
 // Brightness comes from `exposure`, NOT from gamma. The Standard particle/
 // translucent path (BlendModes.slang encodeStandardBlendSource) emits
@@ -33,7 +36,7 @@
 
 #include "../HostDefinitions.h"
 
-import Utils.Color.ColorHelpers;   // piecewise linearToSRGB()
+import Utils.Color.ColorHelpers;   // piecewise linearToSRGB(), luminance()
 
 [vk::binding(0, 0)]
 SamplerState inputSampler;
@@ -75,8 +78,9 @@ struct ToneMapPC
 {
     float exposure;
     float shadowLift;
-    float gamma;     // user display-gamma (1.0 = identity)
-    float shoulder;  // 1 = soft highlight shoulder, 0 = clip (Standard)
+    float gamma;      // user display-gamma (1.0 = identity)
+    float shoulder;   // 1 = soft highlight shoulder, 0 = clip (Standard)
+    float saturation; // 1 = identity (Standard), < 1 = chroma toward luma
 };
 
 [vk::push_constant]
@@ -118,6 +122,17 @@ float4 psMain(PSIn pin) : SV_Target
     if (gPushConstants.shoulder != 0.0f)
         display = softShoulder(display);
     display = saturate(display);
+    // Global chroma scale (ray-traced only; Standard pushes 1.0 and skips).
+    // Done in display space, not linear, on purpose: what is being emulated is
+    // the base game's display-space clip toward white, and a display-space lerp
+    // holds perceived brightness where a linear one visibly darkens saturated
+    // reds. See kRayTracedSaturation in Constants.h for why this lives here and
+    // not in the light data.
+    if (gPushConstants.saturation != 1.0f)
+    {
+        const float y = luminance(display);
+        display = saturate(lerp(y.xxx, display, gPushConstants.saturation));
+    }
     // User gamma adjust (final): gamma 1.0 = identity, <1 darker / >1 brighter.
     display = pow(display, (1.0f / max(gPushConstants.gamma, 1e-4f)).xxx);
     return float4(display, 1.0f);

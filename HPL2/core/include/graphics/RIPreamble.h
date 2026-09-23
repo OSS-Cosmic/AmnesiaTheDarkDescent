@@ -35,6 +35,30 @@
 
 #ifdef DEVICE_SUPPORT_VULKAN
 #include "volk.h"
+
+// volk has already declared the entire Vulkan API, including the platform
+// surface entry points: under VK_USE_PLATFORM_XLIB_KHR it forward-declares
+// Display/Window/VisualID and includes <vulkan/vulkan_xlib.h> itself rather than
+// <X11/Xlib.h>, "to avoid unprefixed macros which can cause conflicts" in its
+// own words (volk.h:113-170).
+//
+// It reaches the core API through <vulkan/vulkan_core.h>, so it never defines
+// VULKAN_H_ -- and vk_mem_alloc.h guards its own include on exactly that name:
+//
+//     #if !defined(VULKAN_H_)
+//     #include <vulkan/vulkan.h>
+//     #endif
+//
+// vulkan.h then does `#include <X11/Xlib.h>` for the Xlib surface, which defines
+// Bool, Status, None, Success, Always and Complex as bare macros that mangle
+// whatever is parsed after this header. rapidjson's Handler::Bool(bool) in
+// RIProgram.cpp is one casualty; the #undef blocks in DebugDraw.h,
+// DisplayDepthPolicy.h, Viewport.h and FsrUpscaler.cpp are older ones.
+//
+// Claiming the guard costs nothing -- everything vulkan.h would declare, volk
+// has declared already -- and it keeps X11 out of every TU, not just this one.
+#define VULKAN_H_
+
 #define VMA_STATIC_VULKAN_FUNCTIONS 0
 #define VMA_DYNAMIC_VULKAN_FUNCTIONS 1
 #include "vk_mem_alloc.h"

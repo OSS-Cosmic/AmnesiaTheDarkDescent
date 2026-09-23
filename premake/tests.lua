@@ -68,6 +68,7 @@ project "TemporalCameraTests"
         ROOT .. "/HPL2/core/sources/graphics/RIPipelineDesc.cpp",
         ROOT .. "/HPL2/core/sources/graphics/StandardShadowCull.cpp",
         ROOT .. "/HPL2/core/sources/graphics/RendererBackendSwitch.cpp",
+        ROOT .. "/HPL2/core/sources/graphics/ToneMapBackendParams.cpp",
     }
     -- StandardShadowCull.cpp shares its predicates with the cull compute shader
     -- through amnesia/slang/StandardCull.h, and the frustum test compares itself
@@ -106,7 +107,12 @@ project "LightParametersTests"
         ROOT .. "/tests/scene/*.cpp",
         ROOT .. "/HPL2/core/sources/scene/LightParameters.cpp",
     }
-    includedirs { ROOT .. "/HPL2/core/include" }
+    -- LightParameters.cpp takes kLightRadianceFloor / kPointLightSourceRadiusSq /
+    -- kLightReachMaxScale from amnesia/slang/Constants.h rather than keeping local
+    -- copies, so the light grid and the shader cannot drift apart. This project
+    -- compiles that source outside the engine, which is the only place the shader
+    -- include path comes for free, so it has to be spelled out here too.
+    includedirs { ROOT .. "/HPL2/core/include", ROOT .. "/amnesia/slang" }
     add_utest()
     add_test_postbuild()
 

@@ -159,9 +159,20 @@ ffx_sdk_replace_required(
 #
 # That breaks the Linux module build AND every engine translation unit that
 # includes this header -- which the engine needs for ffxCreateBackendVKDesc,
-# ffxCreateContextDescUpscale and the PfnFfx* typedefs. The SDK proper already
-# solved this for its own FFX_API macro in sdk/include/FidelityFX/host/ffx_types.h,
+# ffxCreateContextDescUpscale and the PfnFfx* typedefs. The SDK proper has a
+# guard on its own FFX_API macro in sdk/include/FidelityFX/host/ffx_types.h,
 # which is why sdk/include needs no staging; mirror that guard here.
+#
+# That guard is conditional, not unconditional, and the difference matters to
+# anyone editing the module's compile definitions. It reads
+#
+#     #if defined(FFX_GCC) || !defined(FFX_BUILD_AS_DLL)
+#
+# and FFX_GCC is defined nowhere -- not by the SDK, not by the compiler, not by
+# this build. sdk/include survives GCC and Clang purely because nothing defines
+# FFX_BUILD_AS_DLL on those toolchains, so cmake/fsr/CMakeLists.txt keeps that
+# define inside its if(MSVC) leg. Adding it unconditionally reintroduces the
+# same __declspec parse error one header over.
 #
 # visibility("default") rather than nothing on GCC/Clang: the module targets set
 # CXX_VISIBILITY_PRESET hidden so the .so exports exactly these five symbols and
@@ -205,3 +216,46 @@ ffx_sdk_replace_required(
 [=[    FFX_API_CONFIGURE_FG_SWAPCHAIN_KEY_WAITCALLBACK_DX12 = 0,                ///< Sets FfxWaitCallbackFunc
     FFX_API_CONFIGURE_FG_SWAPCHAIN_KEY_FRAMEPACINGTUNING_DX12 = 2,           ///< Sets FfxApiSwapchainFramePacingTuning]=]
     "distinct D3D12 frame-generation swapchain configure keys")
+
+# 7. Spell the SDK include directory the way the filesystem spells it.
+#
+# Two ffx-api headers reach into the SDK through <FidelityFx/...> with a
+# lowercase x, while the directory on disk is sdk/include/FidelityFX. NTFS and
+# the MSVC search path do not care; ext4 and every other case-sensitive
+# filesystem do, and the include fails outright:
+#
+#     fatal error: FidelityFx/host/ffx_types.h: No such file or directory
+#
+# Both spellings appear in upstream v1.1.4 -- the rest of ffx-api already writes
+# FidelityFX -- so this is a typo the Windows-only build could not surface, not
+# a deliberate alias.
+ffx_sdk_replace_required(
+    "${FFX_API_STAGED_PROVIDER_HEADER}"
+    "${FSR_SDK_ROOT}/ffx-api/src/ffx_provider.h"
+    "#include <FidelityFx/host/ffx_types.h>"
+    "#include <FidelityFX/host/ffx_types.h>"
+    "case-correct SDK include in ffx_provider.h")
+
+ffx_sdk_replace_required(
+    "${FFX_API_STAGED_BACKENDS_HEADER}"
+    "${FSR_SDK_ROOT}/ffx-api/src/backends.h"
+    "#include <FidelityFx/host/ffx_interface.h>"
+    "#include <FidelityFX/host/ffx_interface.h>"
+    "case-correct SDK include in backends.h")
+
+# 8. Replace the MSVC integer-literal suffix in the provider's id.
+#
+# `ui64` is a Microsoft extension. GCC and Clang parse it as a user-defined
+# literal operator, find none, and stop:
+#
+#     error: unable to find numeric literal operator 'operator""ui64'
+#
+# ULL is the standard spelling with the same width and signedness, so the
+# constant the provider registry matches on is bit-for-bit unchanged. The digit
+# separator stays: that one is standard C++14.
+ffx_sdk_replace_required(
+    "${FFX_API_STAGED_FSR3UPSCALE_SOURCE}"
+    "${FSR_SDK_ROOT}/ffx-api/src/ffx_provider_fsr3upscale.cpp"
+    "return 0xF5A5'CA1Eui64 << 32"
+    "return 0xF5A5'CA1EULL << 32"
+    "portable provider id literal")

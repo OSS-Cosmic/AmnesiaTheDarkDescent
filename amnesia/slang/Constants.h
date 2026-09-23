@@ -354,6 +354,57 @@ SHARED_CONST float kWaterRefractionExposure = 2.0f; //0.5f;
 // LuxMainMenu, iEditorViewport, cLevelEditorCameraCapture).
 SHARED_CONST float kSceneExposure = 2.5f;
 
+// Additive display-gamma bias applied to the RAY-TRACED backend ONLY, on top of
+// the player's Graphics/Gamma setting, in PostEffect_ToneMap.cpp -- not in the
+// shader, which still sees a single gamma scalar and knows nothing about
+// backends.
+//
+// The two backends author radiance differently and the ray-traced one lands
+// darker. Standard emits sRGBToLinear(display) / kSceneExposure so the tonemap's
+// multiply is its exact inverse and the base game's look comes back bit-for-bit;
+// the ray-traced path composites physically (color * intensity / (d^2 +
+// sourceRadiusSq)) with only that same x2.5 to lift it, and its highlight
+// shoulder compresses everything above kToneMapShoulder rather than clipping.
+//
+// This closes the gap at the display encode. It deliberately does NOT touch
+// kSceneExposure: the Standard blend paths (BlendModes.slang
+// encodeStandardBlendSource, StandardLighting.slang, Standard.environment.3d)
+// divide by that exact value and would break as a pair. Additive rather than
+// scaling so the player's own gamma slider keeps moving the result by the amount
+// they chose -- it just starts higher. 0 = no bias, and reverting is that edit.
+//
+// A display-side compensation, not a diagnosis: if the backends drift again
+// after a lighting change, the cause is upstream in the light model, not here.
+SHARED_CONST float kRayTracedGammaBias = 0.4f;
+
+// Global chroma scale applied to the RAY-TRACED backend ONLY, in display space,
+// in PostEffect_ToneMap.cpp -- pushed in, so the shader sees one scalar and
+// knows nothing about backends. 1.0 = identity, < 1 pulls color toward its
+// Rec.709 luma.
+//
+// The ray-traced path composites physical radiance (color * intensity / (d^2 +
+// sourceRadiusSq)), so an authored light tint multiplied by a saturated albedo
+// keeps all of its chroma. The base game never showed that chroma: it
+// accumulated in display space into an 8-bit buffer that clipped toward white.
+// kToneMapShoulder recovers part of that above the knee; this recovers the
+// mid-tones below it, which is where the warm over-saturation actually lives.
+//
+// This replaces an earlier attempt that retained 65% of each light's chroma at
+// RT upload (RayTracedLightColorToLinear). That baked an art-direction choice
+// into the light data, where it was invisible to anyone reading a light's
+// authored color; lights now upload their unmodified color and the correction
+// happens once, here, at the display encode.
+//
+// Standard is pinned at 1.0 and must stay there: it emits
+// sRGBToLinear(display) / kSceneExposure (BlendModes.slang
+// encodeStandardBlendSource, StandardLighting.slang, Standard.environment.3d)
+// on the assumption that the tonemap is its exact inverse, and any chroma
+// change here breaks that pair and the base game's bit-for-bit look.
+//
+// A display-side compensation, not a diagnosis: if the backends drift again
+// after a lighting change, the cause is upstream in the light model, not here.
+SHARED_CONST float kRayTracedSaturation = 0.80f;
+
 // How much wave turbulence the REFLECTION bounce normal keeps (the refraction
 // bounce always uses the full wave normal). The RT reflection is a sharp mirror
 // trace; blending its normal back toward the flat surface normal calms the

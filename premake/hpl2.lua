@@ -34,6 +34,10 @@ project "HPL2"
         "GamepadSDL.cpp", "GamepadSDL2.cpp", "KeyboardSDL.cpp", "MouseSDL.cpp",
         "TimerSDL.cpp", "LowLevelInputSDL.cpp",
         "LowLevelResourcesSDL.cpp", "LowLevelSystemSDL.cpp", "SDLEngineSetup.cpp",
+        -- Its own TU on purpose: a static archive links object by object, so the
+        -- entry point has to sit alone or every program linking libHPL2 inherits
+        -- one. See the comment at the top of HplMainShim.cpp.
+        "HplMainShim.cpp",
         "SDLFontData.cpp", "LowLevelSoundOpenAL.cpp", "OpenAL*",
         "MeshLoaderCollada.cpp", "MeshLoaderColladaHelpers.cpp",
         "MeshLoaderColladaLoader.cpp", "MeshLoaderMSH.cpp", "MeshLoaderFBX.cpp",

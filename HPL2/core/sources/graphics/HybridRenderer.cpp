@@ -13,6 +13,8 @@
 #include "graphics/ParticlePipelineDesc.h"
 #include "graphics/PathTracePayload.h"
 #include "graphics/PostEffectComposite.h"
+#include "graphics/PostEffect_ToneMap.h"
+#include "graphics/ToneMapBackendParams.h"
 #include "graphics/Graphics.h"
 #include "graphics/RIPogoBuffer.h"
 #include "graphics/RIResourceUploader.h"
@@ -203,6 +205,7 @@ cHybridRenderer::cHybridRenderer(cGraphics *apGraphics, cResources *apResources)
     // gOutput. The renderer transitions the attach to GENERAL around the
     // dispatch and back to COLOR_ATTACHMENT_OPTIMAL afterwards.
     loadSlangCompute(m_composite, "MainCompositePass.cs", "csMain");
+    loadSlangCompute(m_particleColorSpace, "ParticleColorSpace.cs", "csMain");
     loadSlangCompute(m_directLighting, "DirectLightingPass.cs", "csMain");
     loadSlangCompute(m_directSpatialReuse, "DirectSpatialReusePass.cs",
                      "csMain");
@@ -3400,6 +3403,63 @@ void cHybridRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
   }
 
   // --------------------------------------------------------------------
+  // Remove only the backend's extra gamma from forward contributions.
+  // The ratio depends on this viewport's active tone map, not saved settings;
+  // editors/menus without an active tone map need no compensation.
+  float particleGammaRatio = 1.0f;
+  if (auto *composite = viewport->GetPostEffectComposite()) {
+    for (int i = 0; i < composite->GetPostEffectNum(); ++i) {
+      auto *toneMap = dynamic_cast<cPostEffect_ToneMap *>(composite->GetPostEffect(i));
+      if (!toneMap || !toneMap->IsActive())
+        continue;
+      cPostEffectParams_ToneMap params;
+      toneMap->GetParams(&params);
+      const float userGamma = std::max(params.mfGamma, 1.0e-4f);
+      const auto backend = ResolveToneMapBackendParams(
+          eRendererBackend_RayTraced, params.mfGamma);
+      particleGammaRatio = userGamma / std::max(backend.mfGamma, 1.0e-4f);
+      break;
+    }
+  }
+
+  // Temporarily store authored/display RGB in the HDR attachment. Each
+  // compute lane owns one pixel; there is no cross-pixel read/write hazard.
+  // Restore linear scene RGB before any other pass samples the target.
+  auto convertParticleColorSpace = [&](bool toLinear, bool linearBlend = false) {
+    auto *cmd = &mpGraphics->primary.cmds[0];
+    auto *target = state.renderTarget[mpGraphics->swapchainIndex].Get();
+    cmd->vk_d3d12_textureBarrier(
+        {target, toLinear ? RI_RESOURCE_STATE_RENDER_TARGET_READ
+                          : RI_RESOURCE_STATE_SHADER_RESOURCE,
+         RI_RESOURCE_STATE_GENERAL,
+         toLinear ? RI_STAGE_NONE : RI_STAGE_FRAGMENT, RI_STAGE_COMPUTE});
+    m_particleColorSpace.bindComputePipeline(
+        &mpGraphics->device, cmd, HASH_INITIAL_VALUE, "ParticleColorSpace");
+    RIProgram::DescriptorBinding binding{
+        "gParticleScene", RIDescriptor::storageImage(
+            &mpGraphics->device,
+            state.renderTargetView[mpGraphics->swapchainIndex].Get())};
+    m_particleColorSpace.bindDescriptors(
+        &mpGraphics->device, cmd, mpGraphics->frameIndex, &binding, 1,
+        VK_PIPELINE_BIND_POINT_COMPUTE);
+    struct ColorSpacePush {
+      uint32_t toLinear;
+      uint32_t linearBlend;
+      float gammaRatio;
+    };
+    const ColorSpacePush direction{toLinear ? 1u : 0u,
+                                  linearBlend ? 1u : 0u, particleGammaRatio};
+    cmd->vk_d3d12_setPushConstants(&mpGraphics->device,
+        m_particleColorSpace, 0, sizeof(direction), &direction);
+    cmd->dispatch(&mpGraphics->device, (renderWidth + 15u) / 16u,
+                  (renderHeight + 15u) / 16u, 1u);
+    cmd->vk_d3d12_textureBarrier(
+        {target, RI_RESOURCE_STATE_GENERAL,
+         toLinear ? RI_RESOURCE_STATE_SHADER_RESOURCE
+                  : RI_RESOURCE_STATE_RENDER_TARGET_READ,
+         RI_STAGE_COMPUTE, toLinear ? RI_STAGE_FRAGMENT : RI_STAGE_NONE});
+  };
+
   // Translucent pass — two sub-passes, both into the pogo "read" half:
   //   1. Particle pass (this block) — particle emitters only.
   //   2. Mesh pass (below)          — non-particle translucent meshes.
@@ -3540,16 +3600,8 @@ void cHybridRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
       // attached to the frame context by the time we get here.
       flipDepthToReadOnly();
 
-      // Render translucent particles INTO the pogo "read" half (which holds the
-      // composited + post-effected scene), not the swapchain — so the pogo (and
-      // anything that samples it, e.g. the menu/inventory screen capture)
-      // carries particles too. Flip that half COLOR_ATTACHMENT for the draw,
-      // then back to SHADER_READ after, so the tail blit below can sample it.
+      convertParticleColorSpace(false);
       const RI_Format_e particleTargetFormat = cGraphics::PogoColorFormat;
-      {
-        mpGraphics->primary.cmds[0].vk_d3d12_textureBarrier(RI_PogoAttachmentBarrier(
-            state.renderTarget[mpGraphics->swapchainIndex].Get(), /*initial=*/false));
-      }
 
       RITextureView colorView =
           *state.renderTargetAttachmentView[mpGraphics->swapchainIndex];
@@ -3679,12 +3731,8 @@ void cHybridRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
 
       mpGraphics->primary.cmds[0].vk_d3d12_endRendering(&mpGraphics->device);
 
-      // pogo "read" half back to SHADER_READ_ONLY so the tail blit can sample
-      // it.
-      {
-        mpGraphics->primary.cmds[0].vk_d3d12_textureBarrier(RI_PogoShaderBarrier(
-            state.renderTarget[mpGraphics->swapchainIndex].Get(), /*initial=*/false));
-      }
+      convertParticleColorSpace(true);
+
     }
   }
 
@@ -3826,15 +3874,9 @@ void cHybridRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
 
       const RI_Format_e meshTargetFormat = cGraphics::PogoColorFormat;
 
-      // SHADER_READ_ONLY → COLOR_ATTACHMENT_OPTIMAL. If the particle pass
-      // ran above, that block left the pogo half in SHADER_READ_ONLY (for
-      // a tail blit that never got to run); if it didn't, the visibility
-      // composite + post-effect chain also left it in SHADER_READ_ONLY. The
-      // barrier helper handles either source state.
-      {
-        mpGraphics->primary.cmds[0].vk_d3d12_textureBarrier(RI_PogoAttachmentBarrier(
-            state.renderTarget[mpGraphics->swapchainIndex].Get(), /*initial=*/false));
-      }
+      // Mesh shaders keep linear blending; the surrounding conversion only
+      // removes the backend gamma bias from their added contribution.
+      convertParticleColorSpace(false, true);
 
       RITextureView colorView =
           *state.renderTargetAttachmentView[mpGraphics->swapchainIndex];
@@ -4021,8 +4063,7 @@ void cHybridRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
       }
 
       mpGraphics->primary.cmds[0].vk_d3d12_endRendering(&mpGraphics->device);
-      mpGraphics->primary.cmds[0].vk_d3d12_textureBarrier(RI_PogoShaderBarrier(
-          state.renderTarget[mpGraphics->swapchainIndex].Get(), /*initial=*/false));
+      convertParticleColorSpace(true, true);
     }
   }
 
@@ -4122,7 +4163,7 @@ cHybridRenderer::~cHybridRenderer() {
       &m_gbuffer,        &m_vBufferPomBary,
       &m_lightGrid,      &m_composite,           &m_directLighting,
       &m_directSpatialReuse, &m_nrdPack,         &m_lightProbe,
-      &m_particle,
+      &m_particle, &m_particleColorSpace,
       &m_translucentMesh, &m_decal,               &m_water,
       &m_pathTrace,
   };
