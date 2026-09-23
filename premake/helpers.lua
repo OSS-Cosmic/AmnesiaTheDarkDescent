@@ -172,6 +172,9 @@ function link_engine(target_layout)
     link_nrd(target_layout)
     link_fsr(target_layout)
     link_xess(target_layout)
+    if target_layout == "tests" then
+        link_test_runtime_rpath()
+    end
     memory_consumer()
     memory_rebuild_consumer()
     filter "system:linux"

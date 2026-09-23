@@ -181,6 +181,15 @@ function link_sdl2()
     filter {}
 end
 
+-- Test executables live in build-premake/tests/<cfg>, not next to libs/, so
+-- $ORIGIN/libs cannot find the staged SDL2/OpenAL shared libs. Point the
+-- runtime search path at the staged copy by absolute path instead.
+function link_test_runtime_rpath()
+    filter "system:linux"
+        linkoptions { "-Wl,-rpath,'" .. RUNTIME_LIBS .. "'" }
+    filter {}
+end
+
 -- ---- openal-soft -----------------------------------------------------------
 -- ALSOFT_ENABLE_MODULES=OFF: openal-soft auto-enables C++20 modules with the
 -- "Visual Studio 17 2022" generator on MSVC 14.34+ (and Ninja on GCC 15+/Clang 17+).

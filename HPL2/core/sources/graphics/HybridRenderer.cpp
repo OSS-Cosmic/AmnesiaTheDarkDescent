@@ -3428,11 +3428,11 @@ void cHybridRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
   auto convertParticleColorSpace = [&](bool toLinear, bool linearBlend = false) {
     auto *cmd = &mpGraphics->primary.cmds[0];
     auto *target = state.renderTarget[mpGraphics->swapchainIndex].Get();
-    cmd->vk_d3d12_textureBarrier(
-        {target, toLinear ? RI_RESOURCE_STATE_RENDER_TARGET_READ
-                          : RI_RESOURCE_STATE_SHADER_RESOURCE,
-         RI_RESOURCE_STATE_GENERAL,
-         toLinear ? RI_STAGE_NONE : RI_STAGE_FRAGMENT, RI_STAGE_COMPUTE});
+    cmd->vk_d3d12_textureBarrier(RITextureBarrier(
+        target, toLinear ? RI_RESOURCE_STATE_RENDER_TARGET_READ
+                         : RI_RESOURCE_STATE_SHADER_RESOURCE,
+        RI_RESOURCE_STATE_GENERAL,
+        toLinear ? RI_STAGE_NONE : RI_STAGE_FRAGMENT, RI_STAGE_COMPUTE));
     m_particleColorSpace.bindComputePipeline(
         &mpGraphics->device, cmd, HASH_INITIAL_VALUE, "ParticleColorSpace");
     RIProgram::DescriptorBinding binding{
@@ -3453,11 +3453,11 @@ void cHybridRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
         m_particleColorSpace, 0, sizeof(direction), &direction);
     cmd->dispatch(&mpGraphics->device, (renderWidth + 15u) / 16u,
                   (renderHeight + 15u) / 16u, 1u);
-    cmd->vk_d3d12_textureBarrier(
-        {target, RI_RESOURCE_STATE_GENERAL,
-         toLinear ? RI_RESOURCE_STATE_SHADER_RESOURCE
-                  : RI_RESOURCE_STATE_RENDER_TARGET_READ,
-         RI_STAGE_COMPUTE, toLinear ? RI_STAGE_FRAGMENT : RI_STAGE_NONE});
+    cmd->vk_d3d12_textureBarrier(RITextureBarrier(
+        target, RI_RESOURCE_STATE_GENERAL,
+        toLinear ? RI_RESOURCE_STATE_SHADER_RESOURCE
+                 : RI_RESOURCE_STATE_RENDER_TARGET_READ,
+        RI_STAGE_COMPUTE, toLinear ? RI_STAGE_FRAGMENT : RI_STAGE_NONE));
   };
 
   // Translucent pass — two sub-passes, both into the pogo "read" half:
