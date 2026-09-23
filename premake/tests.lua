@@ -61,7 +61,6 @@ project "TemporalCameraTests"
         ROOT .. "/HPL2/core/sources/graphics/TemporalReactiveMaskMath.cpp",
         ROOT .. "/HPL2/core/sources/graphics/WaterReflectionJitterMath.cpp",
         ROOT .. "/HPL2/core/sources/graphics/FsrUpscalerParams.cpp",
-        ROOT .. "/HPL2/core/sources/graphics/RayConeLod.cpp",
         ROOT .. "/HPL2/core/sources/graphics/CubeMipGen.cpp",
         ROOT .. "/HPL2/core/sources/graphics/BlockCompressionDecode.cpp",
         ROOT .. "/HPL2/core/sources/graphics/RIFormat.c",

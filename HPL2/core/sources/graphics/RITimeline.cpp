@@ -35,7 +35,8 @@ void RITimeline::init(RIDevice *device) {
         VK_STRUCTURE_TYPE_SEMAPHORE_TYPE_CREATE_INFO};
     timelineInfo.semaphoreType = VK_SEMAPHORE_TYPE_TIMELINE;
     timelineInfo.initialValue = 0;
-    VkSemaphoreCreateInfo createInfo = {VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO};
+    VkSemaphoreCreateInfo createInfo = {
+        VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO};
     createInfo.pNext = &timelineInfo;
     VK_WrapResult(
         vkCreateSemaphore(device->vk.device, &createInfo, NULL, &vk.semaphore));
@@ -82,8 +83,8 @@ uint64_t RITimeline::completed(RIDevice *device) const {
 #if (DEVICE_IMPL_VULKAN)
   if (RIIsTargetSelected(RI_DEVICE_API_VK)) {
     uint64_t value = 0;
-    if (!VK_WrapResult(
-            vkGetSemaphoreCounterValue(device->vk.device, vk.semaphore, &value)))
+    if (!VK_WrapResult(vkGetSemaphoreCounterValue(device->vk.device,
+                                                  vk.semaphore, &value)))
       return 0;
     return value;
   }
