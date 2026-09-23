@@ -354,6 +354,10 @@ public:
   // the debug checkbox for A/B comparison.
   bool allLightsCastShadows = true;
 
+  // Ray-traced backend: multiplier on the legacy box lights' flat global fill
+  // (MainCompositePass). 1 reproduces Standard's box-light term; 0 disables it.
+  float boxFillScale = 1.0f;
+
   // Shared manual override for the render/display resolution split:
   // 1.0f means native (the (0,0) render-extent sentinel); values in (0,1)
   // make every viewport shade at a reduced render extent while presenting at
@@ -399,6 +403,11 @@ public:
   }
 
   void UpdateFrameUBO(RIDescriptor *descriptor, void *data, size_t size);
+
+  // One-line GPU memory residency summary (budget usage, allocator heaps,
+  // descriptor-cache entries, NRD instances created) for the debug overlay and
+  // the periodic log. Empty when the backend reports no budget.
+  std::string GpuMemoryDiagnostics() const;
 
   // Claim per-frame segments of the translucent scratch buffers.
   bool RequestTranslucentVtx(FrameContext *cntx, size_t numFloats,

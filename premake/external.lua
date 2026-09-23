@@ -4,7 +4,8 @@
 -- impractical (and brittle) to reimplement in premake. Each is wrapped in a
 -- premake kind "Makefile" project whose buildcommands run the library's own
 -- CMake (configure + build) into build-premake/external/<name>/<config>.
--- Consumers pull in the headers/links via link_sdl2() / link_openal() / link_nrd().
+-- Consumers pull in the headers/links via link_sdl2() / link_openal(); NRD is
+-- headers-only via nrd_use(), plus link_nrd() on executables to stage its DLL.
 --
 -- Linux keeps the shared-library deployment flow and copies the resulting .so
 -- files next to the game. Windows builds static SDL2/openal-soft libraries, so
@@ -28,28 +29,66 @@ local NRD_BUILD_PROJECT = "NRDExternal"
 -- copy_glob: optional posix shared-lib glob copied next to the game (Linux, into libs/).
 -- win_glob: optional Windows DLL glob copied next to the .exe.
 -- copy_dir: optional directory copied next to the game on both platforms.
-local function cmake_makefile(name, srcdir, unix_args, win_args, copy_glob, win_glob, copy_dir)
+-- Makefile projects have no reliable output timestamp for MSBuild to use, so
+-- more than one top-level consumer can enter the same wrapper concurrently.
+-- A named mutex keeps a shared external build tree single-writer while still
+-- allowing unrelated configurations (and unrelated externals) to build in
+-- parallel. The commands are passed through cmd.exe so their existing quoting
+-- and generator-specific arguments remain unchanged.
+local function windows_serialized_commands(commands, mutex_name)
+    local body = {}
+    for _, command in ipairs(commands) do
+        table.insert(body, string.format("& cmd.exe /D /C '%s'; if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }", command))
+    end
+    -- The generated command is itself parsed by cmd.exe. Escape the quotes
+    -- belonging to the nested CMake commands so quoted executable/path names
+    -- survive both cmd.exe and powershell.exe argument parsing.
+    local script = string.format(
+        "& {$mutex = [System.Threading.Mutex]::new($false, 'Local\\%s'); $acquired = $false; try {try {$mutex.WaitOne(); $acquired = $true} catch [System.Threading.AbandonedMutexException] {$acquired = $true}; %s} finally {if ($acquired) {$mutex.ReleaseMutex()}; $mutex.Dispose()}}",
+        mutex_name, table.concat(body, " "))
+    script = script:gsub('"', '\\"')
+    return "powershell -NoProfile -ExecutionPolicy Bypass -Command \"" .. script .. "\""
+end
+
+local function cmake_makefile(name, srcdir, unix_args, win_args, copy_glob, win_glob, copy_dir, serialize_name)
     local bdir = EXT_ROOT .. "/" .. name .. "/%{cfg.buildcfg}"
+    local unix_configure = string.format('"%s" -Wno-deprecated -S "%s" -B "%s" -DCMAKE_BUILD_TYPE=%%{cfg.buildcfg} %s',
+        CMAKE, srcdir, bdir, unix_args)
+    local windows_configure = string.format('"%s" -Wno-deprecated -G "Visual Studio 17 2022" -A x64 -S "%s" -B "%s" -DCMAKE_BUILD_TYPE=%%{cfg.buildcfg} %s',
+        CMAKE, srcdir, bdir, win_args)
+    -- The outer solution already builds independent external projects in
+    -- parallel. Keep each nested CMake/MSBuild invocation single-project so
+    -- Debug PDB writers cannot multiply past mspdbsrv's practical limits.
+    local build = string.format('"%s" --build "%s" --config %%{cfg.buildcfg} --parallel 1', CMAKE, bdir)
     project(name)
         kind "Makefile"
         location (ROOT .. "/build-premake/projects")
 
         filter "system:not windows"
             buildcommands {
-                string.format('"%s" -Wno-deprecated -S "%s" -B "%s" -DCMAKE_BUILD_TYPE=%%{cfg.buildcfg} %s',
-                    CMAKE, srcdir, bdir, unix_args),
-                string.format('"%s" --build "%s" --config %%{cfg.buildcfg} -j', CMAKE, bdir),
+                unix_configure,
+                build,
             }
         filter "system:windows"
-            buildcommands {
-                string.format('"%s" -Wno-deprecated -S "%s" -B "%s" -DCMAKE_BUILD_TYPE=%%{cfg.buildcfg} %s',
-                    CMAKE, srcdir, bdir, win_args),
-                string.format('"%s" --build "%s" --config %%{cfg.buildcfg} -j', CMAKE, bdir),
+            -- Force the Visual Studio generator so the output layout matches the
+            -- multi-config libdirs below regardless of whether ninja is on PATH.
+            -- Without this, CMake picks Ninja when available and writes .lib into
+            -- <bdir>/ instead of <bdir>/<config>/, breaking the link stage.
+            if serialize_name then
+                buildcommands {
+                    windows_serialized_commands({ windows_configure, build }, serialize_name),
+                }
+            else
+                buildcommands { windows_configure, build }
+            end
+        filter {}
+        filter "system:not windows"
+            rebuildcommands { build }
+        filter "system:windows"
+            rebuildcommands {
+                serialize_name and windows_serialized_commands({ build }, serialize_name) or build,
             }
         filter {}
-        rebuildcommands {
-            string.format('"%s" --build "%s" --config %%{cfg.buildcfg} -j', CMAKE, bdir),
-        }
         cleancommands {
             string.format('{RMDIR} "%s"', bdir),
         }
@@ -89,11 +128,16 @@ local function cmake_makefile(name, srcdir, unix_args, win_args, copy_glob, win_
 end
 
 -- ---- SDL2 -----------------------------------------------------------------
+-- /FS on Windows: SDL2's CMake build enables /MP via CMake's Visual Studio
+-- generator defaults, so the compile PDB writes must be serialised or MSBuild
+-- fails with C1041 under parallel builds. Same reasoning applies to openal-soft
+-- and NRD below.
 cmake_makefile(SDL2_PROJECT,
     DEPS_EXTERN .. "/SDL",
     "-DSDL_SHARED=ON -DSDL_STATIC=OFF -DSDL_TEST=OFF -DSDL2_DISABLE_INSTALL=ON -DSDL_RPATH=OFF",
-    "-DSDL_SHARED=OFF -DSDL_STATIC=ON -DSDL_TEST=OFF -DSDL2_DISABLE_INSTALL=ON -DSDL_RPATH=OFF",
-    "libSDL2*.so*", nil)
+    "-DSDL_SHARED=OFF -DSDL_STATIC=ON -DSDL_TEST=OFF -DSDL2_DISABLE_INSTALL=ON -DSDL_RPATH=OFF "
+        .. "-DCMAKE_C_FLAGS=\"/FS\" -DCMAKE_CXX_FLAGS=\"/FS\"",
+    "libSDL2*.so*", nil, nil, "Redux-Amnesia-SDL2-%{cfg.buildcfg}")
 
 function link_sdl2()
     dependson { SDL2_PROJECT }
@@ -137,6 +181,15 @@ function link_sdl2()
     filter {}
 end
 
+-- Test executables live in build-premake/tests/<cfg>, not next to libs/, so
+-- $ORIGIN/libs cannot find the staged SDL2/OpenAL shared libs. Point the
+-- runtime search path at the staged copy by absolute path instead.
+function link_test_runtime_rpath()
+    filter "system:linux"
+        linkoptions { "-Wl,-rpath,'" .. RUNTIME_LIBS .. "'" }
+    filter {}
+end
+
 -- ---- openal-soft -----------------------------------------------------------
 -- ALSOFT_ENABLE_MODULES=OFF: openal-soft auto-enables C++20 modules with the
 -- "Visual Studio 17 2022" generator on MSVC 14.34+ (and Ninja on GCC 15+/Clang 17+).
@@ -151,8 +204,8 @@ cmake_makefile(OPENAL_PROJECT,
     "-DLIBTYPE=STATIC -DALSOFT_ENABLE_MODULES=OFF -DALSOFT_UTILS=OFF -DALSOFT_EXAMPLES=OFF -DALSOFT_INSTALL=OFF "
         .. "-DALSOFT_INSTALL_CONFIG=OFF -DALSOFT_INSTALL_HRTF_DATA=OFF -DALSOFT_INSTALL_AMBDEC_PRESETS=OFF "
         .. "-DALSOFT_INSTALL_EXAMPLES=OFF -DALSOFT_INSTALL_UTILS=OFF -DALSOFT_UPDATE_BUILD_VERSION=OFF "
-        .. "-DCMAKE_CXX_FLAGS=\"/EHsc /wd4267 /wd4875\"",
-    "libopenal.so*", nil)
+        .. "-DCMAKE_C_FLAGS=\"/FS\" -DCMAKE_CXX_FLAGS=\"/FS /EHsc /wd4267 /wd4875\"",
+    "libopenal.so*", nil, nil, "Redux-Amnesia-OpenAL-%{cfg.buildcfg}")
 
 function link_openal()
     dependson { OPENAL_PROJECT }
@@ -182,57 +235,117 @@ end
 -- MathLib is pulled by NRD's own FetchContent into its build tree; that copy is
 -- private to NRD and deliberately separate from HPL2/extern/MathLib (mathlib_use()).
 --
--- Only SPIR-V blobs are embedded: this engine is Vulkan-only, and DXIL/DXBC would
--- additionally require FXC on Windows.
 --
 -- NRD_SHADERS_PATH / CMAKE_*_OUTPUT_DIRECTORY are overridden because NRD defaults
 -- them to _Shaders/ and _Bin/ *inside its own source tree*, which would dirty the
 -- submodule on every build.
 local NRD_BUILD = EXT_ROOT .. "/" .. NRD_PROJECT .. "/%{cfg.buildcfg}"
--- The CMake *binary* dir, which cmake_makefile() derives from the project name
--- (NRDExternal), not from NRD_BUILD. Anything CMake places relative to the build
--- tree instead of the overridden output dirs -- notably FetchContent's
--- _deps/shadermake-build -- lives under here.
-local NRD_CMAKE_BINARY = EXT_ROOT .. "/" .. NRD_BUILD_PROJECT .. "/%{cfg.buildcfg}"
 local NRD_COMMON_ARGS =
-    "-DNRD_STATIC_LIBRARY=ON -DNRD_NRI=OFF -DNRD_EMBEDS_SPIRV_SHADERS=ON "
+    "-DNRD_STATIC_LIBRARY=OFF -DNRD_NRI=OFF -DNRD_EMBEDS_SPIRV_SHADERS=ON "
         .. string.format('-DNRD_SHADERS_PATH="%s/_Shaders" ', NRD_BUILD)
         .. string.format('-DCMAKE_RUNTIME_OUTPUT_DIRECTORY="%s/_Bin" ', NRD_BUILD)
         .. string.format('-DCMAKE_LIBRARY_OUTPUT_DIRECTORY="%s/_Bin"', NRD_BUILD)
 
+-- /EHsc on Windows: MSVC 14.44's STL emits C4530 from `__msvc_ostream.hpp`
+-- when instantiating `std::operator<<` without unwind semantics, and NRD's
+-- FetchContent'd ShaderMakeBlob target compiles with /W4 /WX, so the missing
+-- /EHsc breaks the ShaderBlob.cpp build and prevents NRD.dll from linking.
+-- Setting CMAKE_CXX_FLAGS overrides CMake's implicit /EHsc default, so it has
+-- to be re-added explicitly here (same pattern as openal-soft above).
+local NRD_DXIL_ARG = (_OPTIONS["with-d3d12"] == "yes")
+    and " -DNRD_EMBEDS_DXIL_SHADERS=ON "
+    or " -DNRD_EMBEDS_DXIL_SHADERS=OFF "
 cmake_makefile(NRD_BUILD_PROJECT,
     DEPS_EXTERN .. "/NRD",
     NRD_COMMON_ARGS,
-    NRD_COMMON_ARGS .. " -DNRD_EMBEDS_DXIL_SHADERS=OFF -DNRD_EMBEDS_DXBC_SHADERS=OFF",
-    nil, nil)
+    NRD_COMMON_ARGS .. NRD_DXIL_ARG .. "-DNRD_EMBEDS_DXBC_SHADERS=OFF "
+        .. "-DCMAKE_C_FLAGS=\"/FS\" -DCMAKE_CXX_FLAGS=\"/FS /EHsc\"",
+    nil, nil, nil, "Redux-Amnesia-NRD-%{cfg.buildcfg}")
 
-function link_nrd()
-    dependson { NRD_BUILD_PROJECT }
-    -- NRD.h includes NRDDescs.h/NRDSettings.h from the same directory and
-    -- nothing else beyond <cstddef>/<cstdint>, so Include/ is the whole public
-    -- surface. (Integration/ is deliberately not exposed: NRDIntegration.hpp
-    -- needs NRI, which is disabled via -DNRD_NRI=OFF.)
+-- Add NRD's public headers. No libdirs and no links: NrdIntegration.cpp
+-- resolves every entry point through LoadLibrary/dlopen, so NRD is never bound
+-- at link time by anything in this tree.
+--
+-- NRD.h includes NRDDescs.h/NRDSettings.h from the same directory and nothing
+-- else beyond <cstddef>/<cstdint>, so Include/ is the whole public surface.
+-- (Integration/ is deliberately not exposed: NRDIntegration.hpp needs NRI,
+-- which is disabled via -DNRD_NRI=OFF.)
+function nrd_use()
     includedirs {
         DEPS_EXTERN .. "/NRD/Include",
     }
-    -- NRD links ShaderMakeBlob PRIVATE, which for a static library means the
-    -- consumer still has to resolve ShaderMake::FindPermutationInBlob().
-    filter "system:linux"
-        libdirs {
-            NRD_BUILD .. "/_Bin",
-            NRD_CMAKE_BINARY .. "/_deps/shadermake-build",
-        }
-    filter "system:windows"
-        -- MSBuild is multi-config, so it appends the configuration name to the
-        -- output directories.
-        libdirs {
-            NRD_BUILD .. "/_Bin/%{cfg.buildcfg}",
-            NRD_BUILD .. "/_Bin",
-            NRD_CMAKE_BINARY .. "/_deps/shadermake-build/%{cfg.buildcfg}",
-            NRD_CMAKE_BINARY .. "/_deps/shadermake-build",
-        }
-    filter {}
-    links { "NRD", "ShaderMakeBlob" }
+end
+
+-- Stage the shared NRD runtime once for the whole game/tool output directory,
+-- for the same reason XeSS does it below: attaching the copy to every final
+-- executable makes a parallel solution build overwrite the same file from
+-- several post-build events at once, which intermittently fails with
+-- "Access is denied".
+--
+-- cmake_makefile()'s copy_glob/win_glob hooks cannot serve here -- they copy
+-- relative to the CMake *binary* dir (NRDExternal/<cfg>), while the overridden
+-- CMAKE_{RUNTIME,LIBRARY}_OUTPUT_DIRECTORY puts the library under
+-- NRD/<cfg>/_Bin instead.
+--
+-- Declared inline rather than through a *_declare_staging_projects() hook:
+-- premake5.lua dofile's external.lua after the workspace block, so project()
+-- already has workspace scope here (agility.lua is loaded before it and
+-- therefore needs the deferred form).
+local NRD_RUNTIME_PROJECT = "NRDRuntimeGame"
+do
+    local runtime = runtime_dir("")
+    local runtime_libs = runtime_dir("libs")
+    -- The DLL is redistributed under NVIDIA's terms, so its license ships
+    -- beside it -- the same treatment XeSS and the Agility SDK get.
+    local license_dir = runtime_dir("licenses/nrd")
+    local license_src = DEPS_EXTERN .. "/NRD/LICENSE.txt"
+
+    local windows_commands = {
+        string.format('if not exist "%s" mkdir "%s"', winpath(runtime), winpath(runtime)),
+        -- MSBuild is multi-config, so it appends the configuration name to
+        -- CMAKE_RUNTIME_OUTPUT_DIRECTORY.
+        string.format('copy /Y "%s" "%s\\"',
+            winpath(NRD_BUILD .. "/_Bin/%{cfg.buildcfg}/NRD.dll"), winpath(runtime)),
+        string.format('if not exist "%s" mkdir "%s"', winpath(license_dir), winpath(license_dir)),
+        string.format('copy /Y "%s" "%s\\"', winpath(license_src), winpath(license_dir)),
+    }
+    -- Amnesia and the tools already link with -Wl,-rpath,'$ORIGIN/libs', so a
+    -- plain dlopen("libNRD.so") finds it there.
+    local posix_commands = {
+        string.format('mkdir -p "%s"', runtime_libs),
+        string.format('cp -P %s "%s"/', NRD_BUILD .. "/_Bin/libNRD.so*", runtime_libs),
+        string.format('mkdir -p "%s"', license_dir),
+        string.format('cp -f "%s" "%s"/', license_src, license_dir),
+    }
+
+    project(NRD_RUNTIME_PROJECT)
+        kind "Makefile"
+        location (ROOT .. "/build-premake/projects")
+        -- The library has to exist before it can be staged.
+        dependson { NRD_BUILD_PROJECT }
+        filter "system:windows"
+            buildcommands {
+                windows_serialized_commands(windows_commands,
+                    "Redux-Amnesia-" .. NRD_RUNTIME_PROJECT .. "-%{cfg.buildcfg}"),
+            }
+            rebuildcommands {
+                windows_serialized_commands(windows_commands,
+                    "Redux-Amnesia-" .. NRD_RUNTIME_PROJECT .. "-%{cfg.buildcfg}"),
+            }
+        filter "system:not windows"
+            buildcommands(posix_commands)
+            rebuildcommands(posix_commands)
+        filter {}
+end
+
+function link_nrd(target_layout)
+    nrd_use()
+    -- Test executables never construct a denoiser, and nothing links NRD, so
+    -- they need no staged runtime. Same reasoning as link_xess below.
+    if target_layout == "tests" then
+        return
+    end
+    dependson { NRD_RUNTIME_PROJECT }
 end
 
 -- ---- FidelityFX Super Resolution ------------------------------------------
@@ -327,14 +440,28 @@ local function require_fsr_cmake()
 end
 
 local FSR_ENABLED = _OPTIONS["with-fsr"] ~= "no"
+-- The D3D12 module's permutations are HLSL compiled to DXIL, which only the
+-- SDK's vendored DXC can produce, so it exists on Windows only -- and it is
+-- pointless without the engine's own D3D12 backend. cmake/fsr gates the target
+-- on `WIN32 AND FSR_ENABLE_HLSL`; deriving the flag here and passing it
+-- explicitly keeps premake the single source of truth and makes a reconfigure
+-- authoritative over a stale CMake cache entry.
+local FSR_HLSL_ENABLED = FSR_ENABLED
+    and os.target() == "windows"
+    and _OPTIONS["with-d3d12"] == "yes"
+    and _OPTIONS["with-fsr-hlsl"] ~= "no"
+local FSR_RUNTIME_PROJECT = "FsrRuntimeGame"
+local FSR_BIN = FSR_BUILD .. "/bin"
 if FSR_ENABLED then
     require_fsr_cmake()
     FSR_SDK_ROOT = resolve_fsr_sdk()
 
     local fsr_common_args = string.format(
-        '-DFSR_SDK_ROOT="%s" -DFSR_VULKAN_HEADERS="%s" -DFSR_OUTPUT_LIB_DIR="%s/lib" -DFSR_VOLK_HEADERS="%s"',
+        '-DFSR_SDK_ROOT="%s" -DFSR_VULKAN_HEADERS="%s" -DFSR_OUTPUT_LIB_DIR="%s/lib" '
+            .. '-DFSR_OUTPUT_BIN_DIR="%s" -DFSR_VOLK_HEADERS="%s" -DFSR_ENABLE_HLSL=%s',
         FSR_SDK_ROOT, ROOT .. "/HPL2/extern/Vulkan-Headers/include", FSR_BUILD,
-        ROOT .. "/HPL2/extern/volk")
+        FSR_BIN, ROOT .. "/HPL2/extern/volk",
+        FSR_HLSL_ENABLED and "ON" or "OFF")
     if _OPTIONS["python"] then
         fsr_common_args = fsr_common_args .. ' -DPython3_EXECUTABLE="' .. _OPTIONS["python"] .. '"'
     end
@@ -348,14 +475,128 @@ if FSR_ENABLED then
     cmake_makefile(FSR_BUILD_PROJECT,
         ROOT .. "/cmake/fsr",
         fsr_common_args,
-        fsr_common_args,
-        nil, nil, "licenses")
+        fsr_common_args .. " -DCMAKE_C_FLAGS=\"/FS\" -DCMAKE_CXX_FLAGS=\"/FS\"",
+        nil, nil, "licenses", "Redux-Amnesia-FSR-%{cfg.buildcfg}")
+
+    -- Stage the ffx-api modules once for the whole game/tool output directory,
+    -- for the same reason NRD and XeSS do it above: attaching the copy to every
+    -- final executable makes a parallel solution build overwrite the same file
+    -- from several post-build events at once, which intermittently fails with
+    -- "Access is denied".
+    --
+    -- cmake_makefile()'s win_glob/copy_glob hooks cannot serve here for two
+    -- reasons. They copy from <bdir>/%{cfg.buildcfg}/, while the modules' output
+    -- directory is pinned to <bdir>/bin on every generator; and their commands
+    -- are appended outside the wrapper's serialising mutex, which is the exact
+    -- hazard this project exists to avoid.
+    do
+        local runtime = runtime_dir("")
+        local runtime_libs = runtime_dir("libs")
+        local modules = { "ffx_fsr3upscaler_api_vk" }
+        if FSR_HLSL_ENABLED then
+            table.insert(modules, "ffx_fsr3upscaler_api_dx12")
+        end
+
+        local windows_commands = {
+            string.format('if not exist "%s" mkdir "%s"', winpath(runtime), winpath(runtime)),
+        }
+        -- Amnesia and the tools already link with -Wl,-rpath,'$ORIGIN/libs', so a
+        -- plain dlopen("libffx_fsr3upscaler_api_vk.so") finds it there. The
+        -- modules carry no SOVERSION, so each is a single file with no symlink
+        -- chain to preserve; -f replaces a destination an earlier run left
+        -- read-only.
+        local posix_commands = {
+            string.format('mkdir -p "%s"', runtime_libs),
+        }
+        for _, name in ipairs(modules) do
+            table.insert(windows_commands, string.format('copy /Y "%s" "%s\\"',
+                winpath(FSR_BIN .. "/" .. name .. ".dll"), winpath(runtime)))
+            table.insert(posix_commands, string.format('cp -f "%s" "%s"/',
+                FSR_BIN .. "/lib" .. name .. ".so", runtime_libs))
+        end
+
+        project(FSR_RUNTIME_PROJECT)
+            kind "Makefile"
+            location (ROOT .. "/build-premake/projects")
+            -- The modules have to exist before they can be staged.
+            dependson { FSR_BUILD_PROJECT }
+            filter "system:windows"
+                buildcommands {
+                    windows_serialized_commands(windows_commands,
+                        "Redux-Amnesia-" .. FSR_RUNTIME_PROJECT .. "-%{cfg.buildcfg}"),
+                }
+                rebuildcommands {
+                    windows_serialized_commands(windows_commands,
+                        "Redux-Amnesia-" .. FSR_RUNTIME_PROJECT .. "-%{cfg.buildcfg}"),
+                }
+            filter "system:not windows"
+                buildcommands(posix_commands)
+                rebuildcommands(posix_commands)
+            filter {}
+    end
 end
 
-function link_fsr()
+-- Headers and availability defines only. HPL2 is a static library and needs no
+-- staged runtime, so it takes this; final executables take link_fsr(), which
+-- adds the staging order on top.
+--
+-- Deliberately no libdirs/links. The engine resolves ffxCreateContext,
+-- ffxDestroyContext, ffxConfigure, ffxQuery and ffxDispatch with
+-- GetProcAddress/dlsym from whichever module matches the live backend, the same
+-- way NrdIntegration.cpp loads NRD. Linking an import library instead would bind
+-- the process to one backend at load time and turn a missing module into a
+-- hard start-up failure rather than a reason string in the options menu -- and
+-- would not link anyway, because ffx_api.h decorates its prototypes
+-- __declspec(dllexport), not dllimport.
+function fsr_use()
     if not FSR_ENABLED then
-        defines { "HPL2_FSR_AVAILABLE=0" }
+        defines { "HPL2_FSR_AVAILABLE=0", "HPL2_FSR_D3D12_MODULE_AVAILABLE=0" }
         return
+    end
+
+    dependson { FSR_BUILD_PROJECT }
+    includedirs {
+        FSR_SDK_ROOT .. "/sdk/include",
+        -- The ffx-api public headers come from the patched stage, not the
+        -- pristine SDK: ffx_api.h hard-codes FFX_API_ENTRY to
+        -- __declspec(dllexport), which no non-MSVC compiler will parse. See
+        -- cmake/fsr/patches/portable_ffx_api.cmake.
+        FSR_BUILD .. "/fsr_sdk_staged/ffx-api/include",
+    }
+    defines { "HPL2_FSR_AVAILABLE=1" }
+    defines {
+        FSR_HLSL_ENABLED and "HPL2_FSR_D3D12_MODULE_AVAILABLE=1"
+            or "HPL2_FSR_D3D12_MODULE_AVAILABLE=0",
+    }
+end
+
+function link_fsr(target_layout)
+    fsr_use()
+    if not FSR_ENABLED then
+        return
+    end
+
+    -- No archive link here. cFsrUpscaler reaches the SDK only through the five
+    -- ffx-api entry points FfxApiLoader resolves at runtime, plus the
+    -- ffxApiGetResource*/ffxApiGetSurfaceFormatVK helpers, which are static
+    -- inline in the ffx-api headers. Nothing links the static archive except
+    -- fsr_link_static_vk_archive() below.
+
+    -- Test executables never create an upscaler context. Same reasoning as
+    -- link_nrd and link_xess above.
+    if target_layout == "tests" then
+        return
+    end
+    dependson { FSR_RUNTIME_PROJECT }
+end
+
+-- The FSR regression tests link the static Vulkan archive directly: they reach
+-- internal ffx_vk.cpp symbols (findMemoryTypeIndex) and the shader-blob
+-- accessors, which a shared module does not export. Kept out of link_fsr() so
+-- the engine's own link stays module-free.
+function fsr_link_static_vk_archive()
+    if not FSR_ENABLED then
+        return false
     end
 
     dependson { FSR_BUILD_PROJECT }
@@ -363,6 +604,7 @@ function link_fsr()
     libdirs { FSR_BUILD .. "/lib" }
     links { "ffx_fsr3upscaler_vk" }
     defines { "HPL2_FSR_AVAILABLE=1" }
+    return true
 end
 
 -- The shader-blob validation executable includes the same staged SDK headers
@@ -383,6 +625,34 @@ function fsr_shader_blob_test_use()
     return true
 end
 
+-- The module-export regression test loads the ffx-api modules the same way the
+-- engine will: by absolute path, out of the directory the staging project
+-- deploys them to. Pointing it at the deployed copy rather than the CMake
+-- binary dir is deliberate -- it makes one test cover the export macro, the
+-- module build and the staging step together.
+function fsr_module_test_use()
+    if not FSR_ENABLED then
+        return false
+    end
+
+    dependson { FSR_BUILD_PROJECT, FSR_RUNTIME_PROJECT }
+    includedirs { FSR_BUILD .. "/fsr_sdk_staged/ffx-api/include" }
+    -- Windows stages next to the executable, where the default search order
+    -- looks first; elsewhere they go to libs/, which $ORIGIN/libs covers.
+    --
+    -- RUNTIME_EXE/RUNTIME_LIBS rather than runtime_dir(), because those are
+    -- rooted at ROOT while runtime_dir() is rooted at %{wks.location} and
+    -- expands to a path relative to the solution. The test would then only
+    -- resolve its modules when launched from that one directory.
+    local module_dir = (os.target() == "windows") and RUNTIME_EXE or RUNTIME_LIBS
+    defines {
+        'HPL2_FSR_MODULE_DIR="' .. module_dir .. '"',
+        FSR_HLSL_ENABLED and "HPL2_FSR_D3D12_MODULE_AVAILABLE=1"
+            or "HPL2_FSR_D3D12_MODULE_AVAILABLE=0",
+    }
+    return true
+end
+
 -- ---- Intel XeSS -----------------------------------------------------------
 -- XeSS is a prebuilt Vulkan SDK. The engine loads libxess.dll dynamically at
 -- runtime, so there is no CMake build or import-library link here.
@@ -400,7 +670,7 @@ local XESS_ROOT_NAME = "XeSS_SDK_3.0.2"
 local XESS_ZIP_SHA256 = "88b8a373f30e33f3558a77a93e634f11b8132fc3047ea1a8edeead32b8471990"
 
 local function xess_sdk_root_is_valid(root)
-    return os.isfile(root .. "/inc/xess/xess_vk.h")
+    return os.isfile(root .. "/inc/xess/xess.h")
 end
 
 local function resolve_xess_sdk()
@@ -408,7 +678,7 @@ local function resolve_xess_sdk()
     if requested then
         local root = path.getabsolute(requested)
         if not xess_sdk_root_is_valid(root) then
-            error("XeSS: --xess-sdk-dir must name a XeSS SDK root containing inc/xess/xess_vk.h: " .. root)
+            error("XeSS: --xess-sdk-dir must name a XeSS SDK root containing inc/xess/xess.h: " .. root)
         end
         return root
     end
@@ -461,7 +731,7 @@ local function resolve_xess_sdk()
     -- into the named SDK directory rather than into XESS_DEPS.
     zip.extract(XESS_ARCHIVE, extracted)
     if not xess_sdk_root_is_valid(extracted) then
-        error("XeSS: could not locate inc/xess/xess_vk.h in extracted archive at " .. extracted)
+        error("XeSS: could not locate inc/xess/xess.h in extracted archive at " .. extracted)
     end
     return extracted
 end
@@ -484,38 +754,53 @@ function xess_use()
     defines { "HPL2_XESS_AVAILABLE=1" }
 end
 
-function link_xess()
+-- Stage the shared XeSS runtime once for the whole game/tool output directory.
+-- Attaching these copies to every final executable makes a parallel solution
+-- build overwrite libxess.dll from several post-build events at once, which can
+-- intermittently fail with "Access is denied".
+function xess_declare_staging_projects()
+    if not XESS_ENABLED then return end
+
+    local runtime = runtime_dir("")
+    local license_dir = runtime_dir("licenses/xess")
+    local commands = {
+        string.format('if not exist "%s" mkdir "%s"', winpath(runtime), winpath(runtime)),
+        string.format('if exist "%s" (copy /Y "%s" "%s\\" >nul) else (echo XeSS: missing runtime DLL "%s")',
+            winpath(XESS_SDK_ROOT .. "/bin/libxess.dll"),
+            winpath(XESS_SDK_ROOT .. "/bin/libxess.dll"), winpath(runtime),
+            winpath(XESS_SDK_ROOT .. "/bin/libxess.dll")),
+        string.format('if not exist "%s" mkdir "%s"', winpath(license_dir), winpath(license_dir)),
+    }
+    for _, item in ipairs({
+        { filename = "LICENSE.txt", description = "license file" },
+        { filename = "third-party-programs.txt", description = "third-party notices" },
+    }) do
+        local source = winpath(XESS_SDK_ROOT .. "/" .. item.filename)
+        local destination = winpath(license_dir .. "/" .. item.filename)
+        table.insert(commands, string.format('if exist "%s" attrib -R "%s" >nul 2>&1',
+            destination, destination))
+        table.insert(commands, string.format('if exist "%s" (copy /Y "%s" "%s\\" >nul) else (echo XeSS: missing %s "%s")',
+            source, source, winpath(license_dir), item.description, source))
+    end
+
+    project "XeSSRuntimeGame"
+        kind "Makefile"
+        location (ROOT .. "/build-premake/projects")
+        filter "system:windows"
+            buildcommands(commands)
+            rebuildcommands(commands)
+        filter {}
+end
+
+function link_xess(target_layout)
     xess_use()
     if not XESS_ENABLED then
         return
     end
-
-    local runtime = runtime_dir("")
-    local license_dir = runtime_dir("licenses/xess")
-    local function license_commands(filename, description)
-        local source = winpath(XESS_SDK_ROOT .. "/" .. filename)
-        local destination = winpath(license_dir .. "/" .. filename)
-        local clear_readonly = string.format('if exist "%s" attrib -R "%s" >nul 2>&1',
-            destination, destination)
-        local copy = string.format('if exist "%s" (copy /Y "%s" "%s\\" >nul) else (echo XeSS: missing %s "%s")',
-            source, source, winpath(license_dir), description, source)
-        return clear_readonly, copy
+    -- Engine-linked test executables do not load XeSS. Deploying the same DLL
+    -- from every parallel smoke-test postbuild races on the shared game output.
+    if target_layout == "tests" then
+        return
     end
-    local license_clear, license_copy = license_commands("LICENSE.txt", "license file")
-    local notices_clear, notices_copy = license_commands("third-party-programs.txt", "third-party notices")
-    filter "system:windows"
-        postbuildcommands {
-            string.format('if not exist "%s" mkdir "%s"', winpath(runtime), winpath(runtime)),
-            string.format('if exist "%s" (copy /Y "%s" "%s\\") else (echo XeSS: missing runtime DLL "%s")',
-                winpath(XESS_SDK_ROOT .. "/bin/libxess.dll"),
-                winpath(XESS_SDK_ROOT .. "/bin/libxess.dll"), winpath(runtime),
-                winpath(XESS_SDK_ROOT .. "/bin/libxess.dll")),
-            string.format('if not exist "%s" mkdir "%s"', winpath(license_dir), winpath(license_dir)),
-            -- Keep attrib -R separate so cmd does not parse a nested if and & inside the copy block.
-            license_clear,
-            license_copy,
-            notices_clear,
-            notices_copy,
-        }
-    filter {}
+    dependson { "XeSSRuntimeGame" }
 end

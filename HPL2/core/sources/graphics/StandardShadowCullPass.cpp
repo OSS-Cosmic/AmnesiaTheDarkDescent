@@ -23,12 +23,12 @@ bool cStandardShadowCullPass::LoadData() {
   if (!mpGraphics || !mpResources || !mpGraphics->globalset)
     return false;
 
-  const VkDescriptorSetLayout external[] = {
-      mpGraphics->globalset->m_bindlessSet.vk.m_bindlessSetLayout};
+  const RIBindlessLayout external[] = {
+      mpGraphics->globalset->m_bindlessSet.layout()};
 
   auto load = [&](std::shared_ptr<RIProgram> *slot, const char *entryPoint) {
     auto bin = RIProgram::loadShaderStage(mpResources->GetFileSearcher(),
-                                          "Standard.cull.cs.spv");
+                                          "Standard.cull.cs", entryPoint);
     if (bin.empty())
       return false;
     auto program = std::make_shared<RIProgram>();
@@ -73,6 +73,8 @@ bool cStandardShadowCullPass::LoadData() {
     RITexture texture = RITexture::create(&mpGraphics->device, td);
     m_hiZFallback = RISharedPointer<RITexture>(&mpGraphics->device, texture);
     if (!m_hiZFallback.isEmpty()) {
+      m_hiZFallback->setDebugObjectName(&mpGraphics->device,
+                                        "StandardShadowCullPass.hiZFallback");
       RITextureViewDesc vd{};
       vd.viewType = RI_VIEWTYPE_SHADER_RESOURCE_2D;
       vd.format = RI_FORMAT_R32_SFLOAT;
@@ -129,8 +131,8 @@ void cStandardShadowCullPass::DestroyData() {
 bool cStandardShadowCullPass::Dispatch(RICmd *cmd, uint32_t frameIndex,
                                        const Buffers &buffers,
                                        uint32_t tileBase, uint32_t tileCount,
-                                       uint32_t groupBase,
-                                       uint32_t groupCount, uint32_t mode,
+                                       uint32_t groupBase, uint32_t groupCount,
+                                       uint32_t mode,
                                        uint32_t commandWordDelta) {
   if (!IsLoaded() || !cmd)
     return false;
@@ -159,10 +161,9 @@ bool cStandardShadowCullPass::Dispatch(RICmd *cmd, uint32_t frameIndex,
     uint32_t pad2;
   } constants{};
   constants.cullMode =
-      mode != kModeAuto
-          ? mode
-          : (m_useDrawIndirectCount ? kStandardCullModeCompact
-                                    : kStandardCullModeInPlace);
+      mode != kModeAuto ? mode
+                        : (m_useDrawIndirectCount ? kStandardCullModeCompact
+                                                  : kStandardCullModeInPlace);
   constants.tileBase = tileBase;
   constants.tileCount = tileCount;
   constants.groupBase = groupBase;
@@ -173,19 +174,18 @@ bool cStandardShadowCullPass::Dispatch(RICmd *cmd, uint32_t frameIndex,
   const auto bind = [&](const char *name, RIBuffer *buffer, uint64_t stride,
                         uint64_t count) {
     bindings.push_back(RIProgram::DescriptorBinding(
-        name, RIDescriptor::storageBuffer(&mpGraphics->device, buffer, 0,
-                                          std::max<uint64_t>(1, count) * stride)));
+        name,
+        RIDescriptor::storageBuffer(&mpGraphics->device, buffer, 0,
+                                    std::max<uint64_t>(1, count) * stride)));
   };
 
   const auto record = [&](const std::shared_ptr<RIProgram> &program,
                           const char *debugName, uint32_t groups) {
-    VkComputePipelineCreateInfo computeCreate = {
-        VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO};
     const hash_t hash = hash_u32(HASH_INITIAL_VALUE, /*variant=*/0u);
-    program->bindComputePipeline(&mpGraphics->device, cmd, hash, debugName,
-                                 &computeCreate);
-    program->bindBindlessDescriptorSet(cmd, &mpGraphics->globalset->m_bindlessSet,
-                                       0, VK_PIPELINE_BIND_POINT_COMPUTE);
+    program->bindComputePipeline(&mpGraphics->device, cmd, hash, debugName);
+    program->bindBindlessDescriptorSet(cmd,
+                                       &mpGraphics->globalset->m_bindlessSet, 0,
+                                       VK_PIPELINE_BIND_POINT_COMPUTE);
     program->bindDescriptors(&mpGraphics->device, cmd, frameIndex,
                              bindings.data(), bindings.size(),
                              VK_PIPELINE_BIND_POINT_COMPUTE);
@@ -196,8 +196,8 @@ bool cStandardShadowCullPass::Dispatch(RICmd *cmd, uint32_t frameIndex,
 
   // The reset kernel touches only the tile and count buffers, but binding the
   // same set for both dispatches keeps one descriptor layout across the pass.
-  bind("gShadowCullCandidates", buffers.candidates, sizeof(StandardCullCandidate),
-       buffers.candidateCapacity);
+  bind("gShadowCullCandidates", buffers.candidates,
+       sizeof(StandardCullCandidate), buffers.candidateCapacity);
   bind("gShadowCullTiles", buffers.tiles, sizeof(StandardCullTile),
        buffers.tileCapacity);
   bind("gShadowCullGroups", buffers.groups, sizeof(StandardCullGroup),
@@ -222,10 +222,10 @@ bool cStandardShadowCullPass::Dispatch(RICmd *cmd, uint32_t frameIndex,
   if (!hiZ)
     return false;
   if (hiZ == m_hiZFallbackView.Get() && m_hiZFallbackPendingTransition) {
-    cmd->vk_d3d12_textureBarrier(RITextureBarrier(
-        m_hiZFallback.Get(), RI_RESOURCE_STATE_UNDEFINED,
-        RI_RESOURCE_STATE_SHADER_RESOURCE, RI_STAGE_NONE, RI_STAGE_COMPUTE,
-        RI_BARRIER_ASPECT_COLOR));
+    cmd->vk_d3d12_textureBarrier(
+        RITextureBarrier(m_hiZFallback.Get(), RI_RESOURCE_STATE_UNDEFINED,
+                         RI_RESOURCE_STATE_SHADER_RESOURCE, RI_STAGE_NONE,
+                         RI_STAGE_COMPUTE, RI_BARRIER_ASPECT_COLOR));
     m_hiZFallbackPendingTransition = false;
   }
   bindings.push_back(RIProgram::DescriptorBinding(
@@ -242,9 +242,10 @@ bool cStandardShadowCullPass::Dispatch(RICmd *cmd, uint32_t frameIndex,
     // The cull's InterlockedAdd must see the zeroed counters, so the reset has
     // to complete first. A plain buffer barrier is enough: same queue, same
     // stage.
-    cmd->vk_d3d12_bufferBarrier(RIBufferBarrier(
-        buffers.drawCounts, RI_RESOURCE_STATE_STORAGE_WRITE,
-        RI_RESOURCE_STATE_UNORDERED_ACCESS, RI_STAGE_COMPUTE, RI_STAGE_COMPUTE));
+    cmd->vk_d3d12_bufferBarrier(
+        RIBufferBarrier(buffers.drawCounts, RI_RESOURCE_STATE_STORAGE_WRITE,
+                        RI_RESOURCE_STATE_UNORDERED_ACCESS, RI_STAGE_COMPUTE,
+                        RI_STAGE_COMPUTE));
   }
 
   record(m_cull, "Standard.cull.cs:cullShadowTiles", groupCount);

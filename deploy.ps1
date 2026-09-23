@@ -56,10 +56,11 @@ function Get-SafeDestinationPath([string] $Destination, [string] $RelativePath) 
 function Copy-GameAssets([string] $Source, [string] $Destination) {
     $excludedExtensions = @('.rar', '.pdf', '.dll', '.exe')
     foreach ($file in Get-ChildItem -LiteralPath $Source -File -Recurse -Force) {
-        if ($file.Name.StartsWith('Amnesia', [System.StringComparison]::OrdinalIgnoreCase)) { continue }
         if ($excludedExtensions -contains $file.Extension.ToLowerInvariant()) { continue }
 
         $relative = Get-RelativeFilePath $Source $file.FullName
+        # Only the top-level retail files; assets like entities/bottle/amnesia/amnesia_bottle*.ent must be copied.
+        if (-not $relative.Contains('/') -and $file.Name.StartsWith('Amnesia', [System.StringComparison]::OrdinalIgnoreCase)) { continue }
         $target = Get-SafeDestinationPath $Destination $relative
         $targetDirectory = Split-Path -Parent $target
         if (-not (Test-Path -LiteralPath $targetDirectory -PathType Container)) {

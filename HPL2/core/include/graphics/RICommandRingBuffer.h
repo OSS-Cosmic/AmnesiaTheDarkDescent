@@ -28,6 +28,19 @@ struct RICommandRingElement {
       VkFence fence;
     } vk;
 #endif
+#if (DEVICE_IMPL_D3D12)
+    struct {
+      // Borrowed from RIQueue::d3d12.fence — captured on a successful submit
+      // shared by every element in the pool. The monotonic value covers every
+      // successful submit using that pool before it is reset. Value 0 means
+      // the pool has not been submitted yet, so wait() no-ops.
+      // The ring buffer never releases this pointer.
+      ID3D12Fence *fence;
+      uint64_t value;
+      ID3D12Fence **backingFence;
+      uint64_t *backingValue;
+    } d3d12;
+#endif
   };
 };
 
@@ -43,10 +56,10 @@ struct RICommandRingBuffer {
   void init(struct RIDevice *device, struct RIQueue *queue, uint32_t poolCount,
             uint32_t cmdPerPool, bool syncPrimitives);
   void dispose(struct RIDevice *device);
-  // Rotates to the next pool and rewinds the cmd/fence cursors.
+  // Rotates to the next pool and rewinds the command/Vulkan sync cursors.
   void advance();
-  // Claims numCmds command buffers plus a fence slot from the current pool
-  // and advances the cursors.
+  // Claims numCmds command buffers from the current pool and advances the
+  // cursors. Vulkan also advances its per-acquisition synchronization slot.
   struct RICommandRingElement acquire(struct RIDevice *device,
                                       uint32_t numCmds);
 
@@ -68,6 +81,15 @@ struct RICommandRingBuffer {
       VkSemaphore semaphores[MaxPoolCount][CmdPerPool];
     } vk;
 #endif
+#if (DEVICE_IMPL_D3D12)
+    struct {
+      // One borrowed monotonic completion token per pool. Each acquired
+      // element in a pool binds to the same token so its wait covers all
+      // successful submissions made through that pool before reset.
+      ID3D12Fence *fences[MaxPoolCount];
+      uint64_t values[MaxPoolCount];
+    } d3d12;
+#endif
   };
 };
 
@@ -80,6 +102,7 @@ inline void RICommandRingBuffer<MaxPoolCount, CmdPerPool>::init(
   memset(this, 0, sizeof(*this));
   this->poolCount = poolCount;
   this->cmdPerPool = cmdPerPool;
+  // DX12 borrows the queue's single monotonic fence; syncPrimitives is a no-op.
   this->syncPrimitive = syncPrimitives;
 
   poolIndex = 0;
@@ -91,7 +114,7 @@ inline void RICommandRingBuffer<MaxPoolCount, CmdPerPool>::init(
     for (uint32_t cmdIdx = 0; cmdIdx < cmdPerPool; cmdIdx++) {
       cmds[poolIdx][cmdIdx].init(device, &pools[poolIdx]);
 #if (DEVICE_IMPL_VULKAN)
-      if (syncPrimitives) {
+      if (RIIsTargetSelected(RI_DEVICE_API_VK) && syncPrimitives) {
         VkSemaphoreCreateInfo semaphoreCreateInfo = {
             VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO};
         VK_WrapResult(vkCreateSemaphore(device->vk.device, &semaphoreCreateInfo,
@@ -148,9 +171,17 @@ RICommandRingBuffer<MaxPoolCount, CmdPerPool>::acquire(struct RIDevice *device,
   result.numCmds = numCmds;
   result.pool = &pools[poolIndex];
 #if (DEVICE_IMPL_VULKAN)
-  if (syncPrimitive) {
+  if (RIIsTargetSelected(RI_DEVICE_API_VK) && syncPrimitive) {
     result.vk.semaphore = vk.semaphores[poolIndex][fenceIndex];
     result.vk.fence = vk.fences[poolIndex][fenceIndex];
+  }
+#endif
+#if (DEVICE_IMPL_D3D12)
+  if (RIIsTargetSelected(RI_DEVICE_API_D3D12)) {
+    result.d3d12.backingFence = &d3d12.fences[poolIndex];
+    result.d3d12.backingValue = &d3d12.values[poolIndex];
+    result.d3d12.fence = *result.d3d12.backingFence;
+    result.d3d12.value = *result.d3d12.backingValue;
   }
 #endif
 

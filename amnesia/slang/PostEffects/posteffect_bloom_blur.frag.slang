@@ -11,6 +11,8 @@
 //
 // Push constant: 8 bytes, blur direction (texel-scaled before sampling).
 
+#include "../HostDefinitions.h"
+
 [vk::binding(0, 0)]
 SamplerState inputSampler;
 
@@ -24,11 +26,11 @@ struct BloomBlurPC
 };
 
 [vk::push_constant]
-BloomBlurPC pc;
+BloomBlurPC gPushConstants HPL_PUSH_CONSTANT_REGISTER;
 
 struct PSIn
 {
-    [vk::location(0)] float2 v_uv;
+    [vk::location(0)] float2 v_uv : TEXCOORD0;
 };
 
 [shader("fragment")]
@@ -45,7 +47,7 @@ float4 psMain(PSIn pin) : SV_Target
     float3 amount = float3(0.0f);
     for (int i = 0; i < 5; ++i)
     {
-        float2 offset = (float2(fOffset[i], fOffset[i]) * texel) * pc.blurDir;
+        float2 offset = (float2(fOffset[i], fOffset[i]) * texel) * gPushConstants.blurDir;
         amount += sourceInput.Sample(inputSampler, pin.v_uv + offset).rgb
                   * vMul[i];
     }

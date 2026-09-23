@@ -91,6 +91,8 @@ cLuxDebugHandler::cLuxDebugHandler() : iLuxUpdateable("LuxDebugHandler")
 	mpCBFastForward = NULL;
 
 	mpCBRenderScale = NULL;
+	mpCBRendererBackend = NULL;
+	mLastSeenRendererBackend = eRendererBackend_Standard;
 }
 
 //-----------------------------------------------------------------------
@@ -208,6 +210,9 @@ void cLuxDebugHandler::Update(float afTimeStep)
 		//gpBase->mpEngine->GetUpdater()->SetContainer("Inventory");
 	}
 	mlTempCount++;
+
+	// Options can switch the backend too; follow it.
+	SyncRendererBackendCombo();
 
 	//////////////////////////////
 	if(mlTempCount > 30 && m_lstBatchMaps.empty()==false)
@@ -361,6 +366,14 @@ void cLuxDebugHandler::OnDraw(float afFrameTime)
 			gpBase->mpGameDebugSet->DrawFont(gpBase->mpDefaultFont.Get(), cVector3f(5,fY,10),14,cColor(1,1,0,1),
 				_W("GPU total: %.2f ms"), fGpuTotal);
 			fY+=13.0f;
+
+			const std::string sGpuMemory = hpl::Interface<cGraphics>::Get()->GpuMemoryDiagnostics();
+			if(!sGpuMemory.empty())
+			{
+				gpBase->mpGameDebugSet->DrawFont(gpBase->mpDefaultFont.Get(), cVector3f(15,fY,10),13,cColor(0.6f,1,1,1),
+					_W("%ls"), cString::To16Char(sGpuMemory).c_str());
+				fY+=12.0f;
+			}
 			for(const hpl::GpuPassTiming& gpuPass : vGpuTimings)
 			{
 				const float fPct = fGpuTotal > 0.0f ? (gpuPass.ms / fGpuTotal * 100.0f) : 0.0f;
@@ -928,7 +941,7 @@ void cLuxDebugHandler::CreateGuiWindow()
 
 	///////////////////////////
 	//Window
-	cVector2f vSize = cVector2f(250, 846);
+	cVector2f vSize = cVector2f(250, 901);
 	vGroupSize.x = vSize.x - 20;
 	cVector3f vPos = cVector3f(mpGuiSet->GetVirtualSize().x - vSize.x - 10, 10, 0);
 	mpDebugWindow = mpGuiSet->CreateWidgetWindow(0,vPos,vSize,_W("Debug Toolbar") );
@@ -1136,6 +1149,33 @@ void cLuxDebugHandler::CreateGuiWindow()
 
 
 		//Group end
+		vGroupSize.y = vGroupPos.y + 15;
+		pGroup->SetSize(vGroupSize);
+		vPos.y += vGroupSize.y + 15;
+	}
+
+	//////////////////////////
+	// Renderer
+	{
+		vGroupPos = cVector3f(5, 10, 0.1f);
+		pGroup = mpGuiSet->CreateWidgetGroup(vPos, 100, _W("Renderer"), mpDebugWindow);
+
+		cGraphics *pGraphics = gpBase->mpEngine->GetGraphics();
+
+		// User values carry the backend so selection never depends on item order.
+		mpCBRendererBackend = mpGuiSet->CreateWidgetComboBox(vGroupPos, vSize, _W(""), pGroup);
+		mpCBRendererBackend->AddItem("Standard")->SetUserValue((int)eRendererBackend_Standard);
+		mpCBRendererBackend->AddItem("Ray Traced")->SetUserValue((int)eRendererBackend_RayTraced);
+
+		mLastSeenRendererBackend = pGraphics->GetRendererBackend();
+		mpCBRendererBackend->SetSelectedItem(mLastSeenRendererBackend == eRendererBackend_RayTraced ? 1 : 0, false, false);
+
+		// The engine already started Standard on a GPU without ray tracing.
+		mpCBRendererBackend->SetEnabled(pGraphics->IsRayTracedSupported());
+		mpCBRendererBackend->AddCallback(eGuiMessage_SelectionChange, this, kGuiCallback(ChangeRendererBackend));
+		vGroupPos.y += 22;
+
+		// Group end
 		vGroupSize.y = vGroupPos.y + 15;
 		pGroup->SetSize(vGroupSize);
 		vPos.y += vGroupSize.y + 15;
@@ -1609,3 +1649,36 @@ bool cLuxDebugHandler::ChangeRenderScale(iWidget* apWidget, const cGuiMessageDat
 	return true;
 }
 kGuiCallbackDeclaredFuncEnd(cLuxDebugHandler, ChangeRenderScale);
+
+//-----------------------------------------------------------------------
+
+bool cLuxDebugHandler::ChangeRendererBackend(iWidget* apWidget, const cGuiMessageData& aData)
+{
+	if(aData.mlVal < 0 || aData.mlVal >= mpCBRendererBackend->GetItemNum()) return true;
+
+	cWidgetItem* pItem = mpCBRendererBackend->GetItem(aData.mlVal);
+	eRendererBackend backend = pItem->GetUserValue() == (int)eRendererBackend_RayTraced ?
+									eRendererBackend_RayTraced : eRendererBackend_Standard;
+
+	// Saved on exit, same as the Options menu.
+	gpBase->mpConfigHandler->mRendererBackend = backend;
+	// Deferred to the next frame boundary: this runs mid-frame and the switch
+	// destroys a renderer.
+	gpBase->mpEngine->GetGraphics()->RequestRendererBackend(backend);
+
+	return true;
+}
+kGuiCallbackDeclaredFuncEnd(cLuxDebugHandler, ChangeRendererBackend);
+
+//-----------------------------------------------------------------------
+
+void cLuxDebugHandler::SyncRendererBackendCombo()
+{
+	if(mpCBRendererBackend == NULL) return;
+
+	eRendererBackend current = gpBase->mpEngine->GetGraphics()->GetRendererBackend();
+	if(current == mLastSeenRendererBackend) return;
+
+	mLastSeenRendererBackend = current;
+	mpCBRendererBackend->SetSelectedItem(current == eRendererBackend_RayTraced ? 1 : 0, false, false);
+}

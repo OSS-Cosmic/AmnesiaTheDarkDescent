@@ -83,6 +83,8 @@ struct TemporalPresentationResult {
   bool colorProduced = false;
   TemporalUpscalerTextureBinding color = {};
   RIResourceState_e colorState = RI_RESOURCE_STATE_UNDEFINED;
+  uint32_t colorEntryStage = RI_STAGE_NONE;
+  uint32_t colorExitStage = RI_STAGE_NONE;
   bool colorIsSpatialFallback = false;
 
   // Exactly one depth route is selected: either this frame produced the
@@ -164,6 +166,11 @@ private:
       m_displayColorTextures;
   std::array<RISharedPointer<RITextureView>, RI_MAX_SWAPCHAIN_IMAGES>
       m_displayColorViews;
+  // Same images as m_displayColorViews, COLOR_ATTACHMENT-typed for the spatial
+  // fallback's raster pass. The sampled view above stays the one handed out as
+  // a storage/sampled output; D3D12 rejects it as a render target.
+  std::array<RISharedPointer<RITextureView>, RI_MAX_SWAPCHAIN_IMAGES>
+      m_displayColorAttachmentViews;
 
   TemporalUpscalerExtent m_resourceExtent = {};
   bool m_resourceExtentValid = false;

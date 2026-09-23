@@ -52,17 +52,17 @@ struct TranslucentPushConstants
 };
 
 [vk::push_constant]
-TranslucentPushConstants pc;
+TranslucentPushConstants gPushConstants HPL_PUSH_CONSTANT_REGISTER;
 
 struct TranslucentVSOut
 {
-    float3 viewPos                 : VIEWPOS;
-    float2 uv                      : TEXCRD;
-    float3 normal                  : NORMAL;
-    float3 tangent                 : TANGENT;
-    float3 bitangent               : BITANGENT;
-    float4 color                   : COLOR;
-    nointerpolation uint objectId  : OBJECTID;
+    [vk::location(0)] float3 viewPos                 : TEXCOORD0;
+    [vk::location(1)] float2 uv                      : TEXCOORD1;
+    [vk::location(2)] float3 normal                  : TEXCOORD2;
+    [vk::location(3)] float3 tangent                 : TEXCOORD3;
+    [vk::location(4)] float3 bitangent               : TEXCOORD4;
+    [vk::location(5)] float4 color                   : TEXCOORD5;
+    [vk::location(6)] nointerpolation uint objectId  : TEXCOORD6;
     float4 posH                    : SV_POSITION;
 };
 
@@ -88,7 +88,7 @@ float3 translucentSafeNormal(float3 value, float3 fallback)
 float3 translucentDiffuseLighting(TranslucentVSOut psIn, TranslucentMaterial mat,
                                   float3 posW, float footprintW)
 {
-    if ((pc.options & TRANS_OPT_HAS_TLAS) == 0u)
+    if ((gPushConstants.options & TRANS_OPT_HAS_TLAS) == 0u)
         return float3(0.0f);
 
     float3 N = translucentSafeNormal(psIn.normal, float3(0, 0, 1));
@@ -121,13 +121,13 @@ float4 psMain(TranslucentVSOut psIn) : SV_TARGET
     UniformObject       obj = gSceneObjects[psIn.objectId];
     TranslucentMaterial mat = loadTranslucentMaterial(obj.materialID);
     bool litDiffuse = (mat.materialConfig & kMaterialFlagLitDiffuse) != 0u &&
-        (pc.blendMode == kBlendModeAlpha || pc.blendMode == kBlendModePremulAlpha);
+        (gPushConstants.blendMode == kBlendModeAlpha || gPushConstants.blendMode == kBlendModePremulAlpha);
 
     // Reference mask: when the second cube-map-only draw runs, the diffuse /
     // illumination / etc. sample paths are switched off so only the
     // reflection contribution is added on top of the main draw.
     uint textureConfig = mat.materialConfig;
-    if ((pc.options & TRANS_OPT_USE_ILLUMINATION) != 0u)
+    if ((gPushConstants.options & TRANS_OPT_USE_ILLUMINATION) != 0u)
     {
         textureConfig &= (kMaterialFlagEnableNormal
                         | kMaterialFlagEnableCubeMap
@@ -138,7 +138,7 @@ float4 psMain(TranslucentVSOut psIn) : SV_TARGET
     if ((textureConfig & kMaterialFlagEnableDiffuse) != 0u)
     {
         uint diffuseTex = mat.tex[0];
-        if (pc.blendMode == kBlendModeAdd &&
+        if (gPushConstants.blendMode == kBlendModeAdd &&
             (mat.materialConfig & kMaterialFlagSmoothHalo) != 0u)
             diffuseColor = smoothHaloLinearSample(psIn.uv, psIn.color);
         else if (diffuseTex != kInvalidTextureIndex)
@@ -147,7 +147,7 @@ float4 psMain(TranslucentVSOut psIn) : SV_TARGET
             // falloff and magnifies BC1 steps before additive HDR composition.
             diffuseColor = translucentLinearSample(
                 sampleBindless2D(diffuseTex, psIn.uv), psIn.color,
-                pc.blendMode,
+                gPushConstants.blendMode,
                 (mat.materialConfig & kMaterialFlagDiffuseIsMask) != 0u);
     }
 
@@ -165,7 +165,7 @@ float4 psMain(TranslucentVSOut psIn) : SV_TARGET
         diffuseColor.rgb *= translucentDiffuseLighting(psIn, mat, surfacePosW, footprintW)
                           * max(mat.litDiffuseScale, 0.0f);
     FogResult fog = computeFog(surfacePosW, gPerFrame.posW);
-    float finalAlpha = pc.sceneAlpha * fog.visibility;
+    float finalAlpha = gPushConstants.sceneAlpha * fog.visibility;
 
     // AffectedByLightLevel materials dim with the surrounding analytic light
     // (base-game afLightLevel behavior — see lightLevelAt). Per-pixel,
@@ -250,7 +250,7 @@ float4 psMain(TranslucentVSOut psIn) : SV_TARGET
 
         // Premultiplied materials require every source contribution to be
         // associated with coverage before ONE / ONE_MINUS_SRC_ALPHA blending.
-        if (pc.blendMode == kBlendModePremulAlpha)
+        if (gPushConstants.blendMode == kBlendModePremulAlpha)
             reflectionColor.rgb *= finalColor.a;
 
         finalColor.xyz += reflectionColor.xyz
@@ -270,9 +270,9 @@ float4 psMain(TranslucentVSOut psIn) : SV_TARGET
     // Lit surfaces retain authored coverage; preserve existing unlit tuning.
     // Opacity modulation keeps additive fades and multiplicative neutrals.
     float translucentStrength = litDiffuse ? 1.0f : 0.5f;
-    finalColor = applyBlendModulation(pc.blendMode, finalColor,
+    finalColor = applyBlendModulation(gPushConstants.blendMode, finalColor,
                                      finalAlpha * translucentStrength, lightLevel);
     if (finalColor.a <= 0.0f)
         discard;
-    return encodeBlendOutputLinear(pc.blendMode, finalColor);
+    return encodeBlendOutputLinear(gPushConstants.blendMode, finalColor);
 }

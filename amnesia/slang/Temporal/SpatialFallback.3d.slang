@@ -14,6 +14,8 @@
 //   binding 0 : SamplerState colorSampler (bilinear, clamp)
 //   binding 1 : Texture2D<float4> sceneHdrColor
 
+#include "../HostDefinitions.h"
+
 [vk::binding(0, 0)]
 SamplerState colorSampler;
 
@@ -30,11 +32,11 @@ struct SpatialFallbackPC
 };
 
 [vk::push_constant]
-SpatialFallbackPC pc;
+SpatialFallbackPC gPushConstants HPL_PUSH_CONSTANT_REGISTER;
 
 struct VSOut
 {
-    [vk::location(0)] float2 displayUV;
+    [vk::location(0)] float2 displayUV : TEXCOORD0;
     float4 posH : SV_POSITION;
 };
 
@@ -55,22 +57,22 @@ VSOut vsMain(uint vertexId : SV_VertexID)
 [shader("fragment")]
 float4 psMain(VSOut pin) : SV_Target
 {
-    float2 renderExtentF = float2(float(pc.renderExtent.x),
-                                  float(pc.renderExtent.y));
-    float2 displayExtentF = float2(float(pc.displayExtent.x),
-                                   float(pc.displayExtent.y));
+    float2 renderExtentF = float2(float(gPushConstants.renderExtent.x),
+                                  float(gPushConstants.renderExtent.y));
+    float2 displayExtentF = float2(float(gPushConstants.displayExtent.x),
+                                   float(gPushConstants.displayExtent.y));
 
     // Re-form the exact display pixel center before removing the raster
     // jitter. This keeps odd-sized display extents and the 1:1 case stable.
     float2 displayPixel = floor(pin.displayUV * displayExtentF);
     float2 displayUV = (displayPixel + 0.5f) / displayExtentF;
-    float2 inputUV = displayUV - pc.jitterPixels / renderExtentF;
+    float2 inputUV = displayUV - gPushConstants.jitterPixels / renderExtentF;
 
-    float2 validMinUV = (float2(float(pc.validRectMin.x),
-                                float(pc.validRectMin.y)) + 0.5f)
+    float2 validMinUV = (float2(float(gPushConstants.validRectMin.x),
+                                float(gPushConstants.validRectMin.y)) + 0.5f)
                       / renderExtentF;
-    float2 validMaxUV = (float2(float(pc.validRectMax.x),
-                                float(pc.validRectMax.y)) + 0.5f)
+    float2 validMaxUV = (float2(float(gPushConstants.validRectMax.x),
+                                float(gPushConstants.validRectMax.y)) + 0.5f)
                       / renderExtentF;
     inputUV = clamp(inputUV, validMinUV, validMaxUV);
 

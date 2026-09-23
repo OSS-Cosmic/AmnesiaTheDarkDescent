@@ -4,8 +4,11 @@
 #include "system/Types.h"
 
 #include "graphics/RIVK.h"
+#include "graphics/RID3D12.h"
 
 #include <cassert>
+#include <algorithm>
+#include <cstdio>
 #include <cstdlib>
 #include <cstring>
 
@@ -99,7 +102,194 @@ RISwapchain RISwapchain::create( struct RIDevice *device, const struct RISwapcha
 	sc.width = desc.width;
 	sc.height = desc.height;
 	sc.presentQueue = desc.queue;
+#if ( DEVICE_IMPL_D3D12 )
+	if ( RIIsTargetSelected( RI_DEVICE_API_D3D12 ) ) {
+		HWND hwnd = nullptr;
+		RISwapchain *oldSwapchain = nullptr;
+		if ( const RIWindowHandle* handle = std::get_if<RIWindowHandle>( &desc.source ) ) {
+			if ( handle->type == RI_WINDOW_WIN32 && handle->windows.hwnd )
+				hwnd = (HWND)handle->windows.hwnd;
+		} else if ( RISwapchain* const* pOld = std::get_if<RISwapchain*>( &desc.source ) ) {
+			oldSwapchain = *pOld;
+			if ( oldSwapchain && oldSwapchain->d3d12.hwnd )
+				hwnd = (HWND)oldSwapchain->d3d12.hwnd;
+		}
+		if ( !hwnd )
+			return sc;
+
+		bool allowTearing = false;
+		const UINT bufferCount = std::min<UINT>(
+			std::max<UINT>( desc.requestImageCount, 2u ), RI_MAX_SWAPCHAIN_IMAGES );
+		const bool recreate = oldSwapchain != nullptr;
+
+		// Create a fresh DXGI swapchain for the initial path and for a recreate
+		// whose requested buffer configuration is incompatible with ResizeBuffers.
+		auto createSwapchain = [&]() -> bool {
+			IDXGIFactory6* factory = nullptr;
+			HRESULT hr = CreateDXGIFactory2( 0, IID_PPV_ARGS( &factory ) );
+			if ( !D3D12_WrapResult( hr ) )
+				return false;
+			if ( !recreate ) {
+				BOOL tearingSupport = FALSE;
+				hr = factory->CheckFeatureSupport( DXGI_FEATURE_PRESENT_ALLOW_TEARING,
+					&tearingSupport, sizeof( tearingSupport ) );
+				if ( !D3D12_WrapResult( hr ) ) {
+					factory->Release();
+					return false;
+				}
+				allowTearing = tearingSupport == TRUE;
+			}
+			DXGI_SWAP_CHAIN_DESC1 sd = {};
+			sd.Width = desc.width;
+			sd.Height = desc.height;
+			sd.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+			sd.Stereo = FALSE;
+			sd.SampleDesc = { 1, 0 };
+			sd.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
+			sd.BufferCount = bufferCount;
+			sd.Scaling = DXGI_SCALING_STRETCH;
+			sd.SwapEffect = DXGI_SWAP_EFFECT_FLIP_DISCARD;
+			sd.AlphaMode = DXGI_ALPHA_MODE_UNSPECIFIED;
+			sd.Flags = allowTearing ? DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING : 0;
+			IDXGISwapChain1* swapChain1 = nullptr;
+			hr = factory->CreateSwapChainForHwnd( desc.queue->d3d12.queue, hwnd, &sd,
+				nullptr, nullptr, &swapChain1 );
+			if ( !D3D12_WrapResult( hr ) ) {
+				factory->Release();
+				return false;
+			}
+			hr = swapChain1->QueryInterface( IID_PPV_ARGS( &sc.d3d12.swapchain ) );
+			swapChain1->Release();
+			if ( !D3D12_WrapResult( hr ) ) {
+				factory->Release();
+				return false;
+			}
+			if ( !recreate )
+				factory->MakeWindowAssociation( hwnd, DXGI_MWA_NO_ALT_ENTER );
+			factory->Release();
+			return true;
+		};
+
+		if ( recreate ) {
+			allowTearing = oldSwapchain->d3d12.allowTearing != 0;
+			const DXGI_FORMAT requestedFormat = DXGI_FORMAT_R8G8B8A8_UNORM;
+			const UINT requestedFlags = allowTearing ? DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING : 0;
+			const UINT oldFlags = allowTearing ? DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING : 0;
+			const bool compatible = oldSwapchain->imageCount == bufferCount &&
+				requestedFormat == DXGI_FORMAT_R8G8B8A8_UNORM &&
+				oldFlags == requestedFlags;
+			desc.queue->waitIdle( device );
+			for ( uint32_t i = 0; i < RI_MAX_SWAPCHAIN_IMAGES; ++i ) {
+				oldSwapchain->views[i] = RITextureView{};
+				oldSwapchain->textures[i] = RITexture{};
+				if ( oldSwapchain->d3d12.images[i] ) {
+					oldSwapchain->d3d12.images[i]->Release();
+					oldSwapchain->d3d12.images[i] = nullptr;
+				}
+			}
+			if ( compatible && oldSwapchain->d3d12.swapchain ) {
+				sc.d3d12.swapchain = oldSwapchain->d3d12.swapchain;
+				oldSwapchain->d3d12.swapchain = nullptr;
+				HRESULT hr = sc.d3d12.swapchain->ResizeBuffers( bufferCount, desc.width,
+					desc.height, DXGI_FORMAT_R8G8B8A8_UNORM, requestedFlags );
+				if ( !D3D12_WrapResult( hr ) ) {
+					sc.d3d12.swapchain->Release();
+					sc.d3d12.swapchain = nullptr;
+					return sc;
+				}
+			} else {
+				if ( oldSwapchain->d3d12.swapchain ) {
+					oldSwapchain->d3d12.swapchain->Release();
+					oldSwapchain->d3d12.swapchain = nullptr;
+				}
+				if ( !createSwapchain() )
+					return sc;
+			}
+		} else {
+			if ( !createSwapchain() )
+				return sc;
+		}
+
+		auto cleanup = [&]() {
+			for ( uint32_t i = 0; i < RI_MAX_SWAPCHAIN_IMAGES; ++i ) {
+				sc.views[i] = RITextureView{};
+				sc.textures[i] = RITexture{};
+				if ( sc.d3d12.images[i] ) {
+					sc.d3d12.images[i]->Release();
+					sc.d3d12.images[i] = nullptr;
+				}
+			}
+			if ( sc.d3d12.swapchain ) {
+				sc.d3d12.swapchain->Release();
+				sc.d3d12.swapchain = nullptr;
+			}
+		};
+		HRESULT hr = S_OK;
+		// The D3D12 path currently creates an R8G8B8A8_UNORM swapchain. Keep the
+		// neutral RI format in sync with that actual DXGI format; desc.format is
+		// a RISwapchainFormat_e, not an RI_Format_e.
+		const RI_Format swapchainRIFormat = RI_FORMAT_RGBA8_UNORM;
+		sc.format = swapchainRIFormat;
+		for ( UINT i = 0; i < bufferCount; ++i ) {
+			hr = sc.d3d12.swapchain->GetBuffer( i, IID_PPV_ARGS( &sc.d3d12.images[i] ) );
+			if ( !D3D12_WrapResult( hr ) ) {
+				cleanup();
+				return sc;
+			}
+			const D3D12_RESOURCE_DESC resourceDesc = sc.d3d12.images[i]->GetDesc();
+			RITexture &texture = sc.textures[i];
+			// images[i] holds the sole COM reference returned by GetBuffer.
+			// textures[i] is only a borrowed alias for barriers/views: do not AddRef,
+			// release it, or populate a D3D12MA allocation for swapchain memory.
+			texture.d3d12.resource = sc.d3d12.images[i];
+			texture.d3d12.format = static_cast<uint32_t>( resourceDesc.Format );
+			texture.d3d12.width = static_cast<uint32_t>( resourceDesc.Width );
+			texture.d3d12.height = resourceDesc.Height;
+			texture.d3d12.depth = resourceDesc.Dimension == D3D12_RESOURCE_DIMENSION_TEXTURE3D
+				? resourceDesc.DepthOrArraySize : 1;
+			texture.d3d12.mipNum = resourceDesc.MipLevels;
+			texture.d3d12.layerNum = resourceDesc.Dimension == D3D12_RESOURCE_DIMENSION_TEXTURE3D
+				? 1 : resourceDesc.DepthOrArraySize;
+			texture.d3d12.sampleCount = resourceDesc.SampleDesc.Count;
+			texture.d3d12.usage = RI_USAGE_COLOR_ATTACHMENT;
+			texture.format = swapchainRIFormat;
+			texture.type = resourceDesc.Dimension == D3D12_RESOURCE_DIMENSION_TEXTURE1D
+				? RI_TEXTURE_1D
+				: resourceDesc.Dimension == D3D12_RESOURCE_DIMENSION_TEXTURE3D
+					? RI_TEXTURE_3D
+					: RI_TEXTURE_2D;
+
+			// Named so the debug layer reports "Swapchain.image[N]" rather than an
+			// "Unnamed ID3D12Resource Object" handle.
+			char debugName[32];
+			snprintf( debugName, sizeof( debugName ), "Swapchain.image[%u]", i );
+			texture.setDebugObjectName( device, debugName );
+
+			RITextureViewDesc viewDesc = {};
+			viewDesc.viewType = RI_VIEWTYPE_COLOR_ATTACHMENT;
+			viewDesc.format = swapchainRIFormat;
+			viewDesc.mipNum = 1;
+			viewDesc.layerNum = 1;
+			sc.views[i] = RITextureView::create( device, &texture, viewDesc );
+			if ( sc.views[i].isEmpty() ) {
+				cleanup();
+				return sc;
+			}
+		}
+
+		sc.imageCount = (uint16_t)bufferCount;
+		sc.d3d12.allowTearing = allowTearing;
+		sc.d3d12.syncInterval = desc.vsync ? 1 : 0;
+		sc.d3d12.bufferIndex = 0;
+		sc.d3d12.frameIndex = 0;
+		memset( sc.d3d12.frameFenceValues, 0, sizeof( sc.d3d12.frameFenceValues ) );
+		sc.d3d12.hwnd = (void*)hwnd;
+		return sc;
+	}
+#endif
 #if ( DEVICE_IMPL_VULKAN )
+
+	if ( RIIsTargetSelected( RI_DEVICE_API_VK ) ) {
 	VkResult result = VK_SUCCESS;
 	// The swapchain owns its surface. desc.source selects where it comes from:
 	//  - RIWindowHandle : first create — make a fresh surface here (adopted by
@@ -333,13 +523,93 @@ RISwapchain RISwapchain::create( struct RIDevice *device, const struct RISwapcha
 
 	free(supportedPresentMode);
 	free(surfaceFormats);
+	}
 #endif
 	return sc;
+}
+
+void RISwapchain::dispose( struct RIDevice *device ) {
+#if ( DEVICE_IMPL_D3D12 )
+	if ( RIIsTargetSelected( RI_DEVICE_API_D3D12 ) ) {
+		uint64_t highestFrameFenceValue = 0;
+		for ( uint32_t i = 0; i < imageCount; ++i )
+			highestFrameFenceValue = std::max( highestFrameFenceValue, d3d12.frameFenceValues[i] );
+		if ( presentQueue ) {
+			if ( highestFrameFenceValue == 0 ) {
+				presentQueue->waitIdle( device );
+			} else if ( presentQueue->d3d12.fence && presentQueue->d3d12.fenceEvent ) {
+				if ( presentQueue->d3d12.fence->GetCompletedValue() < highestFrameFenceValue ) {
+					HRESULT hr = presentQueue->d3d12.fence->SetEventOnCompletion(
+						highestFrameFenceValue, presentQueue->d3d12.fenceEvent );
+					if ( D3D12_WrapResult( hr ) )
+						WaitForSingleObject( presentQueue->d3d12.fenceEvent, INFINITE );
+					else
+						presentQueue->waitIdle( device );
+				}
+			} else {
+				presentQueue->waitIdle( device );
+			}
+		}
+		for ( uint32_t i = 0; i < RI_MAX_SWAPCHAIN_IMAGES; ++i ) {
+			views[i] = RITextureView{};
+			textures[i] = RITexture{};
+			if ( d3d12.images[i] ) {
+				d3d12.images[i]->Release();
+				d3d12.images[i] = nullptr;
+			}
+		}
+		if ( d3d12.swapchain ) {
+			d3d12.swapchain->Release();
+			d3d12.swapchain = nullptr;
+		}
+		return;
+	}
+#endif
+#if ( DEVICE_IMPL_VULKAN )
+	if ( RIIsTargetSelected( RI_DEVICE_API_VK ) ) {
+		for ( uint32_t p = 0; p < RI_MAX_SWAPCHAIN_IMAGES; p++ ) {
+			views[p].dispose( device );
+			if ( vk.imageAcquireSem[p] )
+				vkDestroySemaphore( device->vk.device, vk.imageAcquireSem[p], NULL );
+			if ( vk.finishSem[p] )
+				vkDestroySemaphore( device->vk.device, vk.finishSem[p], NULL );
+		}
+		if ( vk.swapchain )
+			vkDestroySwapchainKHR( device->vk.device, vk.swapchain, NULL );
+		if ( vk.surface )
+			vkDestroySurfaceKHR( RIGetVkInstance(), vk.surface, NULL );
+	}
+#endif
 }
 
 RISwapchainStatus_e RISwapchainAcquireNextTexture( struct RIDevice *dev, RISwapchain *swapchain, uint32_t *outTextureIndex )
 {
 	assert( swapchain->imageCount > 0 );
+#if ( DEVICE_IMPL_D3D12 )
+	if ( RIIsTargetSelected( RI_DEVICE_API_D3D12 ) ) {
+		swapchain->d3d12.bufferIndex = swapchain->d3d12.swapchain->GetCurrentBackBufferIndex();
+		if ( swapchain->presentQueue && swapchain->presentQueue->d3d12.fence &&
+			swapchain->presentQueue->d3d12.fenceEvent ) {
+			const uint64_t frameFenceValue =
+				swapchain->d3d12.frameFenceValues[swapchain->d3d12.bufferIndex];
+			const uint64_t completedFenceValue =
+				swapchain->presentQueue->d3d12.fence->GetCompletedValue();
+			// A removed device reports UINT64_MAX for every fence.
+			if ( completedFenceValue == UINT64_MAX )
+				RID3D12_CheckDeviceRemoved( *dev, "SwapchainAcquire" );
+			if ( frameFenceValue != 0 && completedFenceValue < frameFenceValue ) {
+				HRESULT hr = swapchain->presentQueue->d3d12.fence->SetEventOnCompletion(
+					frameFenceValue, swapchain->presentQueue->d3d12.fenceEvent );
+				if ( !D3D12_WrapResult( hr ) )
+					return RI_SWAPCHAIN_STATUS_OUT_OF_DATE;
+				WaitForSingleObject( swapchain->presentQueue->d3d12.fenceEvent, INFINITE );
+			}
+		}
+		if ( outTextureIndex )
+			*outTextureIndex = swapchain->d3d12.bufferIndex;
+		return RI_SWAPCHAIN_STATUS_OK;
+	}
+#endif
 #if ( DEVICE_IMPL_VULKAN )
 	{
 		VkSemaphore imageAcquiredSemaphore = swapchain->vk.imageAcquireSem[swapchain->vk.frameIndex];
@@ -364,6 +634,36 @@ RISwapchainStatus_e RISwapchainAcquireNextTexture( struct RIDevice *dev, RISwapc
 
 RISwapchainStatus_e RISwapchainPresent(struct RIDevice* dev, RISwapchain* swapchain) {
 	RISwapchainStatus_e status = RI_SWAPCHAIN_STATUS_OK;
+#if ( DEVICE_IMPL_D3D12 )
+	if ( RIIsTargetSelected( RI_DEVICE_API_D3D12 ) ) {
+		const UINT flags = swapchain->d3d12.allowTearing && swapchain->d3d12.syncInterval == 0
+			? DXGI_PRESENT_ALLOW_TEARING : 0;
+		HRESULT result = swapchain->d3d12.swapchain->Present( swapchain->d3d12.syncInterval, flags );
+		// Device loss is not a resize: recreating the swapchain would hide the
+		// fault until some later API call fails with a misleading error.
+		if ( result == DXGI_ERROR_DEVICE_REMOVED || result == DXGI_ERROR_DEVICE_RESET ) {
+			RID3D12_CheckDeviceRemoved( *dev, "Present" );
+			status = RI_SWAPCHAIN_STATUS_OUT_OF_DATE;
+		} else if ( !D3D12_WrapResult( result ) )
+			status = RI_SWAPCHAIN_STATUS_OUT_OF_DATE;
+		if ( status == RI_SWAPCHAIN_STATUS_OK ) {
+			if ( !swapchain->presentQueue || !swapchain->presentQueue->d3d12.fence ||
+				!swapchain->presentQueue->d3d12.queue ) {
+				status = RI_SWAPCHAIN_STATUS_OUT_OF_DATE;
+			} else {
+				uint64_t signalValue = ++swapchain->presentQueue->d3d12.nextFenceValue;
+				HRESULT signalResult = swapchain->presentQueue->d3d12.queue->Signal(
+					swapchain->presentQueue->d3d12.fence, signalValue );
+				if ( !D3D12_WrapResult( signalResult ) )
+					status = RI_SWAPCHAIN_STATUS_OUT_OF_DATE;
+				else
+					swapchain->d3d12.frameFenceValues[swapchain->d3d12.bufferIndex] = signalValue;
+			}
+		}
+		swapchain->d3d12.frameIndex++;
+		return status;
+	}
+#endif
 #if ( DEVICE_IMPL_VULKAN )
 	{
 		VkSemaphore renderingFinishedSemaphore = swapchain->vk.finishSem[swapchain->vk.frameIndex];

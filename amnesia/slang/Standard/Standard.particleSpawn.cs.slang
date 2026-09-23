@@ -28,13 +28,13 @@ struct ParticleSpawnPC
 };
 
 [vk::push_constant]
-ParticleSpawnPC pc;
+ParticleSpawnPC gPushConstants HPL_PUSH_CONSTANT_REGISTER;
 
 [shader("compute")]
 [numthreads(64, 1, 1)]
 void csMain(uint3 dtid : SV_DispatchThreadID)
 {
-    if (dtid.x >= pc.spawnCount)
+    if (dtid.x >= gPushConstants.spawnCount)
         return;
 
     GpuParticleSpawn cmd = gParticleSpawnCmds[dtid.x];

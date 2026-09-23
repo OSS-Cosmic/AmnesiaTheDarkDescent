@@ -3,7 +3,6 @@
 #include "graphics/DecalPipelineDesc.h"
 #include "graphics/GlobalManagedSets.h"
 #include "graphics/MeshCreator.h"
-#include "graphics/RIVK.h"
 #include "graphics/StandardMeshDecalStreams.h"
 #include "graphics/VertexBuffer.h"
 #include "math/Math.h"
@@ -19,12 +18,15 @@ StandardHaloQueryState::~StandardHaloQueryState() {
   if (!graphics)
     return;
   for (Slot &slot : slots) {
-    if (slot.pool == VK_NULL_HANDLE)
+    if (slot.pool.isEmpty())
       continue;
-    graphics->graphicsDefer.push(
-        std::function<void()>([pool = slot.pool, device = &graphics->device]() {
-          vkDestroyQueryPool(device->vk.device, pool, nullptr);
+    // The deferred copy takes ownership of the handles; clear the slot's so
+    // there is only ever one owner to release them.
+    graphics->graphicsDefer.push(std::function<void()>(
+        [pool = slot.pool, device = &graphics->device]() mutable {
+          pool.dispose(device);
         }));
+    slot.pool = {};
   }
 }
 
@@ -39,19 +41,33 @@ float StandardHaloVisibility(uint64_t visible, uint64_t maximum, bool precise) {
 
 void ResolveStandardHaloQueries(StandardHaloQueryState &state,
                                 uint64_t completedTimeline,
+                                uint64_t currentFrame,
                                 const StandardHaloQueryReader &readCounts) {
+  // Two full frame cycles: a live slot is read back after roughly one, so
+  // anything older belongs to a frame that was never submitted.
+  constexpr uint64_t kStaleFrames = 2 * RI_NUMBER_FRAMES_FLIGHT;
   std::vector<uint64_t> counts;
   for (StandardHaloQueryState::Slot &slot : state.slots) {
-    if (slot.resolved || slot.timelineValue > completedTimeline)
+    if (slot.resolved)
+      continue;
+    // Abandoned frame: retire the slot without trusting anything it holds.
+    if (slot.recordedFrame != UINT64_MAX && currentFrame > slot.recordedFrame &&
+        currentFrame - slot.recordedFrame > kStaleFrames) {
+      slot.resolved = true;
+      slot.cookies.clear();
+      continue;
+    }
+    if (slot.timelineValue > completedTimeline)
       continue;
     if (slot.cookies.empty()) {
       slot.resolved = true;
       continue;
     }
     counts.assign(slot.cookies.size() * 2, 0);
-    // Not ready: keep the slot pending and read it on a later Draw.
-    if (readCounts(slot.pool, static_cast<uint32_t>(counts.size()),
-                   counts.data()) != VK_SUCCESS)
+    // Not ready: keep the slot pending and read it on a later Draw. Must not
+    // set slot.resolved -- that retry is the whole point.
+    if (!readCounts(&slot.pool, static_cast<uint32_t>(counts.size()),
+                    counts.data()))
       continue;
     slot.resolved = true;
     if (slot.timelineValue < state.latestTimeline)
@@ -100,13 +116,12 @@ void cStandardHaloPass::Resolve(StandardHaloQueryState &state,
                                 cFrustum *frustum) {
   if (!mpGraphics || !frustum)
     return;
-  const VkDevice vkDevice = mpGraphics->device.vk.device;
   ResolveStandardHaloQueries(
       state, mpGraphics->graphicsTimeline.completed(&mpGraphics->device),
-      [vkDevice](VkQueryPool pool, uint32_t count, uint64_t *counts) {
-        return vkGetQueryPoolResults(vkDevice, pool, 0, count,
-                                     count * sizeof(uint64_t), counts,
-                                     sizeof(uint64_t), VK_QUERY_RESULT_64_BIT);
+      mpGraphics->frameIndex,
+      [device = &mpGraphics->device](RIQueryPool *pool, uint32_t count,
+                                     uint64_t *counts) {
+        return pool->getResults(device, 0, count, counts);
       });
   // Halos without a result keep their alpha until one lands, as in legacy.
   for (cBillboard *billboard : CollectHalos(translucents)) {
@@ -154,13 +169,10 @@ void cStandardHaloPass::Record(cGraphics::FrameContext *frame,
   if (!slot.resolved)
     return;
 
-  const VkDevice vkDevice = mpGraphics->device.vk.device;
-  if (slot.pool == VK_NULL_HANDLE) {
-    VkQueryPoolCreateInfo info = {VK_STRUCTURE_TYPE_QUERY_POOL_CREATE_INFO};
-    info.queryType = VK_QUERY_TYPE_OCCLUSION;
-    info.queryCount = StandardHaloQueryState::kMaxHalos * 2;
-    if (vkCreateQueryPool(vkDevice, &info, nullptr, &slot.pool) != VK_SUCCESS) {
-      slot.pool = VK_NULL_HANDLE;
+  if (slot.pool.isEmpty()) {
+    const RIQueryPoolDesc desc = {RI_QUERY_TYPE_OCCLUSION,
+                                  StandardHaloQueryState::kMaxHalos * 2};
+    if (!slot.pool.init(&mpGraphics->device, desc)) {
       if (!m_warnedUnavailable) {
         Warning("Standard renderer: occlusion query pool creation failed; "
                 "halos stay hidden\n");
@@ -168,6 +180,7 @@ void cStandardHaloPass::Record(cGraphics::FrameContext *frame,
       }
       return;
     }
+    slot.pool.setDebugObjectName(&mpGraphics->device, "Standard.haloQueries");
   }
   if (!m_box)
     if (cMeshCreator *meshCreator = mpGraphics->GetMeshCreator())
@@ -176,8 +189,7 @@ void cStandardHaloPass::Record(cGraphics::FrameContext *frame,
   if (!m_box)
     return;
 
-  m_box->SubmitToGPU(&mpGraphics->blasSubmit.cmds[0], &mpGraphics->device,
-                     frame);
+  m_box->SubmitToGPU(&mpGraphics->device);
   std::vector<uint64_t> cookies;
   std::vector<uint32_t> objectSlots;
   cookies.reserve(halos.size());
@@ -217,7 +229,7 @@ void cStandardHaloPass::Record(cGraphics::FrameContext *frame,
 
   RICmd *cmd = &mpGraphics->primary.cmds[0];
   const uint32_t queryCount = static_cast<uint32_t>(cookies.size() * 2);
-  vkCmdResetQueryPool(cmd->vk.cmd, slot.pool, 0, queryCount);
+  cmd->vk_d3d12_resetQueryPool(&mpGraphics->device, &slot.pool, 0, queryCount);
   cmd->vk_d3d12_textureBarrier(
       RITextureBarrier(depthTexture, RI_RESOURCE_STATE_SHADER_RESOURCE,
                        RI_RESOURCE_STATE_DEPTH_READ, RI_STAGE_FRAGMENT,
@@ -249,6 +261,10 @@ void cStandardHaloPass::Record(cGraphics::FrameContext *frame,
   cmd->setViewport(&mpGraphics->device, vp);
   cmd->setScissor(&mpGraphics->device, sc);
 
+  // Gates the D3D12 resolve below: the reset above is already recorded, but on
+  // a stream-bind failure no query is written, and resolving a query that was
+  // never ended yields undefined data rather than an error.
+  bool recorded = false;
   uint32_t presentMask = 0;
   if (BindMeshDecalStreams(cmd, mpGraphics, m_box.get(), &presentMask)) {
     meshDecal->bindBindlessDescriptorSet(
@@ -259,52 +275,59 @@ void cStandardHaloPass::Record(cGraphics::FrameContext *frame,
     // Depth-only variants of the decal pipeline: no colour output, no depth
     // write; LEQUAL counts the texels that pass the scene depth, ALWAYS every
     // texel the box covers.
-    DecalPipelineDesc visiblePipeline(
-        cGraphics::PogoColorFormat, cGraphics::DepthFormat,
-        DecalPipelineDesc::BLEND_ADD, presentMask);
-    DecalPipelineDesc maxPipeline(cGraphics::PogoColorFormat,
-                                  cGraphics::DepthFormat,
-                                  DecalPipelineDesc::BLEND_ADD, presentMask);
-    DecalPipelineDesc *pipelines[2] = {&visiblePipeline, &maxPipeline};
+    RIGraphicsPipelineDesc pipelines[2] = {
+        MakeDecalPipelineDesc(cGraphics::PogoColorFormat, cGraphics::DepthFormat,
+                              DecalPipelineDesc::BLEND_ADD, presentMask),
+        MakeDecalPipelineDesc(cGraphics::PogoColorFormat, cGraphics::DepthFormat,
+                              DecalPipelineDesc::BLEND_ADD, presentMask)};
     for (uint32_t variant = 0; variant < 2; ++variant) {
-      DecalPipelineDesc &pd = variant ? maxPipeline : visiblePipeline;
-      pd.pipelineRendering.colorAttachmentCount = 0;
-      pd.pipelineRendering.pColorAttachmentFormats = nullptr;
-      pd.colorBlendState.attachmentCount = 0;
-      pd.colorBlendState.pAttachments = nullptr;
-      pd.depthStencilState.depthCompareOp =
-          variant ? VK_COMPARE_OP_ALWAYS : VK_COMPARE_OP_LESS_OR_EQUAL;
+      RIGraphicsPipelineDesc &pd = pipelines[variant];
+      // Depth-only: blendCount must track colorCount, both drop to zero.
+      pd.renderTarget.colorCount = 0;
+      pd.blendCount = 0;
+      pd.depthStencil.depthCompare =
+          variant ? RI_COMPARE_ALWAYS : RI_COMPARE_LESS_EQUAL;
     }
-    const hash_t pipelineHashes[2] = {
-        hash_u32(hash_u32(visiblePipeline.hash, 0x48414c4fu), 0u),
-        hash_u32(hash_u32(maxPipeline.hash, 0x48414c4fu), 1u)};
+    // The two variants differ only by depthCompare, which the structural hash
+    // already covers; the discriminator is kept for readability.
+    const hash_t pipelineHashes[2] = {hash_u32(HASH_INITIAL_VALUE, 0u),
+                                      hash_u32(HASH_INITIAL_VALUE, 1u)};
     const char *pipelineNames[2] = {"Standard.haloVisible", "Standard.haloMax"};
 
     // Precise queries count samples; without them any passing sample reports
-    // non-zero, which still tells hidden from visible.
-    const bool precise = mpGraphics->device.occlusionQueryPreciseEnabled;
-    const VkQueryControlFlags queryControl =
-        precise ? VK_QUERY_CONTROL_PRECISE_BIT : 0;
+    // non-zero, which still tells hidden from visible. This is the type the
+    // pool was actually granted, so it can differ by backend: D3D12 occlusion
+    // queries are always exact, while a Vulkan adapter lacking
+    // occlusionQueryPrecise falls back to binary and snaps halo alpha to 0/1.
+    const bool precise = slot.pool.isPrecise();
     const uint32_t indexCount = static_cast<uint32_t>(m_box->GetIndexNum());
     for (size_t h = 0; h < cookies.size(); ++h) {
       for (uint32_t variant = 0; variant < 2; ++variant) {
         meshDecal->bindPipeline(&mpGraphics->device, cmd,
                                 pipelineHashes[variant], pipelineNames[variant],
-                                &pipelines[variant]->createInfo);
+                                pipelines[variant]);
         const uint32_t queryIndex = static_cast<uint32_t>(h * 2 + variant);
-        vkCmdBeginQuery(cmd->vk.cmd, slot.pool, queryIndex, queryControl);
+        cmd->vk_d3d12_beginQuery(&mpGraphics->device, &slot.pool, queryIndex);
         cmd->drawIndexed(&mpGraphics->device, indexCount, 1u, 0u, 0,
                          objectSlots[h]);
-        vkCmdEndQuery(cmd->vk.cmd, slot.pool, queryIndex);
+        cmd->vk_d3d12_endQuery(&mpGraphics->device, &slot.pool, queryIndex);
       }
     }
     slot.cookies = std::move(cookies);
     slot.precise = precise;
     slot.timelineValue = mpGraphics->graphicsTimeline.pending() + 1;
+    slot.recordedFrame = frameIndex;
     slot.resolved = false;
     state.lastRecordedFrame = frameIndex;
+    recorded = true;
   }
   cmd->vk_d3d12_endRendering(&mpGraphics->device);
+  // D3D12 cannot read a query heap from the CPU; the counts must be resolved
+  // into the pool's readback buffer, outside the rendering scope and in this
+  // same submit. A no-op on Vulkan.
+  if (recorded)
+    cmd->vk_d3d12_resolveQueryPool(&mpGraphics->device, &slot.pool, 0,
+                                   queryCount);
   cmd->vk_d3d12_textureBarrier(
       RITextureBarrier(depthTexture, RI_RESOURCE_STATE_DEPTH_READ,
                        RI_RESOURCE_STATE_SHADER_RESOURCE, RI_STAGE_NONE,

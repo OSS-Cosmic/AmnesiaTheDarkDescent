@@ -2,25 +2,13 @@
     <Modify Category="Decals" ID="3169" Name="chalk_hieroglyphs_1">
         <SetAttr Material="textures/ptest/decals/chalk_hieroglyphs.mat" />
     </Modify>
-    <Modify Category="Entities" ID="226" Name="BoxLight_1">
-        <SetAttr RendererMask="1" />
-    </Modify>
     <Modify Category="Entities" ID="916" Name="PointLight_4">
-        <SetAttr RendererMask="1" />
-    </Modify>
-    <Modify Category="Entities" ID="1578" Name="BoxLight_4">
         <SetAttr RendererMask="1" />
     </Modify>
     <Modify Category="Entities" ID="1803" Name="SpotLight_18">
         <SetAttr RendererMask="1" />
     </Modify>
     <Modify Category="Entities" ID="1850" Name="SpotLight_21">
-        <SetAttr RendererMask="1" />
-    </Modify>
-    <Modify Category="Entities" ID="2132" Name="BoxLight_5">
-        <SetAttr RendererMask="1" />
-    </Modify>
-    <Modify Category="Entities" ID="2365" Name="BoxLight_7">
         <SetAttr RendererMask="1" />
     </Modify>
     <Modify Category="Entities" ID="2840" Name="PointLight_7">

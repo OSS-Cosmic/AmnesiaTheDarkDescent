@@ -63,8 +63,8 @@ bool cGpuParticlePass::LoadData() {
   if (!mpGraphics || !mpResources || !mpGraphics->globalset)
     return false;
 
-  const VkDescriptorSetLayout external[] = {
-      mpGraphics->globalset->m_bindlessSet.vk.m_bindlessSetLayout};
+  const RIBindlessLayout external[] = {
+      mpGraphics->globalset->m_bindlessSet.layout()};
 
   auto load = [&](std::shared_ptr<RIProgram> &target, const char *name) {
     auto bin = RIProgram::loadShaderStage(mpResources->GetFileSearcher(), name);
@@ -87,11 +87,11 @@ bool cGpuParticlePass::LoadData() {
     return true;
   };
 
-  if (!load(m_spawn, "Standard.particleSpawn.cs.spv"))
+  if (!load(m_spawn, "Standard.particleSpawn.cs"))
     return false;
-  if (!load(m_sim, "Standard.particleSim.cs.spv"))
+  if (!load(m_sim, "Standard.particleSim.cs"))
     return false;
-  if (!load(m_expand, "Standard.particleExpand.cs.spv"))
+  if (!load(m_expand, "Standard.particleExpand.cs"))
     return false;
 
   m_loaded = true;
@@ -122,11 +122,9 @@ void cGpuParticlePass::BindCommon(
     const char *asDebugName, const FrameBuffers &aBuffers,
     RIProgram::DescriptorBinding *apFrameBinding,
     std::vector<RIProgram::DescriptorBinding> &aBindings) {
-  VkComputePipelineCreateInfo createInfo = {
-      VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO};
   const hash_t kHash = hash_u32(HASH_INITIAL_VALUE, /*variant=*/0u);
-  apProgram->bindComputePipeline(&mpGraphics->device, apCmd, kHash, asDebugName,
-                                 &createInfo);
+  apProgram->bindComputePipeline(&mpGraphics->device, apCmd, kHash,
+                                 asDebugName);
   apProgram->bindBindlessDescriptorSet(apCmd, &mpGraphics->globalset->m_bindlessSet,
                                        0, VK_PIPELINE_BIND_POINT_COMPUTE);
 

@@ -8,6 +8,8 @@
 // Streams: position (binding 0) + texcoord (binding 1, .xy). Pairs with
 // outline_alpha.frag.slang.
 
+#include "../HostDefinitions.h"
+
 struct OutlinePass
 {
     float4x4 viewProj;
@@ -25,17 +27,17 @@ struct OutlineAlphaPC
 };
 
 [vk::push_constant]
-OutlineAlphaPC pc;
+OutlineAlphaPC gPushConstants HPL_PUSH_CONSTANT_REGISTER;
 
 struct VSIn
 {
-    [vk::location(0)] float3 a_position;
-    [vk::location(1)] float2 a_uv;
+    [vk::location(0)] float3 a_position : TEXCOORD0;
+    [vk::location(1)] float2 a_uv : TEXCOORD1;
 };
 
 struct VSOut
 {
-    [vk::location(0)] float2 v_uv;
+    [vk::location(0)] float2 v_uv : TEXCOORD0;
     float4 posH : SV_Position;
 };
 
@@ -43,7 +45,7 @@ struct VSOut
 VSOut vsMain(VSIn vin)
 {
     VSOut o;
-    float4 worldPos = mul(pc.model, float4(vin.a_position, 1.0f));
+    float4 worldPos = mul(gPushConstants.model, float4(vin.a_position, 1.0f));
     o.posH = mul(pass.viewProj, worldPos);
     o.v_uv = vin.a_uv;
     return o;

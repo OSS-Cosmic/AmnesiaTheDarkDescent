@@ -34,6 +34,10 @@ project "HPL2"
         "GamepadSDL.cpp", "GamepadSDL2.cpp", "KeyboardSDL.cpp", "MouseSDL.cpp",
         "TimerSDL.cpp", "LowLevelInputSDL.cpp",
         "LowLevelResourcesSDL.cpp", "LowLevelSystemSDL.cpp", "SDLEngineSetup.cpp",
+        -- Its own TU on purpose: a static archive links object by object, so the
+        -- entry point has to sit alone or every program linking libHPL2 inherits
+        -- one. See the comment at the top of HplMainShim.cpp.
+        "HplMainShim.cpp",
         "SDLFontData.cpp", "LowLevelSoundOpenAL.cpp", "OpenAL*",
         "MeshLoaderCollada.cpp", "MeshLoaderColladaHelpers.cpp",
         "MeshLoaderColladaLoader.cpp", "MeshLoaderMSH.cpp", "MeshLoaderFBX.cpp",
@@ -42,7 +46,19 @@ project "HPL2"
     }
     for _, p in ipairs(impl_patterns) do table.insert(patterns, IMPL .. p) end
     table.insert(patterns, CORE .. "/sources/platform/sdl2/*.cpp")
-    files (glob(patterns))
+    local file_list = glob(patterns)
+    -- RID3D12.cpp is Windows-only (opt-in DX12 backend). Prune it from the source
+    -- list on non-Windows targets so gmake doesn't emit a compile target for it;
+    -- the file's own `#if DEVICE_IMPL_D3D12` guard already keeps it a trivially
+    -- empty TU on Windows Vulkan-only builds.
+    if os.target() ~= "windows" then
+        for i = #file_list, 1, -1 do
+            if file_list[i]:match("RID3D12%.cpp$") then
+                table.remove(file_list, i)
+            end
+        end
+    end
+    files (file_list)
     files { CORE .. "/include/**.h" }   -- headers for IDE/source groups
     memory_engine()
     memory_rebuild_engine()
@@ -70,22 +86,32 @@ project "HPL2"
         ROOT .. "/amnesia/slang",
         DEPS_SOURCES .. "/AngelScript/include",
         DEPS_EXTERN .. "/tinyxml2",
+        DEPS_EXTERN .. "/rapidjson/include", -- RIProgram's reflection parser
         DEPS_EXTERN .. "/zlib",             -- zlib.h/zconf.h for BinaryBuffer/SerializeClass
         DEPS_EXTERN .. "/cgltf",            -- cgltf.h single-header glTF 2.0 parser (MeshLoaderGLTF)
     }
+    generated_includes()
+    d3d12ma_includes()
+    if os.target() == "windows" and _OPTIONS["with-d3d12"] == "yes" then
+        defines { "DEVICE_SUPPORT_D3D12" }
+        dependson { "D3D12MA" }
+        slang_d3d12_mips_prebuild()
+    end
     deps_public_includes()   -- ogg/vorbis/IL/Newton/OALWrapper public headers
     vulkan_includes()
     link_sdl2()      -- SDL2 headers + link + dependson
     link_openal()    -- openal-soft headers + link + dependson
-    link_nrd()       -- NRD denoiser headers + link + dependson
-    link_fsr()       -- FidelityFX Super Resolution headers + link + dependson
+    nrd_use()        -- NRD denoiser headers only (runtime-loaded, never linked)
+    fsr_use()        -- FidelityFX Super Resolution headers + dependson (no link:
+                     -- the engine loads the ffx-api module at runtime)
     xess_use()       -- Intel XeSS headers + availability define (Windows only)
     mathlib_use()
+    fmt_use()        -- fmt headers + matching FMT_USE_EXCEPTIONS (static lib: deps/fmt.lua)
 
     -- Keep HPL2 aware of its dependency set; final executables still call
     -- link_engine() because static-library links are not relied on transitively.
     links {
-        "OALWrapper", "AngelScript", "Newton", "tinyxml2",
+        "OALWrapper", "AngelScript", "Newton", "tinyxml2", "fmt",
         "vorbisfile", "vorbis", "ogg", "freealut",
         "zlib", "volk", "IL", "png", "jpeg",
     }

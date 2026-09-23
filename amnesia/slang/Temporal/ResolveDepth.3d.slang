@@ -25,6 +25,8 @@
 //   binding 0 : SamplerState depthSampler (point, clamp)
 //   binding 1 : Texture2D<float> renderDepth (depth aspect only)
 
+#include "../HostDefinitions.h"
+
 [vk::binding(0, 0)]
 SamplerState depthSampler;
 
@@ -39,11 +41,11 @@ struct ResolveDepthPC
 };
 
 [vk::push_constant]
-ResolveDepthPC pc;
+ResolveDepthPC gPushConstants HPL_PUSH_CONSTANT_REGISTER;
 
 struct VSOut
 {
-    [vk::location(0)] float2 displayUV;
+    [vk::location(0)] float2 displayUV : TEXCOORD0;
     float4 posH : SV_POSITION;
 };
 
@@ -68,20 +70,20 @@ VSOut vsMain(uint vertexId : SV_VertexID)
 [shader("fragment")]
 float psMain(VSOut pin) : SV_Depth
 {
-    float2 renderExtentF = float2(float(pc.renderExtent.x),
-                                  float(pc.renderExtent.y));
-    float2 displayExtentF = float2(float(pc.displayExtent.x),
-                                   float(pc.displayExtent.y));
+    float2 renderExtentF = float2(float(gPushConstants.renderExtent.x),
+                                  float(gPushConstants.renderExtent.y));
+    float2 displayExtentF = float2(float(gPushConstants.displayExtent.x),
+                                   float(gPushConstants.displayExtent.y));
 
     // Re-form the exact display pixel center so displayExtent is part of the
     // binding contract and the 1:1, zero-jitter case maps pixel-for-pixel.
     float2 displayPixel = floor(pin.displayUV * displayExtentF);
     float2 displayUV = (displayPixel + 0.5f) / displayExtentF;
-    float2 inputUV = displayUV - pc.jitterPixels / renderExtentF;
+    float2 inputUV = displayUV - gPushConstants.jitterPixels / renderExtentF;
 
     int2 sourceCenter = int2(floor(inputUV * renderExtentF));
-    int2 sourceMax = int2(int(pc.renderExtent.x) - 1,
-                          int(pc.renderExtent.y) - 1);
+    int2 sourceMax = int2(int(gPushConstants.renderExtent.x) - 1,
+                          int(gPushConstants.renderExtent.y) - 1);
     float resolvedDepth = 1.0f;
 
     for (int y = -1; y <= 1; ++y)

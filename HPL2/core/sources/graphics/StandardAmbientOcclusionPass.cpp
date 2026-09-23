@@ -30,12 +30,13 @@ bool cStandardAmbientOcclusionPass::LoadData() {
   if (!mpGraphics || !mpResources || !mpGraphics->globalset)
     return false;
 
-  const VkDescriptorSetLayout external[] = {
-      mpGraphics->globalset->m_bindlessSet.vk.m_bindlessSetLayout};
+  const RIBindlessLayout external[] = {
+      mpGraphics->globalset->m_bindlessSet.layout()};
 
   auto loadSlangCompute = [&](int idx, const char *name,
                               const char *entryPoint) {
-    auto bin = RIProgram::loadShaderStage(mpResources->GetFileSearcher(), name);
+    auto bin = RIProgram::loadShaderStage(mpResources->GetFileSearcher(), name,
+                                          entryPoint);
     if (bin.empty())
       return false;
     auto program = std::make_shared<RIProgram>();
@@ -53,11 +54,11 @@ bool cStandardAmbientOcclusionPass::LoadData() {
     return true;
   };
 
-  if (!loadSlangCompute(0, "Standard.aoPrepareDepths.cs.spv", "csMain"))
+  if (!loadSlangCompute(0, "Standard.aoPrepareDepths.cs", "csMain"))
     return false;
-  if (!loadSlangCompute(1, "Standard.aoCoarse.cs.spv", "csMain"))
+  if (!loadSlangCompute(1, "Standard.aoCoarse.cs", "csMain"))
     return false;
-  if (!loadSlangCompute(2, "Standard.aoReinterleave.cs.spv", "csMain"))
+  if (!loadSlangCompute(2, "Standard.aoReinterleave.cs", "csMain"))
     return false;
 
   m_loaded = true;
@@ -143,6 +144,18 @@ bool cStandardAmbientOcclusionPass::Render(
     RITextureBarrier b(texture, before, after);
     cmd->vk_d3d12_resourceBarrier<0, 0, 1>(0, nullptr, 0, nullptr, 1, &b);
   };
+  // Storage write -> storage read hazard between two consecutive dispatches on
+  // the SAME texture. Vulkan's vkCmdPipelineBarrier carries a global execution
+  // dependency, so a barrier naming any resource happens to order the
+  // dispatches; D3D12 orders only the resource the barrier names, and a
+  // transition out of UNDEFINED is an explicit discard that waits for nothing.
+  // Each producer/consumer pair therefore needs its own barrier here.
+  auto storageHazard = [cmd](RITexture *texture) {
+    RITextureBarrier b(texture, RI_RESOURCE_STATE_GENERAL,
+                       RI_RESOURCE_STATE_GENERAL, RI_STAGE_COMPUTE,
+                       RI_STAGE_COMPUTE);
+    cmd->vk_d3d12_resourceBarrier<0, 0, 1>(0, nullptr, 0, nullptr, 1, &b);
+  };
 
   // positionTexture and normalTexture arrive in SHADER_RESOURCE from the
   // G-buffer/reconstruct step and the light pass reads them next, so they are
@@ -156,12 +169,9 @@ bool cStandardAmbientOcclusionPass::Render(
     barrier(state->aoPreparedDepthTexture[image].Get(),
             RI_RESOURCE_STATE_UNDEFINED, RI_RESOURCE_STATE_GENERAL);
 
-    VkComputePipelineCreateInfo computeCreate = {
-        VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO};
     const hash_t kHash = hash_u32(HASH_INITIAL_VALUE, /*variant=*/0u);
     m_programs[0]->bindComputePipeline(&mpGraphics->device, cmd, kHash,
-                                       "Standard.aoPrepareDepths.cs:csMain",
-                                       &computeCreate);
+                                       "Standard.aoPrepareDepths.cs:csMain");
     m_programs[0]->bindBindlessDescriptorSet(
         cmd, &mpGraphics->globalset->m_bindlessSet, 0,
         VK_PIPELINE_BIND_POINT_COMPUTE);
@@ -182,27 +192,18 @@ bool cStandardAmbientOcclusionPass::Render(
                                    bindings.data(), bindings.size(),
                                    VK_PIPELINE_BIND_POINT_COMPUTE);
 
-    // Matches AOPrepareDepthsPC in Standard.aoPrepareDepths.cs.slang.
-    const struct {
-      uint32_t quarterWidth, quarterHeight;
-    } prepareConstants = {aoConst.quarterWidth, aoConst.quarterHeight};
-    cmd->vk_d3d12_setPushConstants(&mpGraphics->device, *m_programs[0], 0,
-                                   sizeof(prepareConstants), &prepareConstants);
-
     cmd->dispatch(&mpGraphics->device, groupsX, groupsY, 1);
   }
-
   {
     RIGpuScope _gs(&mpGraphics->profiler, cmd, "StandardAO.coarse");
     barrier(state->aoQuarterTexture[image].Get(), RI_RESOURCE_STATE_UNDEFINED,
             RI_RESOURCE_STATE_GENERAL);
+    // prepareDepths wrote aoPreparedDepthTexture; this dispatch reads it.
+    storageHazard(state->aoPreparedDepthTexture[image].Get());
 
-    VkComputePipelineCreateInfo computeCreate = {
-        VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO};
     const hash_t kHash = hash_u32(HASH_INITIAL_VALUE, /*variant=*/0u);
     m_programs[1]->bindComputePipeline(&mpGraphics->device, cmd, kHash,
-                                       "Standard.aoCoarse.cs:csMain",
-                                       &computeCreate);
+                                       "Standard.aoCoarse.cs:csMain");
     m_programs[1]->bindBindlessDescriptorSet(
         cmd, &mpGraphics->globalset->m_bindlessSet, 0,
         VK_PIPELINE_BIND_POINT_COMPUTE);
@@ -233,21 +234,20 @@ bool cStandardAmbientOcclusionPass::Render(
   {
     RIGpuScope _gs(&mpGraphics->profiler, cmd, "StandardAO.reinterleave");
 
-    // Clear to "unoccluded" first so any texel no slice covers stays lit.
+    // The 16 slices cover every in-bounds full-resolution pixel exactly once;
+    // out-of-bounds threads return without corresponding output texels. No
+    // pre-clear is needed, which also avoids requiring a standalone UAV-clear
+    // descriptor on D3D12.
     barrier(state->aoTexture[image].Get(), RI_RESOURCE_STATE_UNDEFINED,
-            RI_RESOURCE_STATE_CLEAR_STORAGE);
-    const float unoccluded[4] = {1.0f, 1.0f, 1.0f, 1.0f};
-    cmd->clearStorageImage(&mpGraphics->device, state->aoTexture[image].Get(),
-                           unoccluded);
-    barrier(state->aoTexture[image].Get(), RI_RESOURCE_STATE_CLEAR_STORAGE,
             RI_RESOURCE_STATE_GENERAL);
+    // The coarse pass wrote aoQuarterTexture; this dispatch reads it.
+    // aoPreparedDepthTexture is read by both dispatches and written by neither,
+    // so the barrier before the coarse pass still covers it.
+    storageHazard(state->aoQuarterTexture[image].Get());
 
-    VkComputePipelineCreateInfo computeCreate = {
-        VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO};
     const hash_t kHash = hash_u32(HASH_INITIAL_VALUE, /*variant=*/0u);
     m_programs[2]->bindComputePipeline(&mpGraphics->device, cmd, kHash,
-                                       "Standard.aoReinterleave.cs:csMain",
-                                       &computeCreate);
+                                       "Standard.aoReinterleave.cs:csMain");
     m_programs[2]->bindBindlessDescriptorSet(
         cmd, &mpGraphics->globalset->m_bindlessSet, 0,
         VK_PIPELINE_BIND_POINT_COMPUTE);

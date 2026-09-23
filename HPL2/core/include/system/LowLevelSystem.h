@@ -22,6 +22,10 @@
 
 #include "system/MemoryManager.h"
 #include "system/SystemTypes.h"
+
+#include <cassert>
+#include <cstdarg>
+#include <cstdio>
 #if defined(__clang__) || defined(__GNUC__)
 #define NORETURN __attribute((__noreturn__))
 #else
@@ -60,6 +64,40 @@ namespace hpl {
 	extern void Error(const char* fmt, ...);
 	extern void Warning(const char* fmt, ...);
 	extern void Log(const char* fmt, ...);
+
+	//--------------------------------------------------------
+
+	// A validation failure the caller cannot carry on from: the offending call
+	// cannot be completed, so continuing leaves the caller acting on state that
+	// was never established. In the renderer that means recording a draw or
+	// dispatch against whatever the previous pass left bound, which corrupts the
+	// GPU silently and surfaces later as an unrelated complaint -- exactly how
+	// an invalid NRD image view presented, as "nothing bound root parameter 0"
+	// pages away from the descriptor that actually caused it.
+	//
+	// Debug builds log and then assert, so the debugger stops at the failing
+	// call with the stack intact; release builds terminate through FatalError.
+	// Fatal either way, only the mechanism differs. The message is formatted
+	// first because assert cannot carry one.
+	//
+	// Deliberately NOT NORETURN: the debug arm does return if the assert is
+	// stepped over or compiled against a no-op handler, so call sites must still
+	// yield a value afterwards. That also keeps the code that follows reachable
+	// as far as the compiler is concerned, avoiding unreachable-code warnings.
+	static inline void ValidationFailed(const char* fmt, ...)
+	{
+		char message[1024];
+		va_list args;
+		va_start(args, fmt);
+		vsnprintf(message, sizeof(message), fmt, args);
+		va_end(args);
+#if !defined(NDEBUG)
+		Error("%s", message);
+		assert(false && "validation failure");
+#else
+		FatalError("%s", message);
+#endif
+	}
 
 	extern void SetUpdateLogFile(const tWString &asFile);
 	extern void ClearUpdateLogFile();

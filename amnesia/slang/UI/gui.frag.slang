@@ -34,17 +34,17 @@ static bool HasClipPlanes(int cfg) { return (cfg & (1 << 1)) != 0; }
 
 struct PSIn
 {
-    [vk::location(0)] float2 v_texcoord;
-    [vk::location(1)] float4 v_color;
+    [vk::location(0)] float2 v_texcoord : TEXCOORD0;
+    [vk::location(1)] float4 v_color : COLOR0;
     // Screen-space (pre-MVP) position so the clip-plane test below stays
     // in the same space as the planes the host writes into pass.clipPlane
     // (cGuiSet::Render uses screen-space planes).
-    [vk::location(2)] float4 v_position;
+    [vk::location(2)] float4 v_position : TEXCOORD1;
 };
 
 struct PSOut
 {
-    [vk::location(0)] float4 out_color;
+    [vk::location(0)] float4 out_color : SV_Target0;
 };
 
 [shader("fragment")]

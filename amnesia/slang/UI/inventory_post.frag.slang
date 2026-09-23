@@ -19,6 +19,8 @@
 // two-quad (sharp-under, darkened-over) GUI crossfade now that the effect runs
 // live in the viewport post-effect chain.
 
+#include "../HostDefinitions.h"
+
 [vk::binding(0, 0)]
 SamplerState inputSampler;
 
@@ -32,16 +34,16 @@ struct InvPostPC
 };
 
 [vk::push_constant]
-InvPostPC pc;
+InvPostPC gPushConstants HPL_PUSH_CONSTANT_REGISTER;
 
 struct PSIn
 {
-    [vk::location(0)] float2 v_uv;
+    [vk::location(0)] float2 v_uv : TEXCOORD0;
 };
 
 struct PSOut
 {
-    [vk::location(0)] float4 out_color;
+    [vk::location(0)] float4 out_color : SV_Target0;
 };
 
 [shader("fragment")]
@@ -60,6 +62,6 @@ PSOut psMain(PSIn pin)
     float3 desat = pow(mixed, float3(1.5f));
 
     PSOut o;
-    o.out_color = float4(lerp(color, desat, saturate(pc.strength)), 1.0f);
+    o.out_color = float4(lerp(color, desat, saturate(gPushConstants.strength)), 1.0f);
     return o;
 }

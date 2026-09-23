@@ -366,6 +366,10 @@ protected:
 	// handle so a mid-frame pane resize/destroy defers the GPU free until any
 	// per-frame keep-alive pins have cleared.
 	SharedResourceHandle<Image> mpPaneImage;
+	// COLOR_ATTACHMENT view of the pane texture — the TargetView delivery
+	// renders through it (D3D12 cannot build an RTV from the Image's
+	// SHADER_RESOURCE view). Recreated with the pane texture.
+	RISharedPointer<RITextureView> mPaneAttachmentView;
 	cVector2l mvPaneSize = cVector2l(0, 0);
 	/* mpRenderTarget removed with iTexture */
 	cVector2f mvUVStart;

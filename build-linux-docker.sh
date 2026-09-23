@@ -17,6 +17,7 @@
 # Options:
 #   release | debug     Build configuration (default: release)
 #   --clean             Remove build-premake/ before generating
+#   -with-test          Build and run the unit tests (disabled by default)
 #   --compile-commands  Run `premake5 export-compile-commands` and symlink its
 #                       output to compile_commands.json in the repo root (for
 #                       clangd/LSP tooling). Reads the project model directly,
@@ -82,12 +83,15 @@ MOUNT_ARGS=(
 # `premake5 gmake2`.
 CONFIG="release"
 CLEAN=0
+WITH_TEST=0
 COMPILE_COMMANDS=0
 EXTRA_ARGS=()
 while [[ $# -gt 0 ]]; do
     case "$1" in
         release|debug)       CONFIG="$1"; shift ;;
         --clean)             CLEAN=1; shift ;;
+        -with-test|--with-test)
+                             WITH_TEST=1; shift ;;
         --compile-commands)  COMPILE_COMMANDS=1; shift ;;
         --)            shift; EXTRA_ARGS=("$@"); break ;;
         --no-deploy|--game-dir)
@@ -110,6 +114,7 @@ fi
 ENV_ARGS+=(
     -e "PM_CONFIG=$CONFIG"
     -e "PM_CLEAN=$CLEAN"
+    -e "PM_WITH_TEST=$WITH_TEST"
     -e "PM_COMPILE_COMMANDS=$COMPILE_COMMANDS"
 )
 
@@ -125,8 +130,13 @@ exec "$RUNTIME" run --rm "${TTY_ARGS[@]}" "${USER_ARGS[@]}" \
         set -euo pipefail
         [[ "$PM_CLEAN" == 1 ]] && rm -rf build-premake
         JOBS="$(nproc 2>/dev/null || echo 4)"
+        TEST_OPTION="no"
+        [[ "$PM_WITH_TEST" == 1 ]] && TEST_OPTION="yes"
         echo "==> Generating gmake2 project files"
-        premake5 gmake2 "$@"
+        premake5 gmake2 \
+            "--with-tests=$TEST_OPTION" \
+            "--with-python-tests=$TEST_OPTION" \
+            "$@"
         if [[ "$PM_COMPILE_COMMANDS" == 1 ]]; then
             # Reads the already-resolved premake project model directly, so
             # it needs no compile step and every path it emits (`directory`
@@ -138,10 +148,12 @@ exec "$RUNTIME" run --rm "${TTY_ARGS[@]}" "${USER_ARGS[@]}" \
         fi
         echo "==> Building ($PM_CONFIG)"
         make -C build-premake config="$PM_CONFIG" -j"$JOBS"
-        # Premake postbuild only runs when the target relinks, so a Python-only
-        # edit would otherwise leave these tests untested. They need no game
-        # install, GPU, or display.
-        echo "==> Running python tests"
-        python3 scripts/run_python_tests.py
+        if [[ "$PM_WITH_TEST" == 1 ]]; then
+            # Premake postbuild only runs when the target relinks, so a Python-only
+            # edit would otherwise leave these tests untested. They need no game
+            # install, GPU, or display.
+            echo "==> Running python tests"
+            python3 scripts/run_python_tests.py
+        fi
         echo "==> Build complete: build-premake/amnesia/"
     ' premake-build "${EXTRA_ARGS[@]}"

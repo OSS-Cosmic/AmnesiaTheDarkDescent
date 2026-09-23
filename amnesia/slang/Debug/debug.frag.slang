@@ -16,12 +16,12 @@ ConstantBuffer<DebugPass> pass;
 
 struct PSIn
 {
-    [vk::location(0)] float4 v_color;
+    [vk::location(0)] float4 v_color : TEXCOORD0;
 };
 
 struct PSOut
 {
-    [vk::location(0)] float4 out_color;
+    [vk::location(0)] float4 out_color : SV_Target0;
 };
 
 [shader("fragment")]

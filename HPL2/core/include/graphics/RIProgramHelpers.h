@@ -9,26 +9,22 @@
 
 namespace hpl {
 
-// Load a single-stage Slang compute program. `name` is the .spv filename
-// resolved through the resource searcher; `entryPoint` is the SPIR-V
-// OpEntryPoint function name (slangc is invoked with
-// -fvk-use-entrypoint-name so Slang function names survive into the SPV).
-void LoadSlangCompute(RIDevice *device, RIProgram &prog,
-                      cResources *resources, const char *name,
-                      const char *entryPoint,
-                      std::span<const VkDescriptorSetLayout> externalLayouts = {});
+// Load a single-stage Slang compute program. `name` is the artifact name with
+// no extension; the active backend appends .spv or .dxil. `entryPoint` is the
+// Slang function name (slangc runs with -fvk-use-entrypoint-name, so it
+// survives into the SPIR-V as well as the DXIL).
+void LoadSlangCompute(RIDevice *device, RIProgram &prog, cResources *resources,
+                      const char *name, const char *entryPoint,
+                      std::span<const RIBindlessLayout> externalLayouts = {});
 
-// Load a Slang vert+frag program. When `vertName == fragName` a single
-// .spv blob is reused for both stages (the same idiom as the m_gbuffer
-// load). Pass distinct names when the stages are compiled to separate
-// .spv files (the common case for post-effects sharing one fullscreen
-// vert with many frags).
-void LoadSlangGraphics(RIDevice *device, RIProgram &prog,
-                       cResources *resources, const char *vertName,
-                       const char *fragName,
+// Load a Slang vert+frag program. `vertName == fragName` reuses one artifact
+// for both stages; distinct names pick up separately compiled artifacts, as
+// post-effects sharing one fullscreen vert with many frags do.
+void LoadSlangGraphics(RIDevice *device, RIProgram &prog, cResources *resources,
+                       const char *vertName, const char *fragName,
                        const char *vertEntryPoint = "vsMain",
                        const char *fragEntryPoint = "psMain",
-                       std::span<const VkDescriptorSetLayout> externalLayouts = {});
+                       std::span<const RIBindlessLayout> externalLayouts = {});
 
 } // namespace hpl
 

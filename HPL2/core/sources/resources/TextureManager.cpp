@@ -609,8 +609,15 @@ void cTextureManager::WriteImageDescriptor(Image *apImage) {
                                                      : kBindingTextures2D);
   binding.arrayElement = slot;
   binding.descriptor = tex->descriptor();
-  g.m_bindlessSet.writeDescriptors(&mpGraphics->device, {&binding, 1});
-  apImage->SetBindlessViewCookie(tex->view.cookie);
+  // Stamp the cookie only on success. It is the write-once guard read at the
+  // top of this function, so recording a failed write would make the null slot
+  // permanent for the image's lifetime.
+  if (g.m_bindlessSet.writeDescriptors(&mpGraphics->device, {&binding, 1}))
+    apImage->SetBindlessViewCookie(tex->view.cookie);
+  else
+    Warning("Bindless texture write failed for '%s' (binding %u slot %u); "
+            "the slot stays null\n",
+            apImage->GetName().c_str(), binding.binding, slot);
 
   // Animated: write the per-slot animation record so the shader can pick the
   // layer from gPerFrame.afT (gAnimTex[slot] = {frameCount, frameTime, mode}).
@@ -669,6 +676,39 @@ void cTextureManager::ReturnBindlessSlot(uint32_t slot, bool isCube,
                                          bool isArray) {
   if (slot == kInvalidTextureIndex)
     return;
+
+  // Release the descriptor before the index goes back in the pool. The D3D12
+  // writer refuses to overwrite a slot it still considers live, and liveness is
+  // tracked per slot by the set itself — so without this release the recycled
+  // index is handed to a new Image whose WriteImageDescriptor is then rejected,
+  // leaving it sampling the destroyed texture (wrong materials / garbage after
+  // a level unload). It also drops the reference the set retained, which would
+  // otherwise leak every bindless texture for the life of the process.
+  //
+  // This runs from the graphicsDefer drain (see ReleaseImageBindlessSlot), i.e.
+  // past the frames in flight, which is exactly when clearing the slot is safe.
+  // Null-guard the global set: this can also run during teardown.
+  if (mpGraphics->globalset != nullptr) {
+    RIBindlessDescriptorSet::WriteBinding release = {};
+    release.binding = isArray ? kBindingTextures2DArray
+                              : (isCube ? kBindingTexturesCube
+                                        : kBindingTextures2D);
+    release.arrayElement = slot;
+    // release.descriptor stays empty — that is what means "release this slot".
+    if (!mpGraphics->globalset->m_bindlessSet.writeDescriptors(
+            &mpGraphics->device, {&release, 1})) {
+      // Retiring one index out of the pool's capacity is strictly better than
+      // recycling a slot whose descriptor still resolves to the dead texture:
+      // the next occupant's write would be rejected by the per-slot liveness
+      // gate and it would sample the destroyed resource. writeDescriptors has
+      // already warned with the specific reason.
+      Warning("cTextureManager: bindless slot %u (binding %u) could not be "
+              "released; retiring the index\n",
+              slot, release.binding);
+      return;
+    }
+  }
+
   (isArray ? m_texture2DArrayPool
            : (isCube ? m_textureCubePool : m_texture2DPool))
       .returnId(slot);
@@ -686,9 +726,8 @@ void ReleaseImageBindlessSlot(Image *apImage) {
   const bool cube = apImage->IsBindlessCube();
   const bool arr = apImage->IsBindlessArray();
   apImage->SetBindlessSlot(kInvalidTextureIndex, cube, arr);
-  Interface<cGraphics>::Get()->graphicsDefer.push(std::function<void()>([slot, cube, arr]() {
-    // Look up the manager at drain time; null at engine shutdown, in which
-    // case leaking the index is harmless (the pool is being destroyed).
+  Interface<cGraphics>::Get()->graphicsDefer.push(std::function<void()>(
+      [slot, cube, arr, name = apImage->GetName()]() {
     if (cTextureManager *mgr = g_textureManager)
       mgr->ReturnBindlessSlot(slot, cube, arr);
   }));

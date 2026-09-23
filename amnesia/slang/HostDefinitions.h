@@ -146,6 +146,33 @@ typedef float float4x4[16];
 #endif
 
 // -----------------------------------------------------------------------------
+// Pinned DXIL register for the shared push-constant block. Same reasoning as
+// gPerFrame's b3 pin (PerFrame/resource.slang): a D3D12 root signature is shared
+// by every stage of a program, so a resource must land on the same register in
+// every stage's reflection -- but slangc numbers registers per compilation unit
+// and each entry point is compiled separately, so a vertex/fragment pair split
+// across two files disagrees whenever they declare different globals. That is
+// exactly how outline_alpha and glow_object broke: the vertex shader's `pass`
+// CBV took b0, pushing its gPushConstants to b1, while the fragment shader --
+// which declares no `pass` -- put gPushConstants at b0.
+//
+// A reserved space is used rather than a high b# in space0 because slangc only
+// reserves an explicit binding within the unit that declares it: a stage that
+// does NOT declare gPushConstants could still auto-assign that register to
+// something else. Nothing is ever auto-assigned outside space0, so space9 is
+// immune to that by construction.
+//
+// Vulkan is unaffected: vk::push_constant governs there, register() is
+// HLSL-only, and only the DXIL compile is given -DDXIL. The __SLANG_COMPILER__
+// guard keeps register() out of the C++ translation units that share this file.
+// -----------------------------------------------------------------------------
+#if defined(__SLANG_COMPILER__) && defined(DXIL)
+    #define HPL_PUSH_CONSTANT_REGISTER : register(b0, space9)
+#else
+    #define HPL_PUSH_CONSTANT_REGISTER
+#endif
+
+// -----------------------------------------------------------------------------
 // Type discriminators. Every Material struct stores its discriminator in `type`
 // at offset 0; the IMaterial interface relies on it. (Lights carry no type
 // field — their type is implied by which SSBO the entry lives in; see

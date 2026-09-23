@@ -24,11 +24,11 @@ struct WaterVSIn
 
 struct WaterVSOut
 {
-    float3 posW                    : POSW;
-    float3 normalW                 : NORMAL;
-    float3 tangentW                : TANGENT;
-    float2 uv                      : TEXCRD;
-    nointerpolation uint objectId  : OBJECTID;
+    [vk::location(0)] float3 posW                    : TEXCOORD0;
+    [vk::location(1)] float3 normalW                 : TEXCOORD1;
+    [vk::location(2)] float3 tangentW                : TEXCOORD2;
+    [vk::location(3)] float2 uv                      : TEXCOORD3;
+    [vk::location(4)] nointerpolation uint objectId  : TEXCOORD4;
     float4 posH                    : SV_POSITION;
 };
 
@@ -37,7 +37,8 @@ WaterVSOut vsMain(WaterVSIn vin,
                   uint drawInst : SV_InstanceID,
                   uint baseInst : SV_StartInstanceLocation)
 {
-    uint instanceId = drawInst + baseInst;
+    uint instanceId = drawInst;
+    instanceId += baseInst;
     UniformObject obj = gSceneObjects[instanceId];
 
     float4x4 modelView    = mul(gPerFrame.viewMat, obj.modelMat);

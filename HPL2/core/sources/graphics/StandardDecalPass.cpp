@@ -28,16 +28,18 @@ bool cStandardDecalPass::LoadData() {
     return IsLoaded();
   if (!mpGraphics || !mpResources || !mpGraphics->globalset)
     return false;
-  auto bin = RIProgram::loadShaderStage(mpResources->GetFileSearcher(),
-                                        "Standard.decal.3d.spv");
-  if (bin.empty())
+  auto vertBin = RIProgram::loadShaderStage(mpResources->GetFileSearcher(),
+                                            "Standard.decal.3d", "vsMain");
+  auto fragBin = RIProgram::loadShaderStage(mpResources->GetFileSearcher(),
+                                            "Standard.decal.3d", "psMain");
+  if (vertBin.empty() || fragBin.empty())
     return false;
   m_program = std::make_shared<RIProgram>();
-  const VkDescriptorSetLayout external[] = {
-      mpGraphics->globalset->m_bindlessSet.vk.m_bindlessSetLayout};
+  const RIBindlessLayout external[] = {
+      mpGraphics->globalset->m_bindlessSet.layout()};
   std::array<RIProgram::ModuleStage, 2> stages = {
-      RIProgram::ModuleStage{RIProgram::PROGRAM_STAGE_VERTEX, bin, "vsMain"},
-      RIProgram::ModuleStage{RIProgram::PROGRAM_STAGE_FRAGMENT, bin, "psMain"}};
+      RIProgram::ModuleStage{RIProgram::PROGRAM_STAGE_VERTEX, vertBin, "vsMain"},
+      RIProgram::ModuleStage{RIProgram::PROGRAM_STAGE_FRAGMENT, fragBin, "psMain"}};
   m_program->initialize(&mpGraphics->device, stages, external,
                         "Standard.decal");
   m_loaded = true;
@@ -68,59 +70,12 @@ bool cStandardDecalPass::Render(cGraphics::FrameContext *, RICmd *cmd,
       world->GetDecalCount() == 0)
     return false;
 
-  struct Pipeline {
-    VkPipelineVertexInputStateCreateInfo vi{
-        VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO};
-    VkPipelineInputAssemblyStateCreateInfo ia{
-        VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO};
-    VkPipelineRasterizationStateCreateInfo rs{
-        VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO};
-    VkDynamicState dyn[2] = {VK_DYNAMIC_STATE_VIEWPORT,
-                             VK_DYNAMIC_STATE_SCISSOR};
-    VkPipelineDynamicStateCreateInfo ds{
-        VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO};
-    VkPipelineRenderingCreateInfo rendering{
-        VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO};
-    VkPipelineViewportStateCreateInfo vp{
-        VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO};
-    VkPipelineMultisampleStateCreateInfo ms{
-        VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO};
-    VkPipelineDepthStencilStateCreateInfo depth{
-        VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO};
-    VkPipelineColorBlendAttachmentState blend{};
-    VkPipelineColorBlendStateCreateInfo cb{
-        VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO};
-    VkGraphicsPipelineCreateInfo create{
-        VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO};
-    VkFormat format = RIFormatToVK(cGraphics::PogoColorFormat);
-    hash_t hash = hash_u32(HASH_INITIAL_VALUE, cGraphics::PogoColorFormat);
-    Pipeline() {
-      ia.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
-      rs.cullMode = VK_CULL_MODE_NONE;
-      rs.polygonMode = VK_POLYGON_MODE_FILL;
-      rs.frontFace = VK_FRONT_FACE_CLOCKWISE;
-      rs.lineWidth = 1.0f;
-      ds.dynamicStateCount = 2;
-      ds.pDynamicStates = dyn;
-      rendering.colorAttachmentCount = 1;
-      rendering.pColorAttachmentFormats = &format;
-      vp.viewportCount = 1;
-      vp.scissorCount = 1;
-      ms.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
-      blend.colorWriteMask = 0xf;
-      cb.attachmentCount = 1;
-      cb.pAttachments = &blend;
-      create.pNext = &rendering;
-      create.pVertexInputState = &vi;
-      create.pInputAssemblyState = &ia;
-      create.pRasterizationState = &rs;
-      create.pDynamicState = &ds;
-      create.pViewportState = &vp;
-      create.pMultisampleState = &ms;
-      create.pDepthStencilState = &depth;
-      create.pColorBlendState = &cb;
-    }
-  } pd;
+  // Fullscreen decal composite: no vertex input, no depth, one opaque colour
+  // target. Everything else is the RI desc's default.
+  RIGraphicsPipelineDesc pipelineDesc = {};
+  pipelineDesc.blendCount = 1;
+  pipelineDesc.renderTarget.colorCount = 1;
+  pipelineDesc.renderTarget.colorFormats[0] = cGraphics::PogoColorFormat;
 
   RIRenderingAttachment attachment = {};
   attachment.view = *output;
@@ -132,8 +87,8 @@ bool cStandardDecalPass::Render(cGraphics::FrameContext *, RICmd *cmd,
   begin.colorCount = 1;
   begin.colors = &attachment;
   cmd->vk_d3d12_beginRendering(&mpGraphics->device, begin);
-  m_program->bindPipeline(&mpGraphics->device, cmd, pd.hash, "Standard.decal",
-                          &pd.create);
+  m_program->bindPipeline(&mpGraphics->device, cmd, HASH_INITIAL_VALUE,
+                          "Standard.decal", pipelineDesc);
   m_program->bindBindlessDescriptorSet(
       cmd, &mpGraphics->globalset->m_bindlessSet, 0);
 

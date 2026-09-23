@@ -283,6 +283,10 @@ public:
 	tWString msDefaultInitConfigFile;
 	tWString msInitConfigFile;
 
+	// From --d3d12 / --vulkan on the command line; Auto takes the platform
+	// default (D3D12 on Windows, Vulkan elsewhere).
+	eRenderApiPreference mRenderApi;
+
 	tWString msDefaultMainConfigPath;
 	tWString msDefaultUserConfigPath;
 	tWString msDefaultUserKeyConfigPath;

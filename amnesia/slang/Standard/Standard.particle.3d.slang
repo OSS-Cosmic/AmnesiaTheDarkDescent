@@ -2,7 +2,10 @@
 // shares the particle material, blend, fog, and light-level contracts with
 // Particle/Particle.frag.slang, but has no water or ray-tracing binding.
 
+#include "../HostDefinitions.h"
+
 import bindless;
+import GeometryStream;
 import SceneTypes;
 import PerFrame.resource;
 import MaterialRaster;
@@ -31,7 +34,7 @@ struct StandardParticlePushConstants
 };
 
 [vk::push_constant]
-StandardParticlePushConstants pc;
+StandardParticlePushConstants gPushConstants HPL_PUSH_CONSTANT_REGISTER;
 
 // Standard/Vulkan projections use a [0, 1] device-depth range: zero is the
 // near plane and one is the far plane. Perspective depth needs the usual
@@ -61,13 +64,13 @@ StandardParticleVertex vsMain(uint vertexId : SV_VertexID,
     uint instanceId = drawInst + baseInst;
     UniformObject object = gSceneObjects[instanceId];
     uint index = object.indexHandle != 0ull
-        ? ((uint*)object.indexHandle)[vertexId] : vertexId;
+        ? geometryLoad(object.indexHandle, vertexId * 4u) : vertexId;
     float3 position = object.posHandle != 0ull
-        ? ((float4*)object.posHandle)[index].xyz : float3(0.0f);
+        ? asfloat(geometryLoad4(object.posHandle, index * 16u)).xyz : float3(0.0f);
     float2 uv = object.uv0Handle != 0ull
-        ? ((float3*)object.uv0Handle)[index].xy : float2(0.0f);
+        ? asfloat(geometryLoad3(object.uv0Handle, index * 12u)).xy : float2(0.0f);
     float4 color = object.colorHandle != 0ull
-        ? ((float4*)object.colorHandle)[index] : float4(1.0f);
+        ? asfloat(geometryLoad4(object.colorHandle, index * 16u)) : float4(1.0f);
 
     float4 viewPosition = mul(gPerFrame.viewMat,
                               mul(object.modelMat, float4(position, 1.0f)));
@@ -86,7 +89,7 @@ float4 psMain(StandardParticleVertex input) : SV_TARGET
     TranslucentMaterial material =
         loadTranslucentMaterial(gSceneObjects[input.objectId].materialID);
     uint diffuseTexture = material.tex[0];
-    bool smoothHalo = pc.blendMode == kBlendModeAdd &&
+    bool smoothHalo = gPushConstants.blendMode == kBlendModeAdd &&
         (material.materialConfig & kMaterialFlagSmoothHalo) != 0u;
 
     float4 textureSample = float4(0.0f, 0.0f, 0.0f, 1.0f);
@@ -94,7 +97,7 @@ float4 psMain(StandardParticleVertex input) : SV_TARGET
         textureSample = sampleBindless2D(diffuseTexture, input.uv);
     float4 source = smoothHalo
         ? smoothHaloLinearSample(input.uv, input.color)
-        : translucentLinearSample(textureSample, input.color, pc.blendMode,
+        : translucentLinearSample(textureSample, input.color, gPushConstants.blendMode,
             (material.materialConfig & kMaterialFlagDiffuseIsMask) != 0u);
 
     float3 worldPosition = mul(gPerFrame.invViewMat,
@@ -109,7 +112,7 @@ float4 psMain(StandardParticleVertex input) : SV_TARGET
     // entirely, as the legacy renderer did; only depth-tested sprites soften
     // where they meet geometry.
     float softFade = 1.0f;
-    if (pc.depthTest != 0u)
+    if (gPushConstants.depthTest != 0u)
     {
         float sceneDepth = standardSceneDepth.Load(
             int3(int2(input.positionH.xy), 0)).r;
@@ -118,31 +121,26 @@ float4 psMain(StandardParticleVertex input) : SV_TARGET
         softFade = standardParticleSoftIntersection(sceneLinearDepth,
                                                     particleLinearDepth);
     }
-    float opacity = pc.sceneAlpha * fog.visibility * softFade *
+    float opacity = gPushConstants.sceneAlpha * fog.visibility * softFade *
                     saturate(material.particleOpacityScale);
 
     float lightLevel = 1.0f;
     if ((material.materialConfig & kMaterialFlagAffectedByLightLevel) != 0u)
-        lightLevel = saturate(pc.lightLevel);
+        lightLevel = saturate(gPushConstants.lightLevel);
     lightLevel *= max(material.particleBrightnessScale, 0.0f);
 
-    float4 modulated = applyBlendModulation(pc.blendMode, source, opacity,
+    float4 modulated = applyBlendModulation(gPushConstants.blendMode, source, opacity,
                                             lightLevel);
 
-    // The legacy alpha test (translucency_particle.frag: `finalColor.a < 0.01
-    // -> discard`). Tested here because neither encodeStandardBlendSource nor
-    // encodeBlendOutputLinear touches .a, so this sees the same value the
-    // original did. It is NOT redundant with the blend state:
-    // applyBlendModulation never folds texture alpha into RGB for
-    // Add/Mul/MulX2, so for those modes the discard is the only thing that
-    // honours a cutout stored in alpha. Drop it and a texture whose shape
-    // lives in alpha (ps_glass_piece on Add, ps_glass_shards on MulX2) emits
-    // its transparent-region RGB across the whole quad and reads as a solid
-    // square. The soft-depth and lifetime fades ride in `opacity`, not in .a,
-    // so no sprite gains a contour here.
-    if (modulated.a < kParticleAlphaDiscard)
+    // Alpha and premultiplied-alpha blending already fade coverage to zero.
+    // Cutting them off at 0.01 creates a visible contour over dark backgrounds
+    // after linear HDR blending and display encoding. Keep the legacy cutout
+    // only for modes whose RGB blending does not consume texture alpha.
+    if (gPushConstants.blendMode != kBlendModeAlpha &&
+        gPushConstants.blendMode != kBlendModePremulAlpha &&
+        modulated.a < kParticleAlphaDiscard)
         discard;
 
-    return encodeBlendOutputLinear(pc.blendMode,
-        encodeStandardBlendSource(pc.blendMode, modulated));
+    return encodeBlendOutputLinear(gPushConstants.blendMode,
+        encodeStandardBlendSource(gPushConstants.blendMode, modulated));
 }

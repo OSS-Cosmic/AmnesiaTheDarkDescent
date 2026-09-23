@@ -8,25 +8,34 @@ $ErrorActionPreference = 'Stop'
 
 function Show-Usage {
     Write-Host @'
-Usage: .\build-windows.ps1 [release|debug] [options] [-- <extra premake args>]
+Usage: .\build-windows.ps1 [release|debug] [options] [--<premake-opt>=<value> ...]
 
 Options:
     -Clean              Remove build-premake\ before generating
+    -WithTest           Build and run the unit tests (disabled by default)
+    -CompileCommands    Export compile_commands.json for clangd and copy the
+                        selected configuration's database to the repo root
     -GameDir <path>     Path to your Amnesia: The Dark Descent install
                         (default: ATDD_DIR or AMNESIA_GAME_DIRECTORY)
     -Help               Show this help
 
+Any additional --foo / --foo=bar arguments are forwarded to premake5.
+
 Examples:
     .\build-windows.ps1
     .\build-windows.ps1 debug
+    .\build-windows.ps1 debug -WithTest
     .\build-windows.ps1 release -Clean
+    .\build-windows.ps1 release -CompileCommands
     .\build-windows.ps1 release -GameDir "C:\Games\Amnesia The Dark Descent"
-    .\build-windows.ps1 release -- --with-tools=no
+    .\build-windows.ps1 release --with-tools=no
 '@
 }
 
 $config = 'release'
 $clean = $false
+$withTest = $false
+$compileCommands = $false
 $gameDir = $null
 $extraArgs = @()
 
@@ -46,6 +55,12 @@ while ($i -lt $scriptArgs.Count) {
     } elseif ($arg -ieq '-Clean' -or $arg -ieq '--clean') {
         $clean = $true
         $i++
+    } elseif ($arg -ieq '-WithTest' -or $arg -ieq '-with-test' -or $arg -ieq '--with-test') {
+        $withTest = $true
+        $i++
+    } elseif ($arg -ieq '-CompileCommands' -or $arg -ieq '--compile-commands') {
+        $compileCommands = $true
+        $i++
     } elseif ($arg -ieq '-NoDeploy' -or $arg -ieq '--no-deploy') {
         Write-Host "==> -NoDeploy is obsolete: builds no longer stage assets"
         $i++
@@ -61,6 +76,12 @@ while ($i -lt $scriptArgs.Count) {
     } elseif ($arg -ieq '-Help' -or $arg -ieq '--help' -or $arg -ieq '-h' -or $arg -ieq '/?') {
         Show-Usage
         exit 0
+    } elseif ($arg.StartsWith('--')) {
+        # Pass through unknown --foo / --foo=bar to premake. PowerShell strips a
+        # bare '--' before it reaches this script, so any extra premake args must
+        # be recognised individually rather than after a terminator.
+        $extraArgs += $arg
+        $i++
     } else {
         Show-Usage
         throw "Unknown argument: $arg"
@@ -162,7 +183,12 @@ if (-not $premake) {
 
 Write-Host "==> Using Premake $premakeVersion from $premake"
 
-$premakeArgs = @('vs2026')
+$testOption = if ($withTest) { 'yes' } else { 'no' }
+$premakeArgs = @(
+    'vs2026',
+    "--with-tests=$testOption",
+    "--with-python-tests=$testOption"
+)
 if ($extraArgs) {
     $premakeArgs += $extraArgs
 }
@@ -170,6 +196,33 @@ if ($extraArgs) {
 Write-Host "==> Generating Visual Studio 2026 solution"
 & $premake @premakeArgs
 if ($LASTEXITCODE -ne 0) { throw "premake5 vs2026 failed" }
+
+if ($compileCommands) {
+    # Reads the already-resolved premake project model directly, so it needs no
+    # compile step and every path it emits (`directory` and each `-I`) is
+    # absolute. The premake options are the ones used for the generate above so
+    # the database's defines and include dirs match what MSBuild will build.
+    Write-Host "==> Exporting compile_commands.json ($config)"
+    $exportArgs = @('export-compile-commands')
+    if ($premakeArgs.Count -gt 1) {
+        $exportArgs += $premakeArgs[1..($premakeArgs.Count - 1)]
+    }
+    & $premake @exportArgs
+    if ($LASTEXITCODE -ne 0) { throw "premake5 export-compile-commands failed" }
+
+    $exportDir = Join-Path $buildDir 'compile_commands'
+    $db = Join-Path $exportDir "$config.json"
+    if (-not (Test-Path -LiteralPath $db -PathType Leaf)) {
+        $found = @(Get-ChildItem -LiteralPath $exportDir -Filter '*.json' -ErrorAction SilentlyContinue |
+            ForEach-Object { $_.Name })
+        throw "Expected $db; export produced: $(if ($found) { $found -join ', ' } else { '(nothing)' })"
+    }
+
+    # Windows has no privilege-free equivalent of `ln -sf`, so the repo-root
+    # database is a copy: re-run with -CompileCommands after changing the build.
+    Copy-Item -LiteralPath $db -Destination (Join-Path $root 'compile_commands.json') -Force
+    Write-Host "==> Wrote compile_commands.json (copied from $db)"
+}
 
 $solutionCandidates = @(
     (Join-Path $buildDir 'Amnesia.slnx'),
@@ -184,7 +237,7 @@ $msbuild = (Get-Command msbuild -ErrorAction SilentlyContinue).Source
 if (-not $msbuild) {
     $vswhere = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio\Installer\vswhere.exe'
     if (-not (Test-Path -LiteralPath $vswhere)) {
-        throw "msbuild not on PATH and vswhere not found at $vswhere. Install VS 2026 or VS Build Tools."
+        throw "msbuild not on PATH and vswhere not found at $vswhere. Install VS 2022 or VS Build Tools."
     }
 
     $msbuild = & $vswhere -latest -products * -requires Microsoft.Component.MSBuild `
@@ -193,7 +246,7 @@ if (-not $msbuild) {
 }
 
 Write-Host "==> Building $cfgName with $msbuild"
-& $msbuild $sln "/p:Configuration=$cfgName" '/p:Platform=x64' '/m' '/v:m'
+& $msbuild $sln "/p:Configuration=$cfgName" '/p:Platform=x64' '/m:4' '/v:m'
 if ($LASTEXITCODE -ne 0) { throw "msbuild failed" }
 
 Write-Host "==> Build complete: build-premake\amnesia\$cfgName\"

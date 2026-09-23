@@ -43,13 +43,13 @@ struct ParticleExpandPC
 };
 
 [vk::push_constant]
-ParticleExpandPC pc;
+ParticleExpandPC gPushConstants HPL_PUSH_CONSTANT_REGISTER;
 
 // iParticleEmitter::BuildViewportVertices' fade prologue (ParticleEmitter.cpp:337).
 // Distances are compared squared, exactly as the host does.
 float particleFadeAlpha(GpuEmitterInstance inst)
 {
-    float3 camera = float3(pc.cameraOriginX, pc.cameraOriginY, pc.cameraOriginZ);
+    float3 camera = float3(gPushConstants.cameraOriginX, gPushConstants.cameraOriginY, gPushConstants.cameraOriginZ);
     float3 delta  = inst.worldPos - camera;
     float  distSq = dot(delta, delta);
     float  alpha  = 1.0f;
@@ -140,7 +140,7 @@ void writeQuad(uint vertexBase, uint quadIndex, uint vertexCapacity,
 [numthreads(64, 1, 1)]
 void csMain(uint3 gid : SV_GroupID, uint3 gtid : SV_GroupThreadID)
 {
-    if (gid.x >= pc.groupCount)
+    if (gid.x >= gPushConstants.groupCount)
         return;
 
     uint2 group       = gParticleGroups[gid.x];
@@ -193,7 +193,7 @@ void csMain(uint3 gid : SV_GroupID, uint3 gtid : SV_GroupThreadID)
     float3 worldPos     = localSpace ? mul(inst.worldMat, float4(part.pos, 1.0f)).xyz     : part.pos;
     float3 worldLastPos = localSpace ? mul(inst.worldMat, float4(part.lastPos, 1.0f)).xyz : part.lastPos;
 
-    float flipY = (pc.invertCull != 0u) ? -1.0f : 1.0f;
+    float flipY = (gPushConstants.invertCull != 0u) ? -1.0f : 1.0f;
 
     particleSubDivUV(p, particleSubDiv(part), uv);
 

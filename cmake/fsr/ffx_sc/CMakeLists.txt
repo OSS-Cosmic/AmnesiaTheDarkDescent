@@ -12,6 +12,33 @@ set(_FFX_SC_SDK_TOOL_ROOT "${FSR_SDK_ROOT}/sdk/tools/ffx_shader_compiler")
 set(_FFX_SC_SDK_SRC_ROOT "${_FFX_SC_SDK_TOOL_ROOT}/src")
 set(_FFX_SC_SDK_LIB_ROOT "${_FFX_SC_SDK_TOOL_ROOT}/libs")
 
+# The D3D12 permutations are HLSL compiled to DXIL by DXC, so the tool's HLSL
+# half has to be built as well. It is Windows-only: it needs the Windows SDK's
+# COM headers and dxcapi.h, and it is only ever used to produce DXIL.
+#
+# The SDK vendors its own DXC under sdk/tools/ffx_shader_compiler/libs/dxc --
+# headers, dxcompiler.dll, dxil.dll and an import library -- so enabling this
+# adds no toolchain dependency beyond the already pinned SDK archive.
+set(FSR_ENABLE_HLSL_DEFAULT OFF)
+if(WIN32)
+    set(FSR_ENABLE_HLSL_DEFAULT ON)
+endif()
+set(FSR_ENABLE_HLSL "${FSR_ENABLE_HLSL_DEFAULT}" CACHE BOOL
+    "Build the HLSL/DXC half of FidelityFX_SC (required for the D3D12 backend)")
+
+set(_FFX_SC_DXC_ROOT "${_FFX_SC_SDK_TOOL_ROOT}/libs/dxc")
+if(FSR_ENABLE_HLSL)
+    foreach(_required_dxc_path
+            "${_FFX_SC_DXC_ROOT}/inc/dxcapi.h"
+            "${_FFX_SC_DXC_ROOT}/inc/d3d12shader.h"
+            "${_FFX_SC_DXC_ROOT}/bin/x64/dxcompiler.dll")
+        if(NOT EXISTS "${_required_dxc_path}")
+            message(FATAL_ERROR
+                "FSR_ENABLE_HLSL is ON but the SDK's vendored DXC is incomplete: ${_required_dxc_path}")
+        endif()
+    endforeach()
+endif()
+
 foreach(_required_path
         "${FSR_SDK_ROOT}/sdk"
         "${_FFX_SC_SDK_SRC_ROOT}/ffx_sc.cpp"
@@ -48,15 +75,26 @@ function(ffx_sc_copy_writable source destination)
         PERMISSIONS OWNER_READ OWNER_WRITE GROUP_READ WORLD_READ)
 endfunction()
 
-foreach(_source_file
-        ffx_sc.cpp
-        glsl_compiler.cpp
-        glsl_compiler.h
-        compiler.h
-        utils.cpp
-        utils.h
-        pch.cpp
-        pch.hpp)
+set(_FFX_SC_SRC_FILES
+    ffx_sc.cpp
+    glsl_compiler.cpp
+    glsl_compiler.h
+    compiler.h
+    utils.cpp
+    utils.h
+    pch.cpp
+    pch.hpp)
+if(FSR_ENABLE_HLSL)
+    # DXBCChecksum belongs to the FXC path, which shares hlsl_compiler.cpp with
+    # DXC; it has to come along even though only DXC is used here.
+    list(APPEND _FFX_SC_SRC_FILES
+        hlsl_compiler.cpp
+        hlsl_compiler.h
+        DXBCChecksum.cpp
+        DXBCChecksum.h)
+endif()
+
+foreach(_source_file IN LISTS _FFX_SC_SRC_FILES)
     ffx_sc_copy_writable("${_FFX_SC_SDK_SRC_ROOT}/${_source_file}"
                          "${_FFX_SC_STAGE_DIR}/src/${_source_file}")
 endforeach()
@@ -89,15 +127,7 @@ file(MAKE_DIRECTORY "${_FFX_SC_STAGE_DIR}/libs/SPIRV-Reflect")
 file(MAKE_DIRECTORY "${_FFX_SC_STAGE_DIR}/libs/SPIRV-Reflect/include/spirv/unified1")
 file(MAKE_DIRECTORY "${_FFX_SC_STAGE_DIR}/libs/tiny-process-library")
 
-foreach(_source_file
-        ffx_sc.cpp
-        glsl_compiler.cpp
-        glsl_compiler.h
-        compiler.h
-        utils.cpp
-        utils.h
-        pch.cpp
-        pch.hpp)
+foreach(_source_file IN LISTS _FFX_SC_SRC_FILES)
     configure_file("${_FFX_SC_TEMP_STAGE_DIR}/src/${_source_file}"
                    "${_FFX_SC_STAGE_DIR}/src/${_source_file}" COPYONLY)
 endforeach()
@@ -128,15 +158,13 @@ else()
     set(_FFX_SC_PROCESS_PLATFORM_SOURCE "${_FFX_SC_STAGE_DIR}/libs/tiny-process-library/process_unix.cpp")
 endif()
 
+set(_FFX_SC_STAGED_SRC_FILES)
+foreach(_source_file IN LISTS _FFX_SC_SRC_FILES)
+    list(APPEND _FFX_SC_STAGED_SRC_FILES "${_FFX_SC_STAGE_DIR}/src/${_source_file}")
+endforeach()
+
 add_executable(FidelityFX_SC
-    "${_FFX_SC_STAGE_DIR}/src/ffx_sc.cpp"
-    "${_FFX_SC_STAGE_DIR}/src/glsl_compiler.cpp"
-    "${_FFX_SC_STAGE_DIR}/src/glsl_compiler.h"
-    "${_FFX_SC_STAGE_DIR}/src/compiler.h"
-    "${_FFX_SC_STAGE_DIR}/src/utils.cpp"
-    "${_FFX_SC_STAGE_DIR}/src/utils.h"
-    "${_FFX_SC_STAGE_DIR}/src/pch.cpp"
-    "${_FFX_SC_STAGE_DIR}/src/pch.hpp"
+    ${_FFX_SC_STAGED_SRC_FILES}
     "${_FFX_SC_STAGE_DIR}/libs/MD5/md5.cpp"
     "${_FFX_SC_STAGE_DIR}/libs/MD5/md5.h"
     "${_FFX_SC_STAGE_DIR}/libs/MD5/md5_loc.h"
@@ -153,6 +181,18 @@ target_include_directories(FidelityFX_SC PRIVATE
     "${_FFX_SC_STAGE_DIR}/libs/MD5"
     "${_FFX_SC_STAGE_DIR}/libs/SPIRV-Reflect"
     "${_FFX_SC_STAGE_DIR}/libs/tiny-process-library")
+
+if(FSR_ENABLE_HLSL)
+    # FFX_SC_ENABLE_HLSL re-enables the HLSL branches that portable_glsl.cmake
+    # fences off. dxcompiler is loaded at run time through -dxcdll, so only the
+    # SDK's vendored headers are needed at build time.
+    target_compile_definitions(FidelityFX_SC PRIVATE FFX_SC_ENABLE_HLSL)
+    target_include_directories(FidelityFX_SC PRIVATE "${_FFX_SC_DXC_ROOT}/inc")
+    # hlsl_compiler.cpp carries the FXC path alongside DXC, and its reflection
+    # helper references IID_ID3D11ShaderReflection. Only this GUID is needed;
+    # both compilers are still loaded dynamically.
+    target_link_libraries(FidelityFX_SC PRIVATE dxguid)
+endif()
 
 if(MSVC)
     target_compile_options(FidelityFX_SC PRIVATE /W3)

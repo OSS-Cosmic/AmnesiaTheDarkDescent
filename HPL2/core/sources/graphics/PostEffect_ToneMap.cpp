@@ -26,6 +26,8 @@
 #include "graphics/RIProgramHelpers.h"
 #include "system/Hasher.h"
 
+#include "graphics/ToneMapBackendParams.h"
+
 namespace hpl {
 
 namespace {
@@ -34,6 +36,7 @@ struct ToneMapPushConstants {
     float shadowLift;
     float gamma;
     float shoulder;
+    float saturation;
 };
 } // namespace
 
@@ -41,8 +44,8 @@ cPostEffectType_ToneMap::cPostEffectType_ToneMap(cGraphics *apGraphics,
                                                  cResources *apResources)
     : iPostEffectType("ToneMap", apGraphics, apResources) {
     LoadSlangGraphics(&mpGraphics->device, m_program, apResources,
-                      "posteffect_fullscreen.vert.spv",
-                      "posteffect_tonemap.frag.spv");
+                      "posteffect_fullscreen.vert",
+                      "posteffect_tonemap.frag");
 }
 
 cPostEffectType_ToneMap::~cPostEffectType_ToneMap() {
@@ -68,44 +71,39 @@ cPostEffect_ToneMap::cPostEffect_ToneMap(cGraphics *apGraphics,
 cPostEffect_ToneMap::~cPostEffect_ToneMap() {}
 
 void cPostEffect_ToneMap::RenderEffect(const PostEffectRenderCtx &ctx) {
-    VkCommandBuffer cmd = ctx.cmd->vk.cmd;
-
-    // Single fullscreen pass: sample the (bloom-composited) HDR pogo input, ACES
-    // tonemap to linear [0,1], write the pogo output. The composite handles the
+    // Single fullscreen pass: sample the (bloom-composited) HDR pogo input,
+    // sRGB-encode it (with a display-space Reinhard shoulder and chroma scale on
+    // the ray-traced backend), write the pogo output. The composite handles the
     // pogo toggle / barriers around this call.
-    // The ctx exposes the output as a raw VkImageView; wrap it in the RI view
-    // type the attachment abstraction expects.
-    RITextureView outView = {};
-    outView.vk.image = ctx.outputView;
-
     RIRenderingAttachment color = {};
-    color.view    = outView;
+    color.view    = ctx.outputView;
     color.loadOp  = RI_ATTACHMENT_LOAD_OP_DONT_CARE;
     color.storeOp = RI_ATTACHMENT_STORE_OP_STORE;
 
     RIBeginRenderingDesc beginDesc = {};
-    beginDesc.renderArea.width  = (int16_t)ctx.width;
-    beginDesc.renderArea.height = (int16_t)ctx.height;
+    beginDesc.renderArea.width  = ctx.width;
+    beginDesc.renderArea.height = ctx.height;
     beginDesc.colorCount = 1;
     beginDesc.colors     = &color;
     ctx.cmd->vk_d3d12_beginRendering(&mpGraphics->device, beginDesc);
 
-    VkViewport viewport = {0.0f,
-                           0.0f,
-                           static_cast<float>(ctx.width),
-                           static_cast<float>(ctx.height),
-                           0.0f,
-                           1.0f};
-    vkCmdSetViewport(cmd, 0, 1, &viewport);
-    VkRect2D scissor = {{0, 0}, {ctx.width, ctx.height}};
-    vkCmdSetScissor(cmd, 0, 1, &scissor);
+    RIViewport viewport = {};
+    viewport.y = static_cast<float>(ctx.height);
+    viewport.width = static_cast<float>(ctx.width);
+    viewport.height = -static_cast<float>(ctx.height);
+    viewport.depthMax = 1.0f;
+    ctx.cmd->setViewport(&mpGraphics->device, viewport);
 
-    PostEffectPipelineState state{};
-    InitPostEffectPipelineState(state, cGraphics::PogoColorFormat, false);
+    RIRect scissor = {};
+    scissor.width = ctx.width;
+    scissor.height = ctx.height;
+    ctx.cmd->setScissor(&mpGraphics->device, scissor);
+
+    const RIGraphicsPipelineDesc pipelineDesc =
+        MakePostEffectPipelineDesc(cGraphics::PogoColorFormat, false);
     const hash_t kHash = hash_u32(HASH_INITIAL_VALUE, /*variant=*/0u);
     mpToneMapType->m_program.bindPipeline(&mpGraphics->device, ctx.cmd, kHash,
-                                          "PostEffect_ToneMap",
-                                          &state.createInfo);
+                                          "PostEffect_ToneMap", pipelineDesc);
 
     auto samplerDesc = mpGraphics->resolve_filter_descriptor(
         eTextureWrap_ClampToEdge, eTextureWrap_ClampToEdge,
@@ -123,17 +121,19 @@ void cPostEffect_ToneMap::RenderEffect(const PostEffectRenderCtx &ctx) {
     ToneMapPushConstants pc{};
     pc.exposure = mParams.mfExposure;
     pc.shadowLift = mParams.mfShadowLift;
-    // User display-gamma setting, applied in-shader as the final encode step
-    // (replaces the deprecated SDL window-brightness ramp). Authored by the
-    // game's cLuxConfigHandler and pushed in via the tonemap params.
-    pc.gamma = mParams.mfGamma;
-    // The Standard backend reproduces the base game's 8-bit buffer, which
-    // clipped highlights at white; the ray-traced backend rolls them off.
-    pc.shoulder = mpGraphics->GetRendererBackend() == eRendererBackend_Standard ? 0.0f : 1.0f;
-    vkCmdPushConstants(cmd, mpToneMapType->m_program.getPipelineLayout(),
-                       VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(pc), &pc);
+    // Everything that depends on which backend drew the frame. Standard is the
+    // identity case on all three fields; the ray-traced path takes a gamma
+    // bias, a highlight shoulder and a chroma pull-down. See
+    // ToneMapBackendParams.cpp for why each one is there.
+    const cToneMapBackendParams backend =
+        ResolveToneMapBackendParams(mpGraphics->GetRendererBackend(), mParams.mfGamma);
+    pc.gamma      = backend.mfGamma;
+    pc.shoulder   = backend.mfShoulder;
+    pc.saturation = backend.mfSaturation;
+    ctx.cmd->vk_d3d12_setPushConstants(
+        &mpGraphics->device, mpToneMapType->m_program, 0, sizeof(pc), &pc);
 
-    vkCmdDraw(cmd, 3, 1, 0, 0);
+    ctx.cmd->draw(&mpGraphics->device, 3, 1, 0, 0);
     ctx.cmd->vk_d3d12_endRendering(&mpGraphics->device);
 }
 

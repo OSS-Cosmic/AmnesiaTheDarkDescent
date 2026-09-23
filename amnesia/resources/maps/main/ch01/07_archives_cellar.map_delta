@@ -2,12 +2,6 @@
     <Modify Category="Decals" ID="6034" Name="chalk_hieroglyphs_1">
         <SetAttr Material="textures/ptest/decals/chalk_hieroglyphs.mat" />
     </Modify>
-    <Modify Category="Entities" ID="5202" Name="BoxLight_3">
-        <SetAttr RendererMask="1" />
-    </Modify>
-    <Modify Category="Entities" ID="5203" Name="BoxLight_4">
-        <SetAttr RendererMask="1" />
-    </Modify>
     <Modify Category="Entities" ID="3076" Name="PointLight_3">
         <SetAttr Re_Intensity="10" Re_Radius="5.51366" Re_SourceRadius="0.5" Re_FlickerOffIntensity="0" Re_CastShadows="true" />
     </Modify>

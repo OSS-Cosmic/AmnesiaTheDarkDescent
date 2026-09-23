@@ -15,15 +15,17 @@ bool cStandardShadowPass::LoadData() {
     return true;
   if (!mpGraphics || !mpResources || !mpGraphics->globalset)
     return false;
-  auto bin = RIProgram::loadShaderStage(mpResources->GetFileSearcher(),
-                                        "Standard.shadow.3d.spv");
-  if (bin.empty())
+  auto vertBin = RIProgram::loadShaderStage(mpResources->GetFileSearcher(),
+                                            "Standard.shadow.3d", "vsMain");
+  auto fragBin = RIProgram::loadShaderStage(mpResources->GetFileSearcher(),
+                                            "Standard.shadow.3d", "psMain");
+  if (vertBin.empty() || fragBin.empty())
     return false;
-  const VkDescriptorSetLayout external[] = {
-      mpGraphics->globalset->m_bindlessSet.vk.m_bindlessSetLayout};
+  const RIBindlessLayout external[] = {
+      mpGraphics->globalset->m_bindlessSet.layout()};
   std::array<RIProgram::ModuleStage, 2> stages = {
-      RIProgram::ModuleStage{RIProgram::PROGRAM_STAGE_VERTEX, bin, "vsMain"},
-      RIProgram::ModuleStage{RIProgram::PROGRAM_STAGE_FRAGMENT, bin, "psMain"}};
+      RIProgram::ModuleStage{RIProgram::PROGRAM_STAGE_VERTEX, vertBin, "vsMain"},
+      RIProgram::ModuleStage{RIProgram::PROGRAM_STAGE_FRAGMENT, fragBin, "psMain"}};
   m_program = std::make_shared<RIProgram>();
   m_program->initialize(&mpGraphics->device, stages, external,
                         "Standard.shadow");
@@ -42,58 +44,27 @@ void cStandardShadowPass::DestroyData() {
 }
 
 namespace {
-struct ShadowPipelineDesc {
-  VkPipelineVertexInputStateCreateInfo vi{
-      VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO};
-  VkPipelineInputAssemblyStateCreateInfo ia{
-      VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO};
-  VkPipelineRasterizationStateCreateInfo rs{
-      VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO};
-  VkDynamicState dyn[2] = {VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR};
-  VkPipelineDynamicStateCreateInfo ds{
-      VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO};
-  VkPipelineViewportStateCreateInfo vp{
-      VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO};
-  VkPipelineMultisampleStateCreateInfo ms{
-      VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO};
-  VkPipelineDepthStencilStateCreateInfo depth{
-      VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO};
-  VkPipelineRenderingCreateInfo rendering{
-      VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO};
-  VkGraphicsPipelineCreateInfo create{
-      VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO};
-  hash_t hash = 0;
-  explicit ShadowPipelineDesc(float slopeScaleBias) {
-    ia.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
-    rs.polygonMode = VK_POLYGON_MODE_FILL;
-    rs.cullMode = VK_CULL_MODE_BACK_BIT;
-    rs.frontFace = VK_FRONT_FACE_CLOCKWISE;
-    rs.lineWidth = 1.0f;
-    rs.depthBiasEnable = slopeScaleBias != 0.0f ? VK_TRUE : VK_FALSE;
-    rs.depthBiasSlopeFactor = slopeScaleBias;
-    ds.dynamicStateCount = 2;
-    ds.pDynamicStates = dyn;
-    vp.viewportCount = 1;
-    vp.scissorCount = 1;
-    ms.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
-    depth.depthTestEnable = VK_TRUE;
-    depth.depthWriteEnable = VK_TRUE;
-    depth.depthCompareOp = VK_COMPARE_OP_LESS_OR_EQUAL;
-    rendering.depthAttachmentFormat =
-        RIFormatToVK(cStandardShadowPass::kAtlasFormat);
-    create.pNext = &rendering;
-    create.pVertexInputState = &vi;
-    create.pInputAssemblyState = &ia;
-    create.pRasterizationState = &rs;
-    create.pDynamicState = &ds;
-    create.pViewportState = &vp;
-    create.pMultisampleState = &ms;
-    create.pDepthStencilState = &depth;
-    hash = hash_f32(
-        hash_u32(HASH_INITIAL_VALUE, cStandardShadowPass::kAtlasFormat),
-        slopeScaleBias);
-  }
-};
+// Depth-only shadow render: the VS pulls vertex data through the bindless set,
+// so there is no vertex input, and nothing is written to colour -- colorCount
+// and blendCount both stay 0 (the desc asserts they agree).
+RIGraphicsPipelineDesc MakeShadowPipelineDesc(float slopeScaleBias) {
+  RIGraphicsPipelineDesc desc = {};
+  desc.topology = RI_TOPOLOGY_TRIANGLE_LIST;
+  desc.raster.polygonMode = RI_POLYGON_MODE_FILL;
+  desc.raster.cullMode = RI_CULL_MODE_BACK;
+  desc.raster.frontFace = RI_FRONT_FACE_CLOCKWISE;
+  desc.raster.lineWidth = 1.0f;
+  // Static depth bias, slope-scaled only (no constant term).
+  desc.raster.depthBiasEnable = slopeScaleBias != 0.0f;
+  desc.raster.depthBiasSlope = slopeScaleBias;
+  desc.depthStencil.depthTest = true;
+  desc.depthStencil.depthWrite = true;
+  desc.depthStencil.depthCompare = RI_COMPARE_LESS_EQUAL;
+  desc.renderTarget.colorCount = 0;
+  desc.blendCount = 0;
+  desc.renderTarget.depthFormat = cStandardShadowPass::kAtlasFormat;
+  return desc;
+}
 
 bool ValidTile(const cStandardShadowPass::Tile &tile, uint32_t atlasSize,
                RIBuffer *indirect) {
@@ -157,9 +128,13 @@ bool cStandardShadowPass::RenderAtlas(
   float boundSlope = 0.0f;
   for (const Tile &tile : tiles) {
     if (!pipelineBound || tile.slopeScaleBias != boundSlope) {
-      ShadowPipelineDesc pd(tile.slopeScaleBias);
-      m_program->bindPipeline(&mpGraphics->device, cmd, pd.hash,
-                              "Standard.shadow", &pd.create);
+      // slopeScaleBias and the atlas format are both hashed structurally
+      // (hash_f32 on depthBiasSlope / the depth format), so the variant hash
+      // no longer has to fold them in.
+      const RIGraphicsPipelineDesc pd =
+          MakeShadowPipelineDesc(tile.slopeScaleBias);
+      m_program->bindPipeline(&mpGraphics->device, cmd, HASH_INITIAL_VALUE,
+                              "Standard.shadow", pd);
       m_program->bindBindlessDescriptorSet(
           cmd, &mpGraphics->globalset->m_bindlessSet, 0);
       // Set 1: gPerFrame, read by the material alpha test's animated-texture lookup.

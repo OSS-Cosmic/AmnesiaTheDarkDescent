@@ -2,6 +2,7 @@
 
 #include "graphics/Graphics.h"
 #include "graphics/RIProgram.h"
+#include "graphics/RIQuery.h"
 #include "graphics/RITexture.h"
 #include "graphics/RITextureView.h"
 
@@ -21,13 +22,19 @@ class iRenderable;
 
 // Per-viewport billboard halo occlusion queries (legacy RendererDeferred
 // m_query). Each in-flight frame owns one occlusion pool; its counts are read
-// back once the graphics timeline has passed the frame that recorded them.
+// back once the graphics timeline has passed the frame that recorded them. On
+// D3D12 the pool also owns the readback buffer its results are resolved into --
+// see RIQueryPool. The 1:1 slot-to-pool mapping is load-bearing: RIQueryPool
+// tracks resolve coverage per pool, so two slots must never share one.
 struct StandardHaloQueryState {
   // Two queries per halo, the 4094 queries legacy MaxOcclusionDescSize allowed.
   static constexpr uint32_t kMaxHalos = 2047;
   struct Slot {
-    VkQueryPool pool = VK_NULL_HANDLE;
+    RIQueryPool pool;
     uint64_t timelineValue = 0;
+    // The frame that recorded these queries, for the staleness check in
+    // ResolveStandardHaloQueries.
+    uint64_t recordedFrame = UINT64_MAX;
     bool resolved = true;
     // Plain (non-precise) queries only report whether any sample passed.
     bool precise = true;
@@ -49,13 +56,23 @@ struct StandardHaloQueryState {
 // fraction of the source box, plain queries only visible (1) or hidden (0).
 float StandardHaloVisibility(uint64_t visible, uint64_t maximum, bool precise);
 
-// Reads `count` 64-bit sample counts from a pool; VK_SUCCESS when all are ready.
+// Reads `count` 64-bit sample counts from a pool; false when they are not ready
+// yet, which leaves the slot pending for a later Draw.
 using StandardHaloQueryReader =
-    std::function<VkResult(VkQueryPool pool, uint32_t count, uint64_t *counts)>;
+    std::function<bool(RIQueryPool *pool, uint32_t count, uint64_t *counts)>;
 
 // Reads every slot whose frame the GPU has finished into latestVisibility; the
 // newest frame wins. A slot whose counts are not ready yet stays pending.
+//
+// `currentFrame` drives a staleness escape hatch. cGraphics::Draw has paths
+// that end the command list and advance the frame WITHOUT submitting, which
+// strands a slot on a timeline value nothing will ever signal. On Vulkan such a
+// slot merely stays pending forever and its halos freeze; on D3D12 a later
+// submit can push the timeline past that value, so the counts must be dropped
+// rather than trusted. Either way, a slot older than a couple of frame cycles
+// is abandoned and discarded.
 void ResolveStandardHaloQueries(StandardHaloQueryState &state, uint64_t completedTimeline,
+                                uint64_t currentFrame,
                                 const StandardHaloQueryReader &readCounts);
 
 // Legacy RendererDeferred billboard halos: each halo billboard's source box is

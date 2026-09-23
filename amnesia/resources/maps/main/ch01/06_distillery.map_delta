@@ -1,11 +1,5 @@
 <MapDelta Version="1" Target="maps/main/ch01/06_distillery.map">
-    <Modify Category="Entities" ID="2300" Name="BoxLight_3">
-        <SetAttr RendererMask="1" />
-    </Modify>
     <Modify Category="Entities" ID="4120" Name="PointLight_24">
-        <SetAttr RendererMask="1" />
-    </Modify>
-    <Modify Category="Entities" ID="4161" Name="BoxLight_1">
         <SetAttr RendererMask="1" />
     </Modify>
     <Modify Category="Entities" ID="3176" Name="PointLight_1">

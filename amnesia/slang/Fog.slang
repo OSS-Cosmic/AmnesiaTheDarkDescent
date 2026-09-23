@@ -67,7 +67,7 @@ FogResult computeFog(float3 surfacePosW, float3 cameraPosW)
     // kFogAreaCapacity host-side).
     uint count = gPerFrame.fogAreaCount;
     for (uint i = 0u; i < count; ++i) {
-        FogAreaParams fa = gFogAreas[gPerFrame.fogAreaIndices[i]];
+        FogAreaParams fa = gFogAreas[gPerFrame.fogAreaIndices[i >> 2u][i & 3u]];
 
         // Move the ray into the box's unit-cube local space. Point uses w=1
         // (translation applied), direction uses w=0 (rotation+scale only).

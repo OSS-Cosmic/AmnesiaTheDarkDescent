@@ -2,9 +2,6 @@
     <Modify Category="Entities" ID="103" Name="PointLight_1">
         <SetAttr RendererMask="1" />
     </Modify>
-    <Modify Category="Entities" ID="232" Name="BoxLight_1">
-        <SetAttr RendererMask="1" />
-    </Modify>
     <Modify Category="Entities" ID="351" Name="PointLight_2">
         <SetAttr RendererMask="1" />
     </Modify>
@@ -21,9 +18,6 @@
         <SetAttr RendererMask="1" />
     </Modify>
     <Modify Category="Entities" ID="561" Name="PointLight_8">
-        <SetAttr RendererMask="1" />
-    </Modify>
-    <Modify Category="Entities" ID="562" Name="BoxLight_2">
         <SetAttr RendererMask="1" />
     </Modify>
     <Modify Category="Entities" ID="570" Name="SpotLight_3">

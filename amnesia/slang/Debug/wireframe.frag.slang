@@ -16,7 +16,7 @@ ConstantBuffer<WireFramePass> pass;
 
 struct PSOut
 {
-    [vk::location(0)] float4 out_color;
+    [vk::location(0)] float4 out_color : SV_Target0;
 };
 
 [shader("fragment")]

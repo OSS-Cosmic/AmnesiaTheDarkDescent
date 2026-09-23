@@ -13,6 +13,8 @@
 //   binding 0 : SamplerState inputSampler  (bilinear, clamp)
 //   binding 1 : Texture2D<float4> sourceInput   (the smaller mip being upsampled)
 
+#include "../HostDefinitions.h"
+
 [vk::binding(0, 0)]
 SamplerState inputSampler;
 
@@ -26,13 +28,13 @@ struct BloomUpsamplePC
 };
 
 [vk::push_constant]
-BloomUpsamplePC pc;
+BloomUpsamplePC gPushConstants HPL_PUSH_CONSTANT_REGISTER;
 
 static const float kUpsampleBlend = 0.5f;
 
 struct PSIn
 {
-    [vk::location(0)] float2 v_uv;
+    [vk::location(0)] float2 v_uv : TEXCOORD0;
 };
 
 [shader("fragment")]
@@ -40,7 +42,7 @@ float4 psMain(PSIn pin) : SV_Target
 {
     uint w, h;
     sourceInput.GetDimensions(w, h);
-    float2 r = (1.0f / float2(float(w), float(h))) * pc.filterRadius;
+    float2 r = (1.0f / float2(float(w), float(h))) * gPushConstants.filterRadius;
     float2 uv = pin.v_uv;
 
     float3 a = sourceInput.Sample(inputSampler, uv + float2(-1,  1) * r).rgb;

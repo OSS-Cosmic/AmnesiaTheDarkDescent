@@ -8,7 +8,11 @@ struct FrameState_s;
 
 struct RI_PogoBuffer {
 	RISharedPointer<RITexture> textures[2];
+	// Sampled (shader-resource) view of each half.
 	RISharedPointer<RITextureView> pogoView[2];
+	// Color-attachment view of each half. D3D12 needs an RTV-type view to
+	// render into; the sampled view is rejected by beginRendering.
+	RISharedPointer<RITextureView> attachmentView[2];
 	uint16_t attachmentIndex;
 };
 

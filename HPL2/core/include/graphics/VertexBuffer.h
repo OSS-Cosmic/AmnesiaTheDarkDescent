@@ -143,8 +143,7 @@ public:
   void DeferOwnedResources();
   // Uploads dirty vertex/index streams (allocates GPU buffers on first submit /
   // shadow-data growth). No-op when nothing changed since the last submit.
-  void SubmitToGPU(RICmd *cmd, RIDevice *device,
-                   cGraphics::FrameContext *cntx);
+  void SubmitToGPU(RIDevice *device);
   // Ensures streams are uploaded (calls SubmitToGPU), then (re)builds the BLAS
   // if it is missing or was built from an older geometry generation. Only call
   // for renderables that are TLAS instances; particles/billboards/beams/ropes/

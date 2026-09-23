@@ -25,6 +25,16 @@ newoption {
 }
 
 newoption {
+    trigger = "with-fsr-hlsl",
+    value = "yes/no",
+    description = "Build the FSR D3D12 runtime module and its DXIL shader permutations "
+        .. "(requires Windows and --with-d3d12=yes; ignored elsewhere). Turning this off "
+        .. "leaves FSR available on Vulkan only.",
+    allowed = { { "yes", "Build the FSR D3D12 module" }, { "no", "Skip the FSR D3D12 module" } },
+    default = "yes",
+}
+
+newoption {
     trigger = "fsr-sdk-dir",
     value = "PATH",
     description = "Path to a local FidelityFX SDK root containing sdk/ (skips SDK acquisition).",
@@ -33,15 +43,41 @@ newoption {
 newoption {
     trigger = "with-xess",
     value = "yes/no",
-    description = "Enable the optional Intel XeSS Vulkan super-resolution backend (Windows only; ignored on Linux).",
+    description = "Enable the optional Intel XeSS super-resolution backend (Windows only; ignored on Linux).",
     allowed = { { "yes", "Build XeSS" }, { "no", "Skip XeSS" } },
     default = "yes",
 }
 
 newoption {
+    trigger = "with-d3d12",
+    value = "yes/no",
+    description = "Build the DirectX 12 runtime backend (Windows only; enabled by default there). "
+        .. "Windows builds compile both backends and default to D3D12 at runtime, with --vulkan "
+        .. "on the game's command line to override; other platforms are Vulkan-only.",
+    allowed = { { "yes", "Build DX12 backend" }, { "no", "Skip DX12 backend" } },
+    -- Platform-derived. Premake resolves _TARGET_OS before any project script
+    -- runs, so os.target() is valid here and honours an explicit --os= for
+    -- cross-generation. Off Windows this stays "no", which keeps the explicit
+    -- --with-d3d12=yes guard in premake5.lua meaningful.
+    default = (os.target() == "windows") and "yes" or "no",
+}
+
+newoption {
+    trigger = "d3d12ma-dir",
+    value = "PATH",
+    description = "Path to the D3D12 Memory Allocator source root (default: HPL2/extern/D3D12MemoryAllocator).",
+}
+
+newoption {
+    trigger = "agility-sdk-dir",
+    value = "PATH",
+    description = "Path to a local DirectX 12 Agility SDK package root (skips SDK acquisition).",
+}
+
+newoption {
     trigger = "xess-sdk-dir",
     value = "PATH",
-    description = "Path to a local XeSS SDK root containing inc/xess/xess_vk.h (skips SDK acquisition).",
+    description = "Path to a local XeSS SDK root containing inc/xess/xess.h (skips SDK acquisition).",
 }
 
 newoption {

@@ -160,6 +160,17 @@ bool CreateViewportAttachmentTexture(struct RIDevice *device, uint32_t width,
                                      RISharedPointer<RITextureView> *view,
                                      const char *what, uint32_t layerNum = 1);
 
+// A second, COLOR_ATTACHMENT-typed view of a texture that already has a sampled
+// one. D3D12 rejects a sampled view bound as a render target (see
+// ri_d3d12_makeRTV), so any target that is both rendered into and sampled needs
+// this companion view; Vulkan accepts one VkImageView for both but is given the
+// pair too, so the two backends bind the same member. Costs nothing on D3D12 (a
+// view there is pure metadata) and one extra VkImageView on Vulkan.
+bool CreateViewportColorAttachmentView(struct RIDevice *device,
+                                       RISharedPointer<RITexture> *tex,
+                                       enum RI_Format_e format,
+                                       RISharedPointer<RITextureView> *view);
+
 // Defer the attachment's shared handles to the graphics freelist and reset both
 // to empty (used by headless one-off targets like the editor thumbnail builder).
 void ReleaseViewportAttachmentTexture(RISharedPointer<RITexture> *tex,
@@ -197,7 +208,9 @@ public:
     uint32_t width;
     uint32_t height;
     struct RITexture renderTarget = {};
+    // Sampled view; use renderTargetAttachmentView to render into it.
     struct RITextureView renderTargetView = {};
+    struct RITextureView renderTargetAttachmentView = {};
   };
 
   // The matrices and temporal inputs the renderer actually used for this
@@ -265,11 +278,20 @@ public:
               validTargetWidth,
               validTargetHeight,
               *renderTarget[swapchainIndex],
-              *renderTargetView[swapchainIndex]};
+              *renderTargetView[swapchainIndex],
+              *renderTargetAttachmentView[swapchainIndex]};
     }
 
     RISharedPointer<RITexture> renderTarget[RI_MAX_SWAPCHAIN_IMAGES];
     RISharedPointer<RITextureView> renderTargetView[RI_MAX_SWAPCHAIN_IMAGES];
+    // Every colour target here that is both rendered into and sampled carries a
+    // second, COLOR_ATTACHMENT-typed view: D3D12 rejects a sampled view bound as
+    // a render target (ri_d3d12_makeRTV), while Vulkan would accept one view for
+    // both. Both backends bind the *AttachmentView member so they stay in step.
+    // Built by CreateViewportColorAttachmentView. depthView needs no companion —
+    // it is already DEPTH_STENCIL_ATTACHMENT-typed.
+    RISharedPointer<RITextureView>
+        renderTargetAttachmentView[RI_MAX_SWAPCHAIN_IMAGES];
 
     RISharedPointer<RITexture> depthTextures[RI_MAX_SWAPCHAIN_IMAGES];
     RISharedPointer<RITextureView> depthView[RI_MAX_SWAPCHAIN_IMAGES];
@@ -285,6 +307,8 @@ public:
 
     RISharedPointer<RITexture> visibilityTexture[RI_MAX_SWAPCHAIN_IMAGES];
     RISharedPointer<RITextureView> visibilityView[RI_MAX_SWAPCHAIN_IMAGES];
+    RISharedPointer<RITextureView>
+        visibilityAttachmentView[RI_MAX_SWAPCHAIN_IMAGES];
 
     // Packed visibility — RGBA32UI storage image written by the V-buffer
     // pass, sampled by the direct-lighting, path-tracing and composite
@@ -297,6 +321,8 @@ public:
     // color target; sampled by temporal passes.
     RISharedPointer<RITexture> velocityTexture[RI_MAX_SWAPCHAIN_IMAGES];
     RISharedPointer<RITextureView> velocityView[RI_MAX_SWAPCHAIN_IMAGES];
+    RISharedPointer<RITextureView>
+        velocityAttachmentView[RI_MAX_SWAPCHAIN_IMAGES];
 
     // Decal accumulators — Type="Decal" mesh decals (Mul/MulX2/Add, no alpha)
     // rasterized each frame before the composite. The composite applies
@@ -308,8 +334,12 @@ public:
     // composite read.
     RISharedPointer<RITexture> decalMulTexture[RI_MAX_SWAPCHAIN_IMAGES];
     RISharedPointer<RITextureView> decalMulView[RI_MAX_SWAPCHAIN_IMAGES];
+    RISharedPointer<RITextureView>
+        decalMulAttachmentView[RI_MAX_SWAPCHAIN_IMAGES];
     RISharedPointer<RITexture> decalAddTexture[RI_MAX_SWAPCHAIN_IMAGES];
     RISharedPointer<RITextureView> decalAddView[RI_MAX_SWAPCHAIN_IMAGES];
+    RISharedPointer<RITextureView>
+        decalAddAttachmentView[RI_MAX_SWAPCHAIN_IMAGES];
 
     // ReSTIR DI's raw demodulated irradiance, overwritten each frame in GENERAL
     // and transitioned to SHADER_RESOURCE for the direct RELAX instance.
@@ -397,6 +427,11 @@ public:
     // mid-stream.
     bool indirectHistoryReset = false;
     bool nrdInputInShaderResource = false;
+    // Same idea for the path tracer's four indirect outputs: they alternate
+    // between being written as storage by PathTracePass and sampled by
+    // NrdPack, so the transition back to storage has to know whether the
+    // previous frame already moved them to the sampled state.
+    bool indirectInShaderResource = false;
 
     // ReSTIR DI reservoirs (RGBA32F = packed light index + W + M; exact uint
     // index needs full-float storage). [reservoirHistory] ping-pongs across
@@ -437,11 +472,15 @@ public:
           renderTargetView[swapchainIndex].isEmpty())
         return {};
       return {0, 0, width, height, *renderTarget[swapchainIndex],
-              *renderTargetView[swapchainIndex]};
+              *renderTargetView[swapchainIndex],
+              *renderTargetAttachmentView[swapchainIndex]};
     }
 
     RISharedPointer<RITexture> renderTarget[RI_MAX_SWAPCHAIN_IMAGES];
     RISharedPointer<RITextureView> renderTargetView[RI_MAX_SWAPCHAIN_IMAGES];
+    // Render-target view for beginRendering; see HybridViewportState.
+    RISharedPointer<RITextureView>
+        renderTargetAttachmentView[RI_MAX_SWAPCHAIN_IMAGES];
 
     RISharedPointer<RITexture> depthTextures[RI_MAX_SWAPCHAIN_IMAGES];
     RISharedPointer<RITextureView> depthView[RI_MAX_SWAPCHAIN_IMAGES];
@@ -469,12 +508,14 @@ public:
           renderTargetView[swapchainIndex].isEmpty())
         return {};
       return {0, 0, width, height, *renderTarget[swapchainIndex],
-              *renderTargetView[swapchainIndex]};
+              *renderTargetView[swapchainIndex],
+              *renderTargetAttachmentView[swapchainIndex]};
     }
 
     RISharedPointer<RITexture> renderTarget[RI_MAX_SWAPCHAIN_IMAGES];
     RISharedPointer<RITexture> depthTextures[RI_MAX_SWAPCHAIN_IMAGES];
     RISharedPointer<RITextureView> renderTargetView[RI_MAX_SWAPCHAIN_IMAGES];
+    RISharedPointer<RITextureView> renderTargetAttachmentView[RI_MAX_SWAPCHAIN_IMAGES];
     RISharedPointer<RITextureView> depthView[RI_MAX_SWAPCHAIN_IMAGES];
     RISharedPointer<RITextureView> depthSampleView[RI_MAX_SWAPCHAIN_IMAGES];
     // Depth pyramid for the camera occlusion cull. See HiZPyramid.h.
@@ -591,7 +632,9 @@ public:
     // cScene's delivery renders the viewport's finished pogo read half into
     // `view` and leaves the image SHADER_READ_ONLY for the consumer.
     // `texture` is the view's backing image — needed for the layout
-    // transitions around the delivery draw.
+    // transitions around the delivery draw. `view` must be a
+    // RI_VIEWTYPE_COLOR_ATTACHMENT view (D3D12 cannot build an RTV from a
+    // SHADER_RESOURCE view).
     struct RITexture texture;
     RITextureView view;
     // Format of `view` — the delivery draw's color attachment (and pipeline
@@ -654,7 +697,9 @@ public:
                    !mPogoBuffer.textures[0].isEmpty() &&
                    !mPogoBuffer.textures[1].isEmpty() &&
                    !mPogoBuffer.pogoView[0].isEmpty() &&
-                   !mPogoBuffer.pogoView[1].isEmpty()
+                   !mPogoBuffer.pogoView[1].isEmpty() &&
+                   !mPogoBuffer.attachmentView[0].isEmpty() &&
+                   !mPogoBuffer.attachmentView[1].isEmpty()
                ? &mPogoBuffer
                : nullptr;
   }
@@ -856,6 +901,7 @@ private:
   RasterCamera mRasterCamera = {};
   bool mTemporalHistoryReset = false;
   std::unique_ptr<cTemporalPresentation> mpTemporalPresentation;
+  std::shared_ptr<RIProgram> mpFeedProgram;
   std::unique_ptr<cTemporalReactiveMask> mpTemporalReactiveMask;
   std::shared_ptr<iTemporalUpscaler> mpTemporalUpscalerProvider;
   TemporalUpscalerSettings mTemporalProviderPreparedSettings = {};

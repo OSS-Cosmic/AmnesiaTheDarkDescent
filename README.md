@@ -87,10 +87,10 @@ docker run --rm -v "$PWD:$PWD" -w "$PWD" amnesia-build \
 Mount the tree at its real host path (as above) so `compile_commands.json` and the paths baked into the object
 files line up between containerized and native builds.
 
-Two wrappers drive the same premake5 flow end to end — generate, build, run the Python tests, and
-optionally deploy your install's assets: [`build-linux-docker.sh`](build-linux-docker.sh) does it in the
-container (canonical), [`build-linux.sh`](build-linux.sh) natively on the host. Both take `[release|debug]`
-and forward anything after `--` to `premake5 gmake2`.
+Two wrappers drive the same premake5 flow end to end: [`build-linux-docker.sh`](build-linux-docker.sh)
+does it in the container (canonical), and [`build-linux.sh`](build-linux.sh) runs natively on the host.
+Both take `[release|debug]`, accept `-with-test` to build and run the unit tests, and forward anything
+after `--` to `premake5 gmake2`. Tests are skipped by default in wrapper builds.
 
 ### Windows
 
@@ -103,6 +103,7 @@ Or use the wrapper, which locates MSBuild via `vswhere` so any PowerShell works:
 
 ```
 .\build-windows.ps1
+.\build-windows.ps1 -WithTest  # also build and run unit tests
 ```
 
 CI generates with `vs2022` instead; `premake5.lua` pins no `_ACTION`, so both produce the same projects.
@@ -129,7 +130,9 @@ Pass these to `premake5`:
 | `--slangc=PATH` | downloads | Use an existing `slangc` instead of the pinned download. |
 | `--cmake=PATH` | `cmake` | The CMake used to build SDL2 and openal-soft. |
 
-`premake5 export-compile-commands` writes a `compile_commands.json` for clangd.
+`premake5 export-compile-commands` writes a `compile_commands.json` for clangd. The wrappers expose it as
+`.\build-windows.ps1 -CompileCommands` and `./build-linux-docker.sh --compile-commands`, which place the selected
+configuration's database at the repository root.
 
 ## Running
 

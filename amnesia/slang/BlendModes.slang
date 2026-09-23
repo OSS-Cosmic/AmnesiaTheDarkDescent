@@ -81,6 +81,7 @@ public float4 applyBlendModulation(uint blendMode, float4 color,
 }
 
 // ONE / ONE_MINUS_SRC_ALPHA: premultiply straight-alpha sources exactly once.
+// This operation also serves the raytraced display-space particle attachment.
 // Additive sources retain ONE / ONE and never attenuate the destination.
 public float4 encodeBlendOutputLinear(uint blendMode, float4 color)
 {
@@ -89,13 +90,15 @@ public float4 encodeBlendOutputLinear(uint blendMode, float4 color)
     return color;
 }
 
-// Standard renderer scene convention: the RGBA16F target stores
-// sRGBToLinear(display) / kSceneExposure and the tonemap multiplies exposure
-// back. Radiance sources (Add, Alpha, PremulAlpha) divide once to share that
-// scale. Mul/MulX2 prepared colours are display-space multipliers; decoding
-// them makes the linear hardware multiply match the legacy display-space one
-// while keeping the 1 / 0.5 neutrals. Apply after applyBlendModulation and
-// before encodeBlendOutputLinear.
+// Linear scene target convention -- shared by both backends. Raytraced
+// particles temporarily use display RGB and restore this scale per pass. The
+// RGBA16F target stores sRGBToLinear(display) / kSceneExposure and the tonemap
+// multiplies exposure back. Radiance sources (Add, Alpha, PremulAlpha) divide
+// once to share that scale; Fog.slang and Water.frag.slang already emit on it
+// on the ray-traced path too. Mul/MulX2 prepared colours are display-space
+// multipliers; decoding them makes the linear hardware multiply match the
+// legacy display-space one while keeping the 1 / 0.5 neutrals. Apply after
+// applyBlendModulation and before encodeBlendOutputLinear.
 public float4 encodeStandardBlendSource(uint blendMode, float4 color)
 {
     switch (blendMode)

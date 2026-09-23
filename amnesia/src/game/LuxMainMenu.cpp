@@ -1394,19 +1394,22 @@ void cLuxMainMenu::CreateBackground()
 
 void cLuxMainMenu::DestroyBackground()
 {
+	if(mpLogoGfx)
+	{
+		mpGui->DestroyGfx(mpLogoGfx);
+		mpLogoGfx = NULL;
+	}
+
 	///////////////////////////
 	//Back ground world is loaded
 	if(mpBgWorld && mpBgCamera)
 	{
-		if(mpLogoGfx) mpGui->DestroyGfx(mpLogoGfx);
-
 		mpScene->DestroyCamera(mpBgCamera);
 		mpScene->DestroyWorld(mpBgWorld);
 
 		mpViewport->SetWorld(NULL);
 		mpViewport->SetCamera(NULL);
 
-		mpLogoGfx = NULL;
 		mpBgCamera = NULL;
 		mpBgWorld = NULL;
 	}

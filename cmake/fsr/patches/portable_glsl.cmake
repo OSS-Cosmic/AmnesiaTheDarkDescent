@@ -82,6 +82,65 @@ namespace fs = std::filesystem;
 
 #include <process.hpp>
 namespace tpl = TinyProcessLib;]=])
+# The HLSL half needs the Windows and DXC headers back. Keep the portable
+# standard-library block, since the other patches in this file rely on it.
+#
+# ATL is an optional Visual Studio component that is not installed on the CI
+# image, so upstream's <atlcomcli.h> is replaced by WRL's ComPtr from the
+# Windows SDK. The tool only uses operator->, operator& (including through
+# IID_PPV_ARGS) and Release(); the first two are API-compatible, and Release()
+# is spelled Reset() in WRL, so a thin subclass covers the difference.
+if(FSR_ENABLE_HLSL)
+    set(_ffx_sc_pch_new [=[#pragma once
+
+#define NOMINMAX
+#define WIN32_LEAN_AND_MEAN
+#include <Windows.h>
+#include <wrl/client.h>
+#include <dxcapi.h>
+#include <d3dcompiler.h>
+#include <d3d12shader.h>
+
+#include <algorithm>
+#include <bitset>
+#include <cassert>
+#include <cmath>
+#include <codecvt>
+#include <cstdint>
+#include <cstdio>
+#include <cwctype>
+#include <deque>
+#include <exception>
+#include <filesystem>
+#include <fstream>
+#include <iomanip>
+#include <iostream>
+#include <locale>
+#include <memory>
+#include <mutex>
+#include <sstream>
+#include <stdexcept>
+#include <string>
+#include <string_view>
+#include <thread>
+#include <unordered_map>
+#include <unordered_set>
+#include <vector>
+
+template <typename T>
+struct CComPtr : Microsoft::WRL::ComPtr<T>
+{
+    using Microsoft::WRL::ComPtr<T>::ComPtr;
+
+    // ATL releases and nulls the pointer; WRL spells that Reset().
+    void Release() { this->Reset(); }
+};
+
+namespace fs = std::filesystem;
+
+#include <process.hpp>
+namespace tpl = TinyProcessLib;]=])
+endif()
 ffx_sc_replace_required("${_ffx_sc_pch}" "${_ffx_sc_pch_old}" "${_ffx_sc_pch_new}" "portable standard-library precompiled header")
 
 set(_ffx_sc_main "${_FFX_SC_STAGE_DIR}/src/ffx_sc.cpp")
@@ -334,8 +393,12 @@ set(_ffx_sc_main_new [=[int main(int argc, char** argv)
 }]=])
 ffx_sc_replace_required("${_ffx_sc_main}" "${_ffx_sc_main_old}" "${_ffx_sc_main_new}" "portable UTF-8 process entry point")
 
-set(_ffx_sc_utils_h "${_FFX_SC_STAGE_DIR}/src/utils.h")
-ffx_sc_replace_required("${_ffx_sc_utils_h}" "#include \"DXBCChecksum.h\"\n" "" "remove unused DXBC checksum dependency from GLSL build")
+# DXBCChecksum backs the FXC path inside hlsl_compiler.cpp, so it is only
+# unused when the HLSL half is fenced off.
+if(NOT FSR_ENABLE_HLSL)
+    set(_ffx_sc_utils_h "${_FFX_SC_STAGE_DIR}/src/utils.h")
+    ffx_sc_replace_required("${_ffx_sc_utils_h}" "#include \"DXBCChecksum.h\"\n" "" "remove unused DXBC checksum dependency from GLSL build")
+endif()
 
 set(_ffx_sc_utils "${_FFX_SC_STAGE_DIR}/src/utils.cpp")
 set(_ffx_sc_utils_old [=[#include "utils.h"

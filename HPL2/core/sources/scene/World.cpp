@@ -20,7 +20,7 @@
  */
 
 #include "scene/World.h"
-#include "graphics/RayTracedLightColor.h"
+#include "graphics/Color.h"
 
 #include <tinyxml2.h>
 
@@ -537,10 +537,9 @@ static PointLight BuildPointLight(iLight *pLight) {
   pl.position[1] = pos.y;
   pl.position[2] = pos.z;
   const cColor c = pLight->GetDiffuseColor();
-  const auto linearColor = RayTracedLightColorToLinear(c.r, c.g, c.b);
-  pl.color[0] = linearColor[0];
-  pl.color[1] = linearColor[1];
-  pl.color[2] = linearColor[2];
+  pl.color[0] = sRGBToLinear(c.r);
+  pl.color[1] = sRGBToLinear(c.g);
+  pl.color[2] = sRGBToLinear(c.b);
   pl.intensity = pLight->GetIntensity();
   pl.radius = pLight->GetRadius();
   pl.sourceRadius = pLight->GetSourceRadius();
@@ -584,10 +583,9 @@ static SpotLight BuildSpotLight(iLight *pLight) {
   }
   sl.cosOuterAngle = std::cos(pSpot->GetFOV() * 0.5f);
   const cColor c = pSpot->GetDiffuseColor();
-  const auto linearColor = RayTracedLightColorToLinear(c.r, c.g, c.b);
-  sl.color[0] = linearColor[0];
-  sl.color[1] = linearColor[1];
-  sl.color[2] = linearColor[2];
+  sl.color[0] = sRGBToLinear(c.r);
+  sl.color[1] = sRGBToLinear(c.g);
+  sl.color[2] = sRGBToLinear(c.b);
   sl.intensity = pSpot->GetIntensity();
   sl.radius = pSpot->GetRadius();
   sl.sourceRadius = pSpot->GetSourceRadius();
@@ -609,10 +607,9 @@ static RectLight BuildRectLight(iLight *pLight) {
   al.position[1] = pos.y;
   al.position[2] = pos.z;
   const cColor c = pArea->GetDiffuseColor();
-  const auto linearColor = RayTracedLightColorToLinear(c.r, c.g, c.b);
-  al.color[0] = linearColor[0];
-  al.color[1] = linearColor[1];
-  al.color[2] = linearColor[2];
+  al.color[0] = sRGBToLinear(c.r);
+  al.color[1] = sRGBToLinear(c.g);
+  al.color[2] = sRGBToLinear(c.b);
   al.intensity = pArea->GetIntensity();
   al.radius = pArea->GetRadius();
   al.width = pArea->GetWidth();
@@ -973,6 +970,39 @@ void cWorld::BuildTlas(cGraphics::FrameContext *cntx, cFrustum *apFrustum) {
   mpGraphics->graphicsDefer.push(mpTlasStorage);
   mpGraphics->graphicsDefer.push(mpTlasInstanceBuffer);
 
+  // One instance record serves both backends: VkAccelerationStructureInstanceKHR
+  // and D3D12_RAYTRACING_INSTANCE_DESC are byte-identical (row-major 3x4
+  // transform, instanceCustomIndex:24 + mask:8, SBT record offset:24 + flags:8,
+  // then the 8-byte acceleration-structure address), and the RIAccelInstanceBits_e
+  // values coincide with D3D12_RAYTRACING_INSTANCE_FLAG_*. Assert the layout
+  // rather than trusting it, so a header change here fails the build instead of
+  // silently corrupting D3D12 TLAS builds.
+  static_assert(sizeof(VkAccelerationStructureInstanceKHR) == 64,
+                "TLAS instance record must stay 64 bytes for D3D12 reuse");
+  static_assert(offsetof(VkAccelerationStructureInstanceKHR, transform) == 0,
+                "TLAS instance transform must lead the record");
+  static_assert(
+      offsetof(VkAccelerationStructureInstanceKHR,
+               accelerationStructureReference) == 56,
+      "TLAS instance AS address must occupy the trailing 8 bytes");
+#if (DEVICE_IMPL_D3D12)
+  static_assert(sizeof(VkAccelerationStructureInstanceKHR) ==
+                    sizeof(D3D12_RAYTRACING_INSTANCE_DESC),
+                "TLAS instance record must match D3D12_RAYTRACING_INSTANCE_DESC");
+  static_assert(offsetof(D3D12_RAYTRACING_INSTANCE_DESC, AccelerationStructure) ==
+                    offsetof(VkAccelerationStructureInstanceKHR,
+                             accelerationStructureReference),
+                "TLAS instance AS address must land at the same offset");
+  static_assert((uint32_t)RI_ACCEL_INSTANCE_TRIANGLE_CULL_DISABLE ==
+                        (uint32_t)D3D12_RAYTRACING_INSTANCE_FLAG_TRIANGLE_CULL_DISABLE &&
+                    (uint32_t)RI_ACCEL_INSTANCE_TRIANGLE_FLIP_FACING ==
+                        (uint32_t)D3D12_RAYTRACING_INSTANCE_FLAG_TRIANGLE_FRONT_COUNTERCLOCKWISE &&
+                    (uint32_t)RI_ACCEL_INSTANCE_FORCE_OPAQUE ==
+                        (uint32_t)D3D12_RAYTRACING_INSTANCE_FLAG_FORCE_OPAQUE &&
+                    (uint32_t)RI_ACCEL_INSTANCE_FORCE_NON_OPAQUE ==
+                        (uint32_t)D3D12_RAYTRACING_INSTANCE_FLAG_FORCE_NON_OPAQUE,
+                "RIAccelInstanceBits_e must match D3D12_RAYTRACING_INSTANCE_FLAG_*");
+#endif
   std::vector<VkAccelerationStructureInstanceKHR> tlasInstances;
 
   // Walk both containers with NO frustum cull. Only sub-meshes are ray-traced
@@ -1020,7 +1050,9 @@ void cWorld::BuildTlas(cGraphics::FrameContext *cntx, cFrustum *apFrustum) {
       return;
 
     auto blas = vb->accelStructure();
-    if (!blas || blas->vk.handle == VK_NULL_HANDLE)
+    // isEmpty() dispatches per backend; reading blas->vk.handle directly would
+    // read D3D12 union storage on a D3D12 device.
+    if (!blas || blas->isEmpty())
       return;
 
     // VkAccelerationStructureInstanceKHR::transform is row-major 3x4; modelF4 is
@@ -1052,8 +1084,9 @@ void cWorld::BuildTlas(cGraphics::FrameContext *cntx, cFrustum *apFrustum) {
           pObject->GetCoverageAmount() >= 1.0f && !dissolveFlags)
         inst.flags |= RI_ACCEL_INSTANCE_FORCE_OPAQUE;
     }
-    assert(blas->vk.deviceAddress != 0);
-    inst.accelerationStructureReference = blas->vk.deviceAddress;
+    const uint64_t blasAddress = blas->getDeviceAddress(&mpGraphics->device);
+    assert(blasAddress != 0);
+    inst.accelerationStructureReference = blasAddress;
     tlasInstances.push_back(inst);
   };
   for (int i = 0; i < eWorldContainerType_LastEnum; ++i) {
@@ -1102,9 +1135,17 @@ void cWorld::BuildTlas(cGraphics::FrameContext *cntx, cFrustum *apFrustum) {
     trans.size =
         (size_t)instanceCount * sizeof(VkAccelerationStructureInstanceKHR);
     trans.offset = 0;
-    trans.currentState = RI_RESOURCE_STATE_ACCEL_READ;
+    // BUILD_INPUT, not ACCEL_READ: this is the instance-descriptor array the
+    // TLAS build consumes, not an acceleration structure. D3D12 rejects an AS
+    // access bit on a buffer that was not created as one.
+    //
+    // The before-state stays a real state rather than UNDEFINED -- the
+    // uploader's pre-barrier is what orders this frame's copy after the
+    // previous frame's TLAS build has finished reading the buffer, and
+    // UNDEFINED lowers to NO_ACCESS, which would drop that edge.
+    trans.currentState = RI_RESOURCE_STATE_ACCEL_BUILD_INPUT;
     trans.currentStages = RI_STAGE_ACCEL_BUILD;
-    trans.postState = RI_RESOURCE_STATE_ACCEL_READ;
+    trans.postState = RI_RESOURCE_STATE_ACCEL_BUILD_INPUT;
     trans.postStages = RI_STAGE_ACCEL_BUILD;
     RI_ResourceBeginCopyBuffer(&mpGraphics->device, &mpGraphics->uploader, &trans);
     std::memcpy(trans.mapped.data, tlasInstances.data(), trans.size);
@@ -1142,9 +1183,20 @@ void cWorld::BuildTlas(cGraphics::FrameContext *cntx, cFrustum *apFrustum) {
     // Build into a local handle, then adopt on success so the TLAS has a single
     // refcount domain (mpTlas stays empty if init fails → skip build).
     RIAccelStructure tlas{};
-    if (tlas.init(&mpGraphics->device, &tlasDesc) == RI_SUCCESS)
+    if (tlas.init(&mpGraphics->device, &tlasDesc) == RI_SUCCESS) {
       mpTlas = RISharedPointer<RIAccelStructure>(&mpGraphics->device, tlas);
-    mTlasStorageCapacity = static_cast<uint32_t>(tlasStorageSize);
+      mTlasStorageCapacity = static_cast<uint32_t>(tlasStorageSize);
+    } else {
+      // Leave the capacity unrecorded so the next frame retries instead of
+      // treating the failed storage as a usable TLAS allocation. Drop mpTlas
+      // too: on a grow it still addresses the storage just replaced (already
+      // deferred above), which must not outlive that defer.
+      Warning("TLAS init failed (instances=%u, storage=%llu); RT passes see no TLAS\n",
+              instanceCount, (unsigned long long)tlasStorageSize);
+      mpTlas = {};
+      mpTlasStorage = {};
+      mTlasStorageCapacity = 0;
+    }
   }
 
   if (!mpTlas.isEmpty()) {

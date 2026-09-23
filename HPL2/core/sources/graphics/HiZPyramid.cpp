@@ -32,11 +32,20 @@ bool HiZPyramid::Create(cGraphics *graphics, uint32_t image,
   td.layerNum = 1;
   td.mipNum = static_cast<uint8_t>(levels);
   td.sampleCount = 1;
-  td.usage = RI_USAGE_SHADER_RESOURCE | RI_USAGE_SHADER_RESOURCE_STORAGE;
+  // Each dispatch samples the whole pyramid through one SRV while writing a
+  // single mip through a UAV, so read and write access overlap on the same
+  // resource with no transition between -- see cStandardHiZPass::Build, which
+  // holds the texture in a combined state for the entire build. Vulkan allows
+  // that with VK_IMAGE_LAYOUT_GENERAL; on D3D12 only a simultaneous-access
+  // texture admits both, since its layout is pinned to COMMON. Never cleared,
+  // so the UAV-clear restriction that comes with the flag does not bite.
+  td.usage = RI_USAGE_SHADER_RESOURCE | RI_USAGE_SHADER_RESOURCE_STORAGE |
+             RI_USAGE_SIMULTANEOUS_ACCESS;
   RITexture created = RITexture::create(&graphics->device, td);
   if (created.isEmpty())
     return false;
   texture[image] = RISharedPointer<RITexture>(&graphics->device, created);
+  texture[image]->setDebugObjectName(&graphics->device, "HiZPyramid.depth");
 
   RITextureViewDesc sample{};
   sample.viewType = RI_VIEWTYPE_SHADER_RESOURCE_2D;

@@ -1,19 +1,4 @@
 <MapDelta Version="1" Target="maps/main/ch03/29_orb_chamber.map">
-    <Modify Category="Entities" ID="398" Name="BoxLight_1">
-        <SetAttr RendererMask="1" />
-    </Modify>
-    <Modify Category="Entities" ID="763" Name="BoxLight_4">
-        <SetAttr RendererMask="1" />
-    </Modify>
-    <Modify Category="Entities" ID="764" Name="BoxLight_5">
-        <SetAttr RendererMask="1" />
-    </Modify>
-    <Modify Category="Entities" ID="970" Name="BoxLight_2">
-        <SetAttr RendererMask="1" />
-    </Modify>
-    <Modify Category="Entities" ID="1484" Name="BoxLight_3">
-        <SetAttr RendererMask="1" />
-    </Modify>
     <Modify Category="Entities" ID="90" Name="PointLight_2">
         <SetAttr Re_Intensity="4" Re_Radius="13.076" Re_SourceRadius="0" Re_FlickerOffIntensity="0" />
     </Modify>

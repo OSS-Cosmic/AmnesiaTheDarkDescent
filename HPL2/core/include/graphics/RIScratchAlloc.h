@@ -6,10 +6,8 @@
 #define RI_UNIFORM_SCRATCH_REQ_ALIGNMENT (256) 
 
 struct RIBlockMem {
-	struct RIBuffer buffer;       // VkBuffer + VmaAllocation + mappedAddress
-#if ( DEVICE_IMPL_VULKAN )
-	VkDeviceAddress deviceAddress;  // BDA of buffer offset 0, set at alloc time
-#endif
+	struct RIBuffer buffer;       // Backend buffer + mappedAddress
+	uint64_t deviceAddress;        // GPU address of buffer offset 0
 };
 
 struct RIScratchAlloc;
@@ -42,7 +40,7 @@ struct RIBufferScratchAllocReq {
 	void* pMappedAddress;
 	size_t bufferOffset;
 	size_t bufferSize;
-	VkDeviceAddress deviceAddress;  // = block.vk.deviceAddress + bufferOffset
+	uint64_t deviceAddress;  // = block.deviceAddress + bufferOffset
 };
 
 size_t RINumberOfUsedBlock(struct RIDevice *device,struct RIScratchAlloc* pool);

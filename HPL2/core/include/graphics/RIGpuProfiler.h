@@ -2,6 +2,7 @@
 #define HPL_RI_GPU_PROFILER_H
 
 #include "graphics/HPLGraphicsConfig.h"
+#include "graphics/RIBuffer.h"
 #include "graphics/RITypes.h"
 
 #include <array>
@@ -39,6 +40,11 @@ struct RIGpuProfiler {
   // upcoming primary submit will signal.
   void beginFrame(struct RICmd *cmd, uint32_t slot, uint64_t timelineValue);
 
+  // Finish recording this frame's timing data. On D3D12 this records the
+  // query-heap -> readback copy and must be called before the command list is
+  // ended/submitted. Vulkan has no additional end-of-frame command.
+  void endFrame(struct RICmd *cmd, bool willSubmit = true);
+
   // Bracket a pass. beginScope writes a start timestamp and opens a debug label;
   // endScope writes the end timestamp and closes the label. Nestable.
   void beginScope(struct RICmd *cmd, const char *name);
@@ -55,7 +61,7 @@ struct RIGpuProfiler {
 
 private:
   struct Scope {
-    const char *name; // string literal at the call site (stable)
+    std::string name;
     uint32_t depth;
     uint32_t beginIdx; // query index; UINT32_MAX when the cap was exceeded
     uint32_t endIdx;
@@ -68,10 +74,16 @@ private:
 #if (DEVICE_IMPL_VULKAN)
     VkQueryPool pool = VK_NULL_HANDLE;
 #endif
+#if (DEVICE_IMPL_D3D12)
+    ID3D12QueryHeap *queryHeap = nullptr;
+    RIBuffer readback = {};
+    uint64_t *mapped = nullptr; // persistently mapped readback memory
+#endif
   };
 
   std::array<Slot, RI_NUMBER_FRAMES_FLIGHT> m_slots;
   std::vector<uint32_t> m_openStack; // indices into the active slot's scopes
+  uint32_t m_openLabelCount = 0;
   uint32_t m_activeSlot = 0;
   bool m_enabled = false;            // false until init() succeeds
   double m_ticksToMs = 0.0;          // 1000 / timestampFrequencyHz

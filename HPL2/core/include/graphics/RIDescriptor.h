@@ -1,10 +1,9 @@
 #ifndef RI_DESCRIPTOR_H
 #define RI_DESCRIPTOR_H
 
-// Descriptors, samplers and acceleration structures, grouped by use case
-// (mirrors ref_nri/ri_descriptor.h). Depends only on the prelude + resource
-// leaf headers; RIDevice is used by pointer only, so a forward declaration is
-// enough (this stays below RIDevice.h in the include layering).
+// Descriptors, samplers and acceleration structures. Depends only on the
+// prelude + resource leaf headers; RIDevice is used by pointer only, so a
+// forward declaration keeps this below RIDevice.h in the include layering.
 #include "graphics/RIPreamble.h"
 #include "graphics/RIBarrier.h"    // RIResourceState_e (RIDescriptor::sampledImage)
 #include "graphics/RIBuffer.h"     // RIBuffer (descriptor / accel geometry refs)
@@ -15,10 +14,13 @@
 #include <cstring>                 // memset / strlen
 
 struct RIDevice;
+#if (DEVICE_IMPL_D3D12)
+namespace D3D12MA { class Allocation; }
+#endif
 
-// Backend-neutral descriptor type (RIDescriptor::type). Mapped to VkDescriptorType
-// at bind via ri_vk_BindlessDescriptorType. The engine uses separate sampled
-// images + samplers (no combined-image-sampler).
+// Backend-neutral descriptor type (RIDescriptor::type); Vulkan maps it at bind
+// via ri_vk_BindlessDescriptorType. The engine uses separate sampled images +
+// samplers (no combined-image-sampler).
 enum RIDescriptorType_e {
   RI_DESCRIPTOR_TYPE_SAMPLED_IMAGE,
   RI_DESCRIPTOR_TYPE_STORAGE_IMAGE,
@@ -70,8 +72,8 @@ enum RIAccelBuildMode_e {
 
 enum RIDescriptorFlags_e {
   RI_VK_DESC_BEGIN = 0,
-  RI_VK_DESC_OWN_SAMPLER = 0x1,   // owns the backing assets VKImage, VkBuffer
-  RI_VK_DESC_OWN_IMAGE_VIEW = 0x2 // owns the backing sampler
+  RI_VK_DESC_OWN_SAMPLER = 0x1,   // owns the backing sampler
+  RI_VK_DESC_OWN_IMAGE_VIEW = 0x2 // owns the backing image view
 };
 
 // matches VkAabbPositionsKHR layout
@@ -138,9 +140,8 @@ CreateDescriptorBindingID(const char *name) {
 struct RIAccelStructure;
 struct RIAccelStructureDesc;
 
-// Owned backend sampler object. The only descriptor-referenced resource that
-// owns a backend handle; created/cached once (cGraphics filter cache) and
-// referenced by RIDescriptor::sampler. Freed via dispose().
+// Backend sampler object. Created/cached once (cGraphics filter cache) and
+// freed via dispose(); RIDescriptor snapshots the description it needs.
 struct RISampler {
   RISampler() { memset(this, 0, sizeof(*this)); }
   void dispose(struct RIDevice *device);
@@ -151,31 +152,101 @@ struct RISampler {
       VkSampler sampler;
     } vk;
 #endif
-#if (DEVICE_IMPL_MTL)
+#if (DEVICE_IMPL_D3D12)
     struct {
-      MTL::SamplerState *sampler;
-    } mtl;
+      D3D12_SAMPLER_DESC desc;
+      uint32_t initialized;
+    } d3d12;
 #endif
   };
+  // Backend-neutral sampler description retained alongside the native object.
+  // Values use the engine's eTextureWrap/eTextureFilter numeric enums.
+  uint32_t wrapS;
+  uint32_t wrapT;
+  uint32_t wrapR;
+  uint32_t filter;
   hash_t cookie;
 };
+
+struct RIDescriptorBufferPayload {
+  const struct RIBuffer *resource; // borrowed RI resource identity
+#if (DEVICE_IMPL_D3D12)
+  ID3D12Resource *nativeResource; // borrowed native handle; no COM ownership
+  D3D12MA::Allocation *allocation; // borrowed allocation identity snapshot
+  uint64_t size;
+#endif
+  uint64_t offset;
+  uint64_t range;
+  uint32_t stride;
+  uint8_t raw;
+  uint8_t structured;
+};
+
+struct RIDescriptorTexturePayload {
+  const struct RITexture *resource; // borrowed backing RI resource identity
+  uint32_t dimension; // RITextureType_e (texture resource dimension)
+  uint32_t viewType;  // RITextureViewType_e (including array/cube/storage)
+  uint32_t format;    // RI_Format_e
+  uint32_t baseMip;
+  uint32_t mipNum;
+  uint32_t baseLayer;
+  uint32_t layerNum;
+#if (DEVICE_IMPL_D3D12)
+  ID3D12Resource *nativeResource; // borrowed native handle; no COM ownership
+  D3D12MA::Allocation *allocation; // borrowed allocation identity snapshot
+  uint32_t nativeFormat;
+#endif
+  uint32_t state; // RIResourceState_e requested for image access
+};
+
+struct RIDescriptorSamplerPayload {
+  uint32_t wrapS;
+  uint32_t wrapT;
+  uint32_t wrapR;
+  uint32_t filter;
+#if (DEVICE_IMPL_D3D12)
+  D3D12_SAMPLER_DESC d3d12Desc;
+  uint32_t initialized;
+#endif
+};
+
+struct RIDescriptorAccelPayload {
+  uint64_t gpuVA;
+#if (DEVICE_IMPL_D3D12)
+  ID3D12Resource *nativeResource; // borrowed native handle; no COM ownership
+  D3D12MA::Allocation *allocation; // borrowed allocation identity snapshot
+#endif
+};
+
+#if (DEVICE_IMPL_VULKAN)
+// Resolved Vulkan descriptor payload. This is deliberately a named native
+// payload rather than a cast of the backend-neutral payload; D3D12 consumers
+// must never reinterpret Vulkan storage (and vice versa).
+struct RIDescriptorVulkanPayload {
+  union {
+    VkDescriptorImageInfo image;
+    VkDescriptorBufferInfo buffer;
+    VkAccelerationStructureKHR accelStructure;
+  };
+};
+#endif
 
 struct RIDescriptor {
   RIDescriptor() { memset(this, 0, sizeof(*this)); }
 
-  // Backend-neutral descriptor builders: reference the RI object + set the
-  // binding params. The descriptor `cookie` (descriptor-set cache key) is
-  // DERIVED from the referenced resource's own cookie folded with the binding
-  // parameters (descriptor type; buffer offset/range) — callers no longer pass
-  // one. A resource with cookie == 0 (uncreated) yields an empty descriptor, so
-  // isEmpty() still holds. `state` selects the VK image layout. The `device`
-  // param is unused (no resolution here) but kept for call-site stability.
+  // Builders snapshot value data and copy borrowed native handles; the handles
+  // carry no ownership, so the consumer must keep the underlying resource alive
+  // for the descriptor's use. `cookie` is derived from the resource's own cookie
+  // folded with the binding parameters, and a resource with cookie == 0 yields
+  // an empty descriptor. `state` selects the image layout/resource state.
   static RIDescriptor uniformBuffer(struct RIDevice *device,
                                     struct RIBuffer *buffer, uint64_t offset,
-                                    uint64_t range);
+                                    uint64_t range, uint32_t stride = 0,
+                                    bool raw = false, bool structured = false);
   static RIDescriptor storageBuffer(struct RIDevice *device,
                                     struct RIBuffer *buffer, uint64_t offset,
-                                    uint64_t range);
+                                    uint64_t range, uint32_t stride = 0,
+                                    bool raw = false, bool structured = false);
   static RIDescriptor sampledImage(struct RIDevice *device,
                                    struct RITextureView *view,
                                    enum RIResourceState_e state =
@@ -190,8 +261,8 @@ struct RIDescriptor {
   bool isEmpty() const { return cookie == 0; }
 
   // Backend handle accessors — read the resolved handle stored inline at build
-  // time (the builders resolve while the referenced RI object is still alive, so
-  // a descriptor never depends on that object outliving it).
+  // time. Vulkan handles are copied values; D3D12 native handles are borrowed
+  // and never released by RIDescriptor.
 #if (DEVICE_IMPL_VULKAN)
   VkImageView vkImageView() const;
   VkBuffer vkBuffer() const;
@@ -204,18 +275,20 @@ struct RIDescriptor {
   hash_t cookie;
   // Backend-neutral descriptor type (RIDescriptorType_e).
   uint8_t type;
+  // Kept separate from native backend storage so no backend needs to
+  // reinterpret another backend's resource representation.
+  union {
+    RIDescriptorBufferPayload buffer;
+    RIDescriptorTexturePayload texture;
+    RIDescriptorSamplerPayload sampler;
+    RIDescriptorAccelPayload accel;
+  } payload;
   // Resolved backend descriptor info, filled in by the builders. Exactly one
   // union member is live per `type`; VkDescriptorImageInfo / VkDescriptorBufferInfo
   // are what the descriptor-set writer consumes directly.
   union {
 #if (DEVICE_IMPL_VULKAN)
-    struct {
-      union {
-        VkDescriptorImageInfo image;   // sampler + imageView + imageLayout
-        VkDescriptorBufferInfo buffer; // buffer + offset + range
-        VkAccelerationStructureKHR accelStructure;
-      };
-    } vk;
+    RIDescriptorVulkanPayload vk;
 #endif
   };
 };
@@ -223,11 +296,10 @@ struct RIDescriptor {
 struct RIAccelStructure {
   RIAccelStructure() { memset(this, 0, sizeof(*this)); }
 
-  // Creates VkAccelerationStructureKHR backed by desc->storage at
-  // desc->storageOffset. Caller must allocate desc->storage with
-  // VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_STORAGE_BIT_KHR and
-  // VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT, sized at least
-  // desc->storageSize bytes.
+  // VK: creates a VkAccelerationStructureKHR over caller-allocated storage,
+  // which must carry ACCELERATION_STRUCTURE_STORAGE + SHADER_DEVICE_ADDRESS
+  // usage. D3D12 has no separate AS object and allocates its own resource
+  // instead; see RID3D12_InitAccelStructure.
   int init(struct RIDevice *device, const struct RIAccelStructureDesc *desc);
   void dispose(struct RIDevice *device);
   bool isEmpty() const;
@@ -236,16 +308,19 @@ struct RIAccelStructure {
 
   enum RIAccelStructureType_e type;
   uint32_t flags; // RIAccelStructureBuildBits_e snapshot
-  // uint64_t buildScratchSize;
-  // uint64_t updateScratchSize;
-  // uint64_t storageOffset;
-  // struct RIBuffer storage; // caller-owned backing buffer
   union {
 #if (DEVICE_IMPL_VULKAN)
     struct {
       VkAccelerationStructureKHR handle;
       VkDeviceAddress deviceAddress;
     } vk;
+#endif
+#if (DEVICE_IMPL_D3D12)
+    struct {
+      ID3D12Resource *resource;  // owned; ray-tracing storage
+      D3D12MA::Allocation *allocation; // owned; released after resource
+      uint64_t deviceAddress;
+    } d3d12;
 #endif
   };
   hash_t cookie;

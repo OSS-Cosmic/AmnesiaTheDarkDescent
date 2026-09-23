@@ -76,8 +76,8 @@ namespace hpl {
 		// Standalone program (no bindless set) — mirrors the Interface<cGraphics>::Get()->gui load in
 		// cGraphics::Init; per-draw state arrives via a frame-scratch UBO
 		// ("pass", see Draw below).
-		auto vert_stage = RIProgram::loadShaderStage(mpResources->GetFileSearcher(), "wireframe.vert.spv");
-		auto frag_stage = RIProgram::loadShaderStage(mpResources->GetFileSearcher(), "wireframe.frag.spv");
+		auto vert_stage = RIProgram::loadShaderStage(mpResources->GetFileSearcher(), "wireframe.vert");
+		auto frag_stage = RIProgram::loadShaderStage(mpResources->GetFileSearcher(), "wireframe.frag");
 		std::array<RIProgram::ModuleStage, 2> stages = {
 			RIProgram::ModuleStage{RIProgram::PROGRAM_STAGE_VERTEX, vert_stage, "vsMain"},
 			RIProgram::ModuleStage{RIProgram::PROGRAM_STAGE_FRAGMENT, frag_stage, "psMain"}
@@ -183,7 +183,7 @@ namespace hpl {
 				if(pVB == NULL) continue;
 
 				auto *vbri = static_cast<cVertexBuffer*>(pVB);
-				vbri->SubmitToGPU(&mpGraphics->blasSubmit.cmds[0], &mpGraphics->device, cntx);
+				vbri->SubmitToGPU(&mpGraphics->device);
 			}
 		}
 
@@ -231,7 +231,8 @@ namespace hpl {
 		{
 
 			RIRenderingAttachment color = {};
-			color.view = *state.renderTargetView[mpGraphics->swapchainIndex];
+			color.view =
+				*state.renderTargetAttachmentView[mpGraphics->swapchainIndex];
 			color.loadOp = RI_ATTACHMENT_LOAD_OP_CLEAR;
 			color.storeOp = RI_ATTACHMENT_STORE_OP_STORE;
 			color.clearValue.color[0] = 0.0f;
@@ -245,12 +246,11 @@ namespace hpl {
 			depth.storeOp = RI_ATTACHMENT_STORE_OP_STORE;
 			depth.clearValue.depth = 1.0f;
 
-			// renderArea fields are int16_t; viewport sizes stay well under 32767.
 			RIBeginRenderingDesc beginDesc = {};
 			beginDesc.renderArea.x = 0;
 			beginDesc.renderArea.y = 0;
-			beginDesc.renderArea.width = (int16_t)renderWidth;
-			beginDesc.renderArea.height = (int16_t)renderHeight;
+			beginDesc.renderArea.width = renderWidth;
+			beginDesc.renderArea.height = renderHeight;
 			beginDesc.colorCount = 1;
 			beginDesc.colors = &color;
 			beginDesc.depthStencil = &depth;
@@ -259,90 +259,60 @@ namespace hpl {
 
 		// Y-flipped viewport — same convention as the forward passes, so the
 		// unmodified projection matrix lands the right way up.
-		VkViewport viewport_vk = { 0.0f, (float)renderHeight,
-								   (float)renderWidth, -(float)renderHeight,
-								   0.0f, 1.0f };
-		VkRect2D scissor = { { 0, 0 }, { renderWidth, renderHeight } };
-		vkCmdSetViewport(mpGraphics->primary.cmds[0].vk.cmd, 0, 1, &viewport_vk);
-		vkCmdSetScissor(mpGraphics->primary.cmds[0].vk.cmd, 0, 1, &scissor);
+		RIViewport viewportRi = {};
+		viewportRi.x = 0.0f;
+		viewportRi.y = (float)renderHeight;
+		viewportRi.width = (float)renderWidth;
+		viewportRi.height = -(float)renderHeight;
+		viewportRi.depthMin = 0.0f;
+		viewportRi.depthMax = 1.0f;
+		RIRect scissor = {};
+		scissor.x = 0;
+		scissor.y = 0;
+		scissor.width = renderWidth;
+		scissor.height = renderHeight;
+		mpGraphics->primary.cmds[0].setViewport(&mpGraphics->device, viewportRi);
+		mpGraphics->primary.cmds[0].setScissor(&mpGraphics->device, scissor);
 
 		////////////////////////////////////////////
 		// Pipeline: position-only fetch, triangle list rasterised as lines.
 		// Formats are constexpr so a single cached variant suffices.
 		{
-			VkVertexInputAttributeDescription vertexAttributeDesc[] = {
-				{ 0, 0, VK_FORMAT_R32G32B32_SFLOAT, 0 } // position (engine stream is float4, stride 16)
-			};
-			VkVertexInputBindingDescription vertexBindingDesc[] = {
-				{ 0, 16, VK_VERTEX_INPUT_RATE_VERTEX }
-			};
-			VkPipelineVertexInputStateCreateInfo vertexInputState = { VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO };
-			vertexInputState.pVertexAttributeDescriptions = vertexAttributeDesc;
-			vertexInputState.vertexAttributeDescriptionCount = ARRAY_COUNT(vertexAttributeDesc);
-			vertexInputState.pVertexBindingDescriptions = vertexBindingDesc;
-			vertexInputState.vertexBindingDescriptionCount = ARRAY_COUNT(vertexBindingDesc);
+			RIGraphicsPipelineDesc desc = {};
 
-			VkPipelineInputAssemblyStateCreateInfo inputAssemblyState = { VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO };
-			inputAssemblyState.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+			desc.vertexInput.bindingCount = 1;
+			desc.vertexInput.bindings[0] = { 0, 16, RI_VERTEX_INPUT_RATE_VERTEX };
+			desc.vertexInput.attributeCount = 1;
+			desc.vertexInput.attributes[0] = { 0, 0, RI_FORMAT_RGB32_SFLOAT, 0 }; // position (engine stream is float4, stride 16)
 
-			VkPipelineRasterizationStateCreateInfo rasterizationState = { VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO };
-			rasterizationState.polygonMode = VK_POLYGON_MODE_LINE;
-			rasterizationState.cullMode = VK_CULL_MODE_NONE;
-			rasterizationState.lineWidth = 1.0f;
+			desc.topology = RI_TOPOLOGY_TRIANGLE_LIST;
 
-			VkDynamicState dynamicStates[] = { VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR };
-			VkPipelineDynamicStateCreateInfo dynamicState = { VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO };
-			dynamicState.dynamicStateCount = ARRAY_COUNT(dynamicStates);
-			dynamicState.pDynamicStates = dynamicStates;
+			desc.raster.polygonMode = RI_POLYGON_MODE_LINE;
+			desc.raster.cullMode = RI_CULL_MODE_NONE;
+			// The Vk create-info never assigned frontFace, i.e. it was
+			// COUNTER_CLOCKWISE; the RI default is CLOCKWISE, so spell it out.
+			desc.raster.frontFace = RI_FRONT_FACE_COUNTER_CLOCKWISE;
+			desc.raster.lineWidth = 1.0f;
 
-			VkPipelineRenderingCreateInfo pipelineRenderingCreateInfo = { VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO };
-			VkFormat colorFormats[1] = { RIFormatToVK(cGraphics::PogoColorFormat) };
-			pipelineRenderingCreateInfo.colorAttachmentCount = 1;
-			pipelineRenderingCreateInfo.pColorAttachmentFormats = colorFormats;
-			pipelineRenderingCreateInfo.depthAttachmentFormat = RIFormatToVK(cGraphics::DepthFormat);
-			pipelineRenderingCreateInfo.stencilAttachmentFormat = VK_FORMAT_UNDEFINED;
+			desc.renderTarget.colorCount = 1;
+			desc.renderTarget.colorFormats[0] = cGraphics::PogoColorFormat;
+			desc.renderTarget.depthFormat = cGraphics::DepthFormat;
 
-			VkPipelineViewportStateCreateInfo viewportState = { VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO };
-			viewportState.viewportCount = 1;
-			viewportState.scissorCount = 1;
+			desc.depthStencil.depthTest = true;
+			desc.depthStencil.depthWrite = true;
+			desc.depthStencil.depthCompare = RI_COMPARE_LESS_EQUAL;
 
-			VkPipelineMultisampleStateCreateInfo multisampleState = { VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO };
-			multisampleState.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
+			desc.blendCount = 1;
+			desc.blend[0].blendEnable = false;
+			desc.blend[0].srcColor = RI_BLEND_ONE;
+			desc.blend[0].dstColor = RI_BLEND_ZERO;
+			desc.blend[0].colorOp = RI_BLEND_OP_ADD;
+			desc.blend[0].srcAlpha = RI_BLEND_ONE;
+			desc.blend[0].dstAlpha = RI_BLEND_ZERO;
+			desc.blend[0].alphaOp = RI_BLEND_OP_ADD;
+			desc.blend[0].writeMask = RI_COLOR_WRITE_RGBA;
 
-			VkPipelineDepthStencilStateCreateInfo depthStencilState = { VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO };
-			depthStencilState.depthTestEnable = VK_TRUE;
-			depthStencilState.depthWriteEnable = VK_TRUE;
-			depthStencilState.depthCompareOp = VK_COMPARE_OP_LESS_OR_EQUAL;
-			depthStencilState.minDepthBounds = 0.0f;
-			depthStencilState.maxDepthBounds = 1.0f;
-
-			VkPipelineColorBlendAttachmentState blendAttachmentState[] = { {
-				VK_FALSE,
-				VK_BLEND_FACTOR_ONE,
-				VK_BLEND_FACTOR_ZERO,
-				VK_BLEND_OP_ADD,
-				VK_BLEND_FACTOR_ONE,
-				VK_BLEND_FACTOR_ZERO,
-				VK_BLEND_OP_ADD,
-				VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT
-			} };
-			VkPipelineColorBlendStateCreateInfo colorBlendState = { VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO };
-			colorBlendState.attachmentCount = ARRAY_COUNT(blendAttachmentState);
-			colorBlendState.pAttachments = blendAttachmentState;
-
-			VkGraphicsPipelineCreateInfo pipelineCreateInfo = { VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO };
-			pipelineCreateInfo.pNext = &pipelineRenderingCreateInfo;
-			pipelineCreateInfo.pVertexInputState = &vertexInputState;
-			pipelineCreateInfo.pInputAssemblyState = &inputAssemblyState;
-			pipelineCreateInfo.pRasterizationState = &rasterizationState;
-			pipelineCreateInfo.pDynamicState = &dynamicState;
-			pipelineCreateInfo.pViewportState = &viewportState;
-			pipelineCreateInfo.pMultisampleState = &multisampleState;
-			pipelineCreateInfo.pDepthStencilState = &depthStencilState;
-			pipelineCreateInfo.pColorBlendState = &colorBlendState;
-
-			const hash_t kHash = hash_u32(HASH_INITIAL_VALUE, 0u);
-			m_wireframe->bindPipeline(&mpGraphics->device, &mpGraphics->primary.cmds[0], kHash, "wireframe", &pipelineCreateInfo);
+			m_wireframe->bindPipeline(&mpGraphics->device, &mpGraphics->primary.cmds[0], HASH_INITIAL_VALUE, "wireframe", desc);
 		}
 
 		////////////////////////////////////////////

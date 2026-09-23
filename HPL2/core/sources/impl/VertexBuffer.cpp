@@ -462,12 +462,9 @@ bool cVertexBuffer::Compile(tVertexCompileFlag aFlags) {
   return true;
 }
 
-void cVertexBuffer::SubmitToGPU(RICmd *cmd, RIDevice *device,
-                                    cGraphics::FrameContext *cntx) {
+void cVertexBuffer::SubmitToGPU(RIDevice *device) {
   cGraphics* pGraphics = Interface<cGraphics>::Get();
-  assert(cmd);
   assert(device);
-  assert(cntx);
 
   if (m_generation == m_lastSubmitted) {
     return;
@@ -537,10 +534,12 @@ void cVertexBuffer::SubmitToGPU(RICmd *cmd, RIDevice *device,
       // freed handle, then take the new one by value.
       if (!element.buffer.isEmpty())
         pGraphics->graphicsDefer.push(element.buffer);
-      element.buffer = RISharedPointer<RIBuffer>(
-          &pGraphics->device, allocBuffer(needed, usage, elementTypeName(element.type)));
-      element.m_internalBufferSize = needed;
+      RIBuffer created = allocBuffer(needed, usage, elementTypeName(element.type));
+      if(created.isEmpty())
+        hpl::FatalError("RI D3D12: failed to create buffer\n");
       reallocated = true;
+      element.buffer = RISharedPointer<RIBuffer>(&pGraphics->device, created);
+      element.m_internalBufferSize = needed;
     }
     // Always upload on (re)alloc; otherwise only when the caller flagged this
     // stream dirty via UpdateData().
@@ -562,10 +561,12 @@ void cVertexBuffer::SubmitToGPU(RICmd *cmd, RIDevice *device,
     if (needsAlloc) {
       if (!m_indexBuffer.isEmpty())
         pGraphics->graphicsDefer.push(m_indexBuffer);
-      m_indexBuffer =
-          RISharedPointer<RIBuffer>(&pGraphics->device, allocBuffer(needed, idxUsage, "Index"));
-      m_indexBufferCapacity = needed;
+      RIBuffer created = allocBuffer(needed, idxUsage, "Index");
+      if(created.isEmpty())
+        hpl::FatalError("RI D3D12: failed to create index buffer\n");
       reallocated = true;
+      m_indexBuffer = RISharedPointer<RIBuffer>(&pGraphics->device, created);
+      m_indexBufferCapacity = needed;
     }
     if (needsAlloc || m_updateIndices) {
       stageUpload(m_indexBuffer.Get(), needed, m_indices.data(),
@@ -580,6 +581,7 @@ void cVertexBuffer::SubmitToGPU(RICmd *cmd, RIDevice *device,
 
   // Dirty flags only drive the *partial* upload path above; clear them so the
   // next submit (after a future UpdateData) re-uploads only the touched streams.
+  // A failed stream keeps a zero capacity, so it is re-allocated on retry.
   m_updateFlags = 0;
   m_updateIndices = false;
   m_lastSubmitted = m_generation;
@@ -590,10 +592,13 @@ void cVertexBuffer::BuildBlas(RICmd *cmd, RIDevice *device,
   cGraphics* pGraphics = Interface<cGraphics>::Get();
   // Streams must be current before any build — no-op if a prior submit (e.g.
   // the translucent/decal prepare) already uploaded this generation.
-  SubmitToGPU(cmd, device, cntx);
+  SubmitToGPU(device);
 
   if (!device->accelerationStructureEnabled)
     return;
+
+  assert(cmd);
+  assert(cntx);
 
   if (!m_blas.isEmpty() && m_blasGeneration == m_generation) {
     return;
@@ -684,15 +689,23 @@ void cVertexBuffer::BuildBlas(RICmd *cmd, RIDevice *device,
   // single refcount domain for the VkAccelerationStructure.
   RIAccelStructure blas{};
   if (blas.init(device, &asDesc) != RI_SUCCESS) {
-    Error("failed to construct acceel structure");
+    // Continuing would adopt a zeroed acceleration structure whose device
+    // address is 0, and every TLAS instance referencing it would be invalid.
+    // Drop the storage and keep any previously-built BLAS, exactly as the
+    // storage-allocation failure above does.
+    Error("failed to construct acceleration structure for VB[%p]; skipping build",
+          static_cast<void *>(this));
+    m_blasStorage = {};
+    return;
   }
   // Distinct name for the AS itself (was reusing the storage buffer's name).
   std::snprintf(dbgName, sizeof(dbgName), "VB[%p]:Blas", static_cast<void *>(this));
   blas.setDebugObjectName(device, dbgName);
-  // The AS device address comes straight from vkGetAccelerationStructureDeviceAddress
-  // here; if it's zero/garbage every TLAS instance referencing it is invalid.
-  assert(blas.vk.handle != VK_NULL_HANDLE);
-  assert(blas.vk.deviceAddress != 0);
+  // If the address is zero/garbage every TLAS instance referencing it is
+  // invalid. isEmpty()/getDeviceAddress() dispatch per backend; reading
+  // blas.vk.* directly would read D3D12 union storage on a D3D12 device.
+  assert(!blas.isEmpty());
+  assert(blas.getDeviceAddress(device) != 0);
   m_blas = RISharedPointer<RIAccelStructure>(device, blas);
 
   struct RIBufferScratchAllocReq scratchReq = RIAllocBufferFromScratchAlloc(

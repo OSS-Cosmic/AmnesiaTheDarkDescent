@@ -24,15 +24,15 @@ bool cStandardHiZPass::LoadData() {
     return false;
 
   auto bin = RIProgram::loadShaderStage(mpResources->GetFileSearcher(),
-                                        "Standard.hiz.cs.spv");
+                                        "Standard.hiz.cs", "hizReduce");
   if (bin.empty())
     return false;
 
-  const VkDescriptorSetLayout external[] = {
-      mpGraphics->globalset->m_bindlessSet.vk.m_bindlessSetLayout};
+  const RIBindlessLayout external[] = {
+      mpGraphics->globalset->m_bindlessSet.layout()};
   auto program = std::make_shared<RIProgram>();
-  std::array<RIProgram::ModuleStage, 1> stages = {
-      RIProgram::ModuleStage{RIProgram::PROGRAM_STAGE_COMPUTE, bin, "hizReduce"}};
+  std::array<RIProgram::ModuleStage, 1> stages = {RIProgram::ModuleStage{
+      RIProgram::PROGRAM_STAGE_COMPUTE, bin, "hizReduce"}};
   program->initialize(&mpGraphics->device, stages, external, "Standard.hiz.cs");
 
   auto old = std::move(m_program);
@@ -67,15 +67,23 @@ bool cStandardHiZPass::Build(RICmd *cmd, uint32_t frameIndex,
     return false;
   if (!pyramid.IsUsable(image))
     return false;
+  // Validate every level before the opening barrier below. Bailing from inside
+  // the loop would leave the texture in UNORDERED_ACCESS with no closing
+  // transition, desyncing the state the next pass declares.
+  for (uint32_t mip = 0; mip < pyramid.mipCount; ++mip)
+    if (pyramid.mipView[image][mip].isEmpty())
+      return false;
 
   RIGpuScope _gs(&mpGraphics->profiler, cmd, "Standard.hiz");
 
   // From UNDEFINED, not from the previous frame's SHADER_RESOURCE: every texel
   // of every level is overwritten below, so discarding the old contents is
-  // correct and saves tracking per-image initialization.
+  // correct and saves tracking per-image initialization. The sync still waits
+  // on compute: the cull may have sampled this pyramid earlier in the same
+  // command list, and D3D12 rejects SyncBefore NONE for an accessed resource.
   cmd->vk_d3d12_textureBarrier(RITextureBarrier(
       pyramid.texture[image].Get(), RI_RESOURCE_STATE_UNDEFINED,
-      RI_RESOURCE_STATE_UNORDERED_ACCESS, RI_STAGE_NONE, RI_STAGE_COMPUTE,
+      RI_RESOURCE_STATE_UNORDERED_ACCESS, RI_STAGE_COMPUTE, RI_STAGE_COMPUTE,
       RI_BARRIER_ASPECT_COLOR));
 
   struct PushConstants {
@@ -87,9 +95,6 @@ bool cStandardHiZPass::Build(RICmd *cmd, uint32_t frameIndex,
   } constants{};
 
   for (uint32_t mip = 0; mip < pyramid.mipCount; ++mip) {
-    if (pyramid.mipView[image][mip].isEmpty())
-      return false;
-
     const uint32_t targetWidth = std::max<uint32_t>(1u, pyramid.width >> mip);
     const uint32_t targetHeight = std::max<uint32_t>(1u, pyramid.height >> mip);
     constants.targetWidth = targetWidth;
@@ -101,8 +106,10 @@ bool cStandardHiZPass::Build(RICmd *cmd, uint32_t frameIndex,
       constants.sourceMip = 0;
       constants.sourceIsDepth = 1;
     } else {
-      constants.sourceWidth = std::max<uint32_t>(1u, pyramid.width >> (mip - 1));
-      constants.sourceHeight = std::max<uint32_t>(1u, pyramid.height >> (mip - 1));
+      constants.sourceWidth =
+          std::max<uint32_t>(1u, pyramid.width >> (mip - 1));
+      constants.sourceHeight =
+          std::max<uint32_t>(1u, pyramid.height >> (mip - 1));
       constants.sourceMip = mip - 1;
       constants.sourceIsDepth = 0;
     }
@@ -114,21 +121,19 @@ bool cStandardHiZPass::Build(RICmd *cmd, uint32_t frameIndex,
     // has to declare the storage state too -- a SHADER_RESOURCE descriptor
     // would ask for SHADER_READ_ONLY_OPTIMAL and disagree with the image.
     bindings.push_back(RIProgram::DescriptorBinding(
-        "gHiZSource",
-        RIDescriptor::sampledImage(&mpGraphics->device,
-                                   pyramid.sampleView[image].Get(),
-                                   RI_RESOURCE_STATE_UNORDERED_ACCESS)));
+        "gHiZSource", RIDescriptor::sampledImage(
+                          &mpGraphics->device, pyramid.sampleView[image].Get(),
+                          RI_RESOURCE_STATE_UNORDERED_ACCESS)));
     bindings.push_back(RIProgram::DescriptorBinding(
         "gHiZTarget",
         RIDescriptor::storageImage(&mpGraphics->device,
                                    pyramid.mipView[image][mip].Get())));
 
-    VkComputePipelineCreateInfo computeCreate = {
-        VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO};
     const hash_t hash = hash_u32(HASH_INITIAL_VALUE, /*variant=*/0u);
     m_program->bindComputePipeline(&mpGraphics->device, cmd, hash,
-                                   "Standard.hiz.cs:hizReduce", &computeCreate);
-    m_program->bindBindlessDescriptorSet(cmd, &mpGraphics->globalset->m_bindlessSet,
+                                   "Standard.hiz.cs:hizReduce");
+    m_program->bindBindlessDescriptorSet(cmd,
+                                         &mpGraphics->globalset->m_bindlessSet,
                                          0, VK_PIPELINE_BIND_POINT_COMPUTE);
     m_program->bindDescriptors(&mpGraphics->device, cmd, frameIndex,
                                bindings.data(), bindings.size(),
@@ -142,8 +147,8 @@ bool cStandardHiZPass::Build(RICmd *cmd, uint32_t frameIndex,
     if (mip + 1u < pyramid.mipCount) {
       cmd->vk_d3d12_textureBarrier(RITextureBarrier(
           pyramid.texture[image].Get(), RI_RESOURCE_STATE_UNORDERED_ACCESS,
-          RI_RESOURCE_STATE_UNORDERED_ACCESS, RI_STAGE_COMPUTE, RI_STAGE_COMPUTE,
-          RI_BARRIER_ASPECT_COLOR));
+          RI_RESOURCE_STATE_UNORDERED_ACCESS, RI_STAGE_COMPUTE,
+          RI_STAGE_COMPUTE, RI_BARRIER_ASPECT_COLOR));
     }
   }
 

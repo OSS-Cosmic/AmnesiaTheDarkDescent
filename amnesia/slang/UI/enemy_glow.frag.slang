@@ -7,6 +7,8 @@
 // up; the facing interior fades out. Additive, RGB-only (alpha 0). Pairs with
 // outline_geom.vert.slang (shared push constant block).
 
+#include "../HostDefinitions.h"
+
 struct OutlinePass
 {
     float4x4 viewProj;
@@ -23,11 +25,11 @@ struct OutlinePC
 };
 
 [vk::push_constant]
-OutlinePC pc;
+OutlinePC gPushConstants HPL_PUSH_CONSTANT_REGISTER;
 
 struct PSIn
 {
-    [vk::location(0)] float3 v_viewNormal;
+    [vk::location(0)] float3 v_viewNormal : TEXCOORD0;
 };
 
 [shader("fragment")]
@@ -35,5 +37,5 @@ float4 psMain(PSIn pin) : SV_Target
 {
     float3 N = normalize(pin.v_viewNormal);
     float rim = pow(saturate(1.0f - abs(N.z)), 2.5f);
-    return float4(pc.color.rgb * (rim * pc.color.a), 0.0f);
+    return float4(gPushConstants.color.rgb * (rim * gPushConstants.color.a), 0.0f);
 }

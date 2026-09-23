@@ -9,6 +9,8 @@
 //   binding 0 : SamplerState inputSampler
 //   binding 1 : Texture2D<float4> sourceInput
 
+#include "../HostDefinitions.h"
+
 [vk::binding(0, 0)]
 SamplerState inputSampler;
 
@@ -23,11 +25,11 @@ struct RadialBlurPC
 };
 
 [vk::push_constant]
-RadialBlurPC pc;
+RadialBlurPC gPushConstants HPL_PUSH_CONSTANT_REGISTER;
 
 struct PSIn
 {
-    [vk::location(0)] float2 v_uv;
+    [vk::location(0)] float2 v_uv : TEXCOORD0;
 };
 
 static float3 SampleTextureBlur(float2 viewTexel, float2 screenCoord,
@@ -40,16 +42,16 @@ static float3 SampleTextureBlur(float2 viewTexel, float2 screenCoord,
 [shader("fragment")]
 float4 psMain(PSIn pin) : SV_Target
 {
-    float2 viewTexel      = 1.0f / pc.screenDim;
-    float2 halfScreenSize = pc.screenDim * 0.5f;
-    float2 screenCoord    = pin.v_uv * pc.screenDim;
+    float2 viewTexel      = 1.0f / gPushConstants.screenDim;
+    float2 halfScreenSize = gPushConstants.screenDim * 0.5f;
+    float2 screenCoord    = pin.v_uv * gPushConstants.screenDim;
 
     float2 vDir = halfScreenSize - screenCoord;
     float  fDist = length(vDir) / halfScreenSize.x;
     vDir = normalize(vDir);
-    fDist = max(0.0f, fDist - pc.blurStartDist);
+    fDist = max(0.0f, fDist - gPushConstants.blurStartDist);
 
-    vDir *= fDist * pc.size * pc.screenDim.x;
+    vDir *= fDist * gPushConstants.size * gPushConstants.screenDim.x;
     float3 vDiffuseColor = float3(0.0f);
     vDiffuseColor += SampleTextureBlur(viewTexel, screenCoord, vDir, -1.0f, 0.1f);
     vDiffuseColor += SampleTextureBlur(viewTexel, screenCoord, vDir, -0.5f, 0.2f);

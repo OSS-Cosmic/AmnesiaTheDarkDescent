@@ -31,83 +31,40 @@ struct StandardWaterReflectionState {
   cStandardWaterReflection::Sample sample;
 };
 namespace {
-struct ReflectionPipeline {
-  VkVertexInputBindingDescription b[5]{};
-  VkVertexInputAttributeDescription a[5]{};
-  VkPipelineVertexInputStateCreateInfo vi{
-      VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO};
-  VkPipelineInputAssemblyStateCreateInfo ia{
-      VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO};
-  VkPipelineRasterizationStateCreateInfo rs{
-      VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO};
-  VkDynamicState ds[2] = {VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR};
-  VkPipelineDynamicStateCreateInfo dyn{
-      VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO};
-  VkFormat formats[2]{};
-  VkPipelineRenderingCreateInfo rendering{
-      VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO};
-  VkPipelineViewportStateCreateInfo vp{
-      VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO};
-  VkPipelineMultisampleStateCreateInfo ms{
-      VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO};
-  VkPipelineDepthStencilStateCreateInfo depth{
-      VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO};
-  VkPipelineColorBlendAttachmentState blend[2]{};
-  VkPipelineColorBlendStateCreateInfo cb{
-      VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO};
-  VkGraphicsPipelineCreateInfo create{
-      VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO};
-  hash_t hash = 0;
-  ReflectionPipeline() {
-    b[0] = {0, 16, VK_VERTEX_INPUT_RATE_VERTEX};
-    b[1] = {1, 12, VK_VERTEX_INPUT_RATE_VERTEX};
-    b[2] = {2, 16, VK_VERTEX_INPUT_RATE_VERTEX};
-    b[3] = {3, 16, VK_VERTEX_INPUT_RATE_VERTEX};
-    b[4] = {4, 12, VK_VERTEX_INPUT_RATE_VERTEX};
-    a[0] = {0, 0, VK_FORMAT_R32G32B32_SFLOAT, 0};
-    a[1] = {1, 1, VK_FORMAT_R32G32B32_SFLOAT, 0};
-    a[2] = {2, 2, VK_FORMAT_R32G32B32A32_SFLOAT, 0};
-    a[3] = {3, 3, VK_FORMAT_R32G32B32A32_SFLOAT, 0};
-    a[4] = {4, 4, VK_FORMAT_R32G32_SFLOAT, 0};
-    vi.vertexBindingDescriptionCount = 5;
-    vi.pVertexBindingDescriptions = b;
-    vi.vertexAttributeDescriptionCount = 5;
-    vi.pVertexAttributeDescriptions = a;
-    ia.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
-    rs.polygonMode = VK_POLYGON_MODE_FILL;
-    rs.cullMode = VK_CULL_MODE_BACK_BIT;
-    rs.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
-    rs.lineWidth = 1;
-    dyn.dynamicStateCount = 2;
-    dyn.pDynamicStates = ds;
-    formats[0] = RIFormatToVK(cGraphics::PogoColorFormat);
-    formats[1] = RIFormatToVK(RI_FORMAT_RGBA32_SFLOAT);
-    rendering.colorAttachmentCount = 2;
-    rendering.pColorAttachmentFormats = formats;
-    rendering.depthAttachmentFormat = RIFormatToVK(cGraphics::DepthFormat);
-    vp.viewportCount = 1;
-    vp.scissorCount = 1;
-    ms.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
-    depth.depthTestEnable = VK_TRUE;
-    depth.depthWriteEnable = VK_TRUE;
-    depth.depthCompareOp = VK_COMPARE_OP_LESS_OR_EQUAL;
-    for (auto &x : blend)
-      x.colorWriteMask = 0xf;
-    cb.attachmentCount = 2;
-    cb.pAttachments = blend;
-    create.pNext = &rendering;
-    create.pVertexInputState = &vi;
-    create.pInputAssemblyState = &ia;
-    create.pRasterizationState = &rs;
-    create.pDynamicState = &dyn;
-    create.pViewportState = &vp;
-    create.pMultisampleState = &ms;
-    create.pDepthStencilState = &depth;
-    create.pColorBlendState = &cb;
-    hash = hash_u32(hash_u32(HASH_INITIAL_VALUE, cGraphics::PogoColorFormat),
-                    RI_FORMAT_RGBA32_SFLOAT);
-  }
-};
+RIGraphicsPipelineDesc MakeReflectionPipelineDesc() {
+  RIGraphicsPipelineDesc desc = {};
+  desc.vertexInput.bindingCount = 5;
+  desc.vertexInput.bindings[0] = {0, 16, RI_VERTEX_INPUT_RATE_VERTEX};
+  desc.vertexInput.bindings[1] = {1, 12, RI_VERTEX_INPUT_RATE_VERTEX};
+  desc.vertexInput.bindings[2] = {2, 16, RI_VERTEX_INPUT_RATE_VERTEX};
+  desc.vertexInput.bindings[3] = {3, 16, RI_VERTEX_INPUT_RATE_VERTEX};
+  desc.vertexInput.bindings[4] = {4, 12, RI_VERTEX_INPUT_RATE_VERTEX};
+  desc.vertexInput.attributeCount = 5;
+  desc.vertexInput.attributes[0] = {0, 0, RI_FORMAT_RGB32_SFLOAT, 0};
+  desc.vertexInput.attributes[1] = {1, 1, RI_FORMAT_RGB32_SFLOAT, 0};
+  desc.vertexInput.attributes[2] = {2, 2, RI_FORMAT_RGBA32_SFLOAT, 0};
+  desc.vertexInput.attributes[3] = {3, 3, RI_FORMAT_RGBA32_SFLOAT, 0};
+  desc.vertexInput.attributes[4] = {4, 4, RI_FORMAT_RG32_SFLOAT, 0};
+  desc.topology = RI_TOPOLOGY_TRIANGLE_LIST;
+  desc.raster.polygonMode = RI_POLYGON_MODE_FILL;
+  desc.raster.cullMode = RI_CULL_MODE_BACK;
+  // The reflection view is mirrored through the water plane, which flips the
+  // winding: with BACK culling this has to stay COUNTER_CLOCKWISE (the RI
+  // default is CLOCKWISE, unlike the zero-initialised Vk create-info).
+  desc.raster.frontFace = RI_FRONT_FACE_COUNTER_CLOCKWISE;
+  desc.raster.lineWidth = 1.0f;
+  desc.renderTarget.colorCount = 2;
+  desc.renderTarget.colorFormats[0] = cGraphics::PogoColorFormat;
+  desc.renderTarget.colorFormats[1] = RI_FORMAT_RGBA32_SFLOAT;
+  desc.renderTarget.depthFormat = cGraphics::DepthFormat;
+  desc.depthStencil.depthTest = true;
+  desc.depthStencil.depthWrite = true;
+  desc.depthStencil.depthCompare = RI_COMPARE_LESS_EQUAL;
+  desc.blendCount = 2; // must match renderTarget.colorCount
+  for (uint32_t i = 0; i < desc.blendCount; ++i)
+    desc.blend[i].writeMask = RI_COLOR_WRITE_RGBA; // was colorWriteMask = 0xf
+  return desc;
+}
 static bool samePlane(const cStandardWaterPlane &a,
                       const cStandardWaterPlane &b) {
   return std::fabs(a.normal.x - b.normal.x) < 1e-4f &&
@@ -173,15 +130,17 @@ bool cStandardWaterReflection::LoadData() {
   if (!m_impl->g || !m_impl->r || !m_impl->g->globalset ||
       !m_impl->environment->LoadData())
     return false;
-  auto bin = RIProgram::loadShaderStage(m_impl->r->GetFileSearcher(),
-                                        "Standard.waterReflection.3d.spv");
-  if (bin.empty())
+  auto vertBin = RIProgram::loadShaderStage(m_impl->r->GetFileSearcher(),
+                                            "Standard.waterReflection.3d", "vsMain");
+  auto fragBin = RIProgram::loadShaderStage(m_impl->r->GetFileSearcher(),
+                                            "Standard.waterReflection.3d", "psMain");
+  if (vertBin.empty() || fragBin.empty())
     return false;
-  const VkDescriptorSetLayout ext[] = {
-      m_impl->g->globalset->m_bindlessSet.vk.m_bindlessSetLayout};
+  const RIBindlessLayout ext[] = {
+      m_impl->g->globalset->m_bindlessSet.layout()};
   std::array<RIProgram::ModuleStage, 2> s = {
-      RIProgram::ModuleStage{RIProgram::PROGRAM_STAGE_VERTEX, bin, "vsMain"},
-      RIProgram::ModuleStage{RIProgram::PROGRAM_STAGE_FRAGMENT, bin, "psMain"}};
+      RIProgram::ModuleStage{RIProgram::PROGRAM_STAGE_VERTEX, vertBin, "vsMain"},
+      RIProgram::ModuleStage{RIProgram::PROGRAM_STAGE_FRAGMENT, fragBin, "psMain"}};
   m_impl->program = std::make_shared<RIProgram>();
   m_impl->program->initialize(&m_impl->g->device, s, ext,
                               "Standard.waterReflection");
@@ -265,9 +224,16 @@ cStandardWaterReflection::Sample cStandardWaterReflection::RecordSurface(
   auto &posAttachment = state->waterReflectionPositionAttachmentView[image];
   auto &depth = state->waterReflectionDepthTexture[image];
   auto &depthAttachment = state->waterReflectionDepthAttachmentView[image];
+  // The reflection colour needs both views of the one texture, as every other
+  // capture target here does: the sampled view is what the water surface (and
+  // the refraction fallback) reads, the attachment view is the only one D3D12
+  // will build an RTV from.
+  auto &targetView = state->waterReflectionView[image];
+  auto &targetAttachment = state->waterReflectionAttachmentView[image];
   if (opaque.isEmpty() || opaqueView.isEmpty() || opaqueAttachment.isEmpty() ||
       pos.isEmpty() || posView.isEmpty() || posAttachment.isEmpty() ||
-      depth.isEmpty() || depthAttachment.isEmpty())
+      depth.isEmpty() || depthAttachment.isEmpty() || targetView.isEmpty() ||
+      targetAttachment.isEmpty())
     return no;
   uint32_t width = std::max(1u, state->width / 2),
            height = std::max(1u, state->height / 2);
@@ -376,7 +342,7 @@ cStandardWaterReflection::Sample cStandardWaterReflection::RecordSurface(
     }
     o->UpdateGraphicsForViewport(&rf, 0);
     auto *v = static_cast<cVertexBuffer *>(o->GetVertexBuffer());
-    v->SubmitToGPU(&m_impl->g->blasSubmit.cmds[0], &m_impl->g->device, frame);
+    v->SubmitToGPU(&m_impl->g->device);
     ObjectSubmitDesc d{};
     d.modelMatrix = o->GetModelMatrix(&rf);
     d.uvMatrix = o->GetMaterial()->GetUvMatrix();
@@ -463,9 +429,9 @@ cStandardWaterReflection::Sample cStandardWaterReflection::RecordSurface(
       cmd, &m_impl->g->globalset->m_bindlessSet, 0);
   m_impl->program->bindDescriptors(&m_impl->g->device, cmd,
                                    m_impl->g->frameIndex, b.data(), b.size());
-  ReflectionPipeline pipe;
-  m_impl->program->bindPipeline(&m_impl->g->device, cmd, pipe.hash,
-                                "Standard.waterReflection", &pipe.create);
+  const RIGraphicsPipelineDesc pipe = MakeReflectionPipelineDesc();
+  m_impl->program->bindPipeline(&m_impl->g->device, cmd, HASH_INITIAL_VALUE,
+                                "Standard.waterReflection", pipe);
   RIViewport vp{};
   vp.y = height;
   vp.width = width;
@@ -510,10 +476,11 @@ cStandardWaterReflection::Sample cStandardWaterReflection::RecordSurface(
       RITextureBarrier(depth.Get(), RI_RESOURCE_STATE_DEPTH_WRITE,
                        RI_RESOURCE_STATE_SHADER_RESOURCE, RI_STAGE_FRAGMENT,
                        RI_STAGE_FRAGMENT, RI_BARRIER_ASPECT_DEPTH));
-  auto *out = state->waterReflectionView[image].Get();
+  auto *out = targetView.Get();
   if (!m_impl->environment->Render(frame, cmd, m_impl->g->frameIndex, width,
                                    height, opaque.Get(), opaqueView.Get(),
-                                   posView.Get(), out, world, &reflectedFrame)) {
+                                   posView.Get(), targetAttachment.Get(), world,
+                                   &reflectedFrame)) {
     // Hand the colour back in the state the flag now claims for it.
     cmd->vk_d3d12_textureBarrier(
         RITextureBarrier(target, RI_RESOURCE_STATE_RENDER_TARGET,
@@ -535,7 +502,7 @@ cStandardWaterReflection::Sample cStandardWaterReflection::RecordSurface(
       !state->waterReflectionDepthSampleView[image].isEmpty()) {
     cStandardTranslucentPass::Targets t;
     t.color = target;
-    t.colorAttachmentView = out;
+    t.colorAttachmentView = targetAttachment.Get();
     t.depth = depth.Get();
     t.depthAttachmentView = depthAttachment.Get();
     t.depthSampleView = state->waterReflectionDepthSampleView[image].Get();

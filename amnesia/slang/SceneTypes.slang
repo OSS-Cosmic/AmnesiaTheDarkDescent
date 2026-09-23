@@ -219,10 +219,10 @@ SLANG_PUBLIC struct UniformObject {
     // Shadow Flag overlay) without affecting ray masks or material data.
     SLANG_PUBLIC uint  renderFlags;
 
-    // Per-object vertex/index stream device addresses (BDAs), folded in from the
+    // Per-object vertex/index stream handles, folded in from the
     // former gOpaque*Handles bindless buffers — they were always indexed by this
-    // same object slot. submitObject writes them from the renderable's vertex
-    // buffer (or an explicit override for particle scratch streams); 0 = stream
+    // same object slot. Vulkan stores a BDA; D3D12 stores (descriptor + 1) in
+    // the upper 32 bits and the stream byte offset in the lower 32 bits. 0 =
     // absent. fetchBindlessTriangle() and the gbuffer / particle vertex shaders
     // read these instead of six parallel StructuredBuffer<uint64_t>. Placed last;
     // the uint64 block stays 8-byte aligned under scalar layout.
@@ -367,14 +367,33 @@ SLANG_PUBLIC struct SceneConstants {
     SLANG_PUBLIC float jitterX;                       // current jitterUV.x: top-left normalized sample offset from pixel center (jitterPixels / renderExtent, |jitterPixels| <= 0.5 render pixels), +x right
     SLANG_PUBLIC float3 cameraU;
     SLANG_PUBLIC float jitterY;                       // current jitterUV.y: top-left normalized sample offset from pixel center (jitterPixels / renderExtent, |jitterPixels| <= 0.5 render pixels), +y down
+    // From here on the order is also valid under D3D12 cbuffer packing (no
+    // float3 straddles a 16-byte row; arrays start on a row and use 16-byte
+    // elements), so the DXIL gPerFrame layout matches the host struct.
     SLANG_PUBLIC float3 cameraV;
-    SLANG_PUBLIC float3 cameraW;
     SLANG_PUBLIC float prevJitterX;                   // previous frame's jitterUV.x, same units and sign convention
+    SLANG_PUBLIC float3 cameraW;
     SLANG_PUBLIC float prevJitterY;                   // previous frame's jitterUV.y, same units and sign convention
+    // Origin of the camera-centered world light grid: posW snapped DOWN to a
+    // whole kLightGridUnit. Both LightGridBuildPass (which bins into cells) and
+    // getCellLights (which looks cells up) must use this exact value or the
+    // lookup reads a cell the builder filled for a different origin.
+    //
+    // Snapped rather than raw posW so the grid shifts one whole cell at a time
+    // instead of sliding continuously: with a raw origin every surface point
+    // changes cell every frame, its light list churns, and the ReSTIR reservoirs
+    // keyed on that list churn with it.
+    SLANG_PUBLIC float3 lightGridOriginW;
+    SLANG_PUBLIC float _padLightGridOrigin;           // keep the next float3 on a 16-byte row (D3D12 cbuffer packing)
     SLANG_PUBLIC float materialMipBias;               // mip bias for gradient-based MATERIAL sampling when a temporal provider shades at a reduced render extent; 0 for Off/NativeAA/native-extent frames
+    SLANG_PUBLIC uint _padFogAreaIndices0;            // row-align fogAreaIndices (D3D12 cbuffer arrays start on a 16-byte row)
+    SLANG_PUBLIC uint _padFogAreaIndices1;
+    SLANG_PUBLIC uint _padFogAreaIndices2;
     // Per-camera visible fog areas in legacy back-to-front draw order. The
     // parameter buffer is shared by all viewports and stays in world order.
-    SLANG_PUBLIC uint fogAreaIndices[kFogAreaCapacity];
+    // Packed four per uint4: a D3D12 cbuffer pads every scalar array element
+    // to 16 bytes. Index i lives at fogAreaIndices[i >> 2][i & 3].
+    SLANG_PUBLIC uint4 fogAreaIndices[kFogAreaCapacity / 4];
     SLANG_PUBLIC uint skyBoxTextureIndex;
     SLANG_PUBLIC uint skyBoxEnabled;
     SLANG_PUBLIC uint fogEnabled;

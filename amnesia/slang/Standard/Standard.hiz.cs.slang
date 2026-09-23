@@ -21,6 +21,8 @@
 //                    sourceMip on Load, so no per-level SRV is needed
 //   gHiZTarget  out  a single-level storage view of the level being written
 
+#include "../HostDefinitions.h"
+
 [vk::binding(0, 2)] Texture2D<float>   gHiZDepth;
 [vk::binding(1, 2)] Texture2D<float>   gHiZSource;
 [vk::binding(2, 2)] RWTexture2D<float> gHiZTarget;
@@ -35,15 +37,15 @@ struct StandardHiZPC {
 };
 
 [vk::push_constant]
-StandardHiZPC pc;
+StandardHiZPC gPushConstants HPL_PUSH_CONSTANT_REGISTER;
 
 float loadSource(uint2 coordinate)
 {
-    uint2 clamped = min(coordinate, pc.sourceExtent - uint2(1u, 1u));
-    if (pc.sourceIsDepth != 0u) {
+    uint2 clamped = min(coordinate, gPushConstants.sourceExtent - uint2(1u, 1u));
+    if (gPushConstants.sourceIsDepth != 0u) {
         return gHiZDepth.Load(int3(int2(clamped), 0));
     }
-    return gHiZSource.Load(int3(int2(clamped), int(pc.sourceMip)));
+    return gHiZSource.Load(int3(int2(clamped), int(gPushConstants.sourceMip)));
 }
 
 [shader("compute")]
@@ -51,7 +53,7 @@ float loadSource(uint2 coordinate)
 void hizReduce(uint3 dispatchThreadID : SV_DispatchThreadID)
 {
     uint2 target = dispatchThreadID.xy;
-    if (target.x >= pc.targetExtent.x || target.y >= pc.targetExtent.y) {
+    if (target.x >= gPushConstants.targetExtent.x || target.y >= gPushConstants.targetExtent.y) {
         return;
     }
 
@@ -63,15 +65,15 @@ void hizReduce(uint3 dispatchThreadID : SV_DispatchThreadID)
 
     // An odd source leaves one row/column unowned by any 2x2 block. Fold it
     // into the last block instead of losing it.
-    if ((pc.sourceExtent.x & 1u) != 0u) {
+    if ((gPushConstants.sourceExtent.x & 1u) != 0u) {
         farthest = max(farthest, loadSource(base + uint2(2u, 0u)));
         farthest = max(farthest, loadSource(base + uint2(2u, 1u)));
     }
-    if ((pc.sourceExtent.y & 1u) != 0u) {
+    if ((gPushConstants.sourceExtent.y & 1u) != 0u) {
         farthest = max(farthest, loadSource(base + uint2(0u, 2u)));
         farthest = max(farthest, loadSource(base + uint2(1u, 2u)));
     }
-    if ((pc.sourceExtent.x & 1u) != 0u && (pc.sourceExtent.y & 1u) != 0u) {
+    if ((gPushConstants.sourceExtent.x & 1u) != 0u && (gPushConstants.sourceExtent.y & 1u) != 0u) {
         farthest = max(farthest, loadSource(base + uint2(2u, 2u)));
     }
 

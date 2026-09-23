@@ -549,6 +549,19 @@ namespace hpl {
 
 	//-----------------------------------------------------------------------
 
+	cColor iLight::GetDiffuseColorFor(eLightModel aModel) const
+	{
+		if(mState.mColorDrive.mbColorAbsolute)
+			return mState.mColorDrive.mAbsoluteColor;
+
+		const cColor& authored = mState.Tuning(aModel).mDiffuseColor;
+		const cColor& scale = mState.mColorDrive.mColorScale;
+		return cColor(authored.r * scale.r, authored.g * scale.g,
+					  authored.b * scale.b, authored.a * scale.a);
+	}
+
+	//-----------------------------------------------------------------------
+
 	cLightTuningState& iLight::AuthoringTuning()
 	{
 		cLightTuningState& tuning = mState.Tuning(GetActiveLightModel());

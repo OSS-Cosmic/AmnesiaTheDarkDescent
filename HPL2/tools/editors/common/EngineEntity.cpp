@@ -369,6 +369,11 @@ bool cEngineEntityLoadedMeshAggregate::Create(const tString& asName)
 	cEditorEntityLoader* pLoader = pWorld->GetEditor()->GetEngineEntityLoader();
 
 	mpEntity = pLoader->LoadEntFile(mpParent->GetID(), asName, msFilename, pWorld->GetWorld(), false, true, true, false, true);
+	// On a failed load the loader's child lists still hold the previous entity's
+	// objects; bail before taking them (the destructor would destroy them).
+	if(mpEntity==NULL)
+		return false;
+
 	mvLights = pLoader->GetLights();
 	mvBillboards = pLoader->GetBillboards();
 	mvParticleSystems = pLoader->GetParticleSystems();

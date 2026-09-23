@@ -85,12 +85,12 @@ fi
 
 is_delta() { [[ "$1" == *.map_delta || "$1" == *.ent_delta ]]; }
 
-# Retail binaries and bulky archives stay behind: names beginning with
-# "Amnesia", plus .rar, .pdf, .dll and .exe files.
+# Retail binaries and bulky archives stay behind: top-level names beginning
+# with "Amnesia", plus .rar, .pdf, .dll and .exe files.
 copy_game_assets() {
     local dest="$1"
     (cd "$GAME_DIR" && find . -type f \
-        ! -name 'Amnesia*' ! -name '*.rar' ! -name '*.pdf' ! -name '*.dll' ! -name '*.exe' \
+        ! -path './Amnesia*' ! -name '*.rar' ! -name '*.pdf' ! -name '*.dll' ! -name '*.exe' \
         -print0) |
     while IFS= read -r -d '' rel; do
         mkdir -p "$dest/$(dirname "$rel")"

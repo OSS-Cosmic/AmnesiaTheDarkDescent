@@ -1,10 +1,9 @@
 #ifndef RI_TYPES_H
 #define RI_TYPES_H
 
-// Umbrella header (mirrors ref_nri/ri_types.h): it defines no types itself —
-// each RI type now lives in its use-case domain header. This aggregates them so
-// existing wholesale `#include "graphics/RITypes.h"` consumers keep compiling.
-// New code should prefer including the specific domain header(s) it needs.
+// Umbrella header: defines no types itself, just aggregates the use-case domain
+// headers for wholesale consumers. New code should include the specific domain
+// header(s) it needs.
 //
 // Layering (leaf -> top): prelude -> resource -> pipeline / shared-ptr ->
 // descriptor -> command -> device -> command-ring. RISwapchain.h includes the
@@ -21,8 +20,10 @@
 #include "graphics/RITexture.h"
 #include "graphics/RITextureView.h"
 
-// Pipeline / draw-state enums + the intrusive shared handle.
+// Pipeline / draw-state enums, the backend-neutral pipeline description built
+// from them, + the intrusive shared handle.
 #include "graphics/RIPipeline.h"
+#include "graphics/RIPipelineDesc.h"
 #include "graphics/RISharedPointer.h"
 
 // Domain types.

@@ -4,6 +4,8 @@
 // render extent. Behavior mirrors TemporalReactiveMaskEvaluate in
 // HPL2/core/include/graphics/TemporalReactiveMask.h.
 
+#include "../HostDefinitions.h"
+
 [vk::binding(0, 2)] Texture2D<float4>  gOpaqueColor;
 [vk::binding(1, 2)] Texture2D<float4>  gSceneColor;
 [vk::binding(2, 2)] RWTexture2D<float> gReactiveMask;
@@ -25,7 +27,7 @@ struct ReactiveMaskPC
 // Scalar-layout offsets: uint2 0, float2 8, uint 16, then five floats at
 // 20, 24, 28, 32, and 36; total push-constant size is 40 bytes.
 [vk::push_constant]
-ReactiveMaskPC pc;
+ReactiveMaskPC gPushConstants HPL_PUSH_CONSTANT_REGISTER;
 
 float sanitizeComponent(float c)
 {
@@ -53,7 +55,7 @@ float evaluateRelative(int2 clampedPixel)
     float den = max(abs(opaque.x), abs(finalColor.x))
               + max(abs(opaque.y), abs(finalColor.y))
               + max(abs(opaque.z), abs(finalColor.z))
-              + pc.gLuminanceFloor;
+              + gPushConstants.gLuminanceFloor;
 
     // This is a per-channel L1 ratio, not a luminance difference. An
     // equal-luminance chromatic change such as opaque (1,1,1) versus final
@@ -82,16 +84,16 @@ float evaluateDilatedRelative(int2 center, int2 extentMax)
 
 float evaluateReactive(float relative)
 {
-    return saturate(relative * pc.gReactiveScale);
+    return saturate(relative * gPushConstants.gReactiveScale);
 }
 
 float evaluateComposition(float relative)
 {
     // Composition strength is deliberately independent and conservative; it
     // does not force every changed pixel to full history rejection.
-    return (relative > pc.gChangeEpsilon)
-        ? saturate(pc.gCompositionScale
-                 * saturate(relative / pc.gCompositionKnee))
+    return (relative > gPushConstants.gChangeEpsilon)
+        ? saturate(gPushConstants.gCompositionScale
+                 * saturate(relative / gPushConstants.gCompositionKnee))
         : 0.0f;
 }
 
@@ -101,11 +103,11 @@ void csMain(uint3 tid : SV_DispatchThreadID)
 {
     uint2 p = tid.xy;
     // Check before any write so odd and boundary extents are safe.
-    if (p.x >= pc.gExtent.x || p.y >= pc.gExtent.y)
+    if (p.x >= gPushConstants.gExtent.x || p.y >= gPushConstants.gExtent.y)
         return;
 
-    int2 extentMax = int2(int(pc.gExtent.x) - 1,
-                         int(pc.gExtent.y) - 1);
+    int2 extentMax = int2(int(gPushConstants.gExtent.x) - 1,
+                         int(gPushConstants.gExtent.y) - 1);
     float relative = evaluateDilatedRelative(int2(p), extentMax);
 
     // FSR consumes these masks on the original jittered input grid, so both
@@ -113,7 +115,7 @@ void csMain(uint3 tid : SV_DispatchThreadID)
     gReactiveMask[p] = evaluateReactive(relative);
     gCompositionMask[p] = evaluateComposition(relative);
 
-    if (pc.gWriteResponsive != 0)
+    if (gPushConstants.gWriteResponsive != 0)
     {
         // Subpixel/sign conversion (see notes/temporal_upscaling.md):
         // jitterPixels is the offset relative to the pixel center in
@@ -122,9 +124,9 @@ void csMain(uint3 tid : SV_DispatchThreadID)
         // the unjittered grid SUBTRACTS jitterPixels/extent:
         // sampleUV = unjitteredUV - jitterPixels / extent
         //          = ((float2(p) + 0.5) - jitterPixels) / extent.
-        float2 extentF = float2(float(pc.gExtent.x), float(pc.gExtent.y));
+        float2 extentF = float2(float(gPushConstants.gExtent.x), float(gPushConstants.gExtent.y));
         float2 unjitteredPixel = float2(float(p.x), float(p.y));
-        float2 sampleUV = (unjitteredPixel + 0.5f - pc.gJitterPixels)
+        float2 sampleUV = (unjitteredPixel + 0.5f - gPushConstants.gJitterPixels)
                         / extentF;
         int2 responsivePixel = clamp(
             int2(floor(sampleUV * extentF)), int2(0, 0), extentMax);

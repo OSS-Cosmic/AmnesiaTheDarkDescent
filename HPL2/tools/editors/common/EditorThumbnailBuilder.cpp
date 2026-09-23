@@ -46,27 +46,14 @@ static std::optional<cTexture> CreateThumbnailCacheTexture()
 	cGraphics* pGraphics = Interface<cGraphics>::Get();
 	cTexture texture;
 
-	VkImageCreateInfo imageInfo = {VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO};
-	imageInfo.imageType = VK_IMAGE_TYPE_2D;
-	imageInfo.format = VK_FORMAT_R8G8B8A8_SRGB;
-	imageInfo.extent = {kThumbnailSize, kThumbnailSize, 1};
-	imageInfo.mipLevels = 1;
-	imageInfo.arrayLayers = 1;
-	imageInfo.samples = VK_SAMPLE_COUNT_1_BIT;
-	imageInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
-	imageInfo.usage = VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
-	imageInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-
-	uint32_t queueFamilies[RI_QUEUE_LEN] = {0};
-	imageInfo.pQueueFamilyIndices = queueFamilies;
-	VK_ConfigureImageQueueFamilies(&imageInfo, pGraphics->device.queues, RI_QUEUE_LEN,
-								   queueFamilies, RI_QUEUE_LEN);
-
-	VmaAllocationCreateInfo allocInfo = {};
-	allocInfo.usage = VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE;
-	if(!VK_WrapResult(vmaCreateImage(pGraphics->device.vk.vmaAllocator, &imageInfo,
-									 &allocInfo, &texture.handle.vk.image,
-									 &texture.handle.vk.allocation, NULL)))
+	RITextureDesc desc = {};
+	desc.type = RI_TEXTURE_2D;
+	desc.format = RI_FORMAT_RGBA8_SRGB;
+	desc.width = kThumbnailSize;
+	desc.height = kThumbnailSize;
+	desc.usage = RI_USAGE_SHADER_RESOURCE | RI_USAGE_TRANSFER_DST;
+	texture.handle = RITexture::create(&pGraphics->device, desc);
+	if(texture.handle.isEmpty())
 	{
 		Error("ThumbnailBuilder: failed to create cache image\n");
 		return std::nullopt;
@@ -74,17 +61,14 @@ static std::optional<cTexture> CreateThumbnailCacheTexture()
 
 	RITextureViewDesc viewDesc = {};
 	viewDesc.viewType = RI_VIEWTYPE_SHADER_RESOURCE_2D;
-	viewDesc.format = VKToRIFormat(imageInfo.format);
+	viewDesc.format = RI_FORMAT_RGBA8_SRGB;
 	viewDesc.mipNum = 1;
 	viewDesc.layerNum = 1;
 	texture.view = RITextureView::create(&pGraphics->device, &texture.handle, viewDesc);
 	if(texture.view.isEmpty())
 	{
 		Error("ThumbnailBuilder: failed to create cache image view\n");
-		vmaDestroyImage(pGraphics->device.vk.vmaAllocator, texture.handle.vk.image,
-						texture.handle.vk.allocation);
-		texture.handle.vk.image = VK_NULL_HANDLE;
-		texture.handle.vk.allocation = NULL;
+		texture.handle.dispose(&pGraphics->device);
 		return std::nullopt;
 	}
 
@@ -134,6 +118,15 @@ cEditorThumbnailBuilder::cEditorThumbnailBuilder(iEditorBase* apEditor)
 	{
 		return; // builder stays a safe no-op
 	}
+	if(!CreateViewportColorAttachmentView(&Interface<cGraphics>::Get()->device, &mTargetTexture,
+										  RI_FORMAT_RGBA8_SRGB, &mTargetAttachmentView))
+	{
+		Error("ThumbnailBuilder: failed to create target attachment view\n");
+		Interface<cGraphics>::Get()->graphicsDefer.push(mTargetAttachmentView);
+		mTargetAttachmentView = {};
+		ReleaseViewportAttachmentTexture(&mTargetTexture, &mTargetView);
+		return; // builder stays a safe no-op
+	}
 
 	//////////////////////////////////////////
 	// The builder's own world: job entities live here, fully isolated from
@@ -156,7 +149,7 @@ cEditorThumbnailBuilder::cEditorThumbnailBuilder(iEditorBase* apEditor)
 	target.width = kThumbnailSize;
 	target.height = kThumbnailSize;
 	target.texture = *mTargetTexture;
-	target.view.vk.image = mTargetView->vk.image;
+	target.view = *mTargetAttachmentView;
 	target.format = RI_FORMAT_RGBA8_SRGB;
 	mpViewport->SetTarget(target);
 
@@ -184,6 +177,8 @@ cEditorThumbnailBuilder::~cEditorThumbnailBuilder()
 	////////////////////////////////////////
 	// GPU handles go to the graphics deferral queue — freed once the in-flight
 	// pipeline is done with them (or in cGraphics::Dispose at shutdown).
+	Interface<cGraphics>::Get()->graphicsDefer.push(mTargetAttachmentView);
+	mTargetAttachmentView = {};
 	ReleaseViewportAttachmentTexture(&mTargetTexture, &mTargetView);
 
 	if(mpViewport)
@@ -402,14 +397,11 @@ void cEditorThumbnailBuilder::RecordCacheCopy(const WorldDrawCtx& ctx)
 	};
 	pCmd->vk_d3d12_textureBarriers<2>(2, pre);
 
-	VkImageCopy region = {};
-	region.srcSubresource = { VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1 };
-	region.dstSubresource = { VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1 };
-	region.extent = { kThumbnailSize, kThumbnailSize, 1 };
-	vkCmdCopyImage(pCmd->vk.cmd,
-				   mTargetTexture->vk.image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-				   pDst->handle.vk.image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-				   1, &region);
+	RIImageCopyDesc region = {};
+	region.width = kThumbnailSize;
+	region.height = kThumbnailSize;
+	pCmd->copyImage(&Interface<cGraphics>::Get()->device,
+					mTargetTexture.Get(), &pDst->handle, region);
 
 	const RITextureBarrier post[2] = {
 		RITextureBarrier(mTargetTexture.Get(),

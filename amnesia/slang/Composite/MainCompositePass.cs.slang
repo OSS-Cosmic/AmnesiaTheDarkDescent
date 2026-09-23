@@ -48,7 +48,7 @@ struct MainCompositePushConstants
 };
 
 [vk::push_constant]
-ConstantBuffer<MainCompositePushConstants> gPushConstants;
+ConstantBuffer<MainCompositePushConstants> gPushConstants HPL_PUSH_CONSTANT_REGISTER;
 
 // REBLUR's denoised indirect diffuse: albedo-demodulated, YCoCg-packed
 // with normalized hit distance in .w.

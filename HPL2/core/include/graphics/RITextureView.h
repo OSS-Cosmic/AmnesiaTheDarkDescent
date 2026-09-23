@@ -12,6 +12,10 @@
 
 struct RIDevice;
 struct RIRenderer;
+#if (DEVICE_IMPL_D3D12)
+struct ID3D12Resource;
+namespace D3D12MA { class Allocation; }
+#endif
 
 enum RITextureViewType_e {
   RI_VIEWTYPE_SHADER_RESOURCE_1D,
@@ -62,7 +66,29 @@ struct RITextureView {
       VkImageView image;
     } vk;
 #endif
+#if (DEVICE_IMPL_D3D12)
+    struct {
+      ID3D12Resource *resource;  // borrowed from RITexture; not owned here
+      D3D12MA::Allocation *allocation; // borrowed allocation identity snapshot
+      uint32_t format;           // DXGI_FORMAT of the view
+      uint32_t viewType;         // RITextureViewType_e snapshot
+      uint32_t baseMip;
+      uint32_t mipNum;
+      uint32_t baseLayer;
+      uint32_t layerNum;
+    } d3d12;
+#endif
   };
+  // Neutral view identity and subresource description, available even when
+  // the active backend has no Vulkan image-view handle.
+  const struct RITexture *resource;
+  uint32_t dimension; // RITextureType_e
+  uint32_t format;    // RI_Format_e
+  uint32_t viewType;  // RITextureViewType_e
+  uint32_t baseMip;
+  uint32_t mipNum;
+  uint32_t baseLayer;
+  uint32_t layerNum;
   hash_t cookie;
 };
 

@@ -2,6 +2,7 @@
 
 #include "graphics/Graphics.h"
 #include "graphics/GlobalManagedSets.h"
+#include "graphics/PathTracePayload.h"
 #include "graphics/RIBarrier.h"
 #include "graphics/RICommand.h"
 #include "graphics/RIDescriptor.h"
@@ -29,6 +30,10 @@ namespace {
 struct ScratchImage {
   RISharedPointer<RITexture> texture;
   RISharedPointer<RITextureView> view;
+  // Only populated for images created with RI_USAGE_COLOR_ATTACHMENT (the three
+  // guide targets). D3D12 rejects `view` as a render target; see
+  // CreateViewportColorAttachmentView.
+  RISharedPointer<RITextureView> attachmentView;
   uint32_t state = RI_RESOURCE_STATE_UNDEFINED;
   uint32_t stage = RI_STAGE_NONE;
 };
@@ -51,8 +56,10 @@ static void deferNrd(cGraphics *graphics,
 }
 
 static void deferImage(cGraphics *graphics, ScratchImage &image) {
-  // A view must outlive the image it names, so queue the view first.
+  // A view must outlive the image it names, so queue the views first.
   graphics->graphicsDefer.push(std::move(image.view));
+  if (!image.attachmentView.isEmpty())
+    graphics->graphicsDefer.push(std::move(image.attachmentView));
   graphics->graphicsDefer.push(std::move(image.texture));
   resetImageState(image);
 }
@@ -218,13 +225,13 @@ void WaterReflectionPass::Initialize(cGraphics *graphics, cResources *resources)
   assert(resources != nullptr);
   m_graphics = graphics;
 
-  const VkDescriptorSetLayout externalLayouts[] = {
-      graphics->globalset->m_bindlessSet.vk.m_bindlessSetLayout};
+  const RIBindlessLayout externalLayouts[] = {
+      graphics->globalset->m_bindlessSet.layout()};
 
   auto guideVert = RIProgram::loadShaderStage(
-      resources->GetFileSearcher(), "WaterGuide.vert.spv");
+      resources->GetFileSearcher(), "WaterGuide.vert");
   auto guideFrag = RIProgram::loadShaderStage(
-      resources->GetFileSearcher(), "WaterGuide.frag.spv");
+      resources->GetFileSearcher(), "WaterGuide.frag");
   std::array<RIProgram::ModuleStage, 2> guideStages = {
       RIProgram::ModuleStage{RIProgram::PROGRAM_STAGE_VERTEX, guideVert,
                              "vsMain"},
@@ -234,7 +241,7 @@ void WaterReflectionPass::Initialize(cGraphics *graphics, cResources *resources)
                      "Water.guide");
 
   auto reduceBin = RIProgram::loadShaderStage(
-      resources->GetFileSearcher(), "WaterGuideReduce.cs.spv");
+      resources->GetFileSearcher(), "WaterGuideReduce.cs");
   RIProgram::ModuleStage reduceStage = {RIProgram::PROGRAM_STAGE_COMPUTE,
                                         reduceBin, "csMain"};
   m_reduce.initialize(&graphics->device,
@@ -242,7 +249,7 @@ void WaterReflectionPass::Initialize(cGraphics *graphics, cResources *resources)
                       externalLayouts, "Water.reduce");
 
   auto traceBin = RIProgram::loadShaderStage(
-      resources->GetFileSearcher(), "WaterReflection.rt.spv");
+      resources->GetFileSearcher(), "WaterReflection.rt");
   std::array<RIProgram::ModuleStage, 4> traceStages = {
       RIProgram::ModuleStage{RIProgram::PROGRAM_STAGE_RAYGEN, traceBin,
                              "waterReflRayGen"},
@@ -256,7 +263,7 @@ void WaterReflectionPass::Initialize(cGraphics *graphics, cResources *resources)
                      "Water.trace");
 
   auto packBin = RIProgram::loadShaderStage(
-      resources->GetFileSearcher(), "WaterReflectionPack.cs.spv");
+      resources->GetFileSearcher(), "WaterReflectionPack.cs");
   RIProgram::ModuleStage packStage = {RIProgram::PROGRAM_STAGE_COMPUTE,
                                       packBin, "csMain"};
   m_pack.initialize(&graphics->device,
@@ -320,9 +327,16 @@ static bool createScratchImage(cGraphics *graphics, uint32_t width,
                                uint32_t height, RI_Format_e format,
                                uint32_t usage, const char *name,
                                ScratchImage &image) {
-  return CreateViewportAttachmentTexture(
-      &graphics->device, width, height, format, usage,
-      RI_VIEWTYPE_SHADER_RESOURCE_2D, &image.texture, &image.view, name);
+  if (!CreateViewportAttachmentTexture(
+          &graphics->device, width, height, format, usage,
+          RI_VIEWTYPE_SHADER_RESOURCE_2D, &image.texture, &image.view, name))
+    return false;
+  // The guide targets are rasterized into; the half-res ones are storage-only
+  // and need no RTV-typed view.
+  if (usage & RI_USAGE_COLOR_ATTACHMENT)
+    return CreateViewportColorAttachmentView(&graphics->device, &image.texture,
+                                             format, &image.attachmentView);
+  return true;
 }
 
 bool WaterReflectionViewportState::Impl::ensureScratch() {
@@ -381,9 +395,16 @@ bool WaterReflectionViewportState::Impl::ensureScratch() {
           RI_USAGE_SHADER_RESOURCE_STORAGE | RI_USAGE_SHADER_RESOURCE,
           "WaterReflection.nrdSpecularRadianceHitDist",
           nrdSpecularRadianceHitDist) ||
+      // Simultaneous access: REBLUR samples IN_MV in its temporal passes and
+      // stores it during stabilization, with no transition between, so this
+      // one is held in a combined read+write state (see the transition before
+      // Denoise below). Vulkan expresses that with GENERAL; on D3D12 only a
+      // simultaneous-access texture admits both. Matches the equivalent
+      // HybridViewportState.nrdMotionVectors in HybridRenderer.
       !createScratchImage(
           graphics, halfWidth, halfHeight, RI_FORMAT_RG16_SFLOAT,
-          RI_USAGE_SHADER_RESOURCE_STORAGE | RI_USAGE_SHADER_RESOURCE,
+          RI_USAGE_SHADER_RESOURCE_STORAGE | RI_USAGE_SHADER_RESOURCE |
+              RI_USAGE_SIMULTANEOUS_ACCESS,
           "WaterReflection.nrdMotionVectors", nrdMotionVectors)) {
     releaseScratch();
     return false;
@@ -396,6 +417,16 @@ WaterReflectionResult WaterReflectionPass::RecordSurface(
     const WaterReflectionSurfaceDesc &surface) {
   WaterReflectionResult result;
   WaterReflectionViewportState::Impl &impl = *state.m_impl;
+
+  // NRD is runtime-loaded and ships separately, so it may be absent. A single
+  // ray per half-resolution texel is far too noisy to show undenoised, and the
+  // caller already handles an unavailable result (it falls back to the
+  // non-raytraced reflection), so retire the pass entirely rather than trace
+  // for an image that cannot be filtered.
+  if (!NrdIntegration::IsAvailable()) {
+    impl.invalidate(surface.renderableCookie);
+    return result;
+  }
 
   if (impl.width == 0 || impl.height == 0 || surface.tlas == nullptr ||
       surface.indexCount == 0 || surface.opaqueDepthView == nullptr) {
@@ -435,9 +466,9 @@ WaterReflectionResult WaterReflectionPass::RecordSurface(
                RI_STAGE_FRAGMENT);
 
     RIRenderingAttachment colors[3] = {};
-    colors[0].view = *impl.guidePositionViewZ.view.Get();
-    colors[1].view = *impl.guideNormalWeight.view.Get();
-    colors[2].view = *impl.guideVelocity.view.Get();
+    colors[0].view = *impl.guidePositionViewZ.attachmentView.Get();
+    colors[1].view = *impl.guideNormalWeight.attachmentView.Get();
+    colors[2].view = *impl.guideVelocity.attachmentView.Get();
     for (RIRenderingAttachment &color : colors) {
       color.loadOp = RI_ATTACHMENT_LOAD_OP_CLEAR;
       color.storeOp = RI_ATTACHMENT_STORE_OP_STORE;
@@ -454,8 +485,8 @@ WaterReflectionResult WaterReflectionPass::RecordSurface(
     depth.readOnly = true;
 
     RIBeginRenderingDesc rendering = {};
-    rendering.renderArea.width = static_cast<int16_t>(impl.width);
-    rendering.renderArea.height = static_cast<int16_t>(impl.height);
+    rendering.renderArea.width = impl.width;
+    rendering.renderArea.height = impl.height;
     rendering.colorCount = 3;
     rendering.colors = colors;
     rendering.depthStencil = &depth;
@@ -469,18 +500,18 @@ WaterReflectionResult WaterReflectionPass::RecordSurface(
     viewport.depthMax = 1.0f;
     cmd->setViewport(&graphics->device, viewport);
     RIRect scissor = {};
-    scissor.width = static_cast<int16_t>(impl.width);
-    scissor.height = static_cast<int16_t>(impl.height);
+    scissor.width = impl.width;
+    scissor.height = impl.height;
     cmd->setScissor(&graphics->device, scissor);
 
-    WaterGuidePipelineDesc pipelineDesc(
-        RI_FORMAT_RGBA32_SFLOAT, RI_FORMAT_RGBA16_SFLOAT, RI_FORMAT_RG16_SFLOAT,
-        cGraphics::DepthFormat, surface.vertexPresentMask);
-    const hash_t pipelineHash = hash_u32(pipelineDesc.hash, 0x57475544u);
-    m_guide.bindPipeline(&graphics->device, cmd, pipelineHash, "Water.guide",
-                         &pipelineDesc.createInfo);
+    m_guide.bindPipeline(&graphics->device, cmd, HASH_INITIAL_VALUE,
+                         "Water.guide",
+                         MakeWaterGuidePipelineDesc(
+                             RI_FORMAT_RGBA32_SFLOAT, RI_FORMAT_RGBA16_SFLOAT,
+                             RI_FORMAT_RG16_SFLOAT, cGraphics::DepthFormat,
+                             surface.vertexPresentMask));
     m_guide.bindBindlessDescriptorSet(cmd, &graphics->globalset->m_bindlessSet,
-                                      0);
+                                      uint32_t(0));
     bindGuideResources(graphics, cmd, m_guide, surface, impl.frameIndex);
     cmd->drawIndexed(&graphics->device, surface.indexCount, 1, 0, 0,
                      surface.objectSlot);
@@ -504,11 +535,9 @@ WaterReflectionResult WaterReflectionPass::RecordSurface(
     transition(cmd, impl.halfVelocity, RI_RESOURCE_STATE_STORAGE_WRITE,
                RI_STAGE_COMPUTE);
 
-    VkComputePipelineCreateInfo pipelineInfo = {
-        VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO};
     const hash_t pipelineHash = hash_u32(HASH_INITIAL_VALUE, 0x57524443u);
     m_reduce.bindComputePipeline(&graphics->device, cmd, pipelineHash,
-                                 "Water.reduce", &pipelineInfo);
+                                 "Water.reduce");
     m_reduce.bindBindlessDescriptorSet(
         cmd, &graphics->globalset->m_bindlessSet, 0,
         VK_PIPELINE_BIND_POINT_COMPUTE);
@@ -542,21 +571,22 @@ WaterReflectionResult WaterReflectionPass::RecordSurface(
 
   {
     RIGpuScope scope(&graphics->profiler, cmd, "Water.Trace");
-    transition(cmd, impl.halfPositionViewZ, RI_RESOURCE_STATE_GENERAL,
+    transition(cmd, impl.halfPositionViewZ, RI_RESOURCE_STATE_SHADER_RESOURCE,
                RI_STAGE_RAY_TRACING);
-    transition(cmd, impl.halfNormalWeight, RI_RESOURCE_STATE_GENERAL,
+    transition(cmd, impl.halfNormalWeight, RI_RESOURCE_STATE_SHADER_RESOURCE,
                RI_STAGE_RAY_TRACING);
-    transition(cmd, impl.halfNormalSpread, RI_RESOURCE_STATE_GENERAL,
+    transition(cmd, impl.halfNormalSpread, RI_RESOURCE_STATE_SHADER_RESOURCE,
                RI_STAGE_RAY_TRACING);
     transition(cmd, impl.reflectionRadianceHitDist,
                RI_RESOURCE_STATE_STORAGE_WRITE, RI_STAGE_RAY_TRACING);
 
-    VkRayTracingPipelineCreateInfoKHR pipelineInfo = {
-        VK_STRUCTURE_TYPE_RAY_TRACING_PIPELINE_CREATE_INFO_KHR};
-    pipelineInfo.maxPipelineRayRecursionDepth = 1;
+    RIRayTracingPipelineDesc pipelineDesc = {};
+    pipelineDesc.maxRecursionDepth = 1;
+    pipelineDesc.maxPayloadSize = kScatterPayloadSize;
+    pipelineDesc.maxAttributeSize = kTriangleAttributeSize;
     const hash_t pipelineHash = hash_u32(HASH_INITIAL_VALUE, 0x57525443u);
     m_trace.bindRayTracingPipeline(&graphics->device, cmd, pipelineHash,
-                                   "Water.trace", &pipelineInfo);
+                                   "Water.trace", pipelineDesc);
     m_trace.bindBindlessDescriptorSet(
         cmd, &graphics->globalset->m_bindlessSet, 0,
         VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR);
@@ -565,15 +595,15 @@ WaterReflectionResult WaterReflectionPass::RecordSurface(
     appendBinding(bindings, "gWaterGuideHalfPosViewZ",
                   RIDescriptor::sampledImage(
                       &graphics->device, impl.halfPositionViewZ.view.Get(),
-                      RI_RESOURCE_STATE_GENERAL));
+                      RI_RESOURCE_STATE_SHADER_RESOURCE));
     appendBinding(bindings, "gWaterGuideHalfNormalWeight",
                   RIDescriptor::sampledImage(
                       &graphics->device, impl.halfNormalWeight.view.Get(),
-                      RI_RESOURCE_STATE_GENERAL));
+                      RI_RESOURCE_STATE_SHADER_RESOURCE));
     appendBinding(bindings, "gWaterGuideHalfNormalSpread",
                   RIDescriptor::sampledImage(
                       &graphics->device, impl.halfNormalSpread.view.Get(),
-                      RI_RESOURCE_STATE_GENERAL));
+                      RI_RESOURCE_STATE_SHADER_RESOURCE));
     appendBinding(bindings, "gWaterReflectionRadianceHitDist",
                   RIDescriptor::storageImage(
                       &graphics->device, impl.reflectionRadianceHitDist.view.Get()));
@@ -583,15 +613,15 @@ WaterReflectionResult WaterReflectionPass::RecordSurface(
 
   {
     RIGpuScope scope(&graphics->profiler, cmd, "Water.Pack");
-    transition(cmd, impl.halfPositionViewZ, RI_RESOURCE_STATE_GENERAL,
+    transition(cmd, impl.halfPositionViewZ, RI_RESOURCE_STATE_SHADER_RESOURCE,
                RI_STAGE_COMPUTE);
-    transition(cmd, impl.halfNormalWeight, RI_RESOURCE_STATE_GENERAL,
+    transition(cmd, impl.halfNormalWeight, RI_RESOURCE_STATE_SHADER_RESOURCE,
                RI_STAGE_COMPUTE);
-    transition(cmd, impl.halfNormalSpread, RI_RESOURCE_STATE_GENERAL,
+    transition(cmd, impl.halfNormalSpread, RI_RESOURCE_STATE_SHADER_RESOURCE,
                RI_STAGE_COMPUTE);
-    transition(cmd, impl.halfVelocity, RI_RESOURCE_STATE_GENERAL,
+    transition(cmd, impl.halfVelocity, RI_RESOURCE_STATE_SHADER_RESOURCE,
                RI_STAGE_COMPUTE);
-    transition(cmd, impl.reflectionRadianceHitDist, RI_RESOURCE_STATE_GENERAL,
+    transition(cmd, impl.reflectionRadianceHitDist, RI_RESOURCE_STATE_SHADER_RESOURCE,
                RI_STAGE_COMPUTE);
     transition(cmd, impl.nrdNormalRoughness, RI_RESOURCE_STATE_STORAGE_WRITE,
                RI_STAGE_COMPUTE);
@@ -602,11 +632,9 @@ WaterReflectionResult WaterReflectionPass::RecordSurface(
     transition(cmd, impl.nrdMotionVectors, RI_RESOURCE_STATE_STORAGE_WRITE,
                RI_STAGE_COMPUTE);
 
-    VkComputePipelineCreateInfo pipelineInfo = {
-        VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO};
     const hash_t pipelineHash = hash_u32(HASH_INITIAL_VALUE, 0x57504b43u);
     m_pack.bindComputePipeline(&graphics->device, cmd, pipelineHash,
-                               "Water.pack", &pipelineInfo);
+                               "Water.pack");
     m_pack.bindBindlessDescriptorSet(
         cmd, &graphics->globalset->m_bindlessSet, 0,
         VK_PIPELINE_BIND_POINT_COMPUTE);
@@ -615,24 +643,24 @@ WaterReflectionResult WaterReflectionPass::RecordSurface(
     appendBinding(bindings, "gWaterGuideHalfPosViewZ",
                   RIDescriptor::sampledImage(
                       &graphics->device, impl.halfPositionViewZ.view.Get(),
-                      RI_RESOURCE_STATE_GENERAL));
+                      RI_RESOURCE_STATE_SHADER_RESOURCE));
     appendBinding(bindings, "gWaterGuideHalfNormalWeight",
                   RIDescriptor::sampledImage(
                       &graphics->device, impl.halfNormalWeight.view.Get(),
-                      RI_RESOURCE_STATE_GENERAL));
+                      RI_RESOURCE_STATE_SHADER_RESOURCE));
     appendBinding(bindings, "gWaterGuideHalfNormalSpread",
                   RIDescriptor::sampledImage(
                       &graphics->device, impl.halfNormalSpread.view.Get(),
-                      RI_RESOURCE_STATE_GENERAL));
+                      RI_RESOURCE_STATE_SHADER_RESOURCE));
     appendBinding(bindings, "gWaterGuideHalfVelocity",
                   RIDescriptor::sampledImage(
                       &graphics->device, impl.halfVelocity.view.Get(),
-                      RI_RESOURCE_STATE_GENERAL));
+                      RI_RESOURCE_STATE_SHADER_RESOURCE));
     appendBinding(bindings, "gWaterReflectionRadianceHitDist",
                   RIDescriptor::sampledImage(
                       &graphics->device,
                       impl.reflectionRadianceHitDist.view.Get(),
-                      RI_RESOURCE_STATE_GENERAL));
+                      RI_RESOURCE_STATE_SHADER_RESOURCE));
     appendBinding(bindings, "gWaterNrdNormalRoughness",
                   RIDescriptor::storageImage(&graphics->device,
                                               impl.nrdNormalRoughness.view.Get()));
@@ -710,12 +738,13 @@ WaterReflectionResult WaterReflectionPass::RecordSurface(
       history.materialSignature = surface.materialSignature;
       history.hasSuccessfulDenoise = true;
 
-      // Half guides are still in GENERAL after their compute reads. Retain
-      // that layout for the fragment descriptors, while adding the explicit
-      // compute-to-fragment dependency for both guides and NRD's output.
-      transition(cmd, impl.halfPositionViewZ, RI_RESOURCE_STATE_GENERAL,
+      // Half guides are already in the sampled state after their compute
+      // reads. Retain that layout for the fragment descriptors, while adding
+      // the explicit compute-to-fragment dependency for both guides and NRD's
+      // output.
+      transition(cmd, impl.halfPositionViewZ, RI_RESOURCE_STATE_SHADER_RESOURCE,
                  RI_STAGE_FRAGMENT);
-      transition(cmd, impl.halfNormalWeight, RI_RESOURCE_STATE_GENERAL,
+      transition(cmd, impl.halfNormalWeight, RI_RESOURCE_STATE_SHADER_RESOURCE,
                  RI_STAGE_FRAGMENT);
       cmd->vk_d3d12_memoryBarrier(
           {RI_RESOURCE_STATE_STORAGE_WRITE, RI_RESOURCE_STATE_SHADER_RESOURCE,

@@ -1,7 +1,4 @@
 <MapDelta Version="1" Target="maps/main/ch03/26_zimmerman_vision.map">
-    <Modify Category="Entities" ID="477" Name="BoxLight_1">
-        <SetAttr RendererMask="1" />
-    </Modify>
     <Modify Category="Entities" ID="31" Name="PointLight_3">
         <SetAttr Re_Intensity="50" Re_Radius="9.99891" Re_SourceRadius="0.35" Re_FlickerOffIntensity="0" />
     </Modify>

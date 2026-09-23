@@ -42,8 +42,8 @@ cLuxPostEffect_Insanity::cLuxPostEffect_Insanity(cGraphics *apGraphics, cResourc
 	// Create program — Slang port of dds_insanity_posteffect.frag.fsl, sharing the
 	// fullscreen-triangle vertex shader with the other post-effects.
 	hpl::LoadSlangGraphics(&Interface<cGraphics>::Get()->device, m_program, apResources,
-	                       "posteffect_fullscreen.vert.spv",
-	                       "posteffect_insanity.frag.spv");
+	                       "posteffect_fullscreen.vert",
+	                       "posteffect_insanity.frag");
 
 	//////////////////////////////
 	// Textures
@@ -98,7 +98,6 @@ struct InsanityPushConstants
 void cLuxPostEffect_Insanity::RenderEffect(const hpl::PostEffectRenderCtx &ctx)
 {
 	using namespace hpl;
-	VkCommandBuffer cmd = ctx.cmd->vk.cmd;
 
 	// Animated amp-map pair: ampMap0->1->2->0 as mfAnimCount sweeps [0,3), blended
 	// by its fractional part (matches the legacy afAmpT animation).
@@ -124,31 +123,37 @@ void cLuxPostEffect_Insanity::RenderEffect(const hpl::PostEffectRenderCtx &ctx)
 	RIDescriptor zoomDesc = resolve(mpZoomMap);
 	if (count <= 0) valid = false;
 
-	RITextureView outView = {};
-	outView.vk.image = ctx.outputView;
+	RITextureView outView = ctx.outputView;
 	RIRenderingAttachment color = {};
 	color.view    = outView;
 	color.loadOp  = RI_ATTACHMENT_LOAD_OP_DONT_CARE;
 	color.storeOp = RI_ATTACHMENT_STORE_OP_STORE;
 
 	RIBeginRenderingDesc beginDesc = {};
-	beginDesc.renderArea.width  = (int16_t)ctx.width;
-	beginDesc.renderArea.height = (int16_t)ctx.height;
+	beginDesc.renderArea.width  = ctx.width;
+	beginDesc.renderArea.height = ctx.height;
 	beginDesc.colorCount = 1;
 	beginDesc.colors     = &color;
 	ctx.cmd->vk_d3d12_beginRendering(&Interface<cGraphics>::Get()->device, beginDesc);
 
-	VkViewport viewport = {0.0f, 0.0f, (float)ctx.width, (float)ctx.height, 0.0f, 1.0f};
-	vkCmdSetViewport(cmd, 0, 1, &viewport);
-	VkRect2D scissor = {{0, 0}, {ctx.width, ctx.height}};
-	vkCmdSetScissor(cmd, 0, 1, &scissor);
+	// Negative height: the engine convention shared with posteffect_fullscreen.vert.
+	RIViewport viewport = {};
+	viewport.y        =  (float)ctx.height;
+	viewport.width    =  (float)ctx.width;
+	viewport.height   = -(float)ctx.height;
+	viewport.depthMax = 1.0f;
+	ctx.cmd->setViewport(&Interface<cGraphics>::Get()->device, viewport);
+	RIRect scissor = {};
+	scissor.width  = ctx.width;
+	scissor.height = ctx.height;
+	ctx.cmd->setScissor(&Interface<cGraphics>::Get()->device, scissor);
 
-	PostEffectPipelineState state{};
-	InitPostEffectPipelineState(state, cGraphics::PogoColorFormat, false);
+	const RIGraphicsPipelineDesc pipelineDesc =
+	    MakePostEffectPipelineDesc(cGraphics::PogoColorFormat, false);
 
 	const hash_t pipelineHash = hash_u32(HASH_INITIAL_VALUE, /*variant=*/0u);
 	m_program.bindPipeline(&Interface<cGraphics>::Get()->device, ctx.cmd, pipelineHash, "PostEffect_Insanity",
-	                       &state.createInfo);
+	                       pipelineDesc);
 
 	auto samplerDesc = Interface<cGraphics>::Get()->resolve_filter_descriptor(
 	    eTextureWrap_ClampToEdge, eTextureWrap_ClampToEdge,
@@ -172,10 +177,10 @@ void cLuxPostEffect_Insanity::RenderEffect(const hpl::PostEffectRenderCtx &ctx)
 	pc.amplitude = amplitude;
 	pc.waveAlpha = valid ? mfWaveAlpha : 0.0f;
 	pc.zoomAlpha = valid ? mfZoomAlpha : 0.0f;
-	vkCmdPushConstants(cmd, m_program.getPipelineLayout(),
-	                   VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(pc), &pc);
+	ctx.cmd->vk_d3d12_setPushConstants(&Interface<cGraphics>::Get()->device,
+	                                   m_program, 0, sizeof(pc), &pc);
 
-	vkCmdDraw(cmd, 3, 1, 0, 0);
+	ctx.cmd->draw(&Interface<cGraphics>::Get()->device, 3, 1, 0, 0);
 	ctx.cmd->vk_d3d12_endRendering(&Interface<cGraphics>::Get()->device);
 }
 
@@ -195,11 +200,11 @@ cLuxPostEffect_MenuBackdrop::cLuxPostEffect_MenuBackdrop(cGraphics *apGraphics, 
 	// Both share the fullscreen-triangle vertex shader with the other
 	// post-effects (no vertex buffer). Same frags the old cLuxScreenEffect used.
 	LoadSlangGraphics(&mpGraphics->device, m_blurProgram, apResources,
-	                  "posteffect_fullscreen.vert.spv",
-	                  "posteffect_bloom_blur.frag.spv");
+	                  "posteffect_fullscreen.vert",
+	                  "posteffect_bloom_blur.frag");
 	LoadSlangGraphics(&mpGraphics->device, m_desatProgram, apResources,
-	                  "posteffect_fullscreen.vert.spv",
-	                  "inventory_post.frag.spv");
+	                  "posteffect_fullscreen.vert",
+	                  "inventory_post.frag");
 }
 
 //-----------------------------------------------------------------------
@@ -214,14 +219,22 @@ cLuxPostEffect_MenuBackdrop::~cLuxPostEffect_MenuBackdrop()
 
 //-----------------------------------------------------------------------
 
-void cLuxPostEffect_MenuBackdrop::EnsureScratch(uint32_t alWidth, uint32_t alHeight)
+void cLuxPostEffect_MenuBackdrop::EnsureScratch(const hpl::PostEffectRenderCtx &ctx)
 {
 	using namespace hpl;
 	auto ensure = [&](PostEffectColorTarget &t, const char *asName){
-		if(t.valid && t.width == alWidth && t.height == alHeight) return;
+		if(t.valid && t.width == ctx.width && t.height == ctx.height) return;
 		DestroyPostEffectColorTarget(t);
-		CreatePostEffectColorTarget(t, alWidth, alHeight,
+		CreatePostEffectColorTarget(t, ctx.width, ctx.height,
 		                            cGraphics::PogoColorFormat, RI_USAGE_NONE, asName);
+		if(!t.valid) return;
+		// Rest state: the scratch halves live in SHADER_RESOURCE between passes,
+		// so every pass can name an honest `before`. Same one-shot init as
+		// cPostEffect_Bloom does for its mip chain.
+		RITextureBarrier init(&t.texture,
+		        RI_RESOURCE_STATE_UNDEFINED, RI_RESOURCE_STATE_SHADER_RESOURCE,
+		        RI_STAGE_NONE, RI_STAGE_FRAGMENT);
+		ctx.cmd->vk_d3d12_textureBarrier(init);
 	};
 	ensure(m_scratchA, "MenuBackdrop.blurA");
 	ensure(m_scratchB, "MenuBackdrop.blurB");
@@ -247,35 +260,40 @@ struct MenuBlurPushConstants  { float blurDir[2]; float _pad[2]; }; // matches B
 void cLuxPostEffect_MenuBackdrop::RenderDesaturate(const hpl::PostEffectRenderCtx &ctx)
 {
 	using namespace hpl;
-	VkCommandBuffer cmd = ctx.cmd->vk.cmd;
 
 	// Single fullscreen pass: sample the display-space pogo input, desaturate/
 	// darken lerped by strength, write the pogo output. The composite owns the
 	// pogo toggle / barriers around this call (like cPostEffect_ToneMap).
-	RITextureView outView = {};
-	outView.vk.image = ctx.outputView;
+	RITextureView outView = ctx.outputView;
 	RIRenderingAttachment color = {};
 	color.view    = outView;
 	color.loadOp  = RI_ATTACHMENT_LOAD_OP_DONT_CARE;
 	color.storeOp = RI_ATTACHMENT_STORE_OP_STORE;
 
 	RIBeginRenderingDesc beginDesc = {};
-	beginDesc.renderArea.width  = (int16_t)ctx.width;
-	beginDesc.renderArea.height = (int16_t)ctx.height;
+	beginDesc.renderArea.width  = ctx.width;
+	beginDesc.renderArea.height = ctx.height;
 	beginDesc.colorCount = 1;
 	beginDesc.colors     = &color;
 	ctx.cmd->vk_d3d12_beginRendering(&mpGraphics->device, beginDesc);
 
-	VkViewport viewport = {0.0f, 0.0f, (float)ctx.width, (float)ctx.height, 0.0f, 1.0f};
-	vkCmdSetViewport(cmd, 0, 1, &viewport);
-	VkRect2D scissor = {{0, 0}, {ctx.width, ctx.height}};
-	vkCmdSetScissor(cmd, 0, 1, &scissor);
+	// Negative height: the engine convention shared with posteffect_fullscreen.vert.
+	RIViewport viewport = {};
+	viewport.y        =  (float)ctx.height;
+	viewport.width    =  (float)ctx.width;
+	viewport.height   = -(float)ctx.height;
+	viewport.depthMax = 1.0f;
+	ctx.cmd->setViewport(&mpGraphics->device, viewport);
+	RIRect scissor = {};
+	scissor.width  = ctx.width;
+	scissor.height = ctx.height;
+	ctx.cmd->setScissor(&mpGraphics->device, scissor);
 
-	PostEffectPipelineState state{};
-	InitPostEffectPipelineState(state, cGraphics::PogoColorFormat, false);
+	const RIGraphicsPipelineDesc pipelineDesc =
+	    MakePostEffectPipelineDesc(cGraphics::PogoColorFormat, false);
 	const hash_t kHash = hash_u32(HASH_INITIAL_VALUE, 0u);
 	m_desatProgram.bindPipeline(&mpGraphics->device, ctx.cmd, kHash,
-	                            "MenuBackdrop.desat", &state.createInfo);
+	                            "MenuBackdrop.desat", pipelineDesc);
 
 	auto samplerDesc = mpGraphics->resolve_filter_descriptor(
 	    eTextureWrap_ClampToEdge, eTextureWrap_ClampToEdge,
@@ -290,10 +308,10 @@ void cLuxPostEffect_MenuBackdrop::RenderDesaturate(const hpl::PostEffectRenderCt
 
 	MenuDesatPushConstants pc{};
 	pc.strength = mfStrength;
-	vkCmdPushConstants(cmd, m_desatProgram.getPipelineLayout(),
-	                   VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(pc), &pc);
+	ctx.cmd->vk_d3d12_setPushConstants(&mpGraphics->device, m_desatProgram, 0,
+	                                   sizeof(pc), &pc);
 
-	vkCmdDraw(cmd, 3, 1, 0, 0);
+	ctx.cmd->draw(&mpGraphics->device, 3, 1, 0, 0);
 	ctx.cmd->vk_d3d12_endRendering(&mpGraphics->device);
 }
 
@@ -302,19 +320,27 @@ void cLuxPostEffect_MenuBackdrop::RenderDesaturate(const hpl::PostEffectRenderCt
 void cLuxPostEffect_MenuBackdrop::RenderBlur(const hpl::PostEffectRenderCtx &ctx)
 {
 	using namespace hpl;
-	EnsureScratch(ctx.width, ctx.height);
-	VkCommandBuffer cmd = ctx.cmd->vk.cmd;
+	EnsureScratch(ctx);
 
-	PostEffectPipelineState state{};
-	InitPostEffectPipelineState(state, cGraphics::PogoColorFormat, false);
+	// Plain value: the `pass` lambda below captures it by reference and it
+	// outlives every call, so there is no lifetime coupling to respect.
+	const RIGraphicsPipelineDesc pipelineDesc =
+	    MakePostEffectPipelineDesc(cGraphics::PogoColorFormat, false);
 	const hash_t kHash = hash_u32(HASH_INITIAL_VALUE, 0u);
 
 	auto samplerDesc = mpGraphics->resolve_filter_descriptor(
 	    eTextureWrap_ClampToEdge, eTextureWrap_ClampToEdge,
 	    eTextureWrap_ClampToEdge, eTextureFilter_Bilinear);
 
-	VkViewport viewport = {0.0f, 0.0f, (float)ctx.width, (float)ctx.height, 0.0f, 1.0f};
-	VkRect2D   scissor  = {{0, 0}, {ctx.width, ctx.height}};
+	// Negative height: the engine convention shared with posteffect_fullscreen.vert.
+	RIViewport viewport = {};
+	viewport.y        =  (float)ctx.height;
+	viewport.width    =  (float)ctx.width;
+	viewport.height   = -(float)ctx.height;
+	viewport.depthMax = 1.0f;
+	RIRect scissor = {};
+	scissor.width  = ctx.width;
+	scissor.height = ctx.height;
 
 	// One separable-blur pass. Writes either an owned scratch target (barriered
 	// here) or the composite's pogo output (barriered by the composite, like
@@ -324,16 +350,21 @@ void cLuxPostEffect_MenuBackdrop::RenderBlur(const hpl::PostEffectRenderCtx &ctx
 	{
 		if(dstScratch)
 		{
-			// discard old contents; wait on any prior sampling of dst (WAR on ping-pong)
+			// dst rests in SHADER_RESOURCE between uses; this is the WAR edge
+			// against the previous iteration sampling it. The `before` state must
+			// be honest: D3D12 tracks no state of its own and writes it straight
+			// into the barrier (old contents are discarded by the DONT_CARE loadOp,
+			// not by the barrier).
 			RITextureBarrier toTarget(&dstScratch->texture,
-			        RI_RESOURCE_STATE_UNDEFINED, RI_RESOURCE_STATE_RENDER_TARGET,
+			        RI_RESOURCE_STATE_SHADER_RESOURCE, RI_RESOURCE_STATE_RENDER_TARGET,
 			        RI_STAGE_FRAGMENT, RI_STAGE_NONE);
 			ctx.cmd->vk_d3d12_textureBarrier(toTarget);
 		}
 
+		// D3D12 binds a render target through an RTV and rejects the sampled view.
 		RITextureView dstView = {};
-		if(dstScratch) dstView = dstScratch->view;
-		else           dstView.vk.image = ctx.outputView;
+		if(dstScratch) dstView = dstScratch->attachmentView;
+		else           dstView = ctx.outputView;
 
 		RIRenderingAttachment color = {};
 		color.view    = dstView;
@@ -341,17 +372,17 @@ void cLuxPostEffect_MenuBackdrop::RenderBlur(const hpl::PostEffectRenderCtx &ctx
 		color.storeOp = RI_ATTACHMENT_STORE_OP_STORE;
 
 		RIBeginRenderingDesc beginDesc = {};
-		beginDesc.renderArea.width  = (int16_t)ctx.width;
-		beginDesc.renderArea.height = (int16_t)ctx.height;
+		beginDesc.renderArea.width  = ctx.width;
+		beginDesc.renderArea.height = ctx.height;
 		beginDesc.colorCount = 1;
 		beginDesc.colors     = &color;
 		ctx.cmd->vk_d3d12_beginRendering(&mpGraphics->device, beginDesc);
 
-		vkCmdSetViewport(cmd, 0, 1, &viewport);
-		vkCmdSetScissor(cmd, 0, 1, &scissor);
+		ctx.cmd->setViewport(&mpGraphics->device, viewport);
+		ctx.cmd->setScissor(&mpGraphics->device, scissor);
 
 		m_blurProgram.bindPipeline(&mpGraphics->device, ctx.cmd, kHash,
-		                           "MenuBackdrop.blur", &state.createInfo);
+		                           "MenuBackdrop.blur", pipelineDesc);
 
 		RIProgram::DescriptorBinding bindings[2] = {};
 		bindings[0].descriptor = *samplerDesc;
@@ -361,10 +392,10 @@ void cLuxPostEffect_MenuBackdrop::RenderBlur(const hpl::PostEffectRenderCtx &ctx
 		m_blurProgram.bindDescriptors(&mpGraphics->device, ctx.cmd, ctx.frameIndex, bindings, 2);
 
 		MenuBlurPushConstants pc = {{dirX, dirY}, {0.0f, 0.0f}};
-		vkCmdPushConstants(cmd, m_blurProgram.getPipelineLayout(),
-		                   VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(pc), &pc);
+		ctx.cmd->vk_d3d12_setPushConstants(&mpGraphics->device, m_blurProgram, 0,
+		                                   sizeof(pc), &pc);
 
-		vkCmdDraw(cmd, 3, 1, 0, 0);
+		ctx.cmd->draw(&mpGraphics->device, 3, 1, 0, 0);
 		ctx.cmd->vk_d3d12_endRendering(&mpGraphics->device);
 
 		if(dstScratch)

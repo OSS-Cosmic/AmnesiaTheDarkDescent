@@ -85,6 +85,32 @@ jobs:
       - name: Rebuild FSR external (incremental)
         run: make -C build-premake config=${{ inputs.config }} FsrSdkExternal
 
+      - name: Rebuild FSR runtime staging (incremental)
+        run: make -C build-premake config=${{ inputs.config }} FsrRuntimeGame
+
+      # The engine dlopen's this module instead of linking it, so neither a
+      # missing file nor an empty export table is a build error -- both just turn
+      # FSR off at runtime. There is no D3D12 module on Linux.
+      - name: Assert FSR module deployed and exported
+        run: |
+          set -euo pipefail
+          module="build-premake/amnesia/${BUILD_FOLDER}/libs/libffx_fsr3upscaler_api_vk.so"
+          test -f "$module" || { echo "FSR runtime module was not deployed: $module"; exit 1; }
+          # ffx-api's ffx_api.h decorates these with FFX_API_ENTRY, which
+          # cmake/fsr/patches/portable_ffx_api.cmake maps to
+          # visibility("default") on non-MSVC. A module that builds but exports
+          # nothing is indistinguishable from a healthy one until dlsym fails.
+          for symbol in ffxCreateContext ffxDestroyContext ffxConfigure ffxQuery ffxDispatch; do
+            nm -D --defined-only "$module" | grep -qE " T ${symbol}\$" \
+              || { echo "FSR module does not export ${symbol}"; exit 1; }
+          done
+          # CXX_VISIBILITY_PRESET hidden should leave exactly those five, so the
+          # module cannot be interposed by the executable's volk or its copy of
+          # ffxGetPermutationBlobByIndex.
+          exported=$(nm -D --defined-only "$module" | grep -cE " T " || true)
+          test "$exported" -eq 5 \
+            || { echo "unexpected FSR module export count: $exported (want 5)"; nm -D --defined-only "$module" | grep -E " T "; exit 1; }
+
       - name: Package
         run: |
           tar --exclude='*.a' -zcf "${CONFIG_NAME}.tar.gz" \

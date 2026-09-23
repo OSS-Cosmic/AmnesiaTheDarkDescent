@@ -13,6 +13,7 @@
 
 import SceneTypes;
 import bindless;
+import GeometryStream;
 
 // BDA accesses use direct primitive pointer casts (`float4*`, `float3*`,
 // `uint*`). The wrapper-struct-with-runtime-array pattern from earlier
@@ -58,18 +59,16 @@ public void fetchBindlessTriangle(uint instanceId, uint primId, out BindlessTria
     uint3 tri = uint3(idxBase, idxBase + 1u, idxBase + 2u);
     if (indexAddr != 0ull)
     {
-        uint *ib = (uint*)indexAddr;
-        tri = uint3(ib[idxBase + 0u],
-                    ib[idxBase + 1u],
-                    ib[idxBase + 2u]);
+        tri = uint3(geometryLoad(indexAddr, (idxBase + 0u) * 4u),
+                    geometryLoad(indexAddr, (idxBase + 1u) * 4u),
+                    geometryLoad(indexAddr, (idxBase + 2u) * 4u));
     }
 
     if (posAddr != 0ull)
     {
-        float4 *pb = (float4*)posAddr;
-        vtx.posL[0] = pb[tri.x].xyz;
-        vtx.posL[1] = pb[tri.y].xyz;
-        vtx.posL[2] = pb[tri.z].xyz;
+        vtx.posL[0] = asfloat(geometryLoad4(posAddr, tri.x * 16u)).xyz;
+        vtx.posL[1] = asfloat(geometryLoad4(posAddr, tri.y * 16u)).xyz;
+        vtx.posL[2] = asfloat(geometryLoad4(posAddr, tri.z * 16u)).xyz;
     }
     else
     {
@@ -80,10 +79,9 @@ public void fetchBindlessTriangle(uint instanceId, uint primId, out BindlessTria
 
     if (nrmAddr != 0ull)
     {
-        float3 *nb = (float3*)nrmAddr;
-        vtx.normalL[0] = nb[tri.x];
-        vtx.normalL[1] = nb[tri.y];
-        vtx.normalL[2] = nb[tri.z];
+        vtx.normalL[0] = asfloat(geometryLoad3(nrmAddr, tri.x * 12u));
+        vtx.normalL[1] = asfloat(geometryLoad3(nrmAddr, tri.y * 12u));
+        vtx.normalL[2] = asfloat(geometryLoad3(nrmAddr, tri.z * 12u));
     }
     else
     {
@@ -94,10 +92,11 @@ public void fetchBindlessTriangle(uint instanceId, uint primId, out BindlessTria
 
     if (tanAddr != 0ull)
     {
-        float4 *tb = (float4*)tanAddr;
-        vtx.tangentL[0] = tb[tri.x];
-        vtx.tangentL[1] = tb[tri.y];
-        vtx.tangentL[2] = tb[tri.z];
+        // Tangent.w is the authored bitangent handedness and must survive the
+        // raw load; it is not a fourth position-like attribute.
+        vtx.tangentL[0] = asfloat(geometryLoad4(tanAddr, tri.x * 16u));
+        vtx.tangentL[1] = asfloat(geometryLoad4(tanAddr, tri.y * 16u));
+        vtx.tangentL[2] = asfloat(geometryLoad4(tanAddr, tri.z * 16u));
     }
     else
     {
@@ -117,10 +116,9 @@ public void fetchBindlessTriangle(uint instanceId, uint primId, out BindlessTria
 
     if (uvAddr != 0ull)
     {
-        float3 *ub = (float3*)uvAddr;
-        vtx.uv[0] = ub[tri.x].xy;
-        vtx.uv[1] = ub[tri.y].xy;
-        vtx.uv[2] = ub[tri.z].xy;
+        vtx.uv[0] = asfloat(geometryLoad3(uvAddr, tri.x * 12u)).xy;
+        vtx.uv[1] = asfloat(geometryLoad3(uvAddr, tri.y * 12u)).xy;
+        vtx.uv[2] = asfloat(geometryLoad3(uvAddr, tri.z * 12u)).xy;
     }
     else
     {

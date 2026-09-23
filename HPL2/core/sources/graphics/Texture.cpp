@@ -25,6 +25,12 @@ cTexture::cTexture(cTexture &&other) noexcept
     : handle(other.handle), format(other.format), view(other.view),
       width(other.width), height(other.height), depth(other.depth),
       mipNum(other.mipNum) {
+  // RITextureView keeps a pointer to its owning RITexture so descriptors can
+  // retain the allocation. Rebase that self-reference before clearing the
+  // moved-from object; otherwise the view points at other.handle after it has
+  // been reset (and, after a return by value, potentially destroyed).
+  if (view.resource == &other.handle)
+    view.resource = &handle;
   // Zero the source so its destructor disposes nothing (dispose is null-safe).
   other.handle = RITexture{};
   other.view = RITextureView{};
@@ -51,6 +57,8 @@ cTexture &cTexture::operator=(cTexture &&other) noexcept {
     handle = other.handle;
     format = other.format;
     view = other.view;
+    if (view.resource == &other.handle)
+      view.resource = &handle;
     width = other.width;
     height = other.height;
     depth = other.depth;
@@ -269,18 +277,8 @@ void cTexture::setDebugName(const tWString& name) {
 }
 
 void cTexture::setDebugName(const char* name) {
-  assert(!handle.isEmpty());
-	if(vkSetDebugUtilsObjectNameEXT){
-		VkDebugUtilsObjectNameInfoEXT debugName = { 
-			VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT, 
-			NULL, 
-			VK_OBJECT_TYPE_IMAGE, 
-			(uint64_t)handle.vk.image, 
-			name 
-		};
-		VK_WrapResult( vkSetDebugUtilsObjectNameEXT( Interface<cGraphics>::Get()->device.vk.device, &debugName ) );
-	}
-
+	assert(!handle.isEmpty());
+	handle.setDebugObjectName(&Interface<cGraphics>::Get()->device, name);
 }
 
 // Stage-copies one (arrIndex, mipLevel) subresource worth of `srcData` into

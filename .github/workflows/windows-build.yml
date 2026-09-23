@@ -118,6 +118,15 @@ jobs:
           path: build-premake/_deps/xess-sdk
           key: xess-sdk-${{ runner.os }}-3.0.2-88b8a373f30e33f3558a77a93e634f11b8132fc3047ea1a8edeead32b8471990
 
+      # Windows generation enables D3D12 by default, so every run now resolves
+      # the Agility SDK. The nupkg is immutable and verified by this SHA-256 in
+      # premake; cache it with its extracted tree so builds do not re-download.
+      - name: Cache Agility SDK
+        uses: actions/cache@v4
+        with:
+          path: build-premake/_deps/agility-sdk
+          key: agility-sdk-${{ runner.os }}-1.619.5-0e9bcf32aac9a79343ede9b21e4864950ee54577e3d8e19bfcdf002bb4e9bfd6
+
       # build-windows.ps1 uses vs2026 locally; hosted runners ship VS 2022 and
       # premake5.lua pins no _ACTION, so vs2022 generates the same projects.
       - name: Generate solution
@@ -130,7 +139,7 @@ jobs:
       # Exercise the FSR copy_dir deploy on a warm tree; this is one incremental
       # external-target rerun, not a second full compile.
       - name: Rebuild FSR external (incremental)
-        run: msbuild build-premake\Amnesia.sln /t:FsrSdkExternal /p:Configuration=$env:BUILD_FOLDER /p:Platform=x64 /v:m
+        run: msbuild build-premake\Amnesia.sln /t:FsrSdkExternal`;FsrRuntimeGame /p:Configuration=$env:BUILD_FOLDER /p:Platform=x64 /v:m
 
       # Force the game deploy postbuilds, including XeSS; this costs one relink,
       # not a second full compile.
@@ -157,6 +166,16 @@ jobs:
           }
           if (-not (Get-ChildItem -LiteralPath $fsrLicenses -Force -ErrorAction Stop | Select-Object -First 1)) {
             throw "FSR deployment directory is empty: $fsrLicenses"
+          }
+          # The engine loads these at runtime instead of linking them, so a
+          # missing module is not a link error -- it silently turns FSR off. This
+          # job generates with defaults, where --with-d3d12 and --with-fsr-hlsl
+          # are both yes, so a missing D3D12 module is the bug, not a variant.
+          foreach ($module in @("ffx_fsr3upscaler_api_vk.dll", "ffx_fsr3upscaler_api_dx12.dll")) {
+            $modulePath = Join-Path $outputDir $module
+            if (-not (Test-Path -LiteralPath $modulePath -PathType Leaf)) {
+              throw "Expected FSR runtime module was not deployed: $modulePath"
+            }
           }
           # link_xess() echoes and continues when a notice file is absent from the
           # SDK, so assert the deploy only for files the SDK actually ships --

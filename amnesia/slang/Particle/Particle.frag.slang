@@ -17,7 +17,8 @@ import PerFrame.resource;
 import Scene;
 import Material;             // load*Material / materialAlphaTest / traceShadowRay / traceReflectionHit
 import Fog;          // computeFog — shared world + fog-area visibility
-import BlendModes;   // linear source preparation and opacity modulation
+import BlendModes;   // authored modulation and premultiplication
+import Utils.Color.ColorHelpers;
 
 // Mirrors the `PushBlock` written from cHybridRenderer::Draw at the per-
 // particle-draw site (uint blendMode, float sceneAlpha). Fragment-only push
@@ -30,14 +31,14 @@ struct ParticlePushConstants
 };
 
 [vk::push_constant]
-ParticlePushConstants pc;
+ParticlePushConstants gPushConstants HPL_PUSH_CONSTANT_REGISTER;
 
 struct ParticleVSOut
 {
-    float3 viewPos                 : VIEWPOS;
-    float2 uv                      : TEXCRD;
-    float4 color                   : COLOR;
-    nointerpolation uint objectId  : OBJECTID;
+    [vk::location(0)] float3 viewPos                 : TEXCOORD0;
+    [vk::location(1)] float2 uv                      : TEXCOORD1;
+    [vk::location(2)] float4 color                   : TEXCOORD2;
+    [vk::location(3)] nointerpolation uint objectId  : TEXCOORD3;
     float4 posH                    : SV_POSITION;
 };
 
@@ -51,13 +52,29 @@ float4 psMain(ParticleVSOut psIn) : SV_TARGET
 
     float4 sample = float4(0.0f, 0.0f, 0.0f, 1.0f);
     uint diffuseTex = mat.tex[0];
-    bool smoothHalo = pc.blendMode == kBlendModeAdd &&
+    bool smoothHalo = gPushConstants.blendMode == kBlendModeAdd &&
         (mat.materialConfig & kMaterialFlagSmoothHalo) != 0u;
     if (!smoothHalo && diffuseTex != kInvalidTextureIndex)
         sample = sampleBindless2D(diffuseTex, psIn.uv);
-    float4 diffuseColor = smoothHalo ? smoothHaloLinearSample(psIn.uv, psIn.color)
-        : translucentLinearSample(sample, psIn.color,
-        pc.blendMode, (mat.materialConfig & kMaterialFlagDiffuseIsMask) != 0u);
+    // The attachment is display-encoded during this pass. Recover the
+    // authored texture RGB before tinting; alpha is always linear data.
+    float4 diffuseColor;
+    if (smoothHalo)
+    {
+        diffuseColor = smoothHaloLinearSample(psIn.uv, float4(1.0f));
+        diffuseColor.rgb = linearToSRGB(diffuseColor.rgb) * psIn.color.rgb;
+        diffuseColor.a = psIn.color.a;
+    }
+    else
+    {
+        float3 authored = linearToSRGB(sample.rgb);
+        if ((mat.materialConfig & kMaterialFlagDiffuseIsMask) != 0u)
+            authored = authored.rrr;
+        diffuseColor = float4(authored * psIn.color.rgb, sample.a * psIn.color.a);
+        if (gPushConstants.blendMode == kBlendModePremulAlpha)
+            diffuseColor.rgb *= psIn.color.a *
+                ((mat.materialConfig & kMaterialFlagDiffuseIsMask) != 0u ? sample.a : 1.0f);
+    }
 
     // Per-pixel fog via the shared helper (world + fog areas), matching
     // Translucent.frag: the visibility scalar folds into the per-pixel alpha.
@@ -69,9 +86,9 @@ float4 psMain(ParticleVSOut psIn) : SV_TARGET
     // translucents — restoring legacy parity.)
     float3 surfacePosW = mul(gPerFrame.invViewMat, float4(psIn.viewPos, 1.0f)).xyz;
     FogResult fog = computeFog(surfacePosW, gPerFrame.posW);
-    // Authoring controls operate in linear space, before display processing.
+    // Opacity remains linear coverage, independent of the RGB blend space.
     // Opacity still controls both source coverage and destination transmission.
-    float finalAlpha = pc.sceneAlpha * fog.visibility * saturate(mat.particleOpacityScale);
+    float finalAlpha = gPushConstants.sceneAlpha * fog.visibility * saturate(mat.particleOpacityScale);
 
     // Soft particles: fade alpha as this camera-facing fragment approaches the
     // opaque geometry behind it, replacing the hard intersection edge with a
@@ -88,20 +105,8 @@ float4 psMain(ParticleVSOut psIn) : SV_TARGET
         gPerFrame.zNear * gPerFrame.zFar /
         (gPerFrame.zFar - sceneZdev * (gPerFrame.zFar - gPerFrame.zNear));
     float  particleLinear = -psIn.viewPos.z;   // view forward = -Z
-    // Soft-faded against OPAQUE depth only.
-    //
-    // Water used to fold into this through a separate nearest-water-depth
-    // layer, so that submerged smoke could not draw over a water surface. It
-    // also erased every splash: splashes spawn at or just under the waterline
-    // (ps_water_dump_splash spawns at the emitter origin, waterlurker_*_splash
-    // a little below it), the fade band is kSoftParticleFadeDistance = 0.35 m,
-    // and these materials are BlendMode="Alpha", so a faded fragment does not
-    // dim -- it trips the alpha-discard below and vanishes outright.
-    //
-    // Fading a splash against the very surface it is splashing off is the
-    // wrong trade, so the water term is gone. Submerged particles now draw over
-    // water; if that needs solving again it wants a test that can tell "behind
-    // the surface" from "touching it", not a shared 0.35 m ramp.
+    // Fade against opaque depth only. Fading against water would erase
+    // splashes born at or just below the waterline inside this 0.35 m band.
     float  soft = saturate((sceneLinear - particleLinear) / kSoftParticleFadeDistance);
     finalAlpha *= soft;
 
@@ -113,23 +118,32 @@ float4 psMain(ParticleVSOut psIn) : SV_TARGET
     {
         lightLevel = lightLevelAt(surfacePosW);
     }
-    lightLevel *= max(mat.particleBrightnessScale, 0.0f);
+    // Retain the existing multiplier-mode brightness control. Radiance
+    // brightness remains a linear multiplier, applied separately below.
+    bool multiplier = gPushConstants.blendMode == kBlendModeMul ||
+                      gPushConstants.blendMode == kBlendModeMulX2;
+    if (multiplier)
+        lightLevel *= max(mat.particleBrightnessScale, 0.0f);
 
-    // Opacity and lighting modulate linear RGB; gamma never changes alpha.
-    float4 modulated    = applyBlendModulation(pc.blendMode, diffuseColor,
+    // Legacy lighting and opacity modulation in authored space.
+    float4 modulated    = applyBlendModulation(gPushConstants.blendMode, diffuseColor,
                                                finalAlpha, lightLevel);
 
-    // The legacy alpha test (translucency_particle.frag: `finalColor.a < 0.01
-    // -> discard`), tested on the post-modulation alpha exactly as the original
-    // did. This is NOT redundant with the blend state: applyBlendModulation
-    // never folds texture alpha into RGB for Add/Mul/MulX2, so for those modes
-    // the discard is the only thing that honours a cutout stored in alpha.
-    // Drop it and a texture whose shape lives in alpha (ps_glass_piece,
-    // ps_glass_shards) emits its transparent-region RGB across the whole quad
-    // and reads as a solid square. The soft-intersection and lifetime fades
-    // ride in `finalAlpha`, not in `.a`, so no sprite gains a contour here.
-    if (modulated.a < kParticleAlphaDiscard)
+    // Alpha and premultiplied-alpha blending already fade coverage to zero.
+    // Cutting them off at 0.01 creates a visible contour over dark backgrounds
+    // after display gamma, particularly with a boost. Keep the legacy cutout
+    // only for modes whose RGB blending does not consume texture alpha.
+    if (gPushConstants.blendMode != kBlendModeAlpha &&
+        gPushConstants.blendMode != kBlendModePremulAlpha &&
+        modulated.a < kParticleAlphaDiscard)
         discard;
 
-    return encodeBlendOutputLinear(pc.blendMode, modulated);
+    if (!multiplier)
+        modulated.rgb = linearToSRGB(sRGBToLinear(modulated.rgb) *
+                                     max(mat.particleBrightnessScale, 0.0f));
+
+    // ONE / ONE_MINUS_SRC_ALPHA still requires straight-alpha RGB to be
+    // premultiplied once, now in the same authored space as the destination.
+    // Exposure encoding belongs to the scene conversion after this pass.
+    return encodeBlendOutputLinear(gPushConstants.blendMode, modulated);
 }

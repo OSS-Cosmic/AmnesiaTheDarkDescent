@@ -43,8 +43,13 @@ HOST_NAMESPACE_BEGIN
 SHARED_CONST uint kBindingTextures2D                 = 0u;
 SHARED_CONST uint kBindingTexturesCube               = 1u;
 SHARED_CONST uint kBindingTextures2DArray           = 2u;  // Texture2DArray[] — animated images (one slot, frame = layer)
+// DXIL geometry pull table. Vulkan uses the same logical stream handles as
+// buffer device addresses; D3D12 uses the registered raw-SRV descriptor index.
+SHARED_CONST uint kBindingGeometryBuffers            = 4u;
+SHARED_CONST uint kGeometryBufferCapacity            = 32768u;
 // Bindings 3..8 were the gOpaque*Handles BDA arrays, folded into UniformObject.
-// Slot 3 is reused for the animated-texture record table; 4..8 stay free.
+// Slot 3 is reused for the animated-texture record table; slot 4 is the HLSL
+// geometry ByteAddressBuffer[] stream boundary; 5..8 stay free.
 SHARED_CONST uint kBindingAnimTex                    = 3u;  // StructuredBuffer<AnimTexRec> — per-2D-array-slot animation params
 SHARED_CONST uint kBindingMaterialSampler            = 9u;
 // Slots 10..19 held the retired surfel-cache SSBOs (counter, surfel, geometry,
@@ -68,14 +73,16 @@ SHARED_CONST uint kBindingBindlessSlotGeneration      = 38u;  // per object slot
 // Slot 39 held the retired per-surfel captured anchor generation and is free.
 SHARED_CONST uint kBindingLightGridCount              = 40u;  // RWStructuredBuffer<uint> (kLightGridCellCount) — world-space light grid
 SHARED_CONST uint kBindingLightGridList               = 41u;  // RWStructuredBuffer<uint> (kLightGridCellCount * kLightsPerCellMax)
+SHARED_CONST uint kBindingLightGridWeight             = 45u;  // RWStructuredBuffer<float> (kLightGridCellCount * kLightsPerCellMax) — per-cell sampling CDF, parallel to the list
 // Slot 42 (formerly kBindingFogAreas on set 0) is now free — fog moved to kWorldSet.
 // Slots 43/44 were the refracted / reflected per-bounce V-buffers; nothing
 // binds or declares them any more (water refraction clobbers gPackedHitInfo
 // like glass, water reflection moved to the raster water pass).
 SHARED_CONST uint kBindingPackedRefractionHitInfo     = 43u;  // RGBA32UI storage image — unused
 SHARED_CONST uint kBindingPackedReflectionHitInfo     = 44u;  // RGBA32UI storage image — unused
-// Slot 45 (formerly kBindingAttenuationLut, the light falloff LUT) is now free —
-// lighting is fully analytic (inverse-square radial + smoothstep spot cone).
+// Slot 45 (formerly kBindingAttenuationLut, the light falloff LUT) is now the
+// light-grid sampling CDF — see kBindingLightGridWeight above. Lighting itself
+// stays fully analytic (windowed inverse-square radial + smoothstep spot cone).
 // Slots 46/47 (formerly kBindingDecals / kBindingObjectDecalIndices on set 0)
 // are now free — decal data moved to the per-world set kWorldDecalSet, baked
 // static by cWorld::Compile. See kBindingWorldDecals below.
@@ -286,7 +293,13 @@ SHARED_CONST uint  kLightGridDim       = 32u;
 SHARED_CONST float kLightGridExtent    = float(kCellDimension) * kCellUnit;
 SHARED_CONST float kLightGridUnit      = kLightGridExtent / float(kLightGridDim);
 SHARED_CONST uint  kLightGridCellCount = kLightGridDim * kLightGridDim * kLightGridDim;  // 32768
-SHARED_CONST uint  kLightsPerCellMax   = 128u;                                           // per-cell light-list cap (list buffer = kLightGridCellCount·this·4B); lights past it are dropped by atomic order
+// Per-cell light-list cap. binLights keeps the TOP-K lights by estimated
+// contribution at the cell centre (not the first K by index) and writes a
+// parallel sampling CDF, so the NEE pick is importance-weighted rather than
+// uniform. K is therefore a quality knob, not a correctness cliff: the lights
+// dropped are by construction the dimmest ones at that cell. Cost is
+// kLightGridCellCount·K·4B per buffer, for the id list and the CDF each.
+SHARED_CONST uint  kLightsPerCellMax   = 8u;
 
 // Gameplay light probe (LightProbePass.cs) — an off-screen, world-space
 // illumination sensor read back on the CPU. One thread per probe in a single
@@ -340,6 +353,57 @@ SHARED_CONST float kWaterRefractionExposure = 2.0f; //0.5f;
 // Read host-side by the tonemap's callers (LuxMapHandler,
 // LuxMainMenu, iEditorViewport, cLevelEditorCameraCapture).
 SHARED_CONST float kSceneExposure = 2.5f;
+
+// Additive display-gamma bias applied to the RAY-TRACED backend ONLY, on top of
+// the player's Graphics/Gamma setting, in PostEffect_ToneMap.cpp -- not in the
+// shader, which still sees a single gamma scalar and knows nothing about
+// backends.
+//
+// The two backends author radiance differently and the ray-traced one lands
+// darker. Standard emits sRGBToLinear(display) / kSceneExposure so the tonemap's
+// multiply is its exact inverse and the base game's look comes back bit-for-bit;
+// the ray-traced path composites physically (color * intensity / (d^2 +
+// sourceRadiusSq)) with only that same x2.5 to lift it, and its highlight
+// shoulder compresses everything above kToneMapShoulder rather than clipping.
+//
+// This closes the gap at the display encode. It deliberately does NOT touch
+// kSceneExposure: the Standard blend paths (BlendModes.slang
+// encodeStandardBlendSource, StandardLighting.slang, Standard.environment.3d)
+// divide by that exact value and would break as a pair. Additive rather than
+// scaling so the player's own gamma slider keeps moving the result by the amount
+// they chose -- it just starts higher. 0 = no bias, and reverting is that edit.
+//
+// A display-side compensation, not a diagnosis: if the backends drift again
+// after a lighting change, the cause is upstream in the light model, not here.
+SHARED_CONST float kRayTracedGammaBias = 0.4f;
+
+// Global chroma scale applied to the RAY-TRACED backend ONLY, in display space,
+// in PostEffect_ToneMap.cpp -- pushed in, so the shader sees one scalar and
+// knows nothing about backends. 1.0 = identity, < 1 pulls color toward its
+// Rec.709 luma.
+//
+// The ray-traced path composites physical radiance (color * intensity / (d^2 +
+// sourceRadiusSq)), so an authored light tint multiplied by a saturated albedo
+// keeps all of its chroma. The base game never showed that chroma: it
+// accumulated in display space into an 8-bit buffer that clipped toward white.
+// kToneMapShoulder recovers part of that above the knee; this recovers the
+// mid-tones below it, which is where the warm over-saturation actually lives.
+//
+// This replaces an earlier attempt that retained 65% of each light's chroma at
+// RT upload (RayTracedLightColorToLinear). That baked an art-direction choice
+// into the light data, where it was invisible to anyone reading a light's
+// authored color; lights now upload their unmodified color and the correction
+// happens once, here, at the display encode.
+//
+// Standard is pinned at 1.0 and must stay there: it emits
+// sRGBToLinear(display) / kSceneExposure (BlendModes.slang
+// encodeStandardBlendSource, StandardLighting.slang, Standard.environment.3d)
+// on the assumption that the tonemap is its exact inverse, and any chroma
+// change here breaks that pair and the base game's bit-for-bit look.
+//
+// A display-side compensation, not a diagnosis: if the backends drift again
+// after a lighting change, the cause is upstream in the light model, not here.
+SHARED_CONST float kRayTracedSaturation = 0.80f;
 
 // How much wave turbulence the REFLECTION bounce normal keeps (the refraction
 // bounce always uses the full wave normal). The RT reflection is a sharp mirror
@@ -415,19 +479,32 @@ SHARED_CONST float kSpatialRadius                  = 16.0f;   // spatial search 
 // `intensity` IS the light's radiance (the host uploads the authored engine
 // radius verbatim for both point and spot — one unit for every analytic light,
 // so direct and the GI NEE agree by construction). The shader emits
-// radiance = color · intensity · 1/(d² + sourceRadius²) — a softened
-// inverse-square that goes HDR (>1) near the source so lights cross the bloom
-// white point. Brightness tuning is an AUTHORING concern (light radius /
-// color), not a constant.
+// radiance = color · intensity · window(d, reach) / (d² + sourceRadius²) — a
+// softened inverse-square that goes HDR (>1) near the source so lights cross the
+// bloom white point, times a window that reaches exactly zero at the bin reach.
+// Brightness tuning is an AUTHORING concern (light radius / color), not a
+// constant.
 //
-// LightGridBuildPass bins each light out to the distance where its brightest
-// channel's radiance dims to kLightRadianceFloor:
-//   reach² = maxChannel(color) · intensity / kLightRadianceFloor − sourceRadius²
-// reach² ≤ 0 (peak below the floor) drops the light entirely. NOTE: this bin reach
-// also governs indirect/GI spread — the GI NEE only samples lights binned into a
-// hit's cell, so lowering the floor widens and brightens GI (and crowds the
-// per-cell light cap); it is not purely a grid-cost knob.
-SHARED_CONST float kLightRadianceFloor         = 0.005f;    // min per-channel radiance (linear) worth binning; reach² = maxC(color)·authoredRadius/floor − sourceRadiusSq (scale-independent)
+// The window is what makes `reach` a real quantity: shading and grid binning now
+// cut off at the SAME distance, so a light leaving a cell contributes ~0 at that
+// moment. Before the window, shading was a bare 1/d² with no cutoff and the grid
+// was the only bound, which forced the reach to be enormous to hide the seam.
+//
+// LightGridBuildPass bins each light out to `reach`, derived in
+// LightParameters.cpp as the distance where its brightest channel dims to
+// kLightRadianceFloor, CLAMPED to kLightReachMaxScale × the authored radius:
+//   reach = min(sqrt(maxChannel(color) · intensity / kLightRadianceFloor − sourceRadius²),
+//               kLightReachMaxScale · intensity)
+// reach ≤ 0 (peak below the floor) drops the light entirely.
+//
+// The CLAMP, not the floor, is what bounds grid occupancy. The floor alone gave
+// a radius-3 white light a 24.5-unit reach — a sphere covering ~8000 of the
+// 32768 cells — so every cell in a room held nearly every light in it and the
+// binning culled almost nothing. NOTE: bin reach also governs indirect/GI spread,
+// since the GI NEE only samples lights binned into a hit's cell; raising the
+// scale widens and brightens GI and crowds the per-cell top-K.
+SHARED_CONST float kLightRadianceFloor         = 0.005f;    // min per-channel radiance (linear) worth binning
+SHARED_CONST float kLightReachMaxScale         = 3.0f;      // hard cap on bin reach as a multiple of the authored radius (= `intensity`); the knob that actually bounds per-cell light count
 SHARED_CONST float kPointLightSourceRadiusSq   = 0.25f;  // soft source radius² (0.5m) — near-field softening + on-source peak cap (caps on-lamp radiance at color·intensity/this instead of 1/d²→∞; raise to soften lamp hotspots further)
 // Default soft-shadow source radius when a light authors none (GetSourceRadius()==0):
 // a fraction of the authored reach radius, so the penumbra scales with the lamp and
@@ -444,6 +521,31 @@ SHARED_CONST float kParalaxScale = 0.4f;
 // tex[3].y (Brdf.slang decodeMaterialRoughness).
 SHARED_CONST float kDefaultDiffuseRoughness = 1.0f;
 
+// -----------------------------------------------------------------------------
+// Standard renderer per-tile light culling (Standard.lightCull.cs.slang ->
+// Standard.light.3d.slang). The resolve used to loop every light in the level
+// for every pixel; the cull pass reduces each screen tile to the world-space
+// AABB of the surfaces actually visible in it and keeps only the lights whose
+// reach sphere touches that box.
+//
+// Buffer layout, kStandardLightTileStride uints per tile, tiles in row-major
+// order (tileX + tileY * tilesX):
+//   [0] point count for this tile, or kStandardLightTileOverflow
+//   [1] spot count for this tile
+//   [2 ...] point indices ascending, then spot indices ascending
+//
+// The lists are EXACT, never top-K: a tile that cannot fit its lights writes
+// kStandardLightTileOverflow and the resolve falls back to looping every light
+// for that tile, so the image is identical either way. Indices stay ascending
+// so the additive accumulation keeps the order it has today.
+// -----------------------------------------------------------------------------
+SHARED_CONST uint kStandardLightTileSize      = 16u;   // pixels per tile edge; also the dispatch group size
+SHARED_CONST uint kStandardLightTileMaxLights = 64u;   // point + spot entries a tile can hold before it falls back
+SHARED_CONST uint kStandardLightTileStride    = 66u;   // 2 + kStandardLightTileMaxLights
+SHARED_CONST uint kStandardLightTileOverflow  = 0xffffffffu;
+// Bitmask words the cull pass uses to order its per-tile emit; caps how many
+// lights of one type it can bin before falling back (32 * this).
+SHARED_CONST uint kStandardLightCullMaskWords = 16u;   // 512 lights per type
 
 HOST_NAMESPACE_END
 

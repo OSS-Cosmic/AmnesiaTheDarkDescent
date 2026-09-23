@@ -5,6 +5,7 @@
 #include "Constants.h"
 import PerFrame.resource;
 import bindless;
+import GeometryStream;
 import Utils.Color.ColorHelpers;
 import SceneTypes;
 
@@ -47,7 +48,7 @@ public struct StandardRasterVertex
 public uint standardRasterVertexIndex(UniformObject obj, uint vertexID)
 {
     return obj.indexHandle != 0ull
-        ? ((uint*)obj.indexHandle)[vertexID]
+        ? geometryLoad(obj.indexHandle, vertexID * 4u)
         : vertexID;
 }
 
@@ -56,16 +57,16 @@ public StandardRasterVertex fetchStandardRasterVertex(UniformObject obj, uint ve
     uint index = standardRasterVertexIndex(obj, vertexID);
     StandardRasterVertex v;
     v.position = obj.posHandle != 0ull
-        ? ((float4*)obj.posHandle)[index].xyz
+        ? asfloat(geometryLoad4(obj.posHandle, index * 16u)).xyz
         : float3(0.0f);
     v.normal = obj.normalHandle != 0ull
-        ? ((float3*)obj.normalHandle)[index]
+        ? asfloat(geometryLoad3(obj.normalHandle, index * 12u))
         : float3(0.0f, 0.0f, 1.0f);
     v.tangent = obj.tangentHandle != 0ull
-        ? ((float4*)obj.tangentHandle)[index]
+        ? asfloat(geometryLoad4(obj.tangentHandle, index * 16u))
         : float4(0.0f, 0.0f, 0.0f, 1.0f);
     v.uv = obj.uv0Handle != 0ull
-        ? ((float3*)obj.uv0Handle)[index].xy
+        ? asfloat(geometryLoad3(obj.uv0Handle, index * 12u)).xy
         : float2(0.0f);
     return v;
 }

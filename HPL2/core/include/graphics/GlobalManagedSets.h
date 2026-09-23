@@ -4,6 +4,7 @@
 #include "graphics/BindlessPool.h"
 #include "graphics/Graphics.h"
 #include "graphics/RIProgram.h"
+#include "graphics/RIBuffer.h"
 #include "graphics/RIRenderer.h"
 #include "graphics/RITypes.h"
 #include "math/MathTypes.h"
@@ -11,11 +12,10 @@
 #include "system/Event.h"
 #include "system/Hasher.h"
 
-#include <array>
 #include <cstdint>
 #include <cstring>
+#include <limits>
 #include <optional>
-#include <unordered_map>
 #include <vector>
 
 #include "Constants.h"
@@ -89,48 +89,30 @@ namespace detail {
 // buffers) and cHybridRenderer (the indirect-draw buffer), so it lives in this
 // header rather than a single .cpp.
 static inline struct RIBuffer
-CreateBindlessSlotBuffer(RIDevice *device, uint32_t slotCount,
-                         size_t elementStride, VkBufferUsageFlags usage,
+CreateBindlessSlotBuffer(RIDevice *device, uint64_t slotCount,
+                         size_t elementStride, uint32_t usage,
                          bool deviceLocalOnly = false,
                          const char *debugName = nullptr) {
-  uint32_t queueFamilies[RI_QUEUE_LEN] = {0};
-  VkBufferCreateInfo bufferCreateInfo = {VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO};
-  VK_ConfigureBufferQueueFamilies(&bufferCreateInfo, device->queues,
-                                  RI_QUEUE_LEN, queueFamilies, RI_QUEUE_LEN);
-  bufferCreateInfo.size = (VkDeviceSize)slotCount * elementStride;
-  bufferCreateInfo.usage = usage;
-
-  VmaAllocationCreateInfo allocInfo = {};
-  if (deviceLocalOnly) {
-    // Pure device-local heap. Caller must seed contents via Interface<cGraphics>::Get()->uploader
-    // (RI_ResourceBeginCopyBuffer / EndCopyBuffer) — out.mappedAddress is null.
-    allocInfo.usage = VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE;
-  } else {
-    allocInfo.usage = VMA_MEMORY_USAGE_AUTO;
-    allocInfo.flags = VMA_ALLOCATION_CREATE_MAPPED_BIT |
-                      VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT;
-  }
-
-  VmaAllocationInfo allocationInfo = {};
   struct RIBuffer out;
-  VK_WrapResult(vmaCreateBuffer(device->vk.vmaAllocator, &bufferCreateInfo,
-                                &allocInfo, &out.vk.buffer, &out.vk.allocation,
-                                &allocationInfo));
-  out.mappedAddress = deviceLocalOnly ? nullptr : allocationInfo.pMappedData;
-  // Stamp the identity cookie, exactly as RIBuffer::create does. Without it the
-  // buffer reads as empty (cookie == 0) to RIDescriptor, and every descriptor
-  // built from it is silently skipped by RIProgram::bindDescriptors -- which
-  // drops the whole descriptor set, so the shader dispatches with set 2 never
-  // bound. Only shows up once one of these buffers is bound by name rather than
-  // used as an indirect-argument or set-0 bindless buffer.
-  out.cookie = hash_random();
-  // Names the VkBuffer and the VMA allocation, so a leak at device teardown
-  // says which buffer it was.
-  if (debugName && out.vk.buffer)
+  if (elementStride == 0 ||
+      slotCount > std::numeric_limits<uint64_t>::max() /
+                      uint64_t(elementStride)) {
+    Warning("Bindless slot buffer size overflows the RI size contract\n");
+    return out;
+  }
+  const uint64_t size = slotCount * uint64_t(elementStride);
+  if (size == 0) {
+    Warning("Bindless slot buffer size must be non-zero\n");
+    return out;
+  }
+  out = RIBuffer::create(device, {size, usage,
+                                  deviceLocalOnly ? RI_MEMORY_DEVICE
+                                                  : RI_MEMORY_HOST_UPLOAD,
+                                  0});
+  if (debugName && !out.isEmpty())
     out.setDebugObjectName(device, debugName);
   return out;
 }
-
 } // namespace detail
 
 // Per-object inputs for submitObject(): the part that varies per pass. The
@@ -147,12 +129,22 @@ struct ObjectSubmitDesc {
   uint32_t        decalList   = 0;
   uint32_t        renderFlags = 0;
 
-  // Explicit per-stream vertex/index device addresses (BDAs), folded into the
+  // Explicit per-stream vertex/index buffer references, folded into the
   // UniformObject. When `set`, submitObject uses these verbatim instead of
   // deriving from `vb` — particles point them at the per-viewport translucent
   // scratch ring (normal/tangent = 0). Leave `set` false to derive from `vb`
   // (kSubmitVertex/kSubmitIndex), or to carry forward the slot's existing
-  // handles (data-only passes that bind raw VkBuffers).
+  // handles (data-only passes that bind fixed-function vertex/index buffers).
+  // The references are borrowed; their buffers must remain alive through GPU use.
+  struct StreamRefs {
+    struct Ref {
+      RIBuffer *buffer = nullptr;
+      uint64_t  byteOffset = 0;
+    } pos, normal, tangent, uv0, color, index;
+    bool set = false;
+  } streamRefs;
+
+  // Legacy packed stream handles remain supported for Vulkan callers only.
   struct StreamHandles {
     uint64_t pos = 0, normal = 0, tangent = 0, uv0 = 0, color = 0, index = 0;
     bool     set = false;
@@ -162,7 +154,7 @@ struct ObjectSubmitDesc {
 // What submitObject() writes for the slot this frame. Slot allocation + the
 // reuse-generation bump always run; these gate the per-slot data writes. The
 // fixed-function raster passes (decal/water/translucent) pass kSubmitData only —
-// they bind raw VkBuffers and never read the opaque*Handles. The bindless-pull
+// they bind fixed-function vertex/index buffers and never read the opaque*Handles. The bindless-pull
 // passes (solids/TLAS/particle) add kSubmitVertex | kSubmitIndex.
 enum ObjectSubmitFlags : uint32_t {
   kSubmitData   = 1u << 0, // stage the UniformObject payload into m_objectBuffer[slot]
@@ -187,7 +179,7 @@ public:
 
   // Build the descriptor-set layout + pool, create and seed all set-0 buffers,
   // and run the one-time descriptor write batch.
-  void initialize(RIDevice *device, cResources *resources);
+  bool initialize(RIDevice *device, cResources *resources);
 
   // Destroy all owned buffers and the descriptor set.
   void destroy(RIDevice *device);
@@ -297,6 +289,9 @@ public:
   // count + packed per-cell unified-light-index list.
   struct RIBuffer m_lightGridCountBuffer;
   struct RIBuffer m_lightGridListBuffer;
+  // Parallel to m_lightGridListBuffer: the per-cell sampling CDF binLights
+  // writes so NEE can importance-sample the cell rather than pick uniformly.
+  struct RIBuffer m_lightGridWeightBuffer;
 
   // Bindless material wiring (Falcor MaterialSystem model). One flat table of
   // fixed-size MaterialDataBlobs (m_materialBuffer, kBindingMaterials) indexed by

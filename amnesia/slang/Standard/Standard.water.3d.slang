@@ -21,7 +21,7 @@ struct WaterPush
     uint cubeMapTextureIndex;
     float4x4 reflectionViewProjection;
 };
-[vk::push_constant] WaterPush pc;
+[vk::push_constant] WaterPush gPushConstants HPL_PUSH_CONSTANT_REGISTER;
 
 struct I { float3 p:POSITION; float3 n:NORMAL; float4 t:TANGENT; float4 c:COLOR; float2 uv:TEXCOORD0; };
 struct V { float3 p:POSITION; float2 uv:TEXCRD; float3 n:NORMAL; float3 t:TANGENT; float3 b:BITANGENT; float4 c:COLOR; nointerpolation uint id:OBJECTID; float4 h:SV_POSITION; };
@@ -86,7 +86,7 @@ float4 psMain(V v):SV_TARGET0
         n=waterSafeNormalize(wave.x*t+wave.y*b+wave.z*n,n);
         tangentNormal=wave;
     }
-    if (pc.refractionEnabled!=0u && (w.materialConfig&kMaterialFlagHasRefraction)!=0u) {
+    if (gPushConstants.refractionEnabled!=0u && (w.materialConfig&kMaterialFlagHasRefraction)!=0u) {
         float viewZ=max(abs(mul(gPerFrame.viewMat,float4(v.p,1)).z),1.0e-3f);
         distorted=uv+mul((float3x3)gPerFrame.viewMat,n).xy*w.refractionScale/viewZ;
         if (!waterScreenUV(distorted) || sceneDepthInput.SampleLevel(waterSampler,distorted,0)<v.h.z-1.0e-3f) distorted=uv;
@@ -98,19 +98,19 @@ float4 psMain(V v):SV_TARGET0
         tint*=kWaterRefractionExposure;
     // reflectionEnabled is the host's authored HasReflection setting; the
     // separate availability bit only says that a planar image was produced.
-    float3 reflected=float3(0.0f); bool reflectionAuthored=pc.reflectionEnabled!=0u;
-    if (pc.reflectionEnabled!=0u && reflectionAuthored) {
+    float3 reflected=float3(0.0f); bool reflectionAuthored=gPushConstants.reflectionEnabled!=0u;
+    if (gPushConstants.reflectionEnabled!=0u && reflectionAuthored) {
         float f=waterFresnelFinite(dot(eye,n),w.frenselBias,w.frenselPow)*waterReflectionFadeFinite(-mul(gPerFrame.viewMat,float4(v.p,1)).z,w.reflectionFadeStart,w.reflectionFadeEnd);
-        if (pc.cubeMapTextureIndex!=kInvalidTextureIndex)
-            reflected=sRGBToLinear(sampleEnvironmentCube(pc.cubeMapTextureIndex,reflect(-eye,n),0.0f).rgb);
+        if (gPushConstants.cubeMapTextureIndex!=kInvalidTextureIndex)
+            reflected=sRGBToLinear(sampleEnvironmentCube(gPushConstants.cubeMapTextureIndex,reflect(-eye,n),0.0f).rgb);
         else {
-            float2 ruv; bool planar=pc.reflectionAvailable!=0u && waterProjectReflectionUV(v.p,pc.reflectionViewProjection,ruv);
+            float2 ruv; bool planar=gPushConstants.reflectionAvailable!=0u && waterProjectReflectionUV(v.p,gPushConstants.reflectionViewProjection,ruv);
             if (planar) reflected=waterReflectionInput.SampleLevel(waterSampler,ruv,0).rgb;
         }
         reflected*=f;
     }
     FogResult fog=computeFog(v.p,gPerFrame.posW);
-    if (pc.reflectionEnabled==0u) {
+    if (gPushConstants.reflectionEnabled==0u) {
         // Legacy translucency_water.frag.fsl without reflection: a fixed fake
         // light over the wave normal, half-Lambert diffuse plus a pow-16 lobe.
         float lDotN=max(dot(normalize(float3(0.5f,0.5f,0.5f)),tangentNormal),0.0f);

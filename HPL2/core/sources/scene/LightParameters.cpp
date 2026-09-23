@@ -5,12 +5,16 @@
 #include <cstring>
 #include <limits>
 
+// Shared with the shaders rather than mirrored (amnesia/slang is on the include
+// path). These were local constexpr copies and had already started to matter:
+// the grid bins against kLightRadianceFloor and the shader windows against the
+// resulting reach, so a drift between the two would desynchronise culling from
+// shading.
+#include "Constants.h"  // kLightRadianceFloor, kPointLightSourceRadiusSq, kLightReachMaxScale
+
 namespace hpl {
 
     namespace {
-        constexpr float kLightRadianceFloor = 0.005f;
-        constexpr float kPointLightSourceRadiusSq = 0.25f;
-
         float FiniteOr(float value, float fallback)
         {
             if(std::isfinite(value)) return value;

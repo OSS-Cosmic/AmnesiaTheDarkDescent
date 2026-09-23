@@ -37,6 +37,7 @@
 #include "graphics/LightProbeQuery.h"
 #include "graphics/MaterialType.h"
 #include "graphics/MeshCreator.h"
+#include "graphics/NrdIntegration.h"
 #include "graphics/PostEffect.h"
 #include "graphics/PostEffectComposite.h"
 #include "graphics/RIRenderer.h"
@@ -44,6 +45,7 @@
 #include "graphics/RITypes.h"
 #include "graphics/RIVK.h"
 #include "graphics/TextureCreator.h"
+#include "graphics/XessUpscaler.h"
 
 #include "resources/FileSearcher.h"
 #include "resources/LowLevelResources.h"
@@ -70,9 +72,37 @@
 
 #include "graphics/RISwapchain.h"
 #include <algorithm>
+#include <chrono>
+#include <cstdio>
 #include <optional>
 
 namespace hpl {
+
+// What the HPL2 renderer needs from any adapter, stated in the backend-neutral
+// terms every backend publishes while enumerating (see RIPhysicalAdapter in
+// RIDevice.h). Returns the first unmet requirement as a label for the user, or
+// NULL when the adapter is acceptable.
+//
+// RIDevice::init builds whatever device it is asked for and asserts only its
+// own caller contract; deciding that an adapter is unfit to run the game is the
+// engine's call, so it is made here, once, before the device exists.
+static const char *RendererUnmetAdapterRequirement(const RIPhysicalAdapter &adapter) {
+  if (!adapter.isSwapChainSupported)
+    return "a presentable swapchain";
+  if (adapter.bindlessTier < 1)
+    return "bindless descriptors";
+  if (!adapter.isBufferDeviceAddressSupported)
+    return "buffer device addresses";
+  if (!adapter.isShaderStorageScalarLayoutSupported)
+    return "scalar block layout";
+  // SceneTypes buffer addresses and the shared particle/triangle shaders use
+  // uint64_t.
+  if (!adapter.isShaderNativeI64Supported)
+    return "64-bit integer shader operations";
+  if (!adapter.isDynamicRenderingSupported)
+    return "dynamic rendering";
+  return NULL;
+}
 
 //////////////////////////////////////////////////////////////////////////
 // CONSTRUCTORS
@@ -213,7 +243,18 @@ void cGraphics::Init(const cEngineInitVars::cGraphicsVars &aVars,
   apResources->AddResourceDir(_W("core/shaders"), false);
   apResources->AddResourceDir(_W("core/textures"), false);
   apResources->AddResourceDir(_W("core/models"), false);
-  apResources->AddResourceDir(_W("compiled_shaders"), false);
+  // Each backend's artifacts live in their own child directory. Resource
+  // directories are indexed non-recursively, so register each one explicitly.
+  //
+  // The flat compiled_shaders/ is deliberately absent. Nothing has written it
+  // since the per-backend split, but a tree built before that still has the old
+  // artifacts sitting in it, and registering it ahead of these served those in
+  // preference to the current ones -- stale shaders, silently, on any machine
+  // that had built once before the move.
+  apResources->AddResourceDir(_W("compiled_shaders/vk"), false);
+#if DEVICE_IMPL_D3D12
+  apResources->AddResourceDir(_W("compiled_shaders/d3d12"), false);
+#endif
 
   ////////////////////////////////////////////////
   // LowLevel Init
@@ -227,40 +268,122 @@ void cGraphics::Init(const cEngineInitVars::cGraphicsVars &aVars,
   } else {
     mbScreenIsSetup = false;
   }
+#if !DEVICE_IMPL_VULKAN && !DEVICE_IMPL_D3D12
+#error "No RI graphics backend compiled"
+#endif
   {
     struct RIBackendInit backendInit = {};
-    backendInit.api = RI_DEVICE_API_VK;
     backendInit.applicationName = "HPL2";
-    // OFF unless the user opts in with HPL_VK_VALIDATION=1, in any build.
-    // Nobody should pay for the layer without asking for it, and leaving it on
-    // by default also stacks it under driver-debug modes (RADV_DEBUG=hang
-    // etc.) -- both intercept submits, and the combination is the least-tested
-    // path as well as one that perturbs hang repros.
-    //
-    // Turn it on while working on the renderer: it is what catches unbound
-    // descriptor sets, malformed copies and bad barriers at the call that
-    // causes them rather than as corruption several frames later.
-    const char *pValidationEnv = getenv("HPL_VK_VALIDATION");
-    backendInit.vk.enableValidationLayer =
-        pValidationEnv != NULL && atoi(pValidationEnv) != 0;
+
+    // D3D12 wherever it is compiled in (Windows), Vulkan everywhere else,
+    // unless the command line asked for one of them specifically.
+    uint8_t requestedApi;
+    switch (aVars.mRenderApi) {
+    case eRenderApiPreference_Vulkan:
+      requestedApi = RI_DEVICE_API_VK;
+      break;
+    case eRenderApiPreference_D3D12:
+      requestedApi = RI_DEVICE_API_D3D12;
+      break;
+    case eRenderApiPreference_Auto:
+    default:
+      requestedApi = DEVICE_IMPL_D3D12 ? RI_DEVICE_API_D3D12 : RI_DEVICE_API_VK;
+      break;
+    }
+
+    // Asking for a backend this build does not contain is a hard stop rather
+    // than a fallback: the renderer never silently substitutes another API, and
+    // an override that is quietly ignored is how you spend an afternoon on a
+    // repro that was running the other backend the whole time.
+    // DEVICE_IMPL_* are 0/1, so these fold away in single-backend builds while
+    // both arms stay type-checked everywhere.
+    if (requestedApi == RI_DEVICE_API_D3D12 && !DEVICE_IMPL_D3D12) {
+      FatalError("Direct3D 12 was not compiled into this build. Rebuild with "
+                 "--with-d3d12=yes, or omit --d3d12 to use Vulkan.\n");
+    }
+    if (requestedApi == RI_DEVICE_API_VK && !DEVICE_IMPL_VULKAN) {
+      FatalError("Vulkan was not compiled into this build. Omit --vulkan to "
+                 "use this build's default backend.\n");
+    }
+
+    backendInit.api = requestedApi;
+    const char *pBackendDisplayName =
+        (requestedApi == RI_DEVICE_API_D3D12) ? "Direct3D 12" : "Vulkan";
+
+#if (DEVICE_IMPL_D3D12)
+    if (requestedApi == RI_DEVICE_API_D3D12) {
+      // HPL_D3D12_VALIDATION=1 enables the debug layer; =2 adds GPU-based
+      // validation, which slows the GPU enough to trip a TDR on full maps.
+      const char *pValidationEnv = getenv("HPL_D3D12_VALIDATION");
+      const int lValidationLevel = pValidationEnv ? atoi(pValidationEnv) : 0;
+      backendInit.d3d12.validationLevel =
+          lValidationLevel >= 2   ? RI_D3D12_VALIDATION_LEVEL_GPU_BASED
+          : lValidationLevel == 1 ? RI_D3D12_VALIDATION_LEVEL_STANDARD
+                                  : RI_D3D12_VALIDATION_LEVEL_NONE;
+
+      // HPL_D3D12_DRED=0/1 overrides RI's default (on with the debug layer or
+      // in debug builds).
+      const char *pDredEnv = getenv("HPL_D3D12_DRED");
+      backendInit.d3d12.dredMode =
+          !pDredEnv              ? RI_D3D12_DRED_DEFAULT
+          : atoi(pDredEnv) != 0 ? RI_D3D12_DRED_ON
+                                : RI_D3D12_DRED_OFF;
+    }
+#endif
+
+#if (DEVICE_IMPL_VULKAN)
+    if (requestedApi == RI_DEVICE_API_VK) {
+      // OFF unless the user opts in with HPL_VK_VALIDATION=1, in any build.
+      // Nobody should pay for the layer without asking for it, and leaving it
+      // on by default also stacks it under driver-debug modes (RADV_DEBUG=hang
+      // etc.) -- both intercept submits, and the combination is the
+      // least-tested path as well as one that perturbs hang repros.
+      //
+      // Turn it on while working on the renderer: it is what catches unbound
+      // descriptor sets, malformed copies and bad barriers at the call that
+      // causes them rather than as corruption several frames later.
+      const char *pValidationEnv = getenv("HPL_VK_VALIDATION");
+      backendInit.vk.enableValidationLayer =
+          pValidationEnv != NULL && atoi(pValidationEnv) != 0;
+    }
+
+    // XeSS needs instance extensions that cannot be added after vkCreateInstance,
+    // so it contributes them here. RI declines anything this instance cannot
+    // provide, which vetoes XeSS rather than failing initialization -- so this
+    // is pure opt-in and never affects whether the renderer comes up. Must
+    // outlive InitRIRenderer below.
+    struct RIVkInstanceRequirements instanceRequirements[1] = {};
+    if (requestedApi == RI_DEVICE_API_VK &&
+        XessVkInstanceRequirements(&instanceRequirements[0])) {
+      backendInit.vk.optionalRequirements = instanceRequirements;
+      backendInit.vk.optionalRequirementCount = 1;
+    }
+#endif
+
+    // Two backends can ship in one binary now, so name the one that came up:
+    // without this a log from a bug report does not say which API ran.
+    Log("Graphics API: %s\n", pBackendDisplayName);
 
     if (InitRIRenderer(&backendInit) != RI_SUCCESS) {
       FatalError(
-          "Failed to initialize the Vulkan renderer! Make sure your graphics "
-          "card supports Vulkan and your drivers are up to date.\n");
+          "Failed to initialize the %s renderer! Make sure your graphics "
+          "card supports %s and your drivers are up to date.\n",
+          pBackendDisplayName, pBackendDisplayName);
     }
 
     uint32_t numAdapters = 0;
     if (EnumerateRIAdapters(NULL, &numAdapters) != RI_SUCCESS ||
         numAdapters == 0) {
-      FatalError("No Vulkan-compatible graphics adapter found! Make sure your "
-                 "drivers are up to date.\n");
+      FatalError("No %s-compatible graphics adapter found! Make sure your "
+                 "drivers are up to date.\n",
+                 pBackendDisplayName);
     }
     std::vector<RIPhysicalAdapter> physicalAdapters(numAdapters);
 
     if (EnumerateRIAdapters(physicalAdapters.data(), &numAdapters) !=
         RI_SUCCESS) {
-      FatalError("Failed to enumerate Vulkan graphics adapters!\n");
+      FatalError("Failed to enumerate %s graphics adapters!\n",
+                 pBackendDisplayName);
     }
     uint32_t selectedAdapterIdx = 0;
     for (size_t i = 1; i < numAdapters; i++) {
@@ -282,6 +405,33 @@ void cGraphics::Init(const cEngineInitVars::cGraphicsVars &aVars,
     }
     const RIPhysicalAdapter &selectedAdapter =
         physicalAdapters[selectedAdapterIdx];
+    // The renderer's unconditional requirements, checked before the
+    // backend-specific gates below and before any device is created, so a
+    // shortfall is named rather than surfacing as a generic device failure.
+    if (const char *pUnmetRequirement =
+            RendererUnmetAdapterRequirement(selectedAdapter)) {
+      FatalError("The %s renderer requires %s, which adapter '%s' does not "
+                 "support. Update your graphics driver or use a different "
+                 "GPU.\n",
+                 pBackendDisplayName, pUnmetRequirement, selectedAdapter.name);
+    }
+#if (DEVICE_IMPL_D3D12)
+    // The engine's DXIL is built at SM 6.8: raster vertex shaders read the
+    // bindless object slot from SV_StartInstanceLocation (the draw's
+    // firstInstance). Below 6.8 every draw would read object 0 and nothing
+    // renders, so refuse up front with an actionable message.
+    if (RIIsTargetSelected(RI_DEVICE_API_D3D12)) {
+      const uint32_t smMajor = selectedAdapter.d3d12.highestShaderModelMajor;
+      const uint32_t smMinor = selectedAdapter.d3d12.highestShaderModelMinor;
+      if (smMajor < 6 || (smMajor == 6 && smMinor < 8)) {
+        FatalError("The %s renderer requires Shader Model 6.8, but adapter "
+                   "'%s' reports %u.%u. Update your graphics driver or use "
+                   "the Vulkan renderer.\n",
+                   pBackendDisplayName, selectedAdapter.name, smMajor,
+                   smMinor);
+      }
+    }
+#endif
     struct RIDeviceDesc deviceInit = {0};
     deviceInit.physicalAdapter = &physicalAdapters[selectedAdapterIdx];
     // Only the ray-traced backend needs hardware ray tracing; Standard's raster shaders use
@@ -293,38 +443,51 @@ void cGraphics::Init(const cEngineInitVars::cGraphicsVars &aVars,
     // RIProgram. The ray-traced WORK stays gated on the active backend
     // (cWorld::BuildTlas), so a Standard session pays for the capability, not
     // for acceleration structures nothing reads.
-    const bool bAdapterCanRayTrace = selectedAdapter.rayTracingTier >= 1 &&
+    const bool bAdapterCanRayTrace = selectedAdapter.isRayTracingSupported &&
                                      selectedAdapter.isRayQuerySupported;
-    deviceInit.requestRayTracing =
-        (mRendererBackend == eRendererBackend_RayTraced || bAdapterCanRayTrace) ? 1 : 0;
-    int deviceResult = device.init(&deviceInit);
-    bool raytracedFallback = false;
-    if (deviceResult != RI_SUCCESS && deviceInit.requestRayTracing) {
-      // The RT device failed. Only the active backend that NEEDS it falls back;
-      // an editor that merely wanted the option keeps the backend it asked for
-      // and loses the switch.
+    // Decided from what the adapter advertises, before the device exists: the
+    // RI layer no longer rejects a request it cannot service, so an
+    // unserviceable one must never be made. Only the active backend that NEEDS
+    // ray tracing falls back; an editor that merely wanted the option keeps the
+    // backend it asked for and loses the switch.
+    if (!bAdapterCanRayTrace) {
       if (mRendererBackend == eRendererBackend_RayTraced) {
         Log("Renderer backend: ray tracing unsupported on '%s', falling back to "
             "Standard\n",
             selectedAdapter.name);
         mRendererBackend = eRendererBackend_Standard;
-        raytracedFallback = true;
       } else {
         Log("Renderer backend: ray tracing unavailable on '%s', backend "
             "switching disabled\n",
             selectedAdapter.name);
       }
-      deviceInit.requestRayTracing = 0;
-      deviceResult = device.init(&deviceInit);
     }
-    if (deviceResult != RI_SUCCESS) {
-      FatalError("Failed to create Vulkan device on adapter '%s'! Make sure "
+    deviceInit.requestRayTracing = bAdapterCanRayTrace ? 1 : 0;
+    // The ray-traced shaders trace with inline ray query, so it is requested
+    // together with the acceleration structures it reads.
+    deviceInit.requestRayQuery = deviceInit.requestRayTracing;
+#if (DEVICE_IMPL_VULKAN)
+    // XeSS's device extensions and feature chain, which likewise have to be in
+    // place before vkCreateDevice. Queried against the adapter just selected;
+    // RI drops the whole contribution rather than failing if it cannot be
+    // honoured. Must outlive device.init below.
+    struct RIVkDeviceRequirements deviceRequirements[1] = {};
+    if (RIIsTargetSelected(RI_DEVICE_API_VK) &&
+        XessVkDeviceRequirements(
+            &deviceRequirements[0], RIGetVkInstance(),
+            physicalAdapters[selectedAdapterIdx].vk.physicalDevice)) {
+      deviceInit.optionalRequirements = deviceRequirements;
+      deviceInit.optionalRequirementCount = 1;
+    }
+#endif
+    if (device.init(&deviceInit) != RI_SUCCESS) {
+      FatalError("Failed to create %s device on adapter '%s'! Make sure "
                  "your drivers are up to date.\n",
-                 selectedAdapter.name);
+                 pBackendDisplayName, selectedAdapter.name);
     }
     // What the DEVICE came up with, not what the adapter advertised: an adapter
-    // that claims ray tracing but fails device creation must not be offered a
-    // switch it cannot perform.
+    // that claims ray tracing but whose device comes up without it must not be
+    // offered a switch it cannot perform.
     mbRayTracedSupported = device.accelerationStructureEnabled &&
                            device.rayTracingPipelineEnabled && device.rayQueryEnabled;
     RI_InitResourceUploader(&device, &uploader);
@@ -397,8 +560,7 @@ void cGraphics::Init(const cEngineInitVars::cGraphicsVars &aVars,
 
     RIBuffer whiteUploadStaging = {};
 
-    // 1x1 white texture — staged upload, then transitioned to
-    // SHADER_READ_ONLY_OPTIMAL.
+    // 1x1 white texture — staged upload, then transitioned for shader reads.
     {
       RITextureDesc whiteDesc = {};
       whiteDesc.type = RI_TEXTURE_2D;
@@ -410,17 +572,23 @@ void cGraphics::Init(const cEngineInitVars::cGraphicsVars &aVars,
       if (whiteTexture2D.isEmpty()) {
         FatalError("Failed to create white texture image!\n");
       }
+      whiteTexture2D.setDebugObjectName(&device, "Graphics.whiteTexture2D");
 
       const uint8_t whitePixel[4] = {255, 255, 255, 255};
+      const RIDeviceSize whiteRowPitch = RIFormatAlignRowPitch(
+          sizeof(whitePixel),
+          device.physicalAdapter.uploadBufferTextureRowAlignment, 4);
       whiteUploadStaging = RIBuffer::create(
-          &device, {(uint64_t)sizeof(whitePixel), RI_BUFFER_USAGE_TRANSFER_SRC,
+          &device, {whiteRowPitch, RI_BUFFER_USAGE_TRANSFER_SRC,
                     RI_MEMORY_HOST_UPLOAD, 0});
       if (whiteUploadStaging.isEmpty()) {
         FatalError("Failed to create white texture staging buffer!\n");
       }
+      if (whiteUploadStaging.mappedAddress == nullptr) {
+        FatalError("Failed to map white texture staging buffer!\n");
+      }
       memcpy(whiteUploadStaging.mappedAddress, whitePixel, sizeof(whitePixel));
-      vmaFlushAllocation(device.vk.vmaAllocator,
-                         whiteUploadStaging.vk.allocation, 0, VK_WHOLE_SIZE);
+      whiteUploadStaging.flushMappedRange(&device, 0, 0);
 
       RITextureBarrier toTransfer = {};
       toTransfer.texture = &whiteTexture2D;
@@ -431,13 +599,22 @@ void cGraphics::Init(const cEngineInitVars::cGraphicsVars &aVars,
       toTransfer.layerCount = 1;
       initElem.cmds[0].vk_d3d12_textureBarrier(toTransfer);
 
-      VkBufferImageCopy copyRegion = {};
-      copyRegion.imageSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
-      copyRegion.imageExtent = {1, 1, 1};
-      vkCmdCopyBufferToImage(
-          initElem.cmds[0].vk.cmd, whiteUploadStaging.vk.buffer,
-          whiteTexture2D.vk.image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1,
-          &copyRegion);
+      RIBufferTextureCopyDesc copyRegion = {};
+      copyRegion.bufferOffset = 0;
+      copyRegion.bufferRowLength = (uint32_t)(whiteRowPitch / 4);
+      copyRegion.bufferImageHeight = 1;
+      copyRegion.bytesPerRow = (uint32_t)whiteRowPitch;
+      copyRegion.bytesPerImage = (uint32_t)whiteRowPitch;
+      copyRegion.mipLevel = 0;
+      copyRegion.arrayLayer = 0;
+      copyRegion.x = 0;
+      copyRegion.y = 0;
+      copyRegion.z = 0;
+      copyRegion.width = 1;
+      copyRegion.height = 1;
+      copyRegion.depth = 1;
+      initElem.cmds[0].copyBufferToTexture(&device, &whiteUploadStaging,
+                                           &whiteTexture2D, copyRegion);
 
       // afterStages 0 derives the all-shader mask — sampled reads can
       // only happen in shader stages.
@@ -465,7 +642,7 @@ void cGraphics::Init(const cEngineInitVars::cGraphicsVars &aVars,
     // Zero-filled vertex buffer — small mapped buffer, never modified after
     // init.
     {
-      constexpr VkDeviceSize kNulVertexSize = 64;
+      constexpr RIDeviceSize kNulVertexSize = 64;
       nulVertexBuffer =
           RIBuffer::create(&device, {(uint64_t)kNulVertexSize,
                                      RI_BUFFER_USAGE_VERTEX_BUFFER |
@@ -474,11 +651,11 @@ void cGraphics::Init(const cEngineInitVars::cGraphicsVars &aVars,
       if (nulVertexBuffer.isEmpty()) {
         FatalError("Failed to create null vertex buffer!\n");
       }
-      if (nulVertexBuffer.mappedAddress) {
-        memset(nulVertexBuffer.mappedAddress, 0, kNulVertexSize);
-        vmaFlushAllocation(device.vk.vmaAllocator,
-                           nulVertexBuffer.vk.allocation, 0, VK_WHOLE_SIZE);
+      if (nulVertexBuffer.mappedAddress == nullptr) {
+        FatalError("Failed to map null vertex buffer!\n");
       }
+      memset(nulVertexBuffer.mappedAddress, 0, kNulVertexSize);
+      nulVertexBuffer.flushMappedRange(&device, 0, 0);
     }
 
     // Default-value fallback vertex streams (see Graphics.h). Each is a
@@ -513,27 +690,25 @@ void cGraphics::Init(const cEngineInitVars::cGraphicsVars &aVars,
         if (s.target->isEmpty()) {
           FatalError("Failed to create fallback vertex buffer!\n");
         }
-        if (s.target->mappedAddress) {
-          std::memcpy(s.target->mappedAddress, s.value, s.size);
-          vmaFlushAllocation(device.vk.vmaAllocator, s.target->vk.allocation, 0,
-                             VK_WHOLE_SIZE);
+        if (s.target->mappedAddress == nullptr) {
+          FatalError("Failed to map fallback vertex buffer!\n");
         }
+        std::memcpy(s.target->mappedAddress, s.value, s.size);
+        s.target->flushMappedRange(&device, 0, 0);
       }
     }
 
     initElem.cmds[0].end(&device);
 
-    VkCommandBufferSubmitInfo cmdSubmitInfo = {
-        VK_STRUCTURE_TYPE_COMMAND_BUFFER_SUBMIT_INFO};
-    cmdSubmitInfo.commandBuffer = initElem.cmds[0].vk.cmd;
-
-    VkSubmitInfo2 submitInfo = {VK_STRUCTURE_TYPE_SUBMIT_INFO_2};
-    submitInfo.commandBufferInfoCount = 1;
-    submitInfo.pCommandBufferInfos = &cmdSubmitInfo;
-
-    VK_WrapResult(vkResetFences(device.vk.device, 1, &initElem.vk.fence));
-    VK_WrapResult(vkQueueSubmit2(device.queues[RI_QUEUE_GRAPHICS].vk.queue, 1,
-                                 &submitInfo, initElem.vk.fence));
+    RICmd *initCmds[] = {&initElem.cmds[0]};
+    RISubmitDesc initSubmit = {};
+    initSubmit.cmds = initCmds;
+    initSubmit.cmdCount = 1;
+    initSubmit.completion = nullptr;
+    if (device.queues[RI_QUEUE_GRAPHICS].submit(&device, initSubmit) !=
+        RI_SUCCESS) {
+      FatalError("Failed to submit fallback-resource initialization!\n");
+    }
     device.queues[RI_QUEUE_GRAPHICS].waitIdle(&device);
 
     if (!whiteUploadStaging.isEmpty()) {
@@ -547,9 +722,9 @@ void cGraphics::Init(const cEngineInitVars::cGraphicsVars &aVars,
   }
   {
     auto vert_stage = RIProgram::loadShaderStage(apResources->GetFileSearcher(),
-                                                 "gui.vert.spv");
+                                                 "gui.vert");
     auto frag_stage = RIProgram::loadShaderStage(apResources->GetFileSearcher(),
-                                                 "gui.frag.spv");
+                                                 "gui.frag");
     std::array<RIProgram::ModuleStage, 2> stages = {
         RIProgram::ModuleStage{RIProgram::PROGRAM_STAGE_VERTEX, vert_stage,
                                "vsMain"},
@@ -559,9 +734,9 @@ void cGraphics::Init(const cEngineInitVars::cGraphicsVars &aVars,
   }
   {
     auto vert_stage = RIProgram::loadShaderStage(
-        apResources->GetFileSearcher(), "posteffect_fullscreen.vert.spv");
+        apResources->GetFileSearcher(), "posteffect_fullscreen.vert");
     auto frag_stage = RIProgram::loadShaderStage(apResources->GetFileSearcher(),
-                                                 "posteffect_present.frag.spv");
+                                                 "posteffect_present.frag");
     std::array<RIProgram::ModuleStage, 2> stages = {
         RIProgram::ModuleStage{RIProgram::PROGRAM_STAGE_VERTEX, vert_stage,
                                "vsMain"},
@@ -619,8 +794,9 @@ void cGraphics::Init(const cEngineInitVars::cGraphicsVars &aVars,
       mLitRenderers[eRendererBackend_RayTraced] =
           hplNew(cHybridRenderer, (this, apResources));
 
-    // Ray traced was asked for on a device that cannot do it. The device-init
-    // fallback above normally catches this; this is the belt-and-braces path.
+    // Ray traced was asked for on a device that cannot do it. The adapter check
+    // before device creation normally catches this; this is the belt-and-braces
+    // path for a device that came up without what its adapter advertised.
     if (mLitRenderers[mRendererBackend] == NULL) {
       mRendererBackend = eRendererBackend_Standard;
       mbRayTracedSupported = false;
@@ -1109,6 +1285,7 @@ void cGraphics::CloseAndSubmitActiveSet() {
     // later vkResetCommandPool can recycle them, and advance the frame index
     // in lockstep with BeginActiveSet's graphicsCmdRing.advance(). Touch no
     // fences (they stay signaled) and reserve no timeline value.
+    profiler.endFrame(&primary.cmds[0], false);
     primary.cmds[0].end(&device);
     if (device.accelerationStructureEnabled)
       blasSubmit.cmds[0].end(&device);
@@ -1117,20 +1294,94 @@ void cGraphics::CloseAndSubmitActiveSet() {
   }
 
   struct RIQueue *graphicsQueue = &device.queues[RI_QUEUE_GRAPHICS];
+
   {
     // Swapchain image: COLOR -> PRESENT for the queue present.
-    RITexture swapchainTexture = {};
-    swapchainTexture.vk.image = swapchain->vk.images[swapchainIndex];
-
     RITextureBarrier toPresent = {};
-    toPresent.texture = &swapchainTexture;
+    toPresent.texture = &swapchain->textures[swapchainIndex];
     toPresent.before = RI_RESOURCE_STATE_RENDER_TARGET_READ;
     toPresent.after = RI_RESOURCE_STATE_PRESENT;
     primary.cmds[0].vk_d3d12_textureBarrier(toPresent);
   }
+  profiler.endFrame(&primary.cmds[0]);
   primary.cmds[0].end(&device);
   if (device.accelerationStructureEnabled)
     blasSubmit.cmds[0].end(&device);
+
+#if (DEVICE_IMPL_D3D12)
+  if (RIIsTargetSelected(RI_DEVICE_API_D3D12)) {
+    // The uploader owns its transfer timeline. Keep the explicit queue wait so
+    // this remains correct if the uploader ever uses a different queue.
+    const RIResourceUploaderD3D12Result uploadResult =
+        RI_D3D12FlushResourceUpdate(&device, &uploader);
+
+    if (!uploadResult.success) {
+      profiler.endFrame(&primary.cmds[0], false);
+      IncrementFrame();
+      return;
+    }
+
+    RITimelineOp uploadWait = {};
+    if (uploadResult.signaled) {
+      uploadWait.timeline = uploadResult.timeline;
+      uploadWait.value = uploadResult.value;
+      uploadWait.stages = RI_STAGE_NONE;
+    }
+
+    if (device.accelerationStructureEnabled) {
+      RISubmitDesc blasDesc = {};
+      RICmd *blasCmds[] = {&blasSubmit.cmds[0]};
+      blasDesc.cmds = blasCmds;
+      blasDesc.cmdCount = 1;
+      blasDesc.waits = uploadResult.signaled ? &uploadWait : nullptr;
+      blasDesc.waitCount = uploadResult.signaled ? 1u : 0u;
+      blasDesc.completion = &blasSubmit;
+      if (graphicsQueue->submit(&device, blasDesc) == RI_FAIL) {
+        profiler.endFrame(&primary.cmds[0], false);
+        IncrementFrame();
+        return;
+      }
+    }
+
+    const uint64_t frameTimelineValue = graphicsTimeline.next();
+    // A D3D12 queue is ordered, so the BLAS list follows the uploader and
+    // precedes the primary list. The primary signal is the frame lifetime
+    // token used by deferred resources and profiler resolution.
+    RITimelineOp graphicsSignal = {&graphicsTimeline, frameTimelineValue,
+                                   RI_STAGE_NONE};
+    RISubmitDesc primaryDesc = {};
+    RICmd *primaryCmds[] = {&primary.cmds[0]};
+    primaryDesc.cmds = primaryCmds;
+    primaryDesc.cmdCount = 1;
+    // Without a BLAS submission there is no ordered intermediate queue wait,
+    // so make the primary list wait for resource uploads directly.
+    if (!device.accelerationStructureEnabled && uploadResult.signaled) {
+      primaryDesc.waits = &uploadWait;
+      primaryDesc.waitCount = 1;
+    }
+    primaryDesc.signals = &graphicsSignal;
+    primaryDesc.signalCount = 1;
+    primaryDesc.completion = &primary;
+    if (graphicsQueue->submit(&device, primaryDesc) == RI_FAIL) {
+      profiler.endFrame(&primary.cmds[0], false);
+      IncrementFrame();
+      return;
+    }
+
+    // Capture the command submission completion before Present adds its own
+    // queue-fence stamp. This is also the value used if Present fails.
+    swapchain->d3d12.frameFenceValues[swapchainIndex] = primary.d3d12.value;
+    const RISwapchainStatus_e presentStatus =
+        RISwapchainPresent(&device, swapchain.Get());
+    if (presentStatus == RI_SWAPCHAIN_STATUS_OUT_OF_DATE)
+      m_forceSwapchainRebuild = true;
+
+    graphicsDefer.seal(frameTimelineValue);
+    RISealRetiredBuffers(&device, frameTimelineValue);
+    IncrementFrame();
+    return;
+  }
+#endif
 
   // Flush pending resource uploads once, up front, so both the BLAS submit
   // and the primary chain off it.
@@ -1160,9 +1411,13 @@ void cGraphics::CloseAndSubmitActiveSet() {
     blasSubmitInfo.signalSemaphoreInfoCount = 1;
     blasSubmitInfo.pSignalSemaphoreInfos = &blasSignal;
 
-    VK_WrapResult(vkResetFences(device.vk.device, 1, &blasSubmit.vk.fence));
-    VK_WrapResult(vkQueueSubmit2(graphicsQueue->vk.queue, 1, &blasSubmitInfo,
-                                 blasSubmit.vk.fence));
+    if (!VK_WrapResult(vkResetFences(device.vk.device, 1, &blasSubmit.vk.fence)) ||
+        !VK_WrapResult(vkQueueSubmit2(graphicsQueue->vk.queue, 1,
+                                      &blasSubmitInfo, blasSubmit.vk.fence))) {
+      profiler.endFrame(&primary.cmds[0], false);
+      IncrementFrame();
+      return;
+    }
   }
   {
     VkCommandBufferSubmitInfo cmdSubmitInfo = {
@@ -1214,9 +1469,13 @@ void cGraphics::CloseAndSubmitActiveSet() {
     submitInfo.signalSemaphoreInfoCount = 2;
     submitInfo.pSignalSemaphoreInfos = signalInfos;
 
-    VK_WrapResult(vkResetFences(device.vk.device, 1, &primary.vk.fence));
-    VK_WrapResult(vkQueueSubmit2(graphicsQueue->vk.queue, 1, &submitInfo,
-                                 primary.vk.fence));
+    if (!VK_WrapResult(vkResetFences(device.vk.device, 1, &primary.vk.fence)) ||
+        !VK_WrapResult(vkQueueSubmit2(graphicsQueue->vk.queue, 1, &submitInfo,
+                                      primary.vk.fence))) {
+      profiler.endFrame(&primary.cmds[0], false);
+      IncrementFrame();
+      return;
+    }
     const RISwapchainStatus_e presentStatus =
         RISwapchainPresent(&device, swapchain.Get());
     if (presentStatus == RI_SWAPCHAIN_STATUS_OUT_OF_DATE) {
@@ -1232,6 +1491,7 @@ void cGraphics::CloseAndSubmitActiveSet() {
 
     // Seal this frame's deferred destroys against the timeline value.
     graphicsDefer.seal(frameTimelineValue);
+    RISealRetiredBuffers(&device, frameTimelineValue);
   }
   IncrementFrame();
 }
@@ -1260,8 +1520,25 @@ void cGraphics::BeginActiveSet() {
 
   const uint64_t completedTimeline = graphicsTimeline.completed(&device);
   graphicsDefer.drain(completedTimeline);
+  // Buffers the backend kept alive past dispose (D3D12 raw-SRV registry) are
+  // released on the same timeline as graphicsDefer.
+  RIReclaimRetiredBuffers(&device, completedTimeline);
   // Read back any GPU timing slot whose frame has finished.
   profiler.resolve(&device, completedTimeline);
+
+  // Periodic residency trace, so a long session leaves a record of whether GPU
+  // memory drifts over budget as frame time climbs.
+  {
+    static std::chrono::steady_clock::time_point lastMemoryLog;
+    const auto now = std::chrono::steady_clock::now();
+    if (now - lastMemoryLog >= std::chrono::seconds(10)) {
+      lastMemoryLog = now;
+      const std::string memory = GpuMemoryDiagnostics();
+      if (!memory.empty())
+        Log("GPU memory: %s  gpu %.2f ms\n", memory.c_str(),
+            profiler.lastTotalMs());
+    }
+  }
 
   // Recreate the swapchain before we acquire when the live window size (owned
   // by cWindow, polled here each frame) or the requested vsync differs from the
@@ -1347,11 +1624,8 @@ void cGraphics::BeginActiveSet() {
   // frame (see CloseAndSubmitActiveSet) has a stale swapchainIndex.
   if (m_frameAcquired) {
     // Swapchain image: UNDEFINED -> COLOR for the frame.
-    RITexture swapchainTexture = {};
-    swapchainTexture.vk.image = swapchain->vk.images[swapchainIndex];
-
     RITextureBarrier toColor = {};
-    toColor.texture = &swapchainTexture;
+    toColor.texture = &swapchain->textures[swapchainIndex];
     toColor.before = RI_RESOURCE_STATE_UNDEFINED;
     toColor.after = RI_RESOURCE_STATE_RENDER_TARGET_READ;
     primary.cmds[0].vk_d3d12_textureBarrier(toColor);
@@ -1367,6 +1641,12 @@ void cGraphics::UpdateFrameUBO(RIDescriptor *descriptor, void *data,
   auto *activeSet = GetActiveSet();
   struct RIBufferScratchAllocReq scratchReq =
       RIAllocBufferFromScratchAlloc(&device, &activeSet->uboScratchAlloc, size);
+  if (scratchReq.pMappedAddress == nullptr ||
+      scratchReq.block.buffer.isEmpty() || scratchReq.bufferSize < size) {
+    FatalError("Failed to allocate %zu bytes from the frame uniform-buffer "
+               "scratch allocator.\n",
+               size);
+  }
   memcpy((uint8_t *)scratchReq.pMappedAddress + scratchReq.bufferOffset, data,
          size);
   // Transient descriptor shim: cookie derives from the scratch buffer
@@ -1376,16 +1656,79 @@ void cGraphics::UpdateFrameUBO(RIDescriptor *descriptor, void *data,
   RIFinishScrachReq(&device, &scratchReq);
 }
 
+std::string cGraphics::GpuMemoryDiagnostics() const {
+  RIMemoryStats stats = {};
+  if (!RIQueryMemoryStats(&device, &stats))
+    return {};
+  constexpr double kMiB = 1024.0 * 1024.0;
+  uint32_t descriptorCacheEntries = 0;
+#if (DEVICE_IMPL_D3D12)
+  descriptorCacheEntries = g_riD3D12DescriptorCacheEntries;
+#endif
+  char line[256];
+  snprintf(line, sizeof(line),
+           "VRAM local %.0f/%.0f MB  nonlocal %.0f/%.0f MB  heaps %.0f MB "
+           "(live %.0f MB)  retired %.0f MB  reg %u  descCache %u  nrdInst %u",
+           stats.localUsage / kMiB, stats.localBudget / kMiB,
+           stats.nonLocalUsage / kMiB, stats.nonLocalBudget / kMiB,
+           stats.allocatorBlockBytes / kMiB,
+           stats.allocatorAllocationBytes / kMiB,
+           stats.retiredBufferBytes / kMiB, stats.registeredBuffers,
+           descriptorCacheEntries, NrdIntegration::InstancesCreated());
+  return line;
+}
+
 std::optional<RIDescriptor>
 cGraphics::resolve_filter_descriptor(eTextureWrap wrapS, eTextureWrap wrapT,
                                      eTextureWrap wrapR,
                                      eTextureFilter filter) {
+  constexpr uint32_t kWrapCount =
+      static_cast<uint32_t>(eTextureWrap_LastEnum);
+  constexpr uint32_t kFilterCount =
+      static_cast<uint32_t>(eTextureFilter_LastEnum);
+  const uint32_t wrapSIndex = static_cast<uint32_t>(wrapS);
+  const uint32_t wrapTIndex = static_cast<uint32_t>(wrapT);
+  const uint32_t wrapRIndex = static_cast<uint32_t>(wrapR);
+  const uint32_t filterIndex = static_cast<uint32_t>(filter);
+
+  if (wrapSIndex >= kWrapCount || wrapTIndex >= kWrapCount ||
+      wrapRIndex >= kWrapCount || filterIndex >= kFilterCount) {
+    assert(false && "Invalid sampler configuration");
+    return std::nullopt;
+  }
+
+  // Collision-free mixed-radix key in the range [0, 191].
+  const size_t cacheIndex =
+      (((static_cast<size_t>(wrapSIndex) * kWrapCount + wrapTIndex) *
+            kWrapCount +
+        wrapRIndex) *
+           kFilterCount +
+       filterIndex);
+  assert(cacheIndex < cachedSamplers.size());
+  RISampler &sampler = cachedSamplers[cacheIndex];
+  sampler.wrapS = wrapSIndex;
+  sampler.wrapT = wrapTIndex;
+  sampler.wrapR = wrapRIndex;
+  sampler.filter = filterIndex;
+
+  // cookie == 0 means the slot has not been initialized (+1 since index 0 is
+  // valid). The cookie is published only after backend initialization succeeds.
+  const hash_t samplerCookie = static_cast<hash_t>(cacheIndex) + 1;
+  if (sampler.cookie != 0) {
+    assert(sampler.cookie == samplerCookie);
+    return RIDescriptor::sampler(&device, &sampler);
+  }
+
 #if (DEVICE_IMPL_VULKAN)
-  {
+  if (RIIsTargetSelected(RI_DEVICE_API_VK)) {
     VkSamplerCreateInfo info = {VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO};
     info.addressModeU = RI_VK_TextureWrap(wrapS);
     info.addressModeV = RI_VK_TextureWrap(wrapT);
     info.addressModeW = RI_VK_TextureWrap(wrapR);
+    info.compareEnable = VK_FALSE;
+    info.anisotropyEnable = VK_FALSE;
+    info.minLod = 0.0f;
+    info.maxLod = 16.0f;
     switch (filter) {
     case eTextureFilter_Nearest:
       info.minFilter = VK_FILTER_NEAREST;
@@ -1403,52 +1746,63 @@ cGraphics::resolve_filter_descriptor(eTextureWrap wrapS, eTextureWrap wrapT,
       info.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
       break;
     case eTextureFilter_LastEnum:
-      assert(false);
-      break;
-    }
-    info.maxLod = 16;
-    constexpr uint32_t kWrapCount =
-        static_cast<uint32_t>(eTextureWrap_LastEnum);
-    constexpr uint32_t kFilterCount =
-        static_cast<uint32_t>(eTextureFilter_LastEnum);
-
-    const uint32_t wrapSIndex = static_cast<uint32_t>(wrapS);
-    const uint32_t wrapTIndex = static_cast<uint32_t>(wrapT);
-    const uint32_t wrapRIndex = static_cast<uint32_t>(wrapR);
-    const uint32_t filterIndex = static_cast<uint32_t>(filter);
-
-    if (wrapSIndex >= kWrapCount || wrapTIndex >= kWrapCount ||
-        wrapRIndex >= kWrapCount || filterIndex >= kFilterCount) {
-      assert(false && "Invalid sampler configuration");
+      assert(false && "Invalid sampler filter");
       return std::nullopt;
     }
-
-    // Collision-free mixed-radix key in the range [0, 191].
-    const size_t cacheIndex =
-        (((static_cast<size_t>(wrapSIndex) * kWrapCount + wrapTIndex) *
-              kWrapCount +
-          wrapRIndex) *
-             kFilterCount +
-         filterIndex);
-    assert(cacheIndex < cachedSamplers.size());
-    RISampler &sampler = cachedSamplers[cacheIndex];
-
-    // cookie == 0 means the slot has not been created (+1 since index 0 is
-    // valid).
-    const hash_t samplerCookie = static_cast<hash_t>(cacheIndex) + 1;
-
-    if (sampler.cookie == 0) {
-      VK_WrapResult(vkCreateSampler(device.vk.device, &info, nullptr,
-                                    &sampler.vk.sampler));
-      sampler.cookie = samplerCookie;
-    } else {
-      // Direct indexing guarantees this slot belongs to this configuration.
-      assert(sampler.cookie == samplerCookie);
-    }
-
+    if (!VK_WrapResult(vkCreateSampler(device.vk.device, &info, nullptr,
+                                       &sampler.vk.sampler)))
+      return std::nullopt;
+    sampler.cookie = samplerCookie;
     return RIDescriptor::sampler(&device, &sampler);
   }
 #endif
+
+#if (DEVICE_IMPL_D3D12)
+  if (RIIsTargetSelected(RI_DEVICE_API_D3D12)) {
+    D3D12_SAMPLER_DESC &desc = sampler.d3d12.desc;
+    desc = {};
+    switch (wrapS) {
+    case eTextureWrap_Repeat: desc.AddressU = D3D12_TEXTURE_ADDRESS_MODE_WRAP; break;
+    case eTextureWrap_Clamp:
+    case eTextureWrap_ClampToEdge: desc.AddressU = D3D12_TEXTURE_ADDRESS_MODE_CLAMP; break;
+    case eTextureWrap_ClampToBorder: desc.AddressU = D3D12_TEXTURE_ADDRESS_MODE_BORDER; break;
+    case eTextureWrap_LastEnum: assert(false && "Invalid sampler wrap"); return std::nullopt;
+    }
+    switch (wrapT) {
+    case eTextureWrap_Repeat: desc.AddressV = D3D12_TEXTURE_ADDRESS_MODE_WRAP; break;
+    case eTextureWrap_Clamp:
+    case eTextureWrap_ClampToEdge: desc.AddressV = D3D12_TEXTURE_ADDRESS_MODE_CLAMP; break;
+    case eTextureWrap_ClampToBorder: desc.AddressV = D3D12_TEXTURE_ADDRESS_MODE_BORDER; break;
+    case eTextureWrap_LastEnum: assert(false && "Invalid sampler wrap"); return std::nullopt;
+    }
+    switch (wrapR) {
+    case eTextureWrap_Repeat: desc.AddressW = D3D12_TEXTURE_ADDRESS_MODE_WRAP; break;
+    case eTextureWrap_Clamp:
+    case eTextureWrap_ClampToEdge: desc.AddressW = D3D12_TEXTURE_ADDRESS_MODE_CLAMP; break;
+    case eTextureWrap_ClampToBorder: desc.AddressW = D3D12_TEXTURE_ADDRESS_MODE_BORDER; break;
+    case eTextureWrap_LastEnum: assert(false && "Invalid sampler wrap"); return std::nullopt;
+    }
+    switch (filter) {
+    case eTextureFilter_Nearest: desc.Filter = D3D12_FILTER_MIN_MAG_MIP_POINT; break;
+    case eTextureFilter_Bilinear: desc.Filter = D3D12_FILTER_MIN_MAG_LINEAR_MIP_POINT; break;
+    case eTextureFilter_Trilinear: desc.Filter = D3D12_FILTER_MIN_MAG_MIP_LINEAR; break;
+    case eTextureFilter_LastEnum: assert(false && "Invalid sampler filter"); return std::nullopt;
+    }
+    desc.MipLODBias = 0.0f;
+    desc.MaxAnisotropy = 1;
+    desc.ComparisonFunc = D3D12_COMPARISON_FUNC_NEVER;
+    desc.BorderColor[0] = 0.0f;
+    desc.BorderColor[1] = 0.0f;
+    desc.BorderColor[2] = 0.0f;
+    desc.BorderColor[3] = 0.0f;
+    desc.MinLOD = 0.0f;
+    desc.MaxLOD = 16.0f;
+    sampler.d3d12.initialized = 1;
+    sampler.cookie = samplerCookie;
+    return RIDescriptor::sampler(&device, &sampler);
+  }
+#endif
+
   return std::nullopt;
 }
 

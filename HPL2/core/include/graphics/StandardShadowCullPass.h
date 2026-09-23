@@ -98,4 +98,49 @@ private:
   bool m_loaded = false;
   bool m_useDrawIndirectCount = false;
 };
+
+// An indirect-command buffer the cull kernel writes and the draw then consumes
+// as arguments. It always needs INDIRECT + SHADER_RESOURCE_STORAGE usage, which
+// on D3D12 forces a device-local (DEFAULT-heap) resource: ALLOW_UNORDERED_ACCESS
+// is illegal on an upload heap, so the kernel cannot write a host-mapped one.
+// Shared by the Standard and Hybrid renderers; implemented in
+// StandardRenderer.cpp.
+//
+// Two shapes, selected by `hostWritten` at Create:
+//
+//   hostWritten = false -- the kernel writes whole commands (the compact and
+//     in-place shadow modes both call makeDrawCommand). Nothing on the host
+//     ever touches it, so it is simply device-local on both backends.
+//
+//   hostWritten = true -- the host builds the commands and the kernel owns only
+//     their instanceCount word (the instance-mask and two-phase visibility
+//     modes). Vulkan keeps this in one host-mapped buffer as before; on D3D12
+//     the host writes `host` and Flush copies the written range into `device`.
+//
+// Callers write through mapped(), Flush() the range before the dispatch that
+// reads it, and bind gpu().
+struct StagedIndirectBuffer {
+  struct RIBuffer host = {};   // host-mapped staging; empty when !hostWritten
+  struct RIBuffer device = {}; // device-local; empty when aliased to host
+  bool staged = false;         // true => host is staging for device
+
+  bool isEmpty() const;
+  void *mapped() const { return host.mappedAddress; }
+  // What the cull kernel binds and the draw reads.
+  struct RIBuffer *gpu() { return device.isEmpty() ? &host : &device; }
+
+  // Idempotent. `stride` is the command size, `elements` the slot capacity.
+  bool Create(struct RIDevice *device, uint64_t elements, size_t stride,
+              bool hostWritten, const char *debugName);
+  void Defer(class cGraphics *graphics);
+  // Copies [byteOffset, byteOffset + byteSize) into the device buffer. A no-op
+  // unless staged. `firstUse` picks the incoming state, since a previous
+  // frame's draw leaves the buffer in INDIRECT_ARGUMENT. `cullFollows` picks
+  // the outgoing one: STORAGE_WRITE when a cull dispatch reads it next (the
+  // state that pass declares on entry), INDIRECT_ARGUMENT when the draw
+  // consumes the host's commands unculled.
+  void Flush(struct RIDevice *device, struct RICmd *cmd, uint64_t byteOffset,
+             uint64_t byteSize, bool firstUse, bool cullFollows);
+};
+
 } // namespace hpl

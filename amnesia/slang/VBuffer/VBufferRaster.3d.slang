@@ -19,26 +19,21 @@ import PerFrame.resource;     // gPerFrame (camera view-proj / eye position)
 import Material;             // load*Material / materialAlphaTest / traceShadowRay / traceReflectionHit
 import SceneTypes;
 import bindless;
+import GeometryStream;
 
-// Per-stream BDA reads use direct primitive pointer casts (`float4*`,
-// `float3*`, `uint*`). The wrapper-struct-with-runtime-array pattern that
-// the GLSL twin uses via `buffer_reference` (and that BindlessTriangle.slang
-// still uses) silently miscompiles in slangc 2026+: all
-// `((Wrapper*)addr).v[i]` sites collapse to `Ptr<PhysicalStorageBuffer, uint>`
-// at the SPIR-V level, so the load yields zero. `[vk::buffer_reference]` is
-// also unrecognized in 2026+. Primitive pointer types translate correctly
-// (see Slang docs: a2-01-spirv-target-specific.md "Global memory pointers").
-
+// Per-stream reads go through the shared GeometryStream helpers, which keep
+// the Vulkan device-address and DXIL descriptor/offset access paths behind a
+// common byte-offset load interface.
 struct VSOut
 {
     float4 posH                          : SV_POSITION;
-    float2 texC                          : TEXCOORD0;
-    nointerpolation uint instanceID      : INSTANCE_ID;
-    nointerpolation uint materialID      : MATERIAL_ID;
+    [vk::location(0)] float2 texC                          : TEXCOORD0;
+    [vk::location(1)] nointerpolation uint instanceID      : TEXCOORD1;
+    [vk::location(2)] nointerpolation uint materialID      : TEXCOORD2;
     // No-jitter clip positions this frame and last frame, for motion vectors.
     // Interpolated (perspective-correct), divided by w in the FS.
-    float4 curClip                       : CUR_CLIP;
-    float4 prevClip                      : PREV_CLIP;
+    [vk::location(3)] float4 curClip                       : TEXCOORD3;
+    [vk::location(4)] float4 prevClip                      : TEXCOORD4;
 }
 
 // Two render targets: packed TriangleHit + screen-space velocity (curUV-prevUV).
@@ -53,11 +48,13 @@ VSOut vsMain(uint vertexID    : SV_VertexID,
              uint drawInst    : SV_InstanceID,
              uint baseInst    : SV_StartInstanceLocation)
 {
-    // SV_InstanceID alone is the per-draw instance counter (always 0 here
-    // since instanceCount=1) — slangc translates it with DX semantics
-    // (InstanceIndex - BaseInstance). The bindless slot id arrives via
-    // firstInstance, so reconstruct Vulkan's gl_InstanceIndex by summing.
-    uint instanceID = drawInst + baseInst;
+    // SV_InstanceID is the per-draw instance counter (always 0 here since
+    // instanceCount=1): it excludes firstInstance on D3D12 natively and on
+    // Vulkan because slangc emits InstanceIndex - BaseInstance. The bindless
+    // slot id arrives via firstInstance, so add SV_StartInstanceLocation
+    // (SM 6.8 on D3D12) on every target.
+    uint instanceID = drawInst;
+    instanceID += baseInst;
     VSOut o;
 
     // Stream BDAs now live in the per-object UniformObject (folded in from the
@@ -70,16 +67,15 @@ VSOut vsMain(uint vertexID    : SV_VertexID,
     // Missing index buffer → non-indexed (each vertexID is its own vertex).
     // Missing attribute streams → safe zero so the transform doesn't NaN out.
     uint idx = (indexAddr != 0ull)
-        ? ((uint*)indexAddr)[vertexID]
+        ? geometryLoad(indexAddr, vertexID * 4u)
         : vertexID;
 
     float3 aPos = (posAddr != 0ull)
-        ? ((float4*)posAddr)[idx].xyz
+        ? asfloat(geometryLoad4(posAddr, idx * 16u)).xyz
         : float3(0.0f);
-    // UV0 stream is tightly packed vec3 (12-byte stride) — float3* indexing
-    // depends on that. If asset packing changes, switch to a uint-stride load.
+    // UV0 stream is tightly packed vec3 (12-byte stride).
     float2 aUv  = (uv0Addr != 0ull)
-        ? ((float3*)uv0Addr)[idx].xy
+        ? asfloat(geometryLoad3(uv0Addr, idx * 12u)).xy
         : float2(0.0f);
 
     float4 worldP     = mul(obj.modelMat,     float4(aPos, 1.0f));

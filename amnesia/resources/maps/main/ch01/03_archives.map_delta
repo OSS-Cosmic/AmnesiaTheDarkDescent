@@ -8,16 +8,7 @@
     <Modify Category="Entities" ID="1709" Name="PointLight_11">
         <SetAttr RendererMask="1" />
     </Modify>
-    <Modify Category="Entities" ID="2974" Name="BoxLight_2">
-        <SetAttr RendererMask="1" />
-    </Modify>
-    <Modify Category="Entities" ID="2975" Name="BoxLight_3">
-        <SetAttr RendererMask="1" />
-    </Modify>
     <Modify Category="Entities" ID="3279" Name="PointLight_37">
-        <SetAttr RendererMask="1" />
-    </Modify>
-    <Modify Category="Entities" ID="3490" Name="BoxLight_4">
         <SetAttr RendererMask="1" />
     </Modify>
     <Modify Category="Entities" ID="4429" Name="PointLight_17">
@@ -30,12 +21,6 @@
         <SetAttr RendererMask="1" />
     </Modify>
     <Modify Category="Entities" ID="4690" Name="PointLight_43">
-        <SetAttr RendererMask="1" />
-    </Modify>
-    <Modify Category="Entities" ID="5220" Name="BoxLight_8">
-        <SetAttr RendererMask="1" />
-    </Modify>
-    <Modify Category="Entities" ID="5234" Name="BoxLight_5">
         <SetAttr RendererMask="1" />
     </Modify>
     <Modify Category="Entities" ID="6255" Name="PointLight_12">

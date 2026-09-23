@@ -3,6 +3,7 @@
 
 #include "graphics/RITypes.h"
 
+#include "graphics/RIPipelineDesc.h" // RIGraphicsPipelineDesc
 #include "graphics/RIPreamble.h"
 
 #include <cstdint>
@@ -14,6 +15,12 @@ namespace hpl {
 // accumulator). The sampled-image descriptor is produced on demand via
 // descriptor() (cookie lives on the view).
 //
+// One texture, two views, as RI_PogoBufferInit does it: `view` is the sampled
+// view behind descriptor(), `attachmentView` is the one to put in an
+// RIRenderingAttachment. D3D12 requires an attachment's view to carry
+// RI_VIEWTYPE_COLOR_ATTACHMENT and rejects a sampled view outright; Vulkan
+// accepts a single VkImageView for both.
+//
 // Lifecycle: create via CreatePostEffectColorTarget, destroy via
 // DestroyPostEffectColorTarget. Destruction is deferred to graphicsDefer, so
 // it is safe to call mid-frame. The owner re-creates when the viewport
@@ -21,6 +28,7 @@ namespace hpl {
 struct PostEffectColorTarget {
     struct RITexture     texture {};
     struct RITextureView view {};
+    struct RITextureView attachmentView {};
     uint32_t width = 0;
     uint32_t height = 0;
     bool valid = false;
@@ -35,41 +43,30 @@ struct PostEffectColorTarget {
 // uncommon needs (e.g. TRANSFER_SRC for the ImageTrail accumulator).
 // Destroy via DestroyPostEffectColorTarget before exit; destruction is
 // deferred to graphicsDefer and is safe to call mid-frame.
+// `clearValue` is the value the target's passes clear it to; supplying it lets
+// D3D12 bake an optimized clear value into the resource so the clear takes the
+// fast path. Leave it unset for a target cleared to {0,0,0,0} (the default) or
+// never cleared at all.
 void CreatePostEffectColorTarget(PostEffectColorTarget &out, uint32_t width,
                                  uint32_t height, enum RI_Format_e format,
                                  uint32_t additionalUsage, // RITextureUsageBits_e
-                                 const char *debugName);
+                                 const char *debugName,
+                                 std::optional<RITextureClearValue> clearValue = {});
 
 void DestroyPostEffectColorTarget(PostEffectColorTarget &target);
 
-// Bundled pipeline-create state for a fullscreen post-effect pass. The
-// owner stamps one of these on the stack, calls
-// InitPostEffectPipelineState, then passes `state.createInfo` to
-// RIProgram::bindPipeline. Inline state arrays must stay alive across
-// the bindPipeline call; this struct guarantees that.
-struct PostEffectPipelineState {
-    VkPipelineVertexInputStateCreateInfo   vertexInput;
-    VkPipelineInputAssemblyStateCreateInfo inputAssembly;
-    VkPipelineRasterizationStateCreateInfo rasterization;
-    VkPipelineViewportStateCreateInfo      viewportState;
-    VkPipelineMultisampleStateCreateInfo   multisample;
-    VkPipelineDepthStencilStateCreateInfo  depthStencil;
-    VkPipelineColorBlendAttachmentState    blendAttachment;
-    VkPipelineColorBlendStateCreateInfo    colorBlend;
-    VkDynamicState                         dynamicStates[2];
-    VkPipelineDynamicStateCreateInfo       dynamicState;
-    VkFormat                               colorFormat;
-    VkPipelineRenderingCreateInfo          pipelineRendering;
-    VkGraphicsPipelineCreateInfo           createInfo;
-};
-
-// Fill `state` for a fullscreen post-effect: no vertex input, no
-// depth/stencil, cull NONE, dynamic viewport+scissor, single color
-// attachment at `colorFormat`. When `alphaBlend` is true the blend
-// attachment is configured as (SRC_ALPHA, ONE_MINUS_SRC_ALPHA) for both
-// color and alpha; otherwise blend is disabled.
-void InitPostEffectPipelineState(PostEffectPipelineState &state,
-                                 enum RI_Format_e colorFormat, bool alphaBlend);
+// Pipeline state for a fullscreen post-effect pass: no vertex input, no
+// depth/stencil, cull NONE, dynamic viewport+scissor, a single colour
+// attachment at `colorFormat`. When `alphaBlend` is true the blend attachment
+// is (SRC_ALPHA, ONE_MINUS_SRC_ALPHA) for both colour and alpha; otherwise
+// blending is disabled.
+//
+// Callers that need a depth-only or multi-target variant (TemporalPresentation's
+// depth resolve) start from this and override `renderTarget` / `blendCount` /
+// `depthStencil` on the returned value -- it is a plain value, so there is no
+// lifetime coupling to respect.
+RIGraphicsPipelineDesc MakePostEffectPipelineDesc(RI_Format_e colorFormat,
+                                                  bool alphaBlend);
 
 } // namespace hpl
 

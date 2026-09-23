@@ -52,13 +52,22 @@ private:
   // constructor and a post-DestroyData LoadData share one path.
   void CreateCullBuffers();
   void DisposeCullBuffers();
+  // Seeds the device-local visibility buffer to "nothing visible" through the
+  // uploader. The RI layer has no fillBuffer, so this is a staged copy.
+  void ZeroCullVisibility();
 
   cRenderList2 m_rendererList;
   RISegmentAlloc<RI_NUMBER_FRAME_SEGMENTS> m_indirectSegment;
-  struct RIBuffer m_indirectDrawBuffer = {};
+  StagedIndirectBuffer m_indirectDrawBuffer;
   // Shadow draws must not consume or alias the camera-visible indirect range.
   RISegmentAlloc<RI_NUMBER_FRAME_SEGMENTS> m_shadowIndirectSegment;
-  struct RIBuffer m_shadowIndirectBuffer = {};
+  StagedIndirectBuffer m_shadowIndirectBuffer;
+  // Set once per (re)create: true until each staged buffer has been copied at
+  // least once, so the first Flush transitions from UNDEFINED rather than
+  // claiming a draw left it in INDIRECT_ARGUMENT. The shadow buffer needs no
+  // flag -- the kernel authors it, so nothing is ever staged into it.
+  bool m_indirectDrawFirstUse = true;
+  bool m_translucentCommandFirstUse = true;
   // GPU shadow cull inputs. All three are host-mapped and written once per
   // Draw, so their visibility to the GPU comes from the implicit host-write
   // barrier at queue submit, exactly like the indirect buffers above.
@@ -81,7 +90,7 @@ private:
   // is VkDrawIndexedIndirectCommand sized for indexed and non-indexed draws
   // alike, which the 16-byte shadow command ring cannot express.
   RISegmentAlloc<RI_NUMBER_FRAME_SEGMENTS> m_translucentCommandSegment;
-  struct RIBuffer m_translucentCommandBuffer = {};
+  StagedIndirectBuffer m_translucentCommandBuffer;
   RISegmentAlloc<RI_NUMBER_FRAME_SEGMENTS> m_translucentCandidateSegment;
   struct RIBuffer m_translucentCandidateBuffer = {};
   // Opaque two-phase camera cull. The candidate ring is per frame; the
@@ -119,6 +128,10 @@ private:
   std::unique_ptr<cStandardWaterPass> m_water;
   std::unique_ptr<cStandardAmbientOcclusionPass> m_ambientOcclusion;
   bool m_forceFallback = false;
+  // HPL_STANDARD_LIGHT_CULL=0 turns off the camera-frustum partition in
+  // BuildStandardLights, so every enabled light lands in the visible prefix.
+  // An A/B against the default isolates the partition from the rest of the
+  // light path without a rebuild.
   bool m_visibilityLoaded = false;
   bool m_fallbackLoaded = false;
   bool m_reconstructLoaded = false;

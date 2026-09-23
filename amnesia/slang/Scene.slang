@@ -149,7 +149,10 @@ public uint getLightCount()
 public CellLights getCellLights(float3 posW)
 {
     CellLights c;
-    int3 cell = gridCellPos(posW, gPerFrame.posW, kLightGridUnit);
+    // gPerFrame.lightGridOriginW, not posW: the camera snapped to a whole cell.
+    // LightGridBuildPass bins against this same origin, so using the raw camera
+    // position here would look up a cell the builder filled for a different grid.
+    int3 cell = gridCellPos(posW, gPerFrame.lightGridOriginW, kLightGridUnit);
     c.valid = (getLightCount() > 0u) && gridCellValid(cell, kLightGridDim);
     if (!c.valid)
     {

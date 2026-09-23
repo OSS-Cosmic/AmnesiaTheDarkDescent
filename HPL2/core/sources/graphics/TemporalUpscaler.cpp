@@ -1,9 +1,10 @@
 #include "graphics/TemporalUpscaler.h"
 
 #include "engine/Interface.h"
+#include "graphics/FfxApiLoader.h"
 #include "graphics/FsrUpscaler.h"
+#include "graphics/RIDevice.h"
 #include "graphics/XessUpscaler.h"
-#include "graphics/XessVulkanSupport.h"
 
 #include <cstring>
 
@@ -18,9 +19,9 @@ constexpr const char *kFsrUnsupportedPlatform =
     "FSR requires Windows x64 or Linux x86_64";
 #if defined(HPL2_FSR_AVAILABLE) && HPL2_FSR_AVAILABLE
 constexpr const char *kFsrGraphicsUnavailable =
-    "FSR Vulkan device is unavailable";
+    "FSR graphics device is unavailable";
 constexpr const char *kFsrRequirementsUnavailable =
-    "FSR Vulkan requirements are not satisfied";
+    "FSR requirements are not satisfied";
 #endif
 
 constexpr const char *kXessNotCompiled = "XeSS support is not compiled in";
@@ -32,7 +33,7 @@ constexpr const char *kXessRuntimeSymbolMissing =
     "XeSS runtime symbol is missing";
 constexpr const char *kXessRuntimeUnavailable = "XeSS runtime is unavailable";
 constexpr const char *kXessGraphicsUnavailable =
-    "XeSS Vulkan device is unavailable";
+    "XeSS graphics device is unavailable";
 constexpr const char *kXessDeviceUnsupported = "XeSS device is unsupported";
 constexpr char kXessDllLoadFailure[] =
     "XeSS DLL libxess.dll could not be loaded";
@@ -143,7 +144,7 @@ const char *XessRuntimeReasonFor(const char *reason) {
 }
 
 const char *XessRuntimeReason() {
-  return XessRuntimeReasonFor(XessVulkanSupportInstance().UnavailableReason());
+  return XessRuntimeReasonFor(XessSupportInstance().UnavailableReason());
 }
 #endif
 
@@ -161,6 +162,19 @@ const char *ProviderUnavailableReason(TemporalUpscalerProvider provider,
       return kFsrUnsupportedPlatform;
     if (!graphics)
       return kFsrGraphicsUnavailable;
+    // The loader already spells out the per-backend failure -- a build with no
+    // module for the live renderer, or a module that would not load -- so it
+    // gives a better reason than any fixed string here could. FfxApiFor caches
+    // one FfxApi per backend in a function-local static, so this pointer into
+    // its unavailableReason buffer stays valid. cFsrUpscaler's own reason is
+    // not reachable from here: AdapterSupports builds a stack temporary whose
+    // supportFailure dies with it, so a DeviceIsUsable failure falls through
+    // to the generic string below.
+    {
+      const hpl::FfxApi &api = hpl::FfxApiActive();
+      if (!api.available)
+        return api.unavailableReason;
+    }
     return kFsrRequirementsUnavailable;
 #endif
   case TemporalUpscalerProvider::XeSS:
@@ -170,22 +184,19 @@ const char *ProviderUnavailableReason(TemporalUpscalerProvider provider,
 #else
     if (!IsXessWindowsPlatform())
       return kXessUnsupportedPlatform;
-    const cXessVulkanSupport &support = XessVulkanSupportInstance();
-    const char *deviceReason =
-        graphics ? graphics->device.xessUnavailableReason : nullptr;
+    // The loader now carries the whole verdict: a DLL or symbol problem, the
+    // build having no arm for the active backend, or a veto recorded while the
+    // device was being built because RI could not honour what XeSS asked for.
+    // Only the first of those is a runtime-installation problem; the rest read
+    // to the player as "this device cannot do it".
+    const cXessSupport &support = XessSupportInstance();
     if (!support.IsAvailable()) {
-      if (deviceReason && deviceReason[0] &&
-          !IsXessRuntimeFailure(deviceReason))
-        return kXessDeviceUnsupported;
-      return XessRuntimeReason();
+      if (IsXessRuntimeFailure(support.UnavailableReason()))
+        return XessRuntimeReason();
+      return kXessDeviceUnsupported;
     }
     if (!graphics)
       return kXessGraphicsUnavailable;
-    if (deviceReason && deviceReason[0]) {
-      if (IsXessRuntimeFailure(deviceReason))
-        return XessRuntimeReasonFor(deviceReason);
-      return kXessDeviceUnsupported;
-    }
     return kXessDeviceUnsupported;
 #endif
   }
@@ -211,6 +222,10 @@ bool ProviderAvailable(TemporalUpscalerProvider provider, cGraphics *graphics,
       *outReason = kFsrUnsupportedPlatform;
     return false;
   }
+  // No backend gate for FSR: cFsrUpscaler::Supports -> DeviceIsUsable picks
+  // the live backend's device handles one arm at a time, and the ffx-api
+  // module is resolved per backend, so an unsupported renderer is rejected
+  // there with a reason that names it.
   if (provider == TemporalUpscalerProvider::XeSS &&
       !IsXessWindowsPlatform()) {
     if (outReason)

@@ -10,6 +10,8 @@
 //   binding 0 : SamplerState inputSampler
 //   binding 1 : Texture2D<float4> sourceInput
 
+#include "../HostDefinitions.h"
+
 [vk::binding(0, 0)]
 SamplerState inputSampler;
 
@@ -22,16 +24,16 @@ struct ImageTrailPC
 };
 
 [vk::push_constant]
-ImageTrailPC pc;
+ImageTrailPC gPushConstants HPL_PUSH_CONSTANT_REGISTER;
 
 struct PSIn
 {
-    [vk::location(0)] float2 v_uv;
+    [vk::location(0)] float2 v_uv : TEXCOORD0;
 };
 
 [shader("fragment")]
 float4 psMain(PSIn pin) : SV_Target
 {
     float3 color = sourceInput.Sample(inputSampler, pin.v_uv).rgb;
-    return float4(color, pc.alpha);
+    return float4(color, gPushConstants.alpha);
 }
