@@ -39,13 +39,23 @@ UTEST(RITargetSelection, VulkanOnlyBuildDoesNotClaimD3D12) {
 
 #else
 
-// Both backends compiled: the predicate reads RIActiveBackendApi(), which needs
-// an initialised renderer. Nothing to assert without a device, but keep the
-// invariant that the two backends are never both selected at once.
-UTEST(RITargetSelection, MultiBackendSelectsAtMostOneApi) {
-  const bool vk = RIIsTargetSelected(RI_DEVICE_API_VK);
-  const bool d3d12 = RIIsTargetSelected(RI_DEVICE_API_D3D12);
-  ASSERT_FALSE(vk && d3d12);
+// Both backends compiled: the predicate reads RIActiveBackendApi(), which the
+// engine defines in RIRenderer.cpp. This project links no engine sources (that
+// would drag in the whole renderer), so the TU supplies the definition itself
+// and drives it: whichever backend is active, exactly that one is selected.
+static uint8_t g_fakeActiveApi = RI_DEVICE_API_UNKNOWN;
+uint8_t RIActiveBackendApi() { return g_fakeActiveApi; }
+
+UTEST(RITargetSelection, MultiBackendSelectsOnlyTheActiveApi) {
+  const uint8_t apis[] = {RI_DEVICE_API_VK, RI_DEVICE_API_D3D12};
+  for (uint8_t active : apis) {
+    g_fakeActiveApi = active;
+    for (uint8_t target : apis) {
+      ASSERT_EQ(RIIsTargetSelected(target), target == active);
+    }
+    ASSERT_FALSE(RIIsTargetSelected(RI_DEVICE_API_UNKNOWN));
+  }
+  g_fakeActiveApi = RI_DEVICE_API_UNKNOWN;
 }
 
 #endif
