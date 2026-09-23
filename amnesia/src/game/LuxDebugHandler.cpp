@@ -445,9 +445,9 @@ void cLuxDebugHandler::OnDraw(float afFrameTime)
 
 		//Physical luminance before gain, and GPU result availability.
 		gpBase->mpGameDebugSet->DrawFont(gpBase->mpDefaultFont.Get(), cVector3f(5,fY,10),14,cColor(1,1),
-							_W("LightSensor: %ls Linear luminance: %f\n"),
+							_W("LightSensor: %ls Linear luminance: %f level: %f \n"),
 							pPlayer->GetHelperLightLevel()->IsUsingProbe() ? _W("GPU") : _W("Held/default"),
-							pPlayer->GetHelperLightLevel()->GetProbeIrradiance() );
+							pPlayer->GetHelperLightLevel()->GetProbeIrradiance(),  pPlayer->GetHelperLightLevel()->GetLevel());
 		fY+=15.0f;
 
 		gpBase->mpGameDebugSet->DrawFont(gpBase->mpDefaultFont.Get(), cVector3f(5,fY,10),14,cColor(1,1),

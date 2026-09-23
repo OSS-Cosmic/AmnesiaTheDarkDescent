@@ -377,6 +377,13 @@ SHARED_CONST float kSceneExposure = 2.5f;
 // after a lighting change, the cause is upstream in the light model, not here.
 SHARED_CONST float kRayTracedGammaBias = 0.4f;
 
+// Extra display-gamma bias for the gameplay light probe ONLY, on top of
+// kRayTracedGammaBias (LuxLightProbeBrightness.h). The probe level goes through
+// the ray-traced display curve so darkness agrees with the screen; this extra
+// makes darkness a little more forgiving without brightening the screen.
+// 0 = probe matches the screen exactly.
+SHARED_CONST float kLightProbeGammaBias = 1.0f;
+
 // Global chroma scale applied to the RAY-TRACED backend ONLY, in display space,
 // in PostEffect_ToneMap.cpp -- pushed in, so the shader sees one scalar and
 // knows nothing about backends. 1.0 = identity, < 1 pulls color toward its

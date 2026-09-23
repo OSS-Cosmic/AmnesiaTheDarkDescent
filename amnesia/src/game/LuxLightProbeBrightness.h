@@ -5,8 +5,16 @@
 #include <algorithm>
 #include <cmath>
 
+#include "Constants.h" // kRayTracedGammaBias, kLightProbeGammaBias
+
 // Shared brightness state for CPU Legacy sensing and asynchronous physical
 // probes. Keep the environment separate so the lantern bonus never feeds back.
+//
+// The physical probe level goes through the same display-gamma lift the
+// ray-traced tonemap applies (kRayTracedGammaBias), so gameplay darkness agrees
+// with what the screen shows, plus kLightProbeGammaBias to make darkness a
+// little more forgiving. The player's own gamma slider is deliberately
+// excluded: a display preference must not change gameplay.
 class cLuxLightProbeBrightness {
 public:
     void Reset() { mfLuminance = 0.0f; mfEnvironment = 1.0f; mbLantern = false; }
@@ -22,7 +30,10 @@ public:
             brightest = std::max(brightest, luminance);
         }
         mfLuminance = static_cast<float>(brightest);
-        mfEnvironment = static_cast<float>(std::min(brightest * gain, 1.0));
+        const double level = std::min(brightest * gain, 1.0);
+        mfEnvironment = static_cast<float>(
+            std::pow(level, 1.0 / (1.0 + hpl::kRayTracedGammaBias +
+                                  hpl::kLightProbeGammaBias)));
     }
 
     // Publish the legacy CPU environmental level without applying the GPU

@@ -651,6 +651,7 @@ public:
 	float GetNormalLightLevel(){ return mProbeBrightness.GetLevel(); }
 
 	// Last physical luminance, before gain or the lantern bonus.
+	float GetLevel(){ return mProbeBrightness.GetLevel(); }
 	float GetProbeIrradiance(){ return mProbeBrightness.GetLuminance(); }
 	// Whether the last sensor update could read a GPU result.
 	bool IsUsingProbe(){ return mbUsingProbe; }

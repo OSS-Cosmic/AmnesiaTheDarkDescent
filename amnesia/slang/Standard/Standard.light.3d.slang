@@ -42,6 +42,31 @@ import Utils.Color.ColorHelpers; // linearToSRGB / sRGBToLinear for the decal fo
 // take (they share this module's light buffers but not the camera's tiles).
 [vk::binding(17,2)] StructuredBuffer<uint> standardTileLights;
 
+// A fullscreen quad can straddle a cutout and read the wall behind it. Such
+// UV differences are not a texture footprint. Prefer a neighbour belonging
+// to this surface; isolated pixels conservatively sample the finest mip.
+float2 surfaceUVGradient(int2 pixel, int2 step, uint4 center, uint2 extent)
+{
+    float2 uv = asfloat(center.zw);
+    float2 gradient = float2(0.0f);
+    bool found = false;
+    for (int side = -1; side <= 1; side += 2)
+    {
+        int2 neighbour = pixel + step * side;
+        if (any(neighbour < 0) || any(neighbour >= int2(extent))) continue;
+        uint4 sample = standardSurfaceInput.Load(int3(neighbour, 0));
+        if (any(sample.xy != center.xy) ||
+            standardPositionInput.Load(int3(neighbour, 0)).w <= 0.0f) continue;
+        float2 candidate = (asfloat(sample.zw) - uv) * float(side);
+        if (!all(isfinite(candidate))) continue;
+        // Prefer the continuous side at a UV seam within the same object.
+        if (!found || dot(candidate, candidate) < dot(gradient, gradient))
+            gradient = candidate;
+        found = true;
+    }
+    return gradient;
+}
+
 // Emulates the legacy LINEAR comparison sampler with four bilinearly weighted
 // texel compares inside one atlas tile. Spot tiles treat taps outside the tile
 // as the fully-lit border; cube-face tiles clamp to the edge texel (their
@@ -273,7 +298,15 @@ float4 psMain(V v) : SV_TARGET0
     float2 specular = float2(0.0f);
     if (material.tex[3] != kInvalidTextureIndex &&
         (material.materialConfig & kMaterialFlagEnableSpecular) != 0u)
-        specular = sampleBindless2D(material.tex[3], uv).xy;
+    {
+        uint surfaceWidth, surfaceHeight;
+        standardSurfaceInput.GetDimensions(surfaceWidth, surfaceHeight);
+        float2 uvDx = surfaceUVGradient(int2(pixel), int2(1, 0), packed,
+                                       uint2(surfaceWidth, surfaceHeight));
+        float2 uvDy = surfaceUVGradient(int2(pixel), int2(0, 1), packed,
+                                       uint2(surfaceWidth, surfaceHeight));
+        specular = sampleBindless2DGrad(material.tex[3], uv, uvDx, uvDy).xy;
+    }
 
     StandardLightSurface surface;
     // Base game order on its gamma G-buffer colour: Type="Decal" meshes blend
