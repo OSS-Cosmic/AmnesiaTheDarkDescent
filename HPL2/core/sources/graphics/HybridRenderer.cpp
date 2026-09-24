@@ -1588,9 +1588,9 @@ void cHybridRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
       mpGraphics->primary.cmds[0].vk_d3d12_setPushConstants(
           &mpGraphics->device, m_lightProbe, 0, sizeof(push), &push);
 
-      // One thread per probe, one group: the cap is kMaxLightProbes and the
-      // shader early-outs past the submitted count.
-      mpGraphics->primary.cmds[0].dispatch(&mpGraphics->device, 1u, 1u, 1u);
+      // One group per probe; its lanes gather and reduce one-bounce lighting.
+      mpGraphics->primary.cmds[0].dispatch(&mpGraphics->device,
+                                         push.mlProbeCount, 1u, 1u);
 
       // The copy rides this frame's submit, so it has executed once the
       // graphics timeline passes the value that submit will signal.

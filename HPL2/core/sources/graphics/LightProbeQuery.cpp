@@ -40,6 +40,9 @@ static_assert(cLightProbeQuery::kMaxProbes == (int)kMaxLightProbes,
               "kMaxProbes must match kMaxLightProbes in amnesia/slang/Constants.h");
 static_assert(cLightProbeQuery::kMaxExcludes == (int)kMaxLightProbeExcludes,
               "kMaxExcludes must match kMaxLightProbeExcludes in amnesia/slang/Constants.h");
+static_assert(kLightProbeSampleCount > 0u && kLightProbeSampleCount <= 1024u &&
+                  (kLightProbeSampleCount & (kLightProbeSampleCount - 1u)) == 0u,
+              "Light probe reduction needs a power-of-two workgroup size");
 
 // Scalar layout: probeCount, excludeCount, then kMaxExcludes ids, all uint.
 static_assert(sizeof(cLightProbeQuery::cPushConstants) ==

@@ -269,7 +269,8 @@ SLANG_PUBLIC struct LightProbeRequest {
     SLANG_PUBLIC float  padding;
 };
 
-// Sum of shadow-tested direct LightSample.Li contributions. The probe has no
+// Shadow-tested direct LightSample.Li plus the full-sphere integral of incoming
+// one-bounce surface radiance (including emission). The probe has no receiving
 // surface normal and applies no N-dot-L factor. Gameplay derives luminance.
 SLANG_PUBLIC struct LightProbeResult {
     SLANG_PUBLIC float3 irradiance;

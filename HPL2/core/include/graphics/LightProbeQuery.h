@@ -42,7 +42,7 @@ class iLight;
 //
 // Gameplay asks "how lit is this world point?" for a handful of points; the
 // renderer answers with the data it already has (the world-space light grid,
-// ILight radiance, and a ray-traced occlusion test per light) in
+// ILight radiance, ray-traced occlusion, and one-bounce surface lighting) in
 // LightProbePass.cs, and the answer comes back over a host-readback buffer.
 //
 // This replaces the base game's CPU sensor (cLuxMapHelper::GetLightLevelAtPos),

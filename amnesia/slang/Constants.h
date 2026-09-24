@@ -302,12 +302,12 @@ SHARED_CONST uint  kLightGridCellCount = kLightGridDim * kLightGridDim * kLightG
 SHARED_CONST uint  kLightsPerCellMax   = 8u;
 
 // Gameplay light probe (LightProbePass.cs) — an off-screen, world-space
-// illumination sensor read back on the CPU. One thread per probe in a single
-// workgroup, so this doubles as the dispatch's thread count. Gameplay asks for
-// a handful of points at a time (the player sensor uses five), so a small fixed
-// cap keeps the whole thing one wave and the readback one cache line per probe.
+// illumination sensor read back on the CPU. Each probe uses one workgroup to
+// gather surrounding one-bounce lighting (the player sensor uses five probes).
 SHARED_CONST uint kMaxLightProbes        = 16u;
 SHARED_CONST uint kMaxLightProbeExcludes = 4u;   // lights the sensor must not see (the player's own ambient/lantern)
+// Must be a power of two for the shared-memory reduction.
+SHARED_CONST uint kLightProbeSampleCount = 64u;
 
 // Decals use a precomputed per-object decal list (UniformObject.decalList →
 // gObjectDecalIndices), not a spatial grid — see SceneTypes.UniformObject and
@@ -382,7 +382,7 @@ SHARED_CONST float kRayTracedGammaBias = 0.4f;
 // the ray-traced display curve so darkness agrees with the screen; this extra
 // makes darkness a little more forgiving without brightening the screen.
 // 0 = probe matches the screen exactly.
-SHARED_CONST float kLightProbeGammaBias = 1.0f;
+SHARED_CONST float kLightProbeGammaBias = 2.0f;
 
 // Global chroma scale applied to the RAY-TRACED backend ONLY, in display space,
 // in PostEffect_ToneMap.cpp -- pushed in, so the shader sees one scalar and
