@@ -497,6 +497,38 @@ static constexpr uint32_t kStandardCullVisibilityKeys = 65536;
 static constexpr uint32_t kStandardShadowMaxCullGroups =
     kStandardShadowMaxCandidates / kStandardCullGroupSize + kStandardShadowMaxTiles;
 
+// The limits above are what ONE Draw may stage. Their backing store is an
+// RISegmentAlloc ring, which only reclaims a segment once the frame that took
+// it is RI_NUMBER_FRAMES_FLIGHT old -- so every frame still in flight holds its
+// slice at the same time. These rings were sized to a single frame's limit,
+// which left no room for the frames already in flight, so the host-side guards
+// never fired: the allocator ran out first.
+//
+// What that cost depended on the allocator. It used to read a full ring as an
+// empty one and hand the next frame a range the in-flight frame was still
+// reading, so a heavy view staged cull tiles and candidates over the data the
+// GPU had not finished with. It now correctly refuses instead -- but a refusal
+// is also silent here: a light whose count/indirect request fails is dropped
+// (lightFailed), and a failed tile/group publish clears `prepared` outright,
+// dropping EVERY shadow for that frame. Either way the symptom is the same,
+// and it is load-dependent: the staged tile count tracks how many cube faces
+// face the camera, so a room full of shadowed point lights -- a row of
+// candles, six faces each -- sits at the edge and crosses it as the view
+// turns, and the shadows flash.
+//
+// Sizing the rings for all frames in flight, plus one frame of slack for the
+// tail the allocator forfeits when a contiguous request does not fit before
+// the end of the buffer, makes the per-frame guards above the real limit again.
+static constexpr uint32_t kStandardShadowRingFrames = RI_NUMBER_FRAMES_FLIGHT + 1;
+static constexpr uint32_t kStandardShadowCandidateRing =
+    kStandardShadowMaxCandidates * kStandardShadowRingFrames;
+static constexpr uint32_t kStandardShadowTileRing =
+    kStandardShadowMaxTiles * kStandardShadowRingFrames;
+static constexpr uint32_t kStandardShadowCullGroupRing =
+    kStandardShadowMaxCullGroups * kStandardShadowRingFrames;
+static constexpr uint32_t kStandardShadowIndirectRing =
+    kObjectSlotCapacity * kStandardShadowRingFrames;
+
 static float StandardPointShadowNear(float radius) {
   return std::max(0.05f, radius * 0.01f);
 }
@@ -814,12 +846,12 @@ cStandardRenderer::cStandardRenderer(cGraphics *apGraphics,
   RISegmentAllocDesc shadowDesc = {};
   shadowDesc.numSegments = RI_NUMBER_FRAMES_FLIGHT;
   shadowDesc.elementStride = sizeof(VkDrawIndirectCommand);
-  shadowDesc.maxElements = kObjectSlotCapacity;
+  shadowDesc.maxElements = kStandardShadowIndirectRing;
   m_shadowIndirectSegment =
       RISegmentAlloc<RI_NUMBER_FRAME_SEGMENTS>(&shadowDesc);
   // Kernel-authored: both shadow cull modes write whole commands, so the host
   // never maps this one.
-  m_shadowIndirectBuffer.Create(&mpGraphics->device, kObjectSlotCapacity,
+  m_shadowIndirectBuffer.Create(&mpGraphics->device, kStandardShadowIndirectRing,
                                 sizeof(VkDrawIndirectCommand),
                                 /*hostWritten*/ false,
                                 "StandardRenderer.shadowIndirect");
@@ -869,16 +901,17 @@ void cStandardRenderer::CreateCullBuffers() {
     *buffer = detail::CreateBindlessSlotBuffer(
         &mpGraphics->device, elements, stride, usage, deviceLocal, debugName);
   };
+  // Ring sizes, not per-Draw limits: see kStandardShadowRingFrames.
   makeCullBuffer(&m_shadowCandidateSegment, &m_shadowCandidateBuffer,
-                 kStandardShadowMaxCandidates, sizeof(StandardCullCandidate),
+                 kStandardShadowCandidateRing, sizeof(StandardCullCandidate),
                  RI_BUFFER_USAGE_SHADER_RESOURCE, false,
                  "StandardRenderer.shadowCullCandidates");
   makeCullBuffer(&m_shadowCullTileSegment, &m_shadowCullTileBuffer,
-                 kStandardShadowMaxTiles, sizeof(StandardCullTile),
+                 kStandardShadowTileRing, sizeof(StandardCullTile),
                  RI_BUFFER_USAGE_SHADER_RESOURCE, false,
                  "StandardRenderer.shadowCullTiles");
   makeCullBuffer(&m_shadowCullGroupSegment, &m_shadowCullGroupBuffer,
-                 kStandardShadowMaxCullGroups, sizeof(StandardCullGroup),
+                 kStandardShadowCullGroupRing, sizeof(StandardCullGroup),
                  RI_BUFFER_USAGE_SHADER_RESOURCE, false,
                  "StandardRenderer.shadowCullGroups");
   makeCullBuffer(&m_cullCameraSegment, &m_cullCameraBuffer,
@@ -913,7 +946,7 @@ void cStandardRenderer::CreateCullBuffers() {
   // Device-local: the counts are written by compute and consumed by
   // vkCmdDrawIndirectCount without ever being read back on the host.
   makeCullBuffer(&m_shadowDrawCountSegment, &m_shadowDrawCountBuffer,
-                 kStandardShadowMaxTiles, sizeof(uint32_t),
+                 kStandardShadowTileRing, sizeof(uint32_t),
                  RI_BUFFER_USAGE_INDIRECT |
                      RI_BUFFER_USAGE_SHADER_RESOURCE_STORAGE,
                  true,
@@ -1154,9 +1187,10 @@ bool cStandardRenderer::LoadData() {
     RISegmentAllocDesc desc = {};
     desc.numSegments = RI_NUMBER_FRAMES_FLIGHT;
     desc.elementStride = sizeof(VkDrawIndirectCommand);
-    desc.maxElements = kObjectSlotCapacity;
+    desc.maxElements = kStandardShadowIndirectRing;
     m_shadowIndirectSegment = RISegmentAlloc<RI_NUMBER_FRAME_SEGMENTS>(&desc);
-    m_shadowIndirectBuffer.Create(&mpGraphics->device, kObjectSlotCapacity,
+    m_shadowIndirectBuffer.Create(&mpGraphics->device,
+                                  kStandardShadowIndirectRing,
                                   sizeof(VkDrawIndirectCommand),
                                   /*hostWritten*/ false,
                                   "StandardRenderer.shadowIndirect");
@@ -2730,8 +2764,11 @@ void cStandardRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
                 (candidateCount + kStandardCullGroupSize - 1u) /
                 kStandardCullGroupSize;
             // Tiles and groups are only staged here, so the capacity they will
-            // be published into has to be checked by hand; the indirect and
-            // count ranges are per tile and absolute, so those may wrap freely.
+            // be published into has to be checked by hand. The indirect and
+            // count ranges are per tile and absolute, so they may wrap -- but
+            // only within the space no in-flight frame still holds, which is
+            // why their rings are sized for kStandardShadowRingFrames. A
+            // request that fails here silently costs this light its shadow.
             if (cullTiles.size() + 1u > kStandardShadowMaxTiles ||
                 cullGroups.size() + groupCount > kStandardShadowMaxCullGroups ||
                 !m_shadowIndirectSegment.request(mpGraphics->frameIndex,
@@ -2833,11 +2870,11 @@ void cStandardRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
         cullBuffers.groups = &m_shadowCullGroupBuffer;
         cullBuffers.indirect = m_shadowIndirectBuffer.gpu();
         cullBuffers.drawCounts = &m_shadowDrawCountBuffer;
-        cullBuffers.candidateCapacity = kStandardShadowMaxCandidates;
-        cullBuffers.indirectCapacity = kObjectSlotCapacity;
-        cullBuffers.tileCapacity = kStandardShadowMaxTiles;
-        cullBuffers.groupCapacity = kStandardShadowMaxCullGroups;
-        cullBuffers.drawCountCapacity = kStandardShadowMaxTiles;
+        cullBuffers.candidateCapacity = kStandardShadowCandidateRing;
+        cullBuffers.indirectCapacity = kStandardShadowIndirectRing;
+        cullBuffers.tileCapacity = kStandardShadowTileRing;
+        cullBuffers.groupCapacity = kStandardShadowCullGroupRing;
+        cullBuffers.drawCountCapacity = kStandardShadowTileRing;
         cullBuffers.cameras = &m_cullCameraBuffer;
         cullBuffers.cameraCapacity = kStandardCullMaxCameras;
         cullBuffers.visibility = &m_cullVisibilityBuffer;
@@ -3156,9 +3193,10 @@ void cStandardRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
       cameraCullBuffers.indirectCapacity = kObjectSlotCapacity;
       cameraCullBuffers.indirectWordCapacity =
           kObjectSlotCapacity * (sizeof(VkDrawIndirectCommand) / sizeof(uint32_t));
-      cameraCullBuffers.tileCapacity = kStandardShadowMaxTiles;
-      cameraCullBuffers.groupCapacity = kStandardShadowMaxCullGroups;
-      cameraCullBuffers.drawCountCapacity = kStandardShadowMaxTiles;
+      // Shared with the shadow pass, so these span its ring, not one Draw.
+      cameraCullBuffers.tileCapacity = kStandardShadowTileRing;
+      cameraCullBuffers.groupCapacity = kStandardShadowCullGroupRing;
+      cameraCullBuffers.drawCountCapacity = kStandardShadowTileRing;
       cameraCullBuffers.cameraCapacity = kStandardCullMaxCameras;
       cameraCullBuffers.visibilityCapacity = kStandardCullVisibilityKeys;
       // Words from a candidate's phase-1 command to its phase-2 one. Both
@@ -4093,9 +4131,10 @@ void cStandardRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
         cull.buffers.indirectWordCapacity =
             kStandardTranslucentMaxDraws *
             (sizeof(VkDrawIndexedIndirectCommand) / sizeof(uint32_t));
-        cull.buffers.tileCapacity = kStandardShadowMaxTiles;
-        cull.buffers.groupCapacity = kStandardShadowMaxCullGroups;
-        cull.buffers.drawCountCapacity = kStandardShadowMaxTiles;
+        // Shared with the shadow pass, so these span its ring, not one Draw.
+        cull.buffers.tileCapacity = kStandardShadowTileRing;
+        cull.buffers.groupCapacity = kStandardShadowCullGroupRing;
+        cull.buffers.drawCountCapacity = kStandardShadowTileRing;
         cull.buffers.cameraCapacity = kStandardCullMaxCameras;
         cull.buffers.visibility = &m_cullVisibilityBuffer;
         cull.buffers.visibilityCapacity = kStandardCullVisibilityKeys;

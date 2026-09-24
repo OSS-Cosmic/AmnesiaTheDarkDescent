@@ -77,33 +77,42 @@ bool RISegmentAlloc<N>::request(uint32_t frameIndex, size_t reqElements,
     assert(head != tail); // this shouldn't happen
   }
 
+  if (reqElements > maxElements)
+    return false;
+
   size_t elmentEndOffset = (elementOffset + numElements) % maxElements;
   assert(elementOffset < maxElements);
   assert(elmentEndOffset < maxElements);
-  // we don't have enough space to fit into the end of the buffer give up the
-  // remaning and move the cursor to the start
-  if (elementOffset < elmentEndOffset &&
-      elmentEndOffset + reqElements > maxElements) {
-    const uint32_t remaining = static_cast<uint32_t>((maxElements - elmentEndOffset));
-    segment[head].numElements += remaining;
-    numElements += remaining;
+
+  // Free space comes from the live element count, NOT from comparing the head
+  // and tail offsets. When the ring is exactly full those two offsets are
+  // equal, which is indistinguishable from empty: the old comparison read that
+  // as "the whole buffer is free" and handed the caller a range an in-flight
+  // frame was still reading. Every frame then staged over its predecessor's
+  // data instead of being told the ring was exhausted.
+  const size_t remainingSpace = maxElements - numElements;
+
+  // A range must be contiguous, so one that will not fit before the end of the
+  // buffer forfeits the tail and restarts at 0. The forfeited elements are
+  // charged to this frame's segment, so they are reclaimed along with it, and
+  // they have to be paid for out of the same free space as the request itself.
+  size_t forfeited = 0;
+  if (elmentEndOffset + reqElements > maxElements)
+    forfeited = maxElements - elmentEndOffset;
+
+  // there is not enough avalaible space we need to reallocate
+  if (reqElements + forfeited > remainingSpace) {
+    return false;
+  }
+  if (forfeited > 0) {
+    segment[head].numElements += forfeited;
+    numElements += static_cast<uint32_t>(forfeited);
     elmentEndOffset = 0;
     assert((elementOffset + numElements) % maxElements == 0);
   }
-  size_t remainingSpace = 0;
-  if (elmentEndOffset < elementOffset) { // the buffer has wrapped around
-    remainingSpace = elementOffset - elmentEndOffset;
-  } else {
-    remainingSpace = maxElements - elmentEndOffset;
-  }
-  assert(remainingSpace <= maxElements);
-
-  // there is not enough avalaible space we need to reallocate
-  if (reqElements > remainingSpace) {
-    return false;
-  }
   segment[head].numElements += reqElements;
   numElements += static_cast<uint32_t>(reqElements);
+  assert(numElements <= maxElements);
 
   req->elementOffset = static_cast<uint32_t>(elmentEndOffset);
   req->elementStride = elementStride;
