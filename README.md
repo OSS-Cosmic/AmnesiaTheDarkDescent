@@ -1,7 +1,9 @@
 # Amnesia: The Dark Descent — Redux
 
-[![Build](https://github.com/flying-swallow/Redux-AmnesiaTheDarkDescent/actions/workflows/build.yml/badge.svg?branch=main)](https://github.com/flying-swallow/Redux-AmnesiaTheDarkDescent/actions/workflows/build.yml)
+[![ModDB](https://button.moddb.com/popularity/medium/mods/59751.png)](https://www.moddb.com/mods/amnesia-redux)
+
 [![Itch.io](https://img.shields.io/badge/Itch-%23FF0B34.svg?style=for-the-badge&logo=Itch.io&logoColor=white)](https://mpollind.itch.io/amnesia-the-dark-descent-redux)
+
 
 
 ![Preview](./images/preview.png?raw=true)
