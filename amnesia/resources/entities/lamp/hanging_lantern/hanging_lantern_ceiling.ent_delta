@@ -1,5 +1,5 @@
 <EntDelta Version="1" Target="entities/lamp/hanging_lantern/hanging_lantern_ceiling.ent">
     <Modify Category="Entities" ID="12" Name="PointLight_1">
-        <SetAttr CastShadows="true" ShadowResolution="High" ShadowsAffectDynamic="true" ShadowsAffectStatic="true" WorldPos="0 -0.688803 0" Re_Intensity="10" Re_Radius="22" Re_SourceRadius="0.12" Re_FlickerOffIntensity="6" />
+        <SetAttr CastShadows="true" Re_FlickerOffIntensity="1.2" Re_Intensity="2" Re_Radius="22" Re_SourceRadius="0.12" WorldPos="0 -0.688803 0" />
     </Modify>
 </EntDelta>

@@ -81,7 +81,7 @@ public float3 standardDecalBlend(uint blendMode, float3 albedoLinear,
     // decal.frag.fsl rejects the sampled texture alpha before multiplying the
     // tint.  Keep that legacy cutoff: a transparent texture must not become
     // active merely because a tint has alpha greater than one.
-    if (sampleLinear.a < 0.01f)
+    if (sampleLinear.a < kDecalAlphaReject)
         return albedoLinear;
     return sRGBToLinear(blendDisplaySpaceExact(
         blendMode, linearToSRGB(albedoLinear), sourceDisplay));

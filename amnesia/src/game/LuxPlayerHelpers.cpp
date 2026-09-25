@@ -2907,10 +2907,15 @@ cLuxPlayerInDarkness::cLuxPlayerInDarkness(cLuxPlayer *apPlayer) : iLuxPlayerHel
 	mfAmbientLightMinLightLevel = gpBase->mpGameCfg->GetFloat("Player_Darkness","AmbientLightMinLightLevel",0);
 	mfAmbientLightRadius = gpBase->mpGameCfg->GetFloat("Player_Darkness","AmbientLightRadius",0);
 	mfAmbientLightIntensity = gpBase->mpGameCfg->GetFloat("Player_Darkness","AmbientLightIntensity",0);
-	//Straight multiplier on the solved intensity, for taste. 1 means "the glow
-	//ends exactly at AmbientLightRadius"; raise it to push the eye-adaptation
-	//light brighter without moving where it culls.
-	mfAmbientLightIntensityMul = gpBase->mpGameCfg->GetFloat("Player_Darkness","AmbientLightIntensityMul",1.0f);
+	//Straight multiplier on the solved ray-traced intensity (the Standard
+	//backend never reads it). 1 means "the glow reaches the radiance floor
+	//exactly at AmbientLightRadius", which reads too dim as night vision; the
+	//reach window still fades it to zero there at any multiplier, so raising it
+	//brightens the glow without moving where it culls. Retail game.cfg has no
+	//such key, so the tuned value ships as this default; a cfg value overrides.
+	const float kDefaultAmbientLightIntensityMul = 3.0f;
+	mfAmbientLightIntensityMul = gpBase->mpGameCfg->GetFloat("Player_Darkness","AmbientLightIntensityMul",
+		kDefaultAmbientLightIntensityMul);
 	mfAmbientLightFadeInTime = gpBase->mpGameCfg->GetFloat("Player_Darkness","AmbientLightFadeInTime",0);
 	mfAmbientLightFadeOutTime = gpBase->mpGameCfg->GetFloat("Player_Darkness","AmbientLightFadeOutTime",0);
 	mAmbientLightColor = gpBase->mpGameCfg->GetColor("Player_Darkness","AmbientLightColor",cColor(0));

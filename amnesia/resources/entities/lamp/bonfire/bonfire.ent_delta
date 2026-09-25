@@ -41,19 +41,19 @@
         <RemoveAttr Name="GroupID" />
         <RemoveAttr Name="Type" />
     </Modify>
-    <Modify Category="Entities" ID="14" Name="SpotLight_1">
-        <SetAttr Re_Intensity="17.5" Re_Radius="22" Re_SourceRadius="0.2" Re_FlickerOffIntensity="15.4" />
-    </Modify>
     <Modify Category="Entities" ID="1" Name="ParticleSystem_1">
         <RemoveAttr Name="GroupID" />
         <RemoveAttr Name="Type" />
     </Modify>
     <Modify Category="Entities" ID="11" Name="PointLight_1">
-        <SetAttr CastShadows="true" ShadowResolution="High" ShadowsAffectDynamic="true" ShadowsAffectStatic="true" WorldPos="0.028483 0.561034 -0.001537" Re_Intensity="35" Re_Radius="22" Re_SourceRadius="0.2" Re_FlickerOffIntensity="30.8" />
+        <SetAttr CastShadows="true" Re_FlickerOffIntensity="30.8" Re_Intensity="35" Re_Radius="22" Re_SourceRadius="0.2" />
     </Modify>
     <Modify Category="Entities" ID="12" Name="Sound_1">
         <RemoveAttr Name="GroupID" />
         <RemoveAttr Name="Type" />
+    </Modify>
+    <Modify Category="Entities" ID="14" Name="SpotLight_1">
+        <SetAttr Re_FlickerOffIntensity="15.4" Re_Intensity="17.5" Re_Radius="22" Re_SourceRadius="0.2" />
     </Modify>
     <Modify Category="Entities" ID="15" Name="Billboard_1">
         <RemoveAttr Name="Axis" />

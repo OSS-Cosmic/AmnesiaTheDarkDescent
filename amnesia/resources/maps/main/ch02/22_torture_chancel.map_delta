@@ -1,24 +1,24 @@
 <MapDelta Version="1" Target="maps/main/ch02/22_torture_chancel.map">
     <Modify Category="Entities" ID="973" Name="PointLight_16">
-        <SetAttr Re_Intensity="7" Re_SourceRadius="0.35" Re_FlickerOffIntensity="0" />
+        <SetAttr Re_FlickerOffIntensity="0" Re_Intensity="7" Re_SourceRadius="0.35" />
     </Modify>
     <Modify Category="Entities" ID="974" Name="PointLight_17">
-        <SetAttr Re_Intensity="6" Re_SourceRadius="0.35" Re_FlickerOffIntensity="0" />
+        <SetAttr Re_FlickerOffIntensity="0" Re_Intensity="6" Re_SourceRadius="0.35" />
     </Modify>
     <Modify Category="Entities" ID="978" Name="PointLight_21">
-        <SetAttr Re_Intensity="4" Re_SourceRadius="0.35" Re_FlickerOffIntensity="0" />
+        <SetAttr Re_FlickerOffIntensity="0" Re_Intensity="4" Re_SourceRadius="0.35" />
     </Modify>
     <Modify Category="Entities" ID="1449" Name="PointLight_1">
-        <SetAttr Re_Intensity="3" Re_SourceRadius="0.3" Re_FlickerOffIntensity="0" />
+        <SetAttr Re_FlickerOffIntensity="0" Re_Intensity="3" Re_SourceRadius="0.3" />
     </Modify>
     <Modify Category="Entities" ID="1648" Name="SpotLight_2">
-        <SetAttr Re_Intensity="5.5" Re_SourceRadius="0.12" Re_FlickerOffIntensity="0" />
+        <SetAttr Re_FlickerOffIntensity="0" Re_Intensity="5.5" Re_SourceRadius="0.12" />
     </Modify>
     <Modify Category="Entities" ID="1692" Name="PointLight_18">
-        <SetAttr Re_Intensity="5.5" Re_SourceRadius="0.35" Re_FlickerOffIntensity="0" />
+        <SetAttr Re_FlickerOffIntensity="0" Re_Intensity="5.5" Re_SourceRadius="0.35" />
     </Modify>
     <Modify Category="Entities" ID="1789" Name="PointLight_2">
-        <SetAttr Re_Intensity="5.5" Re_SourceRadius="0.35" Re_FlickerOffIntensity="0" />
+        <SetAttr Re_FlickerOffIntensity="0" Re_Intensity="5.5" Re_SourceRadius="0.35" />
     </Modify>
     <Modify Category="Entities" ID="1932" Name="candle_floor_no_light_6">
         <SetAttr Filename="entities/lamp/candle_floor/candle_floor.ent" />
@@ -147,34 +147,34 @@
         <SetAttr Filename="entities/lamp/candle_floor/candle_floor.ent" />
     </Modify>
     <Modify Category="Entities" ID="2024" Name="PointLight_3">
-        <SetAttr Re_Intensity="5.5" Re_SourceRadius="0.35" Re_FlickerOffIntensity="0" />
+        <SetAttr Re_FlickerOffIntensity="0" Re_Intensity="5.5" Re_SourceRadius="0.35" />
     </Modify>
     <Modify Category="Entities" ID="2025" Name="PointLight_4">
-        <SetAttr Re_Intensity="5.5" Re_SourceRadius="0.35" Re_FlickerOffIntensity="0" />
+        <SetAttr Re_FlickerOffIntensity="0" Re_Intensity="5.5" Re_SourceRadius="0.35" />
     </Modify>
     <Modify Category="Entities" ID="2026" Name="PointLight_5">
-        <SetAttr Re_Intensity="5.5" Re_SourceRadius="0.35" Re_FlickerOffIntensity="0" />
+        <SetAttr Re_FlickerOffIntensity="0" Re_Intensity="5.5" Re_SourceRadius="0.35" />
     </Modify>
     <Modify Category="Entities" ID="2027" Name="PointLight_6">
-        <SetAttr Re_Intensity="5.5" Re_SourceRadius="0.35" Re_FlickerOffIntensity="0" />
+        <SetAttr Re_FlickerOffIntensity="0" Re_Intensity="5.5" Re_SourceRadius="0.35" />
     </Modify>
     <Modify Category="Entities" ID="2094" Name="PointLight_26">
-        <SetAttr Re_Intensity="4" Re_SourceRadius="0.08" Re_FlickerOffIntensity="4" />
+        <SetAttr Re_FlickerOffIntensity="4" Re_Intensity="4" Re_SourceRadius="0.08" />
     </Modify>
     <Modify Category="Entities" ID="2161" Name="SpotLight_3">
-        <SetAttr Re_Intensity="9" Re_SourceRadius="0.12" Re_FlickerOffIntensity="0" />
+        <SetAttr Re_FlickerOffIntensity="0" Re_Intensity="9" Re_SourceRadius="0.12" />
     </Modify>
     <Modify Category="Entities" ID="2199" Name="PointLight_27">
-        <SetAttr Re_Intensity="4" Re_SourceRadius="0.08" Re_FlickerOffIntensity="4" />
+        <SetAttr Re_FlickerOffIntensity="4" Re_Intensity="4" Re_SourceRadius="0.08" />
     </Modify>
     <Modify Category="Entities" ID="2200" Name="PointLight_28">
-        <SetAttr Re_Intensity="4" Re_SourceRadius="0.08" Re_FlickerOffIntensity="4" />
+        <SetAttr Re_FlickerOffIntensity="4" Re_Intensity="4" Re_SourceRadius="0.08" />
     </Modify>
     <Modify Category="Entities" ID="2232" Name="SpotLight_1">
-        <SetAttr Re_Intensity="10" Re_SourceRadius="0.12" Re_FlickerOffIntensity="7" />
+        <SetAttr Re_FlickerOffIntensity="7" Re_Intensity="10" Re_SourceRadius="0.12" />
     </Modify>
     <Modify Category="Entities" ID="2233" Name="SpotLight_4">
-        <SetAttr Re_Intensity="5" Re_SourceRadius="0.12" Re_FlickerOffIntensity="7" />
+        <SetAttr Re_FlickerOffIntensity="7" Re_Intensity="5" Re_SourceRadius="0.12" />
     </Modify>
     <Modify Category="Entities" ID="2265" Name="candle_floor_no_light_40">
         <SetAttr Filename="entities/lamp/candle_floor/candle_floor.ent" />

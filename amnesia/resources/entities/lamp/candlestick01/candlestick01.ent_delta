@@ -36,7 +36,7 @@
         <RemoveAttr Name="Scale" />
         <RemoveAttr Name="Type" />
     </Modify>
-    <Add Category="Entities" After="6">
+    <Add Category="Entities">
         <PointLight Active="true" CastShadows="false" DiffuseColor="0.850000 0.750000 0.300000 0.650000" FalloffMap="" FlickerActive="true" FlickerFade="true" FlickerOffColor="0.750000 0.650000 0.200000 0.500000" FlickerOffFadeMaxLength="2.000000" FlickerOffFadeMinLength="0.200000" FlickerOffMaxLength="0.000000" FlickerOffMinLength="0.000000" FlickerOffPS="" FlickerOffSound="" FlickerOnFadeMaxLength="2.000000" FlickerOnFadeMinLength="0.200000" FlickerOnMaxLength="0.500000" FlickerOnMinLength="0.000000" FlickerOnPS="" FlickerOnSound="" Gobo="" GoboAnimFrameTime="0.000000" GoboAnimMode="None" Name="PointLight_1" Rotation="0.000000 0.000000 0.000000" Scale="1.000000 1.000000 1.000000" ShadowResolution="High" ShadowsAffectDynamic="true" ShadowsAffectStatic="true" Tag="" WorldPos="-0.00407028 0.442227 -0.000551224" RendererMask="2" Re_Intensity="1.8" Re_Radius="15.7764" Re_SourceRadius="0.02" Re_FlickerOffIntensity="1.700000" />
     </Add>
 </EntDelta>

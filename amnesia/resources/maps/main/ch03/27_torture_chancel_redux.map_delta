@@ -227,6 +227,9 @@
     <Modify Category="Decals" ID="3436" Name="chalk_hieroglyphs_1">
         <SetAttr Material="textures/ptest/decals/chalk_hieroglyphs.mat" />
     </Modify>
+    <Modify Category="Entities" ID="973" Name="PointLight_16">
+        <SetAttr Re_FlickerOffIntensity="0" Re_Intensity="7" Re_Radius="26.6797" Re_SourceRadius="0.35" />
+    </Modify>
     <Modify Category="Entities" ID="978" Name="PointLight_21">
         <SetAttr RendererMask="1" />
     </Modify>
@@ -239,26 +242,20 @@
     <Modify Category="Entities" ID="2053" Name="PointLight_7">
         <SetAttr RendererMask="1" />
     </Modify>
+    <Modify Category="Entities" ID="2094" Name="barrier_pointlight_2">
+        <SetAttr Re_FlickerOffIntensity="4" Re_Intensity="4" Re_Radius="28.0226" Re_SourceRadius="0" />
+    </Modify>
     <Modify Category="Entities" ID="2161" Name="SpotLight_3">
         <SetAttr RendererMask="1" />
     </Modify>
-    <Modify Category="Entities" ID="3155" Name="OrbLight">
-        <SetAttr RendererMask="1" />
-    </Modify>
-    <Modify Category="Entities" ID="973" Name="PointLight_16">
-        <SetAttr Re_Intensity="7" Re_Radius="26.6797" Re_SourceRadius="0.35" Re_FlickerOffIntensity="0" />
-    </Modify>
-    <Modify Category="Entities" ID="2094" Name="barrier_pointlight_2">
-        <SetAttr Re_Intensity="4" Re_Radius="28.0226" Re_SourceRadius="0" Re_FlickerOffIntensity="4" />
-    </Modify>
     <Modify Category="Entities" ID="2199" Name="barrier_pointlight_1">
-        <SetAttr Re_Intensity="4" Re_Radius="28.0226" Re_SourceRadius="0" Re_FlickerOffIntensity="4" />
+        <SetAttr Re_FlickerOffIntensity="4" Re_Intensity="4" Re_Radius="28.0226" Re_SourceRadius="0" />
     </Modify>
     <Modify Category="Entities" ID="2200" Name="barrier_pointlight_3">
-        <SetAttr Re_Intensity="4" Re_Radius="28.0226" Re_SourceRadius="0" Re_FlickerOffIntensity="4" />
+        <SetAttr Re_FlickerOffIntensity="4" Re_Intensity="4" Re_Radius="28.0226" Re_SourceRadius="0" />
     </Modify>
     <Modify Category="Entities" ID="2232" Name="barrier_spotlight_1">
-        <SetAttr Re_Intensity="10" Re_Radius="44.3119" Re_SourceRadius="0" Re_FlickerOffIntensity="7" />
+        <SetAttr Re_FlickerOffIntensity="7" Re_Intensity="10" Re_Radius="44.3119" Re_SourceRadius="0" />
     </Modify>
     <Modify Category="Entities" ID="2265" Name="candle_floor_no_light_40">
         <SetAttr Filename="entities/lamp/candle_floor/candle_floor.ent" />
@@ -327,18 +324,21 @@
         <SetAttr Filename="entities/lamp/candle_floor/candle_floor.ent" />
     </Modify>
     <Modify Category="Entities" ID="3136" Name="barrier_spotlight_weak_1">
-        <SetAttr Re_Intensity="5.5" Re_Radius="32.8609" Re_SourceRadius="0" Re_FlickerOffIntensity="6" />
+        <SetAttr Re_FlickerOffIntensity="6" Re_Intensity="5.5" Re_Radius="32.8609" Re_SourceRadius="0" />
     </Modify>
     <Modify Category="Entities" ID="3137" Name="barrier_pointlight_weak_1">
-        <SetAttr Re_Intensity="3.5" Re_Radius="26.2122" Re_SourceRadius="0" Re_FlickerOffIntensity="3.5" />
+        <SetAttr Re_FlickerOffIntensity="3.5" Re_Intensity="3.5" Re_Radius="26.2122" Re_SourceRadius="0" />
     </Modify>
     <Modify Category="Entities" ID="3141" Name="barrier_pointlight_weak_2">
-        <SetAttr Re_Intensity="3.5" Re_Radius="26.2122" Re_SourceRadius="0" Re_FlickerOffIntensity="3.5" />
+        <SetAttr Re_FlickerOffIntensity="3.5" Re_Intensity="3.5" Re_Radius="26.2122" Re_SourceRadius="0" />
     </Modify>
     <Modify Category="Entities" ID="3142" Name="barrier_pointlight_weak_3">
-        <SetAttr Re_Intensity="3.5" Re_Radius="26.2122" Re_SourceRadius="0" Re_FlickerOffIntensity="3.5" />
+        <SetAttr Re_FlickerOffIntensity="3.5" Re_Intensity="3.5" Re_Radius="26.2122" Re_SourceRadius="0" />
     </Modify>
     <Modify Category="Entities" ID="3154" Name="PointLight_2">
-        <SetAttr Re_Intensity="3" Re_Radius="24.4898" Re_SourceRadius="0.35" Re_FlickerOffIntensity="0" />
+        <SetAttr Re_FlickerOffIntensity="0" Re_Intensity="3" Re_Radius="24.4898" Re_SourceRadius="0.35" />
+    </Modify>
+    <Modify Category="Entities" ID="3155" Name="OrbLight">
+        <SetAttr RendererMask="1" />
     </Modify>
 </MapDelta>

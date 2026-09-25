@@ -371,20 +371,71 @@
     <Modify Category="Entities" ID="410" Name="PointLight_1">
         <SetAttr RendererMask="1" />
     </Modify>
+    <Modify Category="Entities" ID="687" Name="PointLight_7">
+        <SetAttr Re_FlickerOffIntensity="0" Re_Intensity="9" Re_Radius="26.1506" Re_SourceRadius="0" />
+    </Modify>
     <Modify Category="Entities" ID="754" Name="PointLight_8">
         <SetAttr RendererMask="1" />
     </Modify>
+    <Modify Category="Entities" ID="759" Name="Altar_2_Light_1">
+        <SetAttr Filename="entities/lamp/candle_floor/candle_floor.ent" />
+    </Modify>
+    <Modify Category="Entities" ID="760" Name="Altar_2_Light_3">
+        <SetAttr Filename="entities/lamp/candle_floor/candle_floor.ent" />
+    </Modify>
+    <Modify Category="Entities" ID="761" Name="Altar_2_Light_2">
+        <SetAttr Filename="entities/lamp/candle_floor/candle_floor.ent" />
+    </Modify>
+    <Modify Category="Entities" ID="762" Name="Altar_2_Light_6">
+        <SetAttr Filename="entities/lamp/candle_floor/candle_floor.ent" />
+    </Modify>
+    <Modify Category="Entities" ID="763" Name="Altar_2_Light_4">
+        <SetAttr Filename="entities/lamp/candle_floor/candle_floor.ent" />
+    </Modify>
+    <Modify Category="Entities" ID="764" Name="Altar_2_LightPoint_1">
+        <SetAttr Re_FlickerOffIntensity="0" Re_Intensity="6.5" Re_Radius="11.4182" Re_SourceRadius="0" />
+    </Modify>
     <Modify Category="Entities" ID="766" Name="Altar_1_LightPoint_1">
-        <SetAttr Re_Intensity="6.5" Re_Radius="7.5" Re_SourceRadius="0" Re_FlickerOffIntensity="0" Re_CastShadows="true" />
+        <SetAttr Re_CastShadows="true" Re_FlickerOffIntensity="0" Re_Intensity="6.5" Re_Radius="7.5" Re_SourceRadius="0" />
     </Modify>
     <Modify Category="Entities" ID="780" Name="PointLight_17">
         <SetAttr RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="989" Name="Altar_1_Light_4">
+        <SetAttr Filename="entities/lamp/candle_floor/candle_floor.ent" />
+    </Modify>
+    <Modify Category="Entities" ID="990" Name="Altar_1_Light_6">
+        <SetAttr Filename="entities/lamp/candle_floor/candle_floor.ent" />
+    </Modify>
+    <Modify Category="Entities" ID="991" Name="Altar_1_Light_3">
+        <SetAttr Filename="entities/lamp/candle_floor/candle_floor.ent" />
+    </Modify>
+    <Modify Category="Entities" ID="992" Name="Altar_1_Light_1">
+        <SetAttr Filename="entities/lamp/candle_floor/candle_floor.ent" />
+    </Modify>
+    <Modify Category="Entities" ID="993" Name="Altar_1_Light_2">
+        <SetAttr Filename="entities/lamp/candle_floor/candle_floor.ent" />
     </Modify>
     <Modify Category="Entities" ID="1002" Name="PointLight_21">
         <SetAttr RendererMask="1" />
     </Modify>
     <Modify Category="Entities" ID="1013" Name="Altar_1_LightPoint_2">
-        <SetAttr Re_Intensity="6.5" Re_Radius="5" Re_SourceRadius="0" Re_FlickerOffIntensity="0" Re_CastShadows="true" />
+        <SetAttr Re_CastShadows="true" Re_FlickerOffIntensity="0" Re_Intensity="6.5" Re_Radius="5" Re_SourceRadius="0" />
+    </Modify>
+    <Modify Category="Entities" ID="1256" Name="slime_entry_5_4">
+        <SetAttr Re_FlickerOffIntensity="0" Re_Intensity="3.5" Re_Radius="12.2302" Re_SourceRadius="0" />
+    </Modify>
+    <Modify Category="Entities" ID="1257" Name="slime_entry_4_4">
+        <SetAttr Re_FlickerOffIntensity="0" Re_Intensity="4" Re_Radius="15.9558" Re_SourceRadius="0" />
+    </Modify>
+    <Modify Category="Entities" ID="1258" Name="slime_entry_3_4">
+        <SetAttr Re_FlickerOffIntensity="0" Re_Intensity="4" Re_Radius="15.9558" Re_SourceRadius="0" />
+    </Modify>
+    <Modify Category="Entities" ID="1259" Name="slime_entry_2_4">
+        <SetAttr Re_FlickerOffIntensity="0" Re_Intensity="4" Re_Radius="15.9558" Re_SourceRadius="0" />
+    </Modify>
+    <Modify Category="Entities" ID="1260" Name="slime_entry_1_4">
+        <SetAttr Re_FlickerOffIntensity="0" Re_Intensity="4" Re_Radius="15.9558" Re_SourceRadius="0" />
     </Modify>
     <Modify Category="Entities" ID="1261" Name="PointLight_30">
         <SetAttr RendererMask="1" />
@@ -401,14 +452,20 @@
     <Modify Category="Entities" ID="1332" Name="PointLight_32">
         <SetAttr RendererMask="1" />
     </Modify>
+    <Modify Category="Entities" ID="1335" Name="Altar_2_LightPoint_3">
+        <SetAttr Re_FlickerOffIntensity="0" Re_Intensity="7" Re_Radius="11.8501" Re_SourceRadius="0" />
+    </Modify>
     <Modify Category="Entities" ID="1360" Name="PointLight_35">
         <SetAttr RendererMask="1" />
     </Modify>
     <Modify Category="Entities" ID="1363" Name="Altar_1_LightPoint_3">
-        <SetAttr Re_Intensity="6.5" Re_Radius="7.5" Re_SourceRadius="0" Re_FlickerOffIntensity="0" Re_CastShadows="true" />
+        <SetAttr Re_CastShadows="true" Re_FlickerOffIntensity="0" Re_Intensity="6.5" Re_Radius="7.5" Re_SourceRadius="0" />
     </Modify>
     <Modify Category="Entities" ID="1370" Name="PointLight_25">
         <SetAttr RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="1482" Name="Altar_2_LightPoint_2">
+        <SetAttr Re_FlickerOffIntensity="0" Re_Intensity="6.5" Re_Radius="11.4182" Re_SourceRadius="0" />
     </Modify>
     <Modify Category="Entities" ID="1494" Name="PointLight_18">
         <SetAttr RendererMask="1" />
@@ -446,6 +503,15 @@
     <Modify Category="Entities" ID="1647" Name="PointLight_46">
         <SetAttr RendererMask="1" />
     </Modify>
+    <Modify Category="Entities" ID="1762" Name="PointLight_11_slime">
+        <SetAttr Re_FlickerOffIntensity="0" Re_Intensity="9" Re_SourceRadius="0" />
+    </Modify>
+    <Modify Category="Entities" ID="1944" Name="Altar_2_AltarLight">
+        <SetAttr Re_FlickerOffIntensity="0" Re_Intensity="0.3" Re_SourceRadius="0" />
+    </Modify>
+    <Modify Category="Entities" ID="1952" Name="Altar_2_GroundLight">
+        <SetAttr Re_FlickerOffIntensity="0" Re_Intensity="1.5" Re_SourceRadius="0" />
+    </Modify>
     <Modify Category="Entities" ID="1956" Name="Altar_2_WallLight">
         <SetAttr RendererMask="1" />
     </Modify>
@@ -453,82 +519,16 @@
         <SetAttr RendererMask="1" />
     </Modify>
     <Modify Category="Entities" ID="1961" Name="Altar_1_GroundLight">
-        <SetAttr Re_Intensity="1.23" Re_SourceRadius="0" Re_FlickerOffIntensity="0" Re_CastShadows="true" FalloffMap="" />
-    </Modify>
-    <Modify Category="Entities" ID="1963" Name="Altar_1_HintLight">
-        <SetAttr Re_Intensity="2.5" Re_SourceRadius="0" Re_FlickerOffIntensity="0" Re_CastShadows="true" />
-    </Modify>
-    <Modify Category="Entities" ID="687" Name="PointLight_7">
-        <SetAttr Re_Intensity="9" Re_Radius="26.1506" Re_SourceRadius="0" Re_FlickerOffIntensity="0" />
-    </Modify>
-    <Modify Category="Entities" ID="759" Name="Altar_2_Light_1">
-        <SetAttr Filename="entities/lamp/candle_floor/candle_floor.ent" />
-    </Modify>
-    <Modify Category="Entities" ID="760" Name="Altar_2_Light_3">
-        <SetAttr Filename="entities/lamp/candle_floor/candle_floor.ent" />
-    </Modify>
-    <Modify Category="Entities" ID="761" Name="Altar_2_Light_2">
-        <SetAttr Filename="entities/lamp/candle_floor/candle_floor.ent" />
-    </Modify>
-    <Modify Category="Entities" ID="762" Name="Altar_2_Light_6">
-        <SetAttr Filename="entities/lamp/candle_floor/candle_floor.ent" />
-    </Modify>
-    <Modify Category="Entities" ID="763" Name="Altar_2_Light_4">
-        <SetAttr Filename="entities/lamp/candle_floor/candle_floor.ent" />
-    </Modify>
-    <Modify Category="Entities" ID="764" Name="Altar_2_LightPoint_1">
-        <SetAttr Re_Intensity="6.5" Re_Radius="11.4182" Re_SourceRadius="0" Re_FlickerOffIntensity="0" />
-    </Modify>
-    <Modify Category="Entities" ID="989" Name="Altar_1_Light_4">
-        <SetAttr Filename="entities/lamp/candle_floor/candle_floor.ent" />
-    </Modify>
-    <Modify Category="Entities" ID="990" Name="Altar_1_Light_6">
-        <SetAttr Filename="entities/lamp/candle_floor/candle_floor.ent" />
-    </Modify>
-    <Modify Category="Entities" ID="991" Name="Altar_1_Light_3">
-        <SetAttr Filename="entities/lamp/candle_floor/candle_floor.ent" />
-    </Modify>
-    <Modify Category="Entities" ID="992" Name="Altar_1_Light_1">
-        <SetAttr Filename="entities/lamp/candle_floor/candle_floor.ent" />
-    </Modify>
-    <Modify Category="Entities" ID="993" Name="Altar_1_Light_2">
-        <SetAttr Filename="entities/lamp/candle_floor/candle_floor.ent" />
-    </Modify>
-    <Modify Category="Entities" ID="1256" Name="slime_entry_5_4">
-        <SetAttr Re_Intensity="3.5" Re_Radius="12.2302" Re_SourceRadius="0" Re_FlickerOffIntensity="0" />
-    </Modify>
-    <Modify Category="Entities" ID="1257" Name="slime_entry_4_4">
-        <SetAttr Re_Intensity="4" Re_Radius="15.9558" Re_SourceRadius="0" Re_FlickerOffIntensity="0" />
-    </Modify>
-    <Modify Category="Entities" ID="1258" Name="slime_entry_3_4">
-        <SetAttr Re_Intensity="4" Re_Radius="15.9558" Re_SourceRadius="0" Re_FlickerOffIntensity="0" />
-    </Modify>
-    <Modify Category="Entities" ID="1259" Name="slime_entry_2_4">
-        <SetAttr Re_Intensity="4" Re_Radius="15.9558" Re_SourceRadius="0" Re_FlickerOffIntensity="0" />
-    </Modify>
-    <Modify Category="Entities" ID="1260" Name="slime_entry_1_4">
-        <SetAttr Re_Intensity="4" Re_Radius="15.9558" Re_SourceRadius="0" Re_FlickerOffIntensity="0" />
-    </Modify>
-    <Modify Category="Entities" ID="1335" Name="Altar_2_LightPoint_3">
-        <SetAttr Re_Intensity="7" Re_Radius="11.8501" Re_SourceRadius="0" Re_FlickerOffIntensity="0" />
-    </Modify>
-    <Modify Category="Entities" ID="1482" Name="Altar_2_LightPoint_2">
-        <SetAttr Re_Intensity="6.5" Re_Radius="11.4182" Re_SourceRadius="0" Re_FlickerOffIntensity="0" />
-    </Modify>
-    <Modify Category="Entities" ID="1762" Name="PointLight_11_slime">
-        <SetAttr Re_Intensity="9" Re_SourceRadius="0" Re_FlickerOffIntensity="0" />
-    </Modify>
-    <Modify Category="Entities" ID="1944" Name="Altar_2_AltarLight">
-        <SetAttr Re_Intensity="0.3" Re_SourceRadius="0" Re_FlickerOffIntensity="0" />
-    </Modify>
-    <Modify Category="Entities" ID="1952" Name="Altar_2_GroundLight">
-        <SetAttr Re_Intensity="1.5" Re_SourceRadius="0" Re_FlickerOffIntensity="0" />
+        <SetAttr FalloffMap="" Re_CastShadows="true" Re_FlickerOffIntensity="0" Re_Intensity="1.23" Re_SourceRadius="0" />
     </Modify>
     <Modify Category="Entities" ID="1962" Name="Altar_1_AltarLight">
-        <SetAttr Re_Intensity="0.3" Re_SourceRadius="0" Re_FlickerOffIntensity="0" />
+        <SetAttr Re_FlickerOffIntensity="0" Re_Intensity="0.3" Re_SourceRadius="0" />
+    </Modify>
+    <Modify Category="Entities" ID="1963" Name="Altar_1_HintLight">
+        <SetAttr Re_CastShadows="true" Re_FlickerOffIntensity="0" Re_Intensity="2.5" Re_SourceRadius="0" />
     </Modify>
     <Modify Category="Entities" ID="1964" Name="Altar_2_HintLight">
-        <SetAttr Re_Intensity="2.5" Re_SourceRadius="0" Re_FlickerOffIntensity="0" />
+        <SetAttr Re_FlickerOffIntensity="0" Re_Intensity="2.5" Re_SourceRadius="0" />
     </Modify>
     <Add Category="Entities">
         <AreaLight Name="Altar_2_WallLight" WorldPos="20.2714 -5.41841 -43.2987" Rotation="1.5708 1.5708 0" Scale="1 1 1" Tag="" Active="true" CastShadows="true" ShadowResolution="High" ShadowsAffectStatic="true" ShadowsAffectDynamic="true" Intensity="10" Radius="3" SourceRadius="0" FalloffMap="" Gobo="" GoboAnimMode="None" GoboAnimFrameTime="0" DiffuseColor="0 0 0 0" FlickerActive="false" FlickerOnMinLength="0" FlickerOnMaxLength="0" FlickerOnPS="" FlickerOnSound="" FlickerOffMinLength="0" FlickerOffMaxLength="0" FlickerOffPS="" FlickerOffSound="" FlickerOffColor="0 0 0 1" FlickerOffIntensity="0" FlickerFade="false" FlickerOnFadeMinLength="0" FlickerOnFadeMaxLength="0" FlickerOffFadeMinLength="0" FlickerOffFadeMaxLength="0" SourceWidth="1.34988" SourceHeight="2.2" BarnDoorAngle="0.785398" BarnDoorLength="0" SourceTexture="" RendererMask="2" />

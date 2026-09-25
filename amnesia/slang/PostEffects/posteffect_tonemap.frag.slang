@@ -12,7 +12,7 @@
 //
 // ACESFitted() below is NOT part of this pass -- it is kept for reference only.
 // The operator that actually runs is: exposure multiply, sRGB encode, optional
-// display-space Reinhard shoulder, optional chroma scale, user gamma. Tune
+// display-space peak shoulder/gamma for RT, optional chroma scale. Tune
 // `exposure` if mids read dim.
 //
 // Bindings (set 0):
@@ -22,7 +22,7 @@
 // shadowLift unused (layout); gamma (user display-gamma setting, 1.0 = exact
 // identity) applied as the final encode step — replaces the base game's SDL
 // window-brightness ramp, which was identity at 1.0 too; shoulder (1 = roll
-// highlights off above kToneMapShoulder, 0 = clip at display white like the
+// highlights off above the 0.8 display knee, 0 = clip at display white like the
 // base game's 8-bit buffer; the Standard backend uses 0); saturation (chroma
 // scale toward Rec.709 luma, sourced from kRayTracedSaturation; the Standard
 // backend uses 1.0, which this pass treats as an exact no-op).
@@ -35,6 +35,7 @@
 // multiply preserves every blend ratio.
 
 #include "../HostDefinitions.h"
+#include "../ToneMapColor.h"
 
 import Utils.Color.ColorHelpers;   // piecewise linearToSRGB(), luminance()
 
@@ -86,25 +87,6 @@ struct ToneMapPC
 [vk::push_constant]
 ToneMapPC gPushConstants HPL_PUSH_CONSTANT_REGISTER;
 
-// Highlight shoulder knee. Below it the encode is bit-exact, so the particle
-// path's sRGBToLinear/linearToSRGB round trip stays an identity for the faint
-// range those effects live in (see BlendModes.slang). Above it, a Reinhard
-// shoulder with unit slope at the knee, asymptotic to 1.0 — the output must
-// stay bounded because the image trail's fp16 EMA accumulator does not clamp
-// (posteffect_image_trail.frag.slang:33-36).
-static const float kToneMapShoulder = 0.8f;
-
-// Per channel, so a channel that reaches the shoulder first pulls the highlight
-// toward white — the usual filmic desaturation at the top, and the one place
-// this pass deliberately departs from the authored color.
-float3 softShoulder(float3 x)
-{
-    const float k = kToneMapShoulder;
-    const float r = 1.0f - k;
-    float3 over = max(x - k, 0.0f);
-    return min(x, k) + r * over / (r + over);
-}
-
 struct PSIn
 {
     [vk::location(0)] float2 v_uv : TEXCOORD0;
@@ -114,26 +96,24 @@ struct PSIn
 float4 psMain(PSIn pin) : SV_Target
 {
     float3 hdr = sourceInput.Sample(inputSampler, pin.v_uv).rgb * gPushConstants.exposure;
-    // Display-encoded sRGB. With the shoulder it rolls off into [0,1]; without
-    // it (Standard) values clip at display white exactly like the base game,
-    // so authored display terms below 1 come back bit-exact. The saturate keeps
-    // the output bounded for the display-space effects that follow.
     float3 display = max(linearToSRGB(hdr), 0.0f);
     if (gPushConstants.shoulder != 0.0f)
-        display = softShoulder(display);
-    display = saturate(display);
-    // Global chroma scale (ray-traced only; Standard pushes 1.0 and skips).
-    // Done in display space, not linear, on purpose: what is being emulated is
-    // the base game's display-space clip toward white, and a display-space lerp
-    // holds perceived brightness where a linear one visibly darkens saturated
-    // reds. See kRayTracedSaturation in Constants.h for why this lives here and
-    // not in the light data.
-    if (gPushConstants.saturation != 1.0f)
     {
-        const float y = luminance(display);
-        display = saturate(lerp(y.xxx, display, gPushConstants.saturation));
+        // RT: preserve the encoded RGB proportions through highlight roll-off
+        // and brightness adjustment. Saturation defaults to identity; keep the
+        // push-constant slot for explicit grading without changing the ABI.
+        display = toneMapRayTracedColor(display, gPushConstants.gamma);
+        if (gPushConstants.saturation != 1.0f)
+        {
+            const float y = luminance(display);
+            display = lerp(y.xxx, display, gPushConstants.saturation);
+        }
     }
-    // User gamma adjust (final): gamma 1.0 = identity, <1 darker / >1 brighter.
-    display = pow(display, (1.0f / max(gPushConstants.gamma, 1e-4f)).xxx);
-    return float4(display, 1.0f);
+    else
+    {
+        // Standard retains the legacy clip and per-channel user gamma.
+        display = pow(saturate(display),
+                      (1.0f / max(gPushConstants.gamma, 1e-4f)).xxx);
+    }
+    return float4(saturate(display), 1.0f);
 }

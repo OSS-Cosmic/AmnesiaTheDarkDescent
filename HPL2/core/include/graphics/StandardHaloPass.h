@@ -1,6 +1,7 @@
 #pragma once
 
 #include "graphics/Graphics.h"
+#include "graphics/RIBarrier.h"
 #include "graphics/RIProgram.h"
 #include "graphics/RIQuery.h"
 #include "graphics/RITexture.h"
@@ -90,12 +91,15 @@ public:
                cFrustum *frustum);
 
   // Records this frame's queries against the opaque depth, which arrives and
-  // leaves in SHADER_RESOURCE. `meshDecal` is the Decal.vert/frag program; the
-  // pass warns once and records nothing without it.
+  // leaves in `depthState`. SHADER_RESOURCE (Standard) is flipped to
+  // DEPTH_READ around the queries; a state that already admits DEPTH_READ
+  // (the hybrid renderer's read-only depth) is used as-is. `meshDecal` is the
+  // Decal.vert/frag program; the pass warns once and records nothing without it.
   void Record(cGraphics::FrameContext *frame, StandardHaloQueryState &state,
               std::span<iRenderable *> translucents, RIProgram *meshDecal,
               RITexture *depthTexture, RITextureView *depthView, uint32_t width,
-              uint32_t height, RIProgram::DescriptorBinding frameBinding, uint32_t paneSalt);
+              uint32_t height, RIProgram::DescriptorBinding frameBinding, uint32_t paneSalt,
+              RIResourceState_e depthState = RI_RESOURCE_STATE_SHADER_RESOURCE);
 
 private:
   std::vector<cBillboard *> CollectHalos(std::span<iRenderable *> translucents) const;

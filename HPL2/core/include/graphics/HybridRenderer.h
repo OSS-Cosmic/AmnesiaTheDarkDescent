@@ -8,6 +8,7 @@
 #include "graphics/Renderer.h"
 #include "graphics/RISegmentAlloc.h"
 #include "graphics/RITypes.h"
+#include "graphics/StandardHaloPass.h"
 #include "graphics/StandardHiZPass.h"
 #include "graphics/StandardShadowCullPass.h"
 #include "graphics/WaterReflectionPass.h"
@@ -76,6 +77,11 @@ private:
   std::unique_ptr<cStandardHiZPass> m_hiZ;
   std::unique_ptr<cStandardShadowCullPass> m_cull;
   bool m_cullLoaded = false;
+  // Legacy billboard halo occlusion (cStandardHaloPass), borrowed like the
+  // cull passes above. Without it every IsHalo billboard keeps the zero alpha
+  // cBillboard::SetIsHalo starts it at and its glow never draws. Queries run
+  // through m_decal (the same Decal.vert/frag program Standard uses).
+  std::unique_ptr<cStandardHaloPass> m_halo;
 
   // One candidate and one 5-word command slot per DRAW (not per renderable:
   // the mesh path emits a second draw for the cube-map variant).

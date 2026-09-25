@@ -1,8 +1,8 @@
 <EntDelta Version="1" Target="models/hand_objects/lantern/hand_lantern.ent">
-    <Modify Category="Entities" ID="3" Name="PointLight_1">
-        <SetAttr CastShadows="true" ShadowResolution="High" ShadowsAffectDynamic="true" ShadowsAffectStatic="true" WorldPos="0.0027 -0.105 0.0054" Re_Intensity="10" Re_SourceRadius="0.002" Re_FlickerOffIntensity="9.5" />
-    </Modify>
     <Modify Category="Entities" ID="2" Name="Billboard_1">
         <SetAttr WorldPos="0.0027 -0.125 0.0054" />
+    </Modify>
+    <Modify Category="Entities" ID="3" Name="PointLight_1">
+        <SetAttr CastShadows="true" Re_FlickerOffIntensity="9.5" Re_Intensity="10" Re_SourceRadius="0.002" WorldPos="0.0027 -0.105 0.0054" />
     </Modify>
 </EntDelta>

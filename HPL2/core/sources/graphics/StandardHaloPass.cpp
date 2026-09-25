@@ -141,7 +141,8 @@ void cStandardHaloPass::Record(cGraphics::FrameContext *frame,
                                RITextureView *depthView, uint32_t width,
                                uint32_t height,
                                RIProgram::DescriptorBinding frameBinding,
-                               uint32_t paneSalt) {
+                               uint32_t paneSalt,
+                               RIResourceState_e depthState) {
   if (!mpGraphics || !depthTexture || !depthView || width == 0 || height == 0)
     return;
   // One recording per frame: a second render of the same viewport state must
@@ -230,10 +231,14 @@ void cStandardHaloPass::Record(cGraphics::FrameContext *frame,
   RICmd *cmd = &mpGraphics->primary.cmds[0];
   const uint32_t queryCount = static_cast<uint32_t>(cookies.size() * 2);
   cmd->vk_d3d12_resetQueryPool(&mpGraphics->device, &slot.pool, 0, queryCount);
-  cmd->vk_d3d12_textureBarrier(
-      RITextureBarrier(depthTexture, RI_RESOURCE_STATE_SHADER_RESOURCE,
-                       RI_RESOURCE_STATE_DEPTH_READ, RI_STAGE_FRAGMENT,
-                       RI_STAGE_NONE, RI_BARRIER_ASPECT_DEPTH));
+  // A caller whose depth is already depth-test readable needs no transition;
+  // naming a different before-state would be rejected on D3D12.
+  const bool flipDepth = (depthState & RI_RESOURCE_STATE_DEPTH_READ) == 0;
+  if (flipDepth)
+    cmd->vk_d3d12_textureBarrier(
+        RITextureBarrier(depthTexture, depthState,
+                         RI_RESOURCE_STATE_DEPTH_READ, RI_STAGE_FRAGMENT,
+                         RI_STAGE_NONE, RI_BARRIER_ASPECT_DEPTH));
   RIRenderingAttachment depth = {};
   depth.view = *depthView;
   depth.loadOp = RI_ATTACHMENT_LOAD_OP_LOAD;
@@ -328,10 +333,11 @@ void cStandardHaloPass::Record(cGraphics::FrameContext *frame,
   if (recorded)
     cmd->vk_d3d12_resolveQueryPool(&mpGraphics->device, &slot.pool, 0,
                                    queryCount);
-  cmd->vk_d3d12_textureBarrier(
-      RITextureBarrier(depthTexture, RI_RESOURCE_STATE_DEPTH_READ,
-                       RI_RESOURCE_STATE_SHADER_RESOURCE, RI_STAGE_NONE,
-                       RI_STAGE_FRAGMENT, RI_BARRIER_ASPECT_DEPTH));
+  if (flipDepth)
+    cmd->vk_d3d12_textureBarrier(
+        RITextureBarrier(depthTexture, RI_RESOURCE_STATE_DEPTH_READ,
+                         depthState, RI_STAGE_NONE,
+                         RI_STAGE_FRAGMENT, RI_BARRIER_ASPECT_DEPTH));
 }
 
 } // namespace hpl

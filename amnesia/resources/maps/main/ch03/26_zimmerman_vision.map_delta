@@ -1,17 +1,17 @@
 <MapDelta Version="1" Target="maps/main/ch03/26_zimmerman_vision.map">
     <Modify Category="Entities" ID="31" Name="PointLight_3">
-        <SetAttr Re_Intensity="50" Re_Radius="9.99891" Re_SourceRadius="0.35" Re_FlickerOffIntensity="0" />
+        <SetAttr Re_FlickerOffIntensity="0" Re_Intensity="50" Re_Radius="9.99891" Re_SourceRadius="0.35" />
     </Modify>
     <Modify Category="Entities" ID="50" Name="PointLight_6">
-        <SetAttr Re_Intensity="500" Re_Radius="12.2046" Re_SourceRadius="0.35" Re_FlickerOffIntensity="0" />
+        <SetAttr Re_FlickerOffIntensity="0" Re_Intensity="500" Re_Radius="12.2046" Re_SourceRadius="0.35" />
     </Modify>
     <Modify Category="Entities" ID="200" Name="SpotLight_1">
-        <SetAttr Re_Intensity="50" Re_Radius="44.4671" Re_SourceRadius="0.12" Re_FlickerOffIntensity="0" />
+        <SetAttr Re_FlickerOffIntensity="0" Re_Intensity="50" Re_Radius="44.4671" Re_SourceRadius="0.12" />
     </Modify>
     <Modify Category="Entities" ID="221" Name="PointLight_7">
-        <SetAttr Re_Intensity="500" Re_Radius="12.2046" Re_SourceRadius="0.35" Re_FlickerOffIntensity="0" />
+        <SetAttr Re_FlickerOffIntensity="0" Re_Intensity="500" Re_Radius="12.2046" Re_SourceRadius="0.35" />
     </Modify>
     <Modify Category="Entities" ID="434" Name="PointLight_5">
-        <SetAttr Re_Intensity="20" Re_Radius="7.20675" Re_SourceRadius="0.35" Re_FlickerOffIntensity="0" />
+        <SetAttr Re_FlickerOffIntensity="0" Re_Intensity="20" Re_Radius="7.20675" Re_SourceRadius="0.35" />
     </Modify>
 </MapDelta>

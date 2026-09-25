@@ -1,4 +1,10 @@
 <MapDelta Version="1" Target="maps/main/ch01/10_daniels_room.map">
+    <Modify Category="Entities" ID="250" Name="SpotLight_2">
+        <SetAttr Re_FlickerOffIntensity="0" Re_Intensity="15" Re_Radius="29.0707" Re_SourceRadius="0.12" />
+    </Modify>
+    <Modify Category="Entities" ID="561" Name="SpotLight_3">
+        <SetAttr Re_FlickerOffIntensity="0" Re_Intensity="15" Re_Radius="26.5362" Re_SourceRadius="0.12" />
+    </Modify>
     <Modify Category="Entities" ID="562" Name="PointLight_1">
         <SetAttr RendererMask="1" />
     </Modify>
@@ -7,11 +13,5 @@
     </Modify>
     <Modify Category="Entities" ID="564" Name="PointLight_3">
         <SetAttr RendererMask="1" />
-    </Modify>
-    <Modify Category="Entities" ID="250" Name="SpotLight_2">
-        <SetAttr Re_Intensity="15" Re_Radius="29.0707" Re_SourceRadius="0.12" Re_FlickerOffIntensity="0" />
-    </Modify>
-    <Modify Category="Entities" ID="561" Name="SpotLight_3">
-        <SetAttr Re_Intensity="15" Re_Radius="26.5362" Re_SourceRadius="0.12" Re_FlickerOffIntensity="0" />
     </Modify>
 </MapDelta>

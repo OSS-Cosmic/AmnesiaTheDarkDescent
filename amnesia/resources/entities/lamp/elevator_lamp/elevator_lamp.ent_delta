@@ -43,7 +43,7 @@
         <RemoveAttr Name="Type" />
     </Modify>
     <Modify Category="Entities" ID="9" Name="PointLight_1">
-        <SetAttr CastShadows="true" ShadowResolution="Low" ShadowsAffectDynamic="false" ShadowsAffectStatic="true" WorldPos="0.001197 0.549076 -0.001197" Re_Intensity="10" Re_Radius="29.9287" Re_SourceRadius="0.08" Re_FlickerOffIntensity="0.000000" />
+        <SetAttr Re_FlickerOffIntensity="0.000000" Re_Intensity="10" Re_Radius="29.9287" Re_SourceRadius="0.08" />
     </Modify>
     <Modify Category="Entities" ID="10" Name="ParticleSystem_1">
         <RemoveAttr Name="GroupID" />

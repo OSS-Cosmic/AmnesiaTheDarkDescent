@@ -24,6 +24,7 @@
 
 #include "../HostDefinitions.h"
 #include "../Constants.h"
+#include "../RtDiffuseColor.h"
 // Vendored NRD back end, included the same way NrdPack.cs.slang pulls in the
 // front end, so the YCoCg encoding stays authoritative on both sides.
 #include "../../../HPL2/extern/NRD/Shaders/NRD.hlsli"
@@ -45,6 +46,7 @@ struct MainCompositePushConstants
 {
     uint overlayMode;
     uint hasTlas;
+    float diffuseColorExposure; // active tone-map exposure; 0 disables correction
 };
 
 [vk::push_constant]
@@ -168,7 +170,7 @@ float3 projectDecal(uint di, float3 albedo, float3 posW, float3 normalW,
     // neutral and the residual pink-blood tint of the old linear-blend
     // compromise.
     float4 srcD = float4(linearToSRGB(s.rgb), s.a) * d.color;
-    if (srcD.a < 0.01f)                                       // legacy ALPHA_REJECT
+    if (srcD.a < kDecalAlphaReject)                           // legacy ALPHA_REJECT
         return albedo;
 
     return sRGBToLinear(blendDisplaySpaceExact(d.blendMode, linearToSRGB(albedo), srcD));
@@ -322,7 +324,12 @@ void csMain(uint3 tid : SV_DispatchThreadID)
     float3 goboDiffuse = float3(0.f);
     if (wantDirect && gPushConstants.hasTlas != 0u)
         goboDiffuse = evaluateDirectGoboLighting(sd);
-    float3 finalGather = sd.albedo * (direct + diffuse + goboDiffuse) + indirectSpecular;
+    // Correct only the visible diffuse material response. The lighting buffers
+    // and bounce reflectance retain their physical linear values; specular,
+    // emission and fog are composed independently below.
+    float3 finalGather = rtDiffuseColor(sd.albedo, direct + diffuse + goboDiffuse,
+                                       gPushConstants.diffuseColorExposure)
+                       + indirectSpecular;
 
     // Emissive (illumination-map) surfaces glow regardless of the indirect
     // toggle — added on top so glowing textures aren't dark. Primary-hit

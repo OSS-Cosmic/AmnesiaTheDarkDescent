@@ -29,7 +29,7 @@ cToneMapBackendParams ResolveToneMapBackendParams(eRendererBackend aBackend,
     // Highlights roll off instead of clipping: unlike the base game there is no
     // 8-bit buffer doing it for free.
     params.mfShoulder = 1.0f;
-    // And the chroma the base game's clip destroyed gets pulled back down.
+    // Keep authored chroma; any explicit grading is applied after the peak curve.
     params.mfSaturation = kRayTracedSaturation;
     return params;
 }

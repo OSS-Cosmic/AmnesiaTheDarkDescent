@@ -1,65 +1,65 @@
 <MapDelta Version="1" Target="maps/main/ch01/04_wine_cellar_lab.map">
+    <Modify Category="Entities" ID="2287" Name="SpotLight_3">
+        <SetAttr Re_FlickerOffIntensity="0" Re_Intensity="105" Re_Radius="27.5922" Re_SourceRadius="0.12" />
+    </Modify>
+    <Modify Category="Entities" ID="2289" Name="PointLight_21">
+        <SetAttr Re_FlickerOffIntensity="0" Re_Intensity="2" Re_Radius="13.377" Re_SourceRadius="0.5" />
+    </Modify>
+    <Modify Category="Entities" ID="2290" Name="PointLight_22">
+        <SetAttr Re_FlickerOffIntensity="0" Re_Intensity="14" Re_Radius="7.39247" Re_SourceRadius="0.5" />
+    </Modify>
+    <Modify Category="Entities" ID="2629" Name="Valve_1_Light">
+        <SetAttr Re_FlickerOffIntensity="0" Re_Intensity="0" Re_SourceRadius="0" />
+    </Modify>
+    <Modify Category="Entities" ID="2630" Name="Valve_2_Light">
+        <SetAttr Re_FlickerOffIntensity="0" Re_Intensity="0" Re_SourceRadius="0" />
+    </Modify>
+    <Modify Category="Entities" ID="2631" Name="Valve_3_Light">
+        <SetAttr Re_FlickerOffIntensity="0" Re_Intensity="0" Re_SourceRadius="0" />
+    </Modify>
+    <Modify Category="Entities" ID="2632" Name="Valve_4_Light">
+        <SetAttr Re_FlickerOffIntensity="0" Re_Intensity="0" Re_SourceRadius="0" />
+    </Modify>
+    <Modify Category="Entities" ID="2633" Name="LightAcid">
+        <SetAttr Re_FlickerOffIntensity="0" Re_Intensity="0" Re_SourceRadius="0" />
+    </Modify>
     <Modify Category="Entities" ID="2634" Name="LightBurn">
         <SetAttr RendererMask="1" />
     </Modify>
-    <Modify Category="Entities" ID="3620" Name="LightBurn_3">
-        <SetAttr RendererMask="1" />
-    </Modify>
-    <Modify Category="Entities" ID="2287" Name="SpotLight_3">
-        <SetAttr Re_Intensity="105" Re_Radius="27.5922" Re_SourceRadius="0.12" Re_FlickerOffIntensity="0" />
-    </Modify>
-    <Modify Category="Entities" ID="2289" Name="PointLight_21">
-        <SetAttr Re_Intensity="2" Re_Radius="13.377" Re_SourceRadius="0.5" Re_FlickerOffIntensity="0" Re_CastShadows="true" />
-    </Modify>
-    <Modify Category="Entities" ID="2290" Name="PointLight_22">
-        <SetAttr Re_Intensity="14" Re_Radius="7.39247" Re_SourceRadius="0.5" Re_FlickerOffIntensity="0" Re_CastShadows="true" />
-    </Modify>
-    <Modify Category="Entities" ID="2629" Name="Valve_1_Light">
-        <SetAttr Re_Intensity="0" Re_SourceRadius="0" Re_FlickerOffIntensity="0" />
-    </Modify>
-    <Modify Category="Entities" ID="2630" Name="Valve_2_Light">
-        <SetAttr Re_Intensity="0" Re_SourceRadius="0" Re_FlickerOffIntensity="0" />
-    </Modify>
-    <Modify Category="Entities" ID="2631" Name="Valve_3_Light">
-        <SetAttr Re_Intensity="0" Re_SourceRadius="0" Re_FlickerOffIntensity="0" />
-    </Modify>
-    <Modify Category="Entities" ID="2632" Name="Valve_4_Light">
-        <SetAttr Re_Intensity="0" Re_SourceRadius="0" Re_FlickerOffIntensity="0" />
-    </Modify>
-    <Modify Category="Entities" ID="2633" Name="LightAcid">
-        <SetAttr Re_Intensity="0" Re_SourceRadius="0" Re_FlickerOffIntensity="0" />
-    </Modify>
     <Modify Category="Entities" ID="3086" Name="LightBurn_1">
-        <SetAttr Re_Intensity="12" Re_Radius="6.84149" Re_SourceRadius="0" Re_FlickerOffIntensity="0" />
+        <SetAttr Re_FlickerOffIntensity="0" Re_Intensity="12" Re_Radius="6.84149" Re_SourceRadius="0" />
     </Modify>
     <Modify Category="Entities" ID="3141" Name="PointLight_23">
-        <SetAttr Re_Intensity="4.5" Re_Radius="8.1034" Re_SourceRadius="0.5" Re_FlickerOffIntensity="0" Re_CastShadows="true" />
+        <SetAttr Re_FlickerOffIntensity="0" Re_Intensity="4.5" Re_Radius="8.1034" Re_SourceRadius="0.5" />
     </Modify>
     <Modify Category="Entities" ID="3167" Name="LightChemical_1">
-        <SetAttr Re_Intensity="0" Re_SourceRadius="0" Re_FlickerOffIntensity="0" />
+        <SetAttr Re_FlickerOffIntensity="0" Re_Intensity="0" Re_SourceRadius="0" />
     </Modify>
     <Modify Category="Entities" ID="3168" Name="LightChemical_2">
-        <SetAttr Re_Intensity="0" Re_SourceRadius="0" Re_FlickerOffIntensity="0" />
+        <SetAttr Re_FlickerOffIntensity="0" Re_Intensity="0" Re_SourceRadius="0" />
     </Modify>
     <Modify Category="Entities" ID="3169" Name="LightChemical_3">
-        <SetAttr Re_Intensity="0" Re_SourceRadius="0" Re_FlickerOffIntensity="0" />
+        <SetAttr Re_FlickerOffIntensity="0" Re_Intensity="0" Re_SourceRadius="0" />
     </Modify>
     <Modify Category="Entities" ID="3170" Name="LightChemical_4">
-        <SetAttr Re_Intensity="0" Re_SourceRadius="0" Re_FlickerOffIntensity="0" />
+        <SetAttr Re_FlickerOffIntensity="0" Re_Intensity="0" Re_SourceRadius="0" />
     </Modify>
     <Modify Category="Entities" ID="3190" Name="SpotLight_2">
-        <SetAttr Re_Intensity="50" Re_Radius="13.1331" Re_SourceRadius="0.2" Re_FlickerOffIntensity="0" />
+        <SetAttr Re_FlickerOffIntensity="0" Re_Intensity="50" Re_Radius="13.1331" Re_SourceRadius="0.2" />
     </Modify>
     <Modify Category="Entities" ID="3193" Name="SpotLight_4">
         <SetAttr RendererMask="1" />
     </Modify>
     <Modify Category="Entities" ID="3619" Name="LightBurn_2">
-        <SetAttr Re_Intensity="6" Re_SourceRadius="0" Re_FlickerOffIntensity="0" />
+        <SetAttr Re_FlickerOffIntensity="0" Re_Intensity="6" Re_SourceRadius="0" />
+    </Modify>
+    <Modify Category="Entities" ID="3620" Name="LightBurn_3">
+        <SetAttr RendererMask="1" />
     </Modify>
     <Modify Category="Entities" ID="3621" Name="LightBurn_4">
-        <SetAttr Re_Intensity="5" Re_SourceRadius="0" Re_FlickerOffIntensity="0" />
+        <SetAttr Re_FlickerOffIntensity="0" Re_Intensity="5" Re_SourceRadius="0" />
     </Modify>
     <Add Category="Entities">
-        <SpotLight Active="true" Aspect="1" CastShadows="false" DiffuseColor="0.35 0.5 0.35 0.4" FOV="1.74533" FalloffMap="lights/light_falloff_short_fade.tga" FlickerActive="false" FlickerFade="false" FlickerOffColor="0 0 0 1" FlickerOffFadeMaxLength="0" FlickerOffFadeMinLength="0" FlickerOffMaxLength="0" FlickerOffMinLength="0" FlickerOffPS="" FlickerOffSound="" FlickerOnFadeMaxLength="0" FlickerOnFadeMinLength="0" FlickerOnMaxLength="0" FlickerOnMinLength="0" FlickerOnPS="" FlickerOnSound="" Gobo="lights/gobo_water_001.dds" GoboAnimFrameTime="0.1" GoboAnimMode="Loop" Name="SpotLight_4" NearClipPlane="0.1" Rotation="-1.5708 0 0" Scale="1 1 1" ShadowResolution="High" ShadowsAffectDynamic="true" ShadowsAffectStatic="true" SpotFalloffMap="" Tag="" WorldPos="-15.5008 -9 35" RendererMask="2" Re_Intensity="4" Re_Radius="13.076" Re_SourceRadius="0.2" Re_FlickerOffIntensity="0" />
+        <SpotLight Name="SpotLight_4" WorldPos="-15.5008 -9 35" Rotation="-1.5708 0 0" Scale="1 1 1" RendererMask="2" Tag="" Active="true" CastShadows="false" ShadowResolution="High" ShadowsAffectStatic="true" ShadowsAffectDynamic="true" Radius="1" Re_Intensity="4" Re_Radius="13.076" Re_SourceRadius="0.2" FalloffMap="lights/light_falloff_short_fade.tga" Gobo="lights/gobo_water_001.dds" GoboAnimMode="Loop" GoboAnimFrameTime="0.1" DiffuseColor="0.35 0.5 0.35 0.4" FlickerActive="false" FlickerOnMinLength="0" FlickerOnMaxLength="0" FlickerOnPS="" FlickerOnSound="" FlickerOffMinLength="0" FlickerOffMaxLength="0" FlickerOffPS="" FlickerOffSound="" FlickerOffColor="0 0 0 1" FlickerOffRadius="0" Re_FlickerOffIntensity="0" FlickerFade="false" FlickerOnFadeMinLength="0" FlickerOnFadeMaxLength="0" FlickerOffFadeMinLength="0" FlickerOffFadeMaxLength="0" FOV="1.74533" Aspect="1" NearClipPlane="0.1" SpotFalloffMap="" />
     </Add>
 </MapDelta>

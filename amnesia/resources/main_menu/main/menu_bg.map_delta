@@ -1,0 +1,5 @@
+<MapDelta Version="1" Target="main_menu/main/menu_bg.map">
+    <Modify Category="Entities" ID="14" Name="BoxLight_1">
+        <SetAttr Re_DiffuseTintStrength="1" Re_SpecularTintStrength="0" />
+    </Modify>
+</MapDelta>

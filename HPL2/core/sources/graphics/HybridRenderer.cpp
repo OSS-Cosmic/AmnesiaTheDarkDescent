@@ -375,6 +375,7 @@ cHybridRenderer::cHybridRenderer(cGraphics *apGraphics, cResources *apResources)
 
     m_hiZ = std::make_unique<cStandardHiZPass>(mpGraphics, apResources);
     m_cull = std::make_unique<cStandardShadowCullPass>(mpGraphics, apResources);
+    m_halo = std::make_unique<cStandardHaloPass>(mpGraphics);
     // Non-fatal: without these the translucent families draw exactly as they
     // did before, just without occlusion culling.
     m_cullLoaded = m_hiZ->LoadData() && m_cull->LoadData();
@@ -665,6 +666,14 @@ void cViewport::HybridViewportState::Update(cGraphics::FrameContext *cntx,
         RI_VIEWTYPE_SHADER_RESOURCE_2D, &packedHitInfoTexture[i],
         &packedHitInfoView[i], "HybridViewportState.packedHitInfo");
 
+    // Forward-blend base — storage-only scratch the particle/translucent
+    // colour-space bracket writes on encode and reads on restore.
+    CreateViewportAttachmentTexture(
+        &pGraphics->device, renderW, renderH, cGraphics::PogoColorFormat,
+        RI_USAGE_SHADER_RESOURCE_STORAGE | RI_USAGE_SHADER_RESOURCE,
+        RI_VIEWTYPE_SHADER_RESOURCE_2D, &forwardBlendBase[i],
+        &forwardBlendBaseView[i], "HybridViewportState.forwardBlendBase");
+
     // Screen-space velocity — gbuffer MRT #2, sampled by temporal passes.
     CreateViewportAttachmentTexture(
         &pGraphics->device, renderW, renderH, cGraphics::VelocityFormat,
@@ -849,6 +858,7 @@ cViewport::HybridViewportState::~HybridViewportState() {
     pGraphics->graphicsDefer.push(velocityTexture[i]);
     pGraphics->graphicsDefer.push(decalMulTexture[i]);
     pGraphics->graphicsDefer.push(decalAddTexture[i]);
+    pGraphics->graphicsDefer.push(forwardBlendBase[i]);
 
     pGraphics->graphicsDefer.push(renderTargetView[i]);
     pGraphics->graphicsDefer.push(depthView[i]);
@@ -858,6 +868,7 @@ cViewport::HybridViewportState::~HybridViewportState() {
     pGraphics->graphicsDefer.push(velocityView[i]);
     pGraphics->graphicsDefer.push(decalMulView[i]);
     pGraphics->graphicsDefer.push(decalAddView[i]);
+    pGraphics->graphicsDefer.push(forwardBlendBaseView[i]);
 
     // Companion COLOR_ATTACHMENT views of the same images.
     pGraphics->graphicsDefer.push(renderTargetAttachmentView[i]);
@@ -2955,13 +2966,32 @@ void cHybridRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
                                     mpGraphics->frameIndex, bnd.data(), bnd.size(),
                                     VK_PIPELINE_BIND_POINT_COMPUTE);
 
+    // Use this viewport's actual exposure (camera captures can override it).
+    // Without an active tone map, keep the original linear diffuse response.
+    float diffuseColorExposure = 0.0f;
+    if (auto *postEffects = viewport->GetPostEffectComposite()) {
+      for (int i = 0; i < postEffects->GetPostEffectNum(); ++i) {
+        auto *toneMap = dynamic_cast<cPostEffect_ToneMap *>(postEffects->GetPostEffect(i));
+        if (!toneMap || !toneMap->IsActive())
+          continue;
+        cPostEffectParams_ToneMap params;
+        toneMap->GetParams(&params);
+        if (std::isfinite(params.mfExposure) && params.mfExposure > 0.0f)
+          diffuseColorExposure = params.mfExposure;
+        break;
+      }
+    }
+
     struct MainCompositePushConstants {
       uint32_t overlayMode;
       uint32_t hasTlas;
+      float diffuseColorExposure;
     };
-    static_assert(sizeof(MainCompositePushConstants) == 8);
+    static_assert(sizeof(MainCompositePushConstants) == 12);
+    static_assert(offsetof(MainCompositePushConstants, diffuseColorExposure) == 8);
     const MainCompositePushConstants push{m_overlayMode,
-                                         apWorld->GetTlas() ? 1u : 0u};
+                                         apWorld->GetTlas() ? 1u : 0u,
+                                         diffuseColorExposure};
     mpGraphics->primary.cmds[0].vk_d3d12_setPushConstants(
         &mpGraphics->device, m_composite, 0, sizeof(push), &push);
 
@@ -3403,7 +3433,7 @@ void cHybridRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
   }
 
   // --------------------------------------------------------------------
-  // Remove only the backend's extra gamma from forward contributions.
+  // Remove only the backend's extra peak gamma from forward contributions.
   // The ratio depends on this viewport's active tone map, not saved settings;
   // editors/menus without an active tone map need no compensation.
   float particleGammaRatio = 1.0f;
@@ -3435,12 +3465,27 @@ void cHybridRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
         toLinear ? RI_STAGE_NONE : RI_STAGE_FRAGMENT, RI_STAGE_COMPUTE));
     m_particleColorSpace.bindComputePipeline(
         &mpGraphics->device, cmd, HASH_INITIAL_VALUE, "ParticleColorSpace");
-    RIProgram::DescriptorBinding binding{
-        "gParticleScene", RIDescriptor::storageImage(
-            &mpGraphics->device,
-            state.renderTargetView[mpGraphics->swapchainIndex].Get())};
+    // The base image's contents only live between one encode and its
+    // restore, so every encode discards it (after the previous bracket's
+    // restore has finished reading it).
+    auto *base = state.forwardBlendBase[mpGraphics->swapchainIndex].Get();
+    if (!toLinear)
+      cmd->vk_d3d12_textureBarrier(RITextureBarrier(
+          base, RI_RESOURCE_STATE_UNDEFINED, RI_RESOURCE_STATE_STORAGE_WRITE,
+          RI_STAGE_COMPUTE, RI_STAGE_COMPUTE));
+    RIProgram::DescriptorBinding bindings[2] = {
+        RIProgram::DescriptorBinding(
+            "gParticleScene",
+            RIDescriptor::storageImage(
+                &mpGraphics->device,
+                state.renderTargetView[mpGraphics->swapchainIndex].Get())),
+        RIProgram::DescriptorBinding(
+            "gParticleSceneBase",
+            RIDescriptor::storageImage(
+                &mpGraphics->device,
+                state.forwardBlendBaseView[mpGraphics->swapchainIndex].Get()))};
     m_particleColorSpace.bindDescriptors(
-        &mpGraphics->device, cmd, mpGraphics->frameIndex, &binding, 1,
+        &mpGraphics->device, cmd, mpGraphics->frameIndex, bindings, 2,
         VK_PIPELINE_BIND_POINT_COMPUTE);
     struct ColorSpacePush {
       uint32_t toLinear;
@@ -3453,12 +3498,43 @@ void cHybridRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
         m_particleColorSpace, 0, sizeof(direction), &direction);
     cmd->dispatch(&mpGraphics->device, (renderWidth + 15u) / 16u,
                   (renderHeight + 15u) / 16u, 1u);
+    if (!toLinear)
+      cmd->vk_d3d12_textureBarrier(RITextureBarrier(
+          base, RI_RESOURCE_STATE_STORAGE_WRITE, RI_RESOURCE_STATE_STORAGE_READ,
+          RI_STAGE_COMPUTE, RI_STAGE_COMPUTE));
     cmd->vk_d3d12_textureBarrier(RITextureBarrier(
         target, RI_RESOURCE_STATE_GENERAL,
         toLinear ? RI_RESOURCE_STATE_SHADER_RESOURCE
                  : RI_RESOURCE_STATE_RENDER_TARGET_READ,
         RI_STAGE_COMPUTE, toLinear ? RI_STAGE_FRAGMENT : RI_STAGE_NONE));
   };
+
+  // Legacy billboard halos: occluded-texel counts of each halo's source box
+  // set its glow alpha (cStandardHaloPass, shared with Standard). Resolved
+  // before the translucent passes so this frame draws the newest alpha. The
+  // queries test against the final opaque depth in its read-only state.
+  if (m_halo) {
+    if (!state.haloQueries) {
+      state.haloQueries = std::make_shared<StandardHaloQueryState>();
+      state.haloQueries->graphics = mpGraphics;
+    }
+    const std::span<iRenderable *> haloCandidates =
+        m_rendererList.GetRenderableItems(eRenderListType_Translucent);
+    m_halo->Resolve(*state.haloQueries, haloCandidates, apFrustum);
+    flipDepthToReadOnly();
+    RIProgram::DescriptorBinding haloFrame;
+    haloFrame.handle = DescriptorBindingID::Create("gPerFrame");
+    mpGraphics->UpdateFrameUBO(&haloFrame.descriptor, &perFrame, sizeof(perFrame));
+    const uint32_t paneSalt =
+        hash_u64(HASH_INITIAL_VALUE, reinterpret_cast<uintptr_t>(viewport));
+    m_halo->Record(cntx, *state.haloQueries, haloCandidates, &m_decal,
+                   state.depthTextures[mpGraphics->swapchainIndex].Get(),
+                   state.depthView[mpGraphics->swapchainIndex].Get(),
+                   renderWidth, renderHeight, haloFrame, paneSalt,
+                   static_cast<RIResourceState_e>(
+                       RI_RESOURCE_STATE_DEPTH_READ |
+                       RI_RESOURCE_STATE_SHADER_RESOURCE));
+  }
 
   // Translucent pass — two sub-passes, both into the pogo "read" half:
   //   1. Particle pass (this block) — particle emitters only.
@@ -4179,6 +4255,9 @@ cHybridRenderer::~cHybridRenderer() {
   if (m_cull)
     m_cull->DestroyData();
   m_cull.reset();
+  if (m_halo)
+    m_halo->DestroyData();
+  m_halo.reset();
   m_cullLoaded = false;
 
   // Staged indirect buffers: both halves (host staging + device copy).

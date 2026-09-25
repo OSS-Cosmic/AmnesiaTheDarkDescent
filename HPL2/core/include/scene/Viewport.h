@@ -303,6 +303,18 @@ public:
     // HiZPyramid.h. Built from the G-buffer's depth, which is final opaque
     // depth: nothing writes depth again before the translucent families.
     HiZPyramid hiZ;
+    // Billboard halo occlusion queries (cStandardHaloPass), created on first
+    // use. shared_ptr so the defaulted move carries it and its destructor
+    // defers the query pools past the in-flight frames.
+    std::shared_ptr<StandardHaloQueryState> haloQueries;
+
+    // Forward-blend base: the display-encoded scene as it was when a forward
+    // bracket opened (ParticleColorSpace.cs.slang). The restore caps each
+    // channel the blended passes pushed past display white, the way the base
+    // game's 8-bit target clipped them, without touching scene HDR.
+    RISharedPointer<RITexture> forwardBlendBase[RI_MAX_SWAPCHAIN_IMAGES];
+    RISharedPointer<RITextureView> forwardBlendBaseView[RI_MAX_SWAPCHAIN_IMAGES];
+
     // Lazy full-resolution nearest water view-depth, used only by particles.
 
     RISharedPointer<RITexture> visibilityTexture[RI_MAX_SWAPCHAIN_IMAGES];

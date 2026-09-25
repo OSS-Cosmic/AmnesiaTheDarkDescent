@@ -225,7 +225,6 @@
         <RemoveAttr Name="Type" />
     </Modify>
     <Modify Category="Entities" ID="48" Name="Billboard_2">
-        <SetAttr ConnectLight="PointLight_1" />
         <RemoveAttr Name="Axis" />
         <RemoveAttr Name="GroupID" />
         <RemoveAttr Name="Scale" />
@@ -330,7 +329,7 @@
         <RemoveAttr Name="Type" />
     </Modify>
     <Modify Category="Entities" ID="63" Name="PointLight_1">
-        <SetAttr CastShadows="true" ShadowResolution="Low" ShadowsAffectDynamic="true" ShadowsAffectStatic="true" WorldPos="1.73196 -5.49423 -1.74373" Radius="6" FlickerOffRadius="5" Re_Intensity="1.3" Re_Radius="10" Re_SourceRadius="0.035" Re_FlickerOffIntensity="1.2" />
+        <SetAttr CastShadows="true" FlickerOffRadius="5" Radius="6" Re_FlickerOffIntensity="1.2" Re_Intensity="1.3" Re_Radius="10" Re_SourceRadius="0.035" ShadowResolution="Low" WorldPos="1.73196 -5.49423 -1.74373" />
     </Modify>
     <Add Category="Entities">
         <PointLight Name="PointLight_2" WorldPos="0.00530386 -5.49423 -2.46741" Rotation="0 0 0" Scale="1 1 1" Tag="" Active="true" CastShadows="true" ShadowResolution="Low" ShadowsAffectStatic="true" ShadowsAffectDynamic="true" FalloffMap="" Gobo="" GoboAnimMode="None" GoboAnimFrameTime="0" DiffuseColor="0.45 0.25 0 1" FlickerActive="false" FlickerOnMinLength="0" FlickerOnMaxLength="1" FlickerOnPS="" FlickerOnSound="" FlickerOffMinLength="0" FlickerOffMaxLength="0" FlickerOffPS="" FlickerOffSound="" FlickerOffColor="0.4 0.2 0 1" FlickerFade="false" FlickerOnFadeMinLength="0.5" FlickerOnFadeMaxLength="1" FlickerOffFadeMinLength="0.5" FlickerOffFadeMaxLength="1" Radius="6" FlickerOffRadius="5" Re_Intensity="1.3" Re_Radius="10" Re_SourceRadius="0.035" Re_FlickerOffIntensity="1.2" />

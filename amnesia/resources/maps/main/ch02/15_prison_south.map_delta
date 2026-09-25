@@ -59,14 +59,23 @@
     <Modify Category="Entities" ID="1302" Name="PointLight_5">
         <SetAttr RendererMask="1" />
     </Modify>
+    <Modify Category="Entities" ID="1492" Name="SpotLight_1">
+        <SetAttr Re_FlickerOffIntensity="0" Re_Intensity="50" Re_Radius="26.7681" Re_SourceRadius="0.12" />
+    </Modify>
     <Modify Category="Entities" ID="1493" Name="PointLight_8">
         <SetAttr RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="1498" Name="PointLight_9">
+        <SetAttr Re_FlickerOffIntensity="0" Re_Intensity="1.5" Re_Radius="4.66065" Re_SourceRadius="0.35" />
     </Modify>
     <Modify Category="Entities" ID="1501" Name="SpotLight_3">
         <SetAttr RendererMask="1" />
     </Modify>
     <Modify Category="Entities" ID="1512" Name="SpotLight_4">
         <SetAttr RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="1513" Name="PointLight_10">
+        <SetAttr Re_FlickerOffIntensity="0" Re_Intensity="3" Re_Radius="5.67738" Re_SourceRadius="0.35" />
     </Modify>
     <Modify Category="Entities" ID="1515" Name="SpotLight_5">
         <SetAttr RendererMask="1" />
@@ -76,6 +85,9 @@
     </Modify>
     <Modify Category="Entities" ID="1526" Name="SpotLight_9">
         <SetAttr RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="1574" Name="SpotLight_7">
+        <SetAttr Re_FlickerOffIntensity="0" Re_Intensity="10" Re_SourceRadius="0" />
     </Modify>
     <Modify Category="Entities" ID="1678" Name="PointLight_4">
         <SetAttr RendererMask="1" />
@@ -107,6 +119,12 @@
     <Modify Category="Entities" ID="1756" Name="torch_static01_3">
         <SetAttr RendererMask="1" />
     </Modify>
+    <Modify Category="Entities" ID="1758" Name="PointLight_17">
+        <SetAttr Re_FlickerOffIntensity="0" Re_Intensity="5" Re_Radius="5.73191" Re_SourceRadius="0.35" />
+    </Modify>
+    <Modify Category="Entities" ID="1760" Name="PointLight_18">
+        <SetAttr Re_FlickerOffIntensity="0" Re_Intensity="1" Re_Radius="5.13066" Re_SourceRadius="0.35" />
+    </Modify>
     <Modify Category="Entities" ID="1761" Name="PointLight_19">
         <SetAttr RendererMask="1" />
     </Modify>
@@ -128,6 +146,9 @@
     <Modify Category="Entities" ID="2061" Name="torch_static0b2_16">
         <SetAttr RendererMask="1" />
     </Modify>
+    <Modify Category="Entities" ID="2064" Name="PointLight_16">
+        <SetAttr Re_FlickerOffIntensity="0" Re_Intensity="5" Re_SourceRadius="0" />
+    </Modify>
     <Modify Category="Entities" ID="2065" Name="PointLight_20">
         <SetAttr RendererMask="1" />
     </Modify>
@@ -142,6 +163,9 @@
     </Modify>
     <Modify Category="Entities" ID="2069" Name="PointLight_24">
         <SetAttr RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="2070" Name="PointLight_25">
+        <SetAttr Re_FlickerOffIntensity="0" Re_Intensity="6.5" Re_SourceRadius="0" />
     </Modify>
     <Modify Category="Entities" ID="2071" Name="PointLight_26">
         <SetAttr RendererMask="1" />
@@ -161,55 +185,31 @@
     <Modify Category="Entities" ID="2076" Name="PointLight_31">
         <SetAttr RendererMask="1" />
     </Modify>
+    <Modify Category="Entities" ID="2077" Name="PointLight_32">
+        <SetAttr Re_FlickerOffIntensity="0" Re_Intensity="6.5" Re_SourceRadius="0" />
+    </Modify>
+    <Modify Category="Entities" ID="2175" Name="SpotLight_2">
+        <SetAttr Re_FlickerOffIntensity="0" Re_Intensity="50" Re_Radius="19.3923" Re_SourceRadius="0.12" />
+    </Modify>
     <Modify Category="Entities" ID="2177" Name="PointLight_33">
         <SetAttr RendererMask="1" />
     </Modify>
-    <Modify Category="Entities" ID="2379" Name="PointLight_38">
-        <SetAttr RendererMask="1" />
-    </Modify>
-    <Modify Category="Entities" ID="1492" Name="SpotLight_1">
-        <SetAttr Re_Intensity="50" Re_Radius="26.7681" Re_SourceRadius="0.12" Re_FlickerOffIntensity="0" />
-    </Modify>
-    <Modify Category="Entities" ID="1498" Name="PointLight_9">
-        <SetAttr Re_Intensity="1.5" Re_Radius="4.66065" Re_SourceRadius="0.35" Re_FlickerOffIntensity="0" />
-    </Modify>
-    <Modify Category="Entities" ID="1513" Name="PointLight_10">
-        <SetAttr Re_Intensity="3" Re_Radius="5.67738" Re_SourceRadius="0.35" Re_FlickerOffIntensity="0" />
-    </Modify>
-    <Modify Category="Entities" ID="1574" Name="SpotLight_7">
-        <SetAttr Re_Intensity="10" Re_SourceRadius="0" Re_FlickerOffIntensity="0" />
-    </Modify>
-    <Modify Category="Entities" ID="1758" Name="PointLight_17">
-        <SetAttr Re_Intensity="5" Re_Radius="5.73191" Re_SourceRadius="0.35" Re_FlickerOffIntensity="0" />
-    </Modify>
-    <Modify Category="Entities" ID="1760" Name="PointLight_18">
-        <SetAttr Re_Intensity="1" Re_Radius="5.13066" Re_SourceRadius="0.35" Re_FlickerOffIntensity="0" />
-    </Modify>
-    <Modify Category="Entities" ID="2064" Name="PointLight_16">
-        <SetAttr Re_Intensity="5" Re_SourceRadius="0" Re_FlickerOffIntensity="0" />
-    </Modify>
-    <Modify Category="Entities" ID="2070" Name="PointLight_25">
-        <SetAttr Re_Intensity="6.5" Re_SourceRadius="0" Re_FlickerOffIntensity="0" />
-    </Modify>
-    <Modify Category="Entities" ID="2077" Name="PointLight_32">
-        <SetAttr Re_Intensity="6.5" Re_SourceRadius="0" Re_FlickerOffIntensity="0" />
-    </Modify>
-    <Modify Category="Entities" ID="2175" Name="SpotLight_2">
-        <SetAttr Re_Intensity="50" Re_Radius="19.3923" Re_SourceRadius="0.12" Re_FlickerOffIntensity="0" />
-    </Modify>
     <Modify Category="Entities" ID="2184" Name="PointLight_34">
-        <SetAttr Re_Intensity="3" Re_Radius="6.6101" Re_SourceRadius="0.35" Re_FlickerOffIntensity="0" />
+        <SetAttr Re_FlickerOffIntensity="0" Re_Intensity="3" Re_Radius="6.6101" Re_SourceRadius="0.35" />
     </Modify>
     <Modify Category="Entities" ID="2201" Name="PointLight_35">
-        <SetAttr Re_Intensity="3" Re_Radius="6.6101" Re_SourceRadius="0.35" Re_FlickerOffIntensity="0" />
+        <SetAttr Re_FlickerOffIntensity="0" Re_Intensity="3" Re_Radius="6.6101" Re_SourceRadius="0.35" />
     </Modify>
     <Modify Category="Entities" ID="2202" Name="PointLight_36">
-        <SetAttr Re_Intensity="4.5" Re_Radius="5.43547" Re_SourceRadius="0.35" Re_FlickerOffIntensity="0" />
+        <SetAttr Re_FlickerOffIntensity="0" Re_Intensity="4.5" Re_Radius="5.43547" Re_SourceRadius="0.35" />
     </Modify>
     <Modify Category="Entities" ID="2203" Name="SpotLight_8">
-        <SetAttr Re_Intensity="50" Re_Radius="19.3923" Re_SourceRadius="0.12" Re_FlickerOffIntensity="0" />
+        <SetAttr Re_FlickerOffIntensity="0" Re_Intensity="50" Re_Radius="19.3923" Re_SourceRadius="0.12" />
     </Modify>
     <Modify Category="Entities" ID="2271" Name="PointLight_37">
+        <SetAttr RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="2379" Name="PointLight_38">
         <SetAttr RendererMask="1" />
     </Modify>
     <Add Category="Entities">
@@ -353,8 +353,6 @@
                 <Var Name="ConnectionLightUseSpec" Value="false" />
             </UserVariables>
         </Entity>
-    </Add>
-    <Add Category="Entities">
-        <PointLight Active="true" CastShadows="false" DiffuseColor="0.646484 0.768005 1 0.2" FalloffMap="" FlickerActive="false" FlickerFade="false" FlickerOffColor="0 0 0 1" FlickerOffFadeMaxLength="0" FlickerOffFadeMinLength="0" FlickerOffMaxLength="0" FlickerOffMinLength="0" FlickerOffPS="" FlickerOffSound="" FlickerOnFadeMaxLength="0" FlickerOnFadeMinLength="0" FlickerOnMaxLength="0" FlickerOnMinLength="0" FlickerOnPS="" FlickerOnSound="" Gobo="" GoboAnimFrameTime="0" GoboAnimMode="None" Group="0" Name="PointLight_37" Rotation="0 0 0" Scale="1 1 1" ShadowResolution="High" ShadowsAffectDynamic="true" ShadowsAffectStatic="true" Tag="" WorldPos="70 5.25 18.324" RendererMask="2" Re_Intensity="0.5" Re_Radius="3.39323" Re_SourceRadius="0.3393" Re_FlickerOffIntensity="0" />
+        <PointLight Active="true" CastShadows="false" DiffuseColor="0.646484 0.768005 1 0.2" FalloffMap="" FlickerActive="false" FlickerFade="false" FlickerOffColor="0 0 0 1" FlickerOffFadeMaxLength="0" FlickerOffFadeMinLength="0" FlickerOffMaxLength="0" FlickerOffMinLength="0" FlickerOffPS="" FlickerOffSound="" FlickerOnFadeMaxLength="0" FlickerOnFadeMinLength="0" FlickerOnMaxLength="0" FlickerOnMinLength="0" FlickerOnPS="" FlickerOnSound="" Gobo="" GoboAnimFrameTime="0" GoboAnimMode="None" Name="PointLight_37" Rotation="0 0 0" Scale="1 1 1" ShadowResolution="High" ShadowsAffectDynamic="true" ShadowsAffectStatic="true" Tag="" WorldPos="70 5.25 18.324" RendererMask="2" Re_Intensity="0.5" Re_Radius="3.39323" Re_SourceRadius="0.3393" Re_FlickerOffIntensity="0" />
     </Add>
 </MapDelta>

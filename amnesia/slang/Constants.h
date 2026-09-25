@@ -253,6 +253,16 @@ SHARED_CONST float kSoftParticleFadeDistance = 0.35f;
 // nonzero values in the empty region, which a `<= 0` test would let through.
 SHARED_CONST float kParticleAlphaDiscard = 0.01f;
 
+// Decal alpha rejection, from the original RendererDeferred::RenderDecals
+// (SetAlphaMode(Trans) + SetAlphaLimit(0.01) around every decal draw: a
+// fixed-function alpha test on texture * vertex colour). As with particles,
+// the Mul/MulX2/Add blends never read alpha, so this test is the only thing
+// that cuts a decal's shape: retail dirt_coal.dds is uniformly dark RGB with
+// the stain in alpha and reads as a dark square without it. Shared by the
+// mesh-decal raster (Decal.frag) and both clustered projections
+// (MainCompositePass projectDecal, StandardDecals standardDecalBlend).
+SHARED_CONST float kDecalAlphaReject = 0.01f;
+
 // Blend-mode value families (see BlendModes.slang for the shared math).
 // Two DIFFERENT encodings of the same modes — do not mix them up:
 //   1. kBlendMode*: the push-constant / pipeline scheme. Mirrors the
@@ -364,7 +374,7 @@ SHARED_CONST float kSceneExposure = 2.5f;
 // multiply is its exact inverse and the base game's look comes back bit-for-bit;
 // the ray-traced path composites physically (color * intensity / (d^2 +
 // sourceRadiusSq)) with only that same x2.5 to lift it, and its highlight
-// shoulder compresses everything above kToneMapShoulder rather than clipping.
+// shoulder compresses the display peak above 0.8 rather than clipping.
 //
 // This closes the gap at the display encode. It deliberately does NOT touch
 // kSceneExposure: the Standard blend paths (BlendModes.slang
@@ -375,7 +385,7 @@ SHARED_CONST float kSceneExposure = 2.5f;
 //
 // A display-side compensation, not a diagnosis: if the backends drift again
 // after a lighting change, the cause is upstream in the light model, not here.
-SHARED_CONST float kRayTracedGammaBias = 0.4f;
+SHARED_CONST float kRayTracedGammaBias = 0.2f;
 
 // Extra display-gamma bias for the gameplay light probe ONLY, on top of
 // kRayTracedGammaBias (LuxLightProbeBrightness.h). The probe level goes through
@@ -384,33 +394,11 @@ SHARED_CONST float kRayTracedGammaBias = 0.4f;
 // 0 = probe matches the screen exactly.
 SHARED_CONST float kLightProbeGammaBias = 2.0f;
 
-// Global chroma scale applied to the RAY-TRACED backend ONLY, in display space,
-// in PostEffect_ToneMap.cpp -- pushed in, so the shader sees one scalar and
-// knows nothing about backends. 1.0 = identity, < 1 pulls color toward its
-// Rec.709 luma.
-//
-// The ray-traced path composites physical radiance (color * intensity / (d^2 +
-// sourceRadiusSq)), so an authored light tint multiplied by a saturated albedo
-// keeps all of its chroma. The base game never showed that chroma: it
-// accumulated in display space into an 8-bit buffer that clipped toward white.
-// kToneMapShoulder recovers part of that above the knee; this recovers the
-// mid-tones below it, which is where the warm over-saturation actually lives.
-//
-// This replaces an earlier attempt that retained 65% of each light's chroma at
-// RT upload (RayTracedLightColorToLinear). That baked an art-direction choice
-// into the light data, where it was invisible to anyone reading a light's
-// authored color; lights now upload their unmodified color and the correction
-// happens once, here, at the display encode.
-//
-// Standard is pinned at 1.0 and must stay there: it emits
-// sRGBToLinear(display) / kSceneExposure (BlendModes.slang
-// encodeStandardBlendSource, StandardLighting.slang, Standard.environment.3d)
-// on the assumption that the tonemap is its exact inverse, and any chroma
-// change here breaks that pair and the base game's bit-for-bit look.
-//
-// A display-side compensation, not a diagnosis: if the backends drift again
-// after a lighting change, the cause is upstream in the light model, not here.
-SHARED_CONST float kRayTracedSaturation = 0.80f;
+// Optional RT display-space chroma grading. Keep identity for light authoring:
+// the peak-based shoulder/gamma preserves encoded RGB ratios, so a blanket
+// desaturation would unnecessarily change both light and material colors.
+// Standard always uses 1.0.
+SHARED_CONST float kRayTracedSaturation = 1.0f;
 
 // How much wave turbulence the REFLECTION bounce normal keeps (the refraction
 // bounce always uses the full wave normal). The RT reflection is a sharp mirror

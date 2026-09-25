@@ -4,6 +4,6 @@
         <SetAttr Rotation="-6.35733e-08 0.000491857 1.19755e-09" />
     </Modify>
     <Modify Category="Entities" ID="4" Name="PointLight_1">
-        <SetAttr CastShadows="true" ShadowResolution="High" ShadowsAffectDynamic="true" ShadowsAffectStatic="true" WorldPos="-0.005528 0.935486 0.44989" Re_Intensity="3.5" Re_Radius="26.4528" Re_SourceRadius="0.08" Re_FlickerOffIntensity="1" FlickerOnMaxLength="0.7" />
+        <SetAttr CastShadows="true" FlickerOnMaxLength="0.7" Re_FlickerOffIntensity="1" Re_Intensity="3.5" Re_Radius="26.4528" Re_SourceRadius="0.08" WorldPos="-0.005528 0.935486 0.44989" />
     </Modify>
 </EntDelta>

@@ -11,6 +11,33 @@
     <Modify Category="Decals" ID="2216" Name="chalk_letters_1">
         <SetAttr Material="textures/ptest/decals/chalk_letters.mat" />
     </Modify>
+    <Modify Category="Entities" ID="203" Name="spotthunder_1">
+        <SetAttr Re_FlickerOffIntensity="0" Re_Intensity="4" Re_Radius="15.9558" Re_SourceRadius="0.1" />
+    </Modify>
+    <Modify Category="Entities" ID="204" Name="pointthunder_1">
+        <SetAttr RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="205" Name="ambthunder_1">
+        <SetAttr Re_FlickerOffIntensity="0" Re_Intensity="5" Re_Radius="10.0116" Re_SourceRadius="0" />
+    </Modify>
+    <Modify Category="Entities" ID="206" Name="ambthunder_2">
+        <SetAttr Re_FlickerOffIntensity="0" Re_Intensity="8" Re_Radius="12.6697" Re_SourceRadius="0" />
+    </Modify>
+    <Modify Category="Entities" ID="215" Name="spotthunder_2">
+        <SetAttr Re_FlickerOffIntensity="0" Re_Intensity="15" Re_Radius="14.841" Re_SourceRadius="0" />
+    </Modify>
+    <Modify Category="Entities" ID="227" Name="pointthunder_4">
+        <SetAttr Re_FlickerOffIntensity="0" Re_Intensity="2" Re_Radius="7.27306" Re_SourceRadius="0" />
+    </Modify>
+    <Modify Category="Entities" ID="354" Name="spotthunder_5">
+        <SetAttr Re_FlickerOffIntensity="0" Re_Intensity="15" Re_Radius="21.8534" Re_SourceRadius="0.1" />
+    </Modify>
+    <Modify Category="Entities" ID="357" Name="pointthunder_5">
+        <SetAttr Re_FlickerOffIntensity="0" Re_Intensity="4" Re_Radius="10.2978" Re_SourceRadius="0" />
+    </Modify>
+    <Modify Category="Entities" ID="358" Name="ambthunder_3">
+        <SetAttr Re_FlickerOffIntensity="0" Re_Intensity="9" Re_Radius="13.4394" Re_SourceRadius="0" />
+    </Modify>
     <Modify Category="Entities" ID="391" Name="PointLight_8">
         <SetAttr RendererMask="1" />
     </Modify>
@@ -23,9 +50,8 @@
     <Modify Category="Entities" ID="461" Name="PointLight_12">
         <SetAttr RendererMask="1" />
     </Modify>
-    <!-- Weak neutral RT fill for the sofa/table alcove. Legacy fill tuning is unchanged. -->
     <Modify Category="Entities" ID="701" Name="PointLight_13">
-        <SetAttr RendererMask="3" Re_DiffuseColor="0.75 0.75 0.75 0" Re_Intensity="0.35" Re_Radius="6" Re_SourceRadius="1" Re_CastShadows="true" />
+        <SetAttr Re_CastShadows="true" Re_DiffuseColor="0.75 0.75 0.75 0" Re_Intensity="0.35" Re_Radius="6" Re_SourceRadius="1" RendererMask="3" />
     </Modify>
     <Modify Category="Entities" ID="702" Name="PointLight_14">
         <SetAttr RendererMask="1" />
@@ -54,8 +80,32 @@
     <Modify Category="Entities" ID="890" Name="PointLight_21">
         <SetAttr RendererMask="1" />
     </Modify>
+    <Modify Category="Entities" ID="891" Name="SpotLight_3">
+        <SetAttr Re_FlickerOffIntensity="0" Re_Intensity="15" Re_Radius="15.4164" Re_SourceRadius="0.12" />
+    </Modify>
+    <Modify Category="Entities" ID="892" Name="PointLight_22">
+        <SetAttr Re_FlickerOffIntensity="0" Re_Intensity="7" Re_Radius="9.26288" Re_SourceRadius="0.35" />
+    </Modify>
+    <Modify Category="Entities" ID="893" Name="PointLight_23">
+        <SetAttr Re_FlickerOffIntensity="0" Re_Intensity="3" Re_Radius="11.9373" Re_SourceRadius="0.35" />
+    </Modify>
     <Modify Category="Entities" ID="1122" Name="PointLight_24">
         <SetAttr RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="1123" Name="PointLight_25">
+        <SetAttr Re_FlickerOffIntensity="0" Re_Intensity="5" Re_Radius="11.516" Re_SourceRadius="0" />
+    </Modify>
+    <Modify Category="Entities" ID="1174" Name="pointthunder_3">
+        <SetAttr Re_FlickerOffIntensity="0" Re_Intensity="2" Re_Radius="7.27306" Re_SourceRadius="0" />
+    </Modify>
+    <Modify Category="Entities" ID="1175" Name="pointthunder_2">
+        <SetAttr Re_FlickerOffIntensity="0" Re_Intensity="2" Re_Radius="7.27306" Re_SourceRadius="0" />
+    </Modify>
+    <Modify Category="Entities" ID="1176" Name="spotthunder_3">
+        <SetAttr Re_FlickerOffIntensity="0" Re_Intensity="15" Re_Radius="17.841" Re_SourceRadius="0.1" />
+    </Modify>
+    <Modify Category="Entities" ID="1279" Name="spotthunder_4">
+        <SetAttr Re_FlickerOffIntensity="0" Re_Intensity="15" Re_Radius="17.8409" Re_SourceRadius="0.1" />
     </Modify>
     <Modify Category="Entities" ID="1281" Name="PointLight_26">
         <SetAttr RendererMask="1" />
@@ -63,8 +113,23 @@
     <Modify Category="Entities" ID="1305" Name="PointLight_27">
         <SetAttr RendererMask="1" />
     </Modify>
+    <Modify Category="Entities" ID="1634" Name="PointLight_28">
+        <SetAttr Re_FlickerOffIntensity="0" Re_Intensity="5" Re_SourceRadius="0" />
+    </Modify>
     <Modify Category="Entities" ID="1635" Name="PointLight_29">
         <SetAttr RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="2010" Name="pointthunder_6">
+        <SetAttr Re_FlickerOffIntensity="0" Re_Intensity="1.5" Re_Radius="9.76289" Re_SourceRadius="0" />
+    </Modify>
+    <Modify Category="Entities" ID="2011" Name="pointthunder_7">
+        <SetAttr Re_FlickerOffIntensity="0" Re_Intensity="2" Re_Radius="11.2769" Re_SourceRadius="0" />
+    </Modify>
+    <Modify Category="Entities" ID="2012" Name="pointthunder_8">
+        <SetAttr Re_FlickerOffIntensity="0" Re_Intensity="2" Re_Radius="11.2769" Re_SourceRadius="0" />
+    </Modify>
+    <Modify Category="Entities" ID="2013" Name="pointthunder_9">
+        <SetAttr Re_FlickerOffIntensity="0" Re_Intensity="2" Re_Radius="11.2769" Re_SourceRadius="0" />
     </Modify>
     <Modify Category="Entities" ID="2189" Name="PointLight_1">
         <SetAttr RendererMask="1" />
@@ -75,73 +140,7 @@
     <Modify Category="Entities" ID="2207" Name="PointLight_30">
         <SetAttr RendererMask="1" />
     </Modify>
-    <Modify Category="Entities" ID="203" Name="spotthunder_1">
-        <SetAttr Re_Intensity="4" Re_Radius="15.9558" Re_SourceRadius="0.1" Re_FlickerOffIntensity="0" />
-    </Modify>
-    <Modify Category="Entities" ID="204" Name="pointthunder_1">
-        <SetAttr RendererMask="1" />
-    </Modify>
-    <Modify Category="Entities" ID="205" Name="ambthunder_1">
-        <SetAttr Re_Intensity="5" Re_Radius="10.0116" Re_SourceRadius="0" Re_FlickerOffIntensity="0" />
-    </Modify>
-    <Modify Category="Entities" ID="206" Name="ambthunder_2">
-        <SetAttr Re_Intensity="8" Re_Radius="12.6697" Re_SourceRadius="0" Re_FlickerOffIntensity="0" />
-    </Modify>
-    <Modify Category="Entities" ID="215" Name="spotthunder_2">
-        <SetAttr Re_Intensity="15" Re_Radius="14.841" Re_SourceRadius="0" Re_FlickerOffIntensity="0" />
-    </Modify>
-    <Modify Category="Entities" ID="227" Name="pointthunder_4">
-        <SetAttr Re_Intensity="2" Re_Radius="7.27306" Re_SourceRadius="0" Re_FlickerOffIntensity="0" />
-    </Modify>
-    <Modify Category="Entities" ID="354" Name="spotthunder_5">
-        <SetAttr Re_Intensity="15" Re_Radius="21.8534" Re_SourceRadius="0.1" Re_FlickerOffIntensity="0" />
-    </Modify>
-    <Modify Category="Entities" ID="357" Name="pointthunder_5">
-        <SetAttr Re_Intensity="4" Re_Radius="10.2978" Re_SourceRadius="0" Re_FlickerOffIntensity="0" />
-    </Modify>
-    <Modify Category="Entities" ID="358" Name="ambthunder_3">
-        <SetAttr Re_Intensity="9" Re_Radius="13.4394" Re_SourceRadius="0" Re_FlickerOffIntensity="0" />
-    </Modify>
-    <Modify Category="Entities" ID="891" Name="SpotLight_3">
-        <SetAttr Re_Intensity="15" Re_Radius="15.4164" Re_SourceRadius="0.12" Re_FlickerOffIntensity="0" />
-    </Modify>
-    <Modify Category="Entities" ID="892" Name="PointLight_22">
-        <SetAttr Re_Intensity="7" Re_Radius="9.26288" Re_SourceRadius="0.35" Re_FlickerOffIntensity="0" />
-    </Modify>
-    <Modify Category="Entities" ID="893" Name="PointLight_23">
-        <SetAttr Re_Intensity="3" Re_Radius="11.9373" Re_SourceRadius="0.35" Re_FlickerOffIntensity="0" />
-    </Modify>
-    <Modify Category="Entities" ID="1123" Name="PointLight_25">
-        <SetAttr Re_Intensity="5" Re_Radius="11.516" Re_SourceRadius="0" Re_FlickerOffIntensity="0" />
-    </Modify>
-    <Modify Category="Entities" ID="1174" Name="pointthunder_3">
-        <SetAttr Re_Intensity="2" Re_Radius="7.27306" Re_SourceRadius="0" Re_FlickerOffIntensity="0" />
-    </Modify>
-    <Modify Category="Entities" ID="1175" Name="pointthunder_2">
-        <SetAttr Re_Intensity="2" Re_Radius="7.27306" Re_SourceRadius="0" Re_FlickerOffIntensity="0" />
-    </Modify>
-    <Modify Category="Entities" ID="1176" Name="spotthunder_3">
-        <SetAttr Re_Intensity="15" Re_Radius="17.841" Re_SourceRadius="0.1" Re_FlickerOffIntensity="0" />
-    </Modify>
-    <Modify Category="Entities" ID="1279" Name="spotthunder_4">
-        <SetAttr Re_Intensity="15" Re_Radius="17.8409" Re_SourceRadius="0.1" Re_FlickerOffIntensity="0" />
-    </Modify>
-    <Modify Category="Entities" ID="1634" Name="PointLight_28">
-        <SetAttr Re_Intensity="5" Re_SourceRadius="0" Re_FlickerOffIntensity="0" />
-    </Modify>
-    <Modify Category="Entities" ID="2010" Name="pointthunder_6">
-        <SetAttr Re_Intensity="1.5" Re_Radius="9.76289" Re_SourceRadius="0" Re_FlickerOffIntensity="0" />
-    </Modify>
-    <Modify Category="Entities" ID="2011" Name="pointthunder_7">
-        <SetAttr Re_Intensity="2" Re_Radius="11.2769" Re_SourceRadius="0" Re_FlickerOffIntensity="0" />
-    </Modify>
-    <Modify Category="Entities" ID="2012" Name="pointthunder_8">
-        <SetAttr Re_Intensity="2" Re_Radius="11.2769" Re_SourceRadius="0" Re_FlickerOffIntensity="0" />
-    </Modify>
-    <Modify Category="Entities" ID="2013" Name="pointthunder_9">
-        <SetAttr Re_Intensity="2" Re_Radius="11.2769" Re_SourceRadius="0" Re_FlickerOffIntensity="0" />
-    </Modify>
     <Add Category="Entities">
-        <PointLight Active="true" CastShadows="false" DiffuseColor="0.32 0.35 0.4 0.2" FalloffMap="lights/light_falloff_short_fade.tga" FlickerActive="false" FlickerFade="false" FlickerOffColor="0 0 0 1" FlickerOffFadeMaxLength="0" FlickerOffFadeMinLength="0" FlickerOffMaxLength="0" FlickerOffMinLength="0" FlickerOffPS="" FlickerOffSound="" FlickerOnFadeMaxLength="0" FlickerOnFadeMinLength="0" FlickerOnMaxLength="0" FlickerOnMinLength="0" FlickerOnPS="" FlickerOnSound="" Gobo="" GoboAnimFrameTime="0" GoboAnimMode="None" Group="0" Name="pointthunder_1" Rotation="0 0 0" Scale="1 1 1" ShadowResolution="High" ShadowsAffectDynamic="true" ShadowsAffectStatic="true" Tag="" WorldPos="-4.5 2.5 9.5" RendererMask="2" Re_Intensity="2" Re_Radius="7.27306" Re_SourceRadius="0" Re_FlickerOffIntensity="0" />
+        <PointLight Active="true" CastShadows="false" DiffuseColor="0.32 0.35 0.4 0.2" FalloffMap="lights/light_falloff_short_fade.tga" FlickerActive="false" FlickerFade="false" FlickerOffColor="0 0 0 1" FlickerOffFadeMaxLength="0" FlickerOffFadeMinLength="0" FlickerOffMaxLength="0" FlickerOffMinLength="0" FlickerOffPS="" FlickerOffSound="" FlickerOnFadeMaxLength="0" FlickerOnFadeMinLength="0" FlickerOnMaxLength="0" FlickerOnMinLength="0" FlickerOnPS="" FlickerOnSound="" Gobo="" GoboAnimFrameTime="0" GoboAnimMode="None" Name="pointthunder_1" Rotation="0 0 0" Scale="1 1 1" ShadowResolution="High" ShadowsAffectDynamic="true" ShadowsAffectStatic="true" Tag="" WorldPos="-4.5 2.5 9.5" RendererMask="2" Re_Intensity="2" Re_Radius="7.27306" Re_SourceRadius="0" Re_FlickerOffIntensity="0" />
     </Add>
 </MapDelta>

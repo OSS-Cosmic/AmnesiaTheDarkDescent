@@ -72,7 +72,7 @@ cPostEffect_ToneMap::~cPostEffect_ToneMap() {}
 
 void cPostEffect_ToneMap::RenderEffect(const PostEffectRenderCtx &ctx) {
     // Single fullscreen pass: sample the (bloom-composited) HDR pogo input,
-    // sRGB-encode it (with a display-space Reinhard shoulder and chroma scale on
+    // sRGB-encode it (with a color-preserving display-space peak curve on
     // the ray-traced backend), write the pogo output. The composite handles the
     // pogo toggle / barriers around this call.
     RIRenderingAttachment color = {};
@@ -123,7 +123,7 @@ void cPostEffect_ToneMap::RenderEffect(const PostEffectRenderCtx &ctx) {
     pc.shadowLift = mParams.mfShadowLift;
     // Everything that depends on which backend drew the frame. Standard is the
     // identity case on all three fields; the ray-traced path takes a gamma
-    // bias, a highlight shoulder and a chroma pull-down. See
+    // bias, a color-preserving highlight shoulder. See
     // ToneMapBackendParams.cpp for why each one is there.
     const cToneMapBackendParams backend =
         ResolveToneMapBackendParams(mpGraphics->GetRendererBackend(), mParams.mfGamma);
