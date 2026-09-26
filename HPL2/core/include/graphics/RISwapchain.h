@@ -145,6 +145,8 @@ enum RISwapchainStatus_e {
 	RI_SWAPCHAIN_STATUS_OK = 0,
 	RI_SWAPCHAIN_STATUS_OUT_OF_DATE,
 	RI_SWAPCHAIN_STATUS_SUBOPTIMAL,
+	// No image was acquired; retry on the next frame without rebuilding.
+	RI_SWAPCHAIN_STATUS_NOT_READY,
 };
 
 // Creates a platform VkSurfaceKHR from a window handle. Owned by the caller
@@ -153,6 +155,7 @@ enum RISwapchainStatus_e {
 VkSurfaceKHR RICreateWindowSurface(const struct RIWindowHandle *handle);
 // Acquires the next swapchain image. On OK/SUBOPTIMAL the image index is written to
 // *outTextureIndex; on OUT_OF_DATE nothing is written and the caller must recreate.
+// NOT_READY also leaves the index untouched and must skip submission/presentation.
 RISwapchainStatus_e RISwapchainAcquireNextTexture(struct RIDevice* dev, RISwapchain* swapchain, uint32_t* outTextureIndex);
 RISwapchainStatus_e RISwapchainPresent(struct RIDevice* dev, RISwapchain* swapchain);
 

@@ -298,8 +298,11 @@ SLANG_PUBLIC struct LightSample {
 // hit) used across the V-buffer / G-buffer port:
 //   .x : geometry instance id
 //   .y : primitive (triangle) index inside the instance
-//   .z : barycentrics packed as two float16s (low=b1, high=b2; b0 = 1-b1-b2)
-//   .w : 0 (reserved). All-zero packed = "no hit", which `isValid()` tests.
+//   .z : b1 as fp32 bits (b0 = 1-b1-b2)
+//   .w : b2 as fp32 bits with the sign bit forced on, so a written hit is
+//        never all-zero. All-zero packed = "no hit", which `isValid()` tests.
+// Encode/decode only via TriangleHit::pack() / HitInfo::getTriangleHit()
+// (HitInfo.slang); do not hand-pack this layout.
 // Wraps a single uint4 so shader code can do `HitInfo h = HitInfo(packed)`,
 // matching Falcor's source-compatible constructor pattern.
 SLANG_PUBLIC struct HitInfo {

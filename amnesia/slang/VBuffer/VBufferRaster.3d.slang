@@ -18,6 +18,7 @@ import Scene;
 import PerFrame.resource;     // gPerFrame (camera view-proj / eye position)
 import Material;             // load*Material / materialAlphaTest / traceShadowRay / traceReflectionHit
 import SceneTypes;
+import HitInfo;              // TriangleHit::pack()
 import bindless;
 import GeometryStream;
 
@@ -111,16 +112,16 @@ GBufferOut psMain(VSOut vsOut,
 
     GBufferOut o;
 
-    // Packed TriangleHit — this layout is the packing contract every
-    // downstream decoder depends on (VBufferPomBary.cs, the composite, the
-    // path tracer's primary-hit recovery), so it must stay byte-exact:
-    //   .x = instanceID  .y = primitiveIndex  .z = packHalf2x16(b1,b2)  .w = 0
-    uint b1 = f32tof16(barys.y);
-    uint b2 = f32tof16(barys.z);
-    o.hit.x = vsOut.instanceID;
-    o.hit.y = primitiveID;
-    o.hit.z = b1 | (b2 << 16);
-    o.hit.w = 1u;
+    // Packed TriangleHit — every downstream decoder (VBufferPomBary.cs, the
+    // composite, the path tracer's primary-hit recovery) reads this through
+    // HitInfo::getTriangleHit(), so always encode via TriangleHit::pack().
+    // Barycentrics are kept at full fp32; half precision snaps the rebuilt
+    // UVs to multi-texel blocks on large triangles.
+    TriangleHit hit;
+    hit.instanceID     = vsOut.instanceID;
+    hit.primitiveIndex = primitiveID;
+    hit.barycentrics   = barys.yz;
+    o.hit = hit.pack();
 
     // Category b: screen-space velocity deliberately stays unjittered
     // curUV - prevUV (NRD and the upscaler expect this); camera jitter is

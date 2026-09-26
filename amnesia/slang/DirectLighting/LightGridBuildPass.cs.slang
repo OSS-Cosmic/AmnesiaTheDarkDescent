@@ -6,7 +6,7 @@
 //               stable SLOT CAPACITY (gPerFrame.{point,spot,area}LightCount are
 //               host high-water slot counts, sparse — zeroed holes have radius 0
 //               and are skipped) and keeps the TOP-kLightsPerCellMax lights by
-//               estimated contribution at the cell centre, writing both the
+//               estimated maximum contribution within the cell, writing both the
 //               packed light id (packLightId(type, slot) — the same value
 //               getLight() decodes, so a reservoir's persisted id stays valid
 //               across frames) and a sampling CDF. The cell owns its count +
@@ -25,7 +25,7 @@
 //
 // TOP-K, NOT FIRST-K. The cap used to drop whatever came last in index order,
 // which is arbitrary with respect to how much a light actually matters here.
-// Now each candidate gets a cheap contribution estimate at the cell centre and
+// Now each candidate gets a cheap contribution estimate over the cell and
 // the list keeps the best K, sorted descending, with a running CDF in
 // gLightGridWeight. That buys two things:
 //   * the one-sample NEE in PathTraceCommon can importance-sample the cell
@@ -95,13 +95,16 @@ struct TopK
 // Cheap estimate of how much this light contributes anywhere in the cell, used
 // only to rank and to build the sampling pdf — it never scales radiance, so it
 // can be crude. Mirrors the shape of ILight.sample (windowed softened
-// inverse-square on the brightest channel) evaluated at the cell centre, with
-// the distance floored at the cell's bounding-sphere radius so a light sitting
-// inside the cell doesn't get a singular weight.
+// inverse-square on the brightest channel) at the nearest point of the cell.
+// The source-radius term already prevents singularities. Using the centre or
+// flooring distance to the cell radius can zero lights that illuminate part
+// of the cell, even when there is room for them in the list.
 float cellLightWeight(float3 lightPos, float3 color, float intensity,
                       float radius, float3 cellCenter)
 {
-    float d    = max(distance(lightPos, cellCenter), kLightGridUnit * 0.8660254f);
+    float3 delta = max(abs(lightPos - cellCenter) - kLightGridUnit * 0.5f,
+                       float3(0.0f));
+    float d    = length(delta);
     float maxC = max(color.x, max(color.y, color.z));
     return maxC * intensity * lightReachWindow(d, radius)
          / (d * d + kPointLightSourceRadiusSq);
@@ -160,18 +163,10 @@ void binLights(uint3 dispatchThreadId: SV_DispatchThreadID)
         {
             continue;
         }
-        // Fold in the cone term at the cell centre so a cell clipped by the edge
-        // of a beam ranks below one in the middle of it. Gobos keep the full
-        // weight: their footprint is the projection, already tested above.
-        float coneTerm = 1.f;
-        if (sl.goboTextureIndex == kInvalidTextureIndex)
-        {
-            float3 toCell  = normalize(cellCenter - sl.position);
-            float  cosCell = dot(toCell, sl.direction);
-            coneTerm = smoothstep(sl.cosOuterAngle, 1.f, cosCell);
-        }
+        // The conservative footprint test above owns angular rejection. A
+        // centre-only cone weight would drop partially illuminated cells.
         top.insert(packLightId(kLightTypeSpot, s),
-                   cellLightWeight(sl.position, sl.color, sl.intensity, sl.radius, cellCenter) * coneTerm);
+                   cellLightWeight(sl.position, sl.color, sl.intensity, sl.radius, cellCenter));
     }
 
     // Area lights — planar emitters; the reach sphere is a conservative bound

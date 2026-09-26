@@ -4,6 +4,7 @@ import PerFrame.resource;
 import MaterialRaster;
 import StandardRaster;
 import SceneTypes;
+import HitInfo;   // TriangleHit::pack() — raster-only, no Scene/Material imports
 import bindless;
 
 struct V { float4 posH:SV_POSITION; float2 uv:TEXCOORD0; nointerpolation uint objectID:OBJECT_ID; nointerpolation uint materialID:MATERIAL_ID; float4 curClip:CLIP; float4 prevClip:PREVCLIP; };
@@ -35,9 +36,11 @@ struct O { uint4 hit:SV_TARGET0; float4 diagnostic:SV_TARGET1; float2 velocity:S
     if(materialAlphaTest(vd,v.materialID,gSceneObjects[v.objectID].dissolveAmount)) discard;
     DiffuseMaterial material = loadDiffuseMaterial(v.materialID);
     O o;
-    o.hit = uint4(v.objectID, primitiveID,
-        (f32tof16(bary.y) & 0xffffu) | ((f32tof16(bary.z) & 0xffffu) << 16),
-        1u);
+    TriangleHit hit;
+    hit.instanceID     = v.objectID;
+    hit.primitiveIndex = primitiveID;
+    hit.barycentrics   = bary.yz;   // full fp32; see HitInfo.slang
+    o.hit = hit.pack();
     o.diagnostic = float4(sampleBindless2D(material.tex[0], v.uv).rgb, 1.0f);
     float2 curUV = v.curClip.xy / v.curClip.w * float2(0.5, -0.5) + float2(0.5, 0.5);
     float2 prevUV = v.prevClip.xy / v.prevClip.w * float2(0.5, -0.5) + float2(0.5, 0.5);

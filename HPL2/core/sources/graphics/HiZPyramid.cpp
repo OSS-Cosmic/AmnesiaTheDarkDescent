@@ -15,7 +15,8 @@ bool HiZPyramid::Create(cGraphics *graphics, uint32_t image,
   // last row/column of depth, and a missing occluder texel makes the stored
   // depth too near, which is the direction that culls visible geometry.
   const uint32_t pyramidWidth = std::max<uint32_t>(1u, (renderWidth + 1u) / 2u);
-  const uint32_t pyramidHeight = std::max<uint32_t>(1u, (renderHeight + 1u) / 2u);
+  const uint32_t pyramidHeight =
+      std::max<uint32_t>(1u, (renderHeight + 1u) / 2u);
   uint32_t levels = 1;
   uint32_t extent = std::max(pyramidWidth, pyramidHeight);
   while (extent > 1u && levels < kMaxMips) {
