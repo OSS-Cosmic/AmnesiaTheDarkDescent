@@ -2187,6 +2187,13 @@ void cStandardRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
   viewport->PublishRasterCamera(temporalFrame.viewMat, temporalFrame.projMat);
   viewport->PublishRasterTemporalFrame(temporalFrame, afFrameTime * 1000.0f);
 
+  // Hi-Z contains jittered raster depth. Convert the temporal projection to
+  // row-major for occlusion while retaining the original frustum planes.
+  cMatrixf rasterProjection;
+  rasterProjection.FromTranspose(temporalFrame.projMat);
+  const cMatrixf occlusionViewProjection =
+      cMath::MatrixMul(rasterProjection, apFrustum->GetViewMatrix());
+
   uint32_t drawCount = 0;
   RISegmentReq req = {};
   VkDrawIndirectCommand *indirect = nullptr;
@@ -3156,7 +3163,7 @@ void cStandardRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
           static_cast<uint8_t *>(m_cullCameraBuffer.mappedAddress) +
           cameraReq.elementOffset * sizeof(StandardCullCamera));
       StandardCullCamera camera{};
-      std::memcpy(camera.viewProjection, viewProjection.v,
+      std::memcpy(camera.viewProjection, occlusionViewProjection.v,
                   sizeof(camera.viewProjection));
       camera.hiZWidth = state->hiZ.width;
       camera.hiZHeight = state->hiZ.height;
@@ -3217,6 +3224,14 @@ void cStandardRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
           kStandardCullModeVisibilityReplay);
     }
   }
+  // The flush above left the commands as a cull's input. Without the replay
+  // dispatch nothing hands them to the draw, so do it here.
+  if (cameraCullReady && drawCount > 0 && !cameraCullDispatched &&
+      m_indirectDrawBuffer.staged)
+    mpGraphics->primary.cmds[0].vk_d3d12_bufferBarrier(RIBufferBarrier(
+        m_indirectDrawBuffer.gpu(), RI_RESOURCE_STATE_STORAGE_WRITE,
+        RI_RESOURCE_STATE_INDIRECT_ARGUMENT, RI_STAGE_COMPUTE,
+        RI_STAGE_DRAW_INDIRECT));
 
   mpGraphics->primary.cmds[0].vk_d3d12_beginRendering(&mpGraphics->device,
                                                       begin);
@@ -3310,6 +3325,9 @@ void cStandardRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
             kStandardCullModeVisibilityUpdate, cameraCommandWordDelta);
 
     if (culled) {
+      // Cover every color attachment, including the fallback G-buffer's MRTs.
+      cameraCmd->vk_d3d12_memoryBarrier(
+          {RI_RESOURCE_STATE_RENDER_TARGET, RI_RESOURCE_STATE_RENDER_TARGET_READ});
       for (uint32_t i = 0; i < begin.colorCount; ++i) {
         colors[i].loadOp = RI_ATTACHMENT_LOAD_OP_LOAD;
         colors[i].storeOp = RI_ATTACHMENT_STORE_OP_STORE;
@@ -4104,7 +4122,7 @@ void cStandardRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
             static_cast<uint8_t *>(m_cullCameraBuffer.mappedAddress) +
             cameraReq.elementOffset * sizeof(StandardCullCamera));
         StandardCullCamera camera{};
-        std::memcpy(camera.viewProjection, viewProjection.v,
+        std::memcpy(camera.viewProjection, occlusionViewProjection.v,
                     sizeof(camera.viewProjection));
         camera.hiZWidth = state->hiZ.width;
         camera.hiZHeight = state->hiZ.height;

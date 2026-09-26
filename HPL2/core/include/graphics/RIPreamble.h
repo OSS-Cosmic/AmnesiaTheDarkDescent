@@ -146,7 +146,8 @@ static inline bool __D3D12_WrapResult(HRESULT result, const char *sourceFilename
     (current)->pNext = (next);                                                 \
     (next)->pNext = __pNext;                                                   \
   }
-// Logs + returns false on a non-success VkResult; true otherwise.
+// Device loss is terminal: continuing can reuse unfinished resources or wait
+// on semaphores that will never signal. Other failures are returned to callers.
 #define VK_WrapResult(res)                                                     \
   __VK_WrapResult(res, __FILE__, __FUNCTION__, __LINE__)
 
@@ -155,6 +156,10 @@ static inline bool __VK_WrapResult(VkResult result, const char *sourceFilename,
   if (result != VK_SUCCESS) {
     hpl::Log("RI: VK %i, file %s:%i (%s)\n", result, sourceFilename, sourceLine,
              functionName);
+    if (result == VK_ERROR_DEVICE_LOST)
+      hpl::FatalError("Vulkan device lost in %s (%s:%i). Rendering cannot "
+                      "continue. See hpl.log for details.\n",
+                      functionName, sourceFilename, sourceLine);
     return false;
   }
   return true;
