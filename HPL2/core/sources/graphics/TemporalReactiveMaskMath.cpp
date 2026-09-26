@@ -21,6 +21,24 @@ static double PositiveFloor(float value) {
 
 } // namespace
 
+TemporalReactiveMaskParams TemporalReactiveMaskDefaultParams(
+    TemporalUpscalerProvider provider, bool standardRenderer,
+    float sceneExposure) {
+  TemporalReactiveMaskParams params;
+  if (provider == TemporalUpscalerProvider::Fsr && standardRenderer) {
+    const float exposure = std::isfinite(sceneExposure) && sceneExposure > 0.0f
+                               ? sceneExposure
+                               : 1.0f;
+    const float floor = 0.05f / exposure;
+    params.luminanceFloor = std::isfinite(floor) && floor > 0.0f ? floor : 0.05f;
+    params.reactiveScale = 0.5f;
+    // A same-frame transparency difference is not evidence that the opaque
+    // detail beneath a flame needs its history protection removed as well.
+    params.compositionScale = 0.0f;
+  }
+  return params;
+}
+
 TemporalReactiveMaskSample TemporalReactiveMaskEvaluate(
     const float opaqueRgb[3], const float finalRgb[3],
     const TemporalReactiveMaskParams &params) {

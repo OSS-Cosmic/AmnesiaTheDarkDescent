@@ -21,10 +21,6 @@
 // RI*Renderer functions below, never by referencing this object directly.
 static RIRenderer g_renderer;
 
-// Backs the multi-backend path of RIIsTargetSelected (see RITypes.h). Defined
-// unconditionally: single-backend builds fold that check at compile time, but
-// callers that cache something per backend still need the value at runtime.
-uint8_t RIActiveBackendApi() { return g_renderer.api; }
 
 #if (DEVICE_IMPL_VULKAN)
 
@@ -36,6 +32,11 @@ uint8_t RIActiveBackendApi() { return g_renderer.api; }
 #include "vk_mem_alloc.h"
 
 VkInstance RIGetVkInstance() { return g_renderer.vk.instance; }
+uint8_t RIActiveBackendApi() { return g_renderer.api; }
+#if (DEVICE_IMPL_D3D12)
+IDXGIFactory6 *RIGetDXGIFactory() { return g_renderer.d3d12.factory; }
+#endif
+
 
 static inline enum RIVendor_e VendorFromID(uint32_t vendorID) {
   switch (vendorID) {
@@ -128,6 +129,18 @@ const static char *DefaultDeviceExtension[] = {
     // buffer (see amnesia/slang/VBuffer/VBufferRaster.3d.slang).
     /************************************************************************/
     VK_KHR_FRAGMENT_SHADER_BARYCENTRIC_EXTENSION_NAME,
+    /************************************************************************/
+    // Quad derivatives in compute. NRD's REBLUR passes read across the quad
+    // (QuadReadAcrossX/Y), and a compute shader has no implicit quad layout, so
+    // DXC declares ComputeDerivativeGroupQuadsKHR to define one. Only the
+    // ray-traced backend runs NRD, but this is kept out of
+    // RayTracingDeviceExtension so the device flag describes the hardware
+    // rather than the capability mode. The KHR form supersedes the NV one;
+    // both are listed because the collection loop below keeps whichever the
+    // driver advertises, and the feature struct is shared between them.
+    /************************************************************************/
+    VK_KHR_COMPUTE_SHADER_DERIVATIVES_EXTENSION_NAME,
+    VK_NV_COMPUTE_SHADER_DERIVATIVES_EXTENSION_NAME,
 };
 
 // Only enabled when RIDeviceDesc::requestRayTracing is set. Also the
@@ -322,6 +335,7 @@ static bool __VK_ValidateForeignFeatureChain(
       }
     }
     if (!isEngineNode) {
+      hpl::Log("RI: foreign feature structure sType %d\n", (int)node->sType);
       if (reason)
         *reason = "returned a feature structure not owned by the engine";
       return false;
@@ -491,6 +505,22 @@ int EnumerateRIAdapters(struct RIPhysicalAdapter *adapters,
             qCToStrRef(VK_AMD_DEVICE_COHERENT_MEMORY_EXTENSION_NAME));
         if (hasAmdCoherentMemoryExt) {
           R_VK_ADD_STRUCT(&features, &amdCoherentMemoryFeatures);
+        }
+
+        // One struct serves both extensions: the NV struct and its sType are
+        // aliases of the KHR ones, so only the name has to be tried twice.
+        VkPhysicalDeviceComputeShaderDerivativesFeaturesKHR
+            computeShaderDerivativesFeatures = {
+                VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_COMPUTE_SHADER_DERIVATIVES_FEATURES_KHR};
+        const bool hasComputeShaderDerivativesExt =
+            __VK_SupportExtension(
+                extensionProperties, extensionNum,
+                qCToStrRef(VK_KHR_COMPUTE_SHADER_DERIVATIVES_EXTENSION_NAME)) ||
+            __VK_SupportExtension(
+                extensionProperties, extensionNum,
+                qCToStrRef(VK_NV_COMPUTE_SHADER_DERIVATIVES_EXTENSION_NAME));
+        if (hasComputeShaderDerivativesExt) {
+          R_VK_ADD_STRUCT(&features, &computeShaderDerivativesFeatures);
         }
 
         VkPhysicalDeviceMemoryProperties memoryProperties = {0};
@@ -848,6 +878,17 @@ int EnumerateRIAdapters(struct RIPhysicalAdapter *adapters,
               (hasSpirv14Ext && hasShaderFloatControlsExt)))
                 ? 1
                 : 0;
+        // Advertised extension AND the reported feature bit: the extension
+        // alone says the entry points exist, not that the quad layout can be
+        // requested. NRD's REBLUR SPIR-V declares the capability
+        // unconditionally, so a shortfall here has to be caught before the
+        // ray-traced backend is offered.
+        physicalAdapter->isComputeShaderDerivativesSupported =
+            (hasComputeShaderDerivativesExt &&
+             computeShaderDerivativesFeatures.computeDerivativeGroupQuads)
+                ? 1
+                : 0;
+
         // Tier 2 mirrors DXR 1.1: the tier-1 foundation plus inline ray query
         // and indirect trace dispatch.
         physicalAdapter->rayTracingTier =
@@ -1382,6 +1423,24 @@ int RIDevice::init(struct RIDeviceDesc *init) {
       R_VK_ADD_STRUCT(&features, &fragmentBarycentricFeatures);
     }
 
+    // NRD's REBLUR SPIR-V declares ComputeDerivativeGroupQuadsKHR, so without
+    // this the first denoiser dispatch fails in vkCreateShaderModule. The NV
+    // struct is an alias of the KHR one, so a single node covers whichever
+    // extension name survived the filter above.
+    VkPhysicalDeviceComputeShaderDerivativesFeaturesKHR
+        computeShaderDerivativesFeatures = {
+            VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_COMPUTE_SHADER_DERIVATIVES_FEATURES_KHR};
+    const bool computeShaderDerivativesExtensionEnabled =
+        __VK_isExtensionNamesSupported(
+            qCToStrRef(VK_KHR_COMPUTE_SHADER_DERIVATIVES_EXTENSION_NAME),
+            enabledExtensionNames, arrlen(enabledExtensionNames)) ||
+        __VK_isExtensionNamesSupported(
+            qCToStrRef(VK_NV_COMPUTE_SHADER_DERIVATIVES_EXTENSION_NAME),
+            enabledExtensionNames, arrlen(enabledExtensionNames));
+    if (computeShaderDerivativesExtensionEnabled) {
+      R_VK_ADD_STRUCT(&features, &computeShaderDerivativesFeatures);
+    }
+
     // VkPhysicalDeviceRayTracingMaintenance1FeaturesKHR
     // rayTracingMaintenanceFeatures =
     // {VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_MAINTENANCE_1_FEATURES_KHR};
@@ -1480,6 +1539,44 @@ int RIDevice::init(struct RIDeviceDesc *init) {
         supportedFragmentBarycentricFeatures = fragmentBarycentricFeatures;
     const VkPhysicalDeviceCoherentMemoryFeaturesAMD
         supportedAmdCoherentMemoryFeatures = amdCoherentMemoryFeatures;
+    const VkPhysicalDeviceComputeShaderDerivativesFeaturesKHR
+        supportedComputeShaderDerivativesFeatures =
+            computeShaderDerivativesFeatures;
+
+    // Feature structures for extensions the engine never enables itself but a
+    // contributor may (XeSS asks for VK_EXT_mutable_descriptor_type). If the
+    // chain already holds an engine-owned node for it, the contributor patches
+    // that in place instead of appending a structure of its own, which the
+    // validation above rightly refuses. Spliced in only once a contributor has
+    // enabled the extension, and dropped again by restorePlainRequirements.
+    VkPhysicalDeviceMutableDescriptorTypeFeaturesEXT mutableDescriptorFeatures = {
+        VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MUTABLE_DESCRIPTOR_TYPE_FEATURES_EXT};
+    VkPhysicalDeviceMutableDescriptorTypeFeaturesEXT
+        supportedMutableDescriptorFeatures = mutableDescriptorFeatures;
+    bool mutableDescriptorFeaturesChained = false;
+    const size_t plainEngineFeatureNodeCount = engineFeatureNodeCount;
+    auto chainContributorFeatureNodes = [&]() {
+      if (mutableDescriptorFeaturesChained ||
+          engineFeatureNodeCount == sizeof(engineFeatureNodes) /
+                                        sizeof(engineFeatureNodes[0]) ||
+          !__VK_isExtensionNamesSupported(
+              qCToStrRef(VK_EXT_MUTABLE_DESCRIPTOR_TYPE_EXTENSION_NAME),
+              enabledExtensionNames, arrlen(enabledExtensionNames)))
+        return;
+      VkPhysicalDeviceFeatures2 supportQuery = {
+          VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2};
+      supportedMutableDescriptorFeatures.pNext = nullptr;
+      supportQuery.pNext = &supportedMutableDescriptorFeatures;
+      vkGetPhysicalDeviceFeatures2(physicalAdapter->vk.physicalDevice,
+                                   &supportQuery);
+      supportedMutableDescriptorFeatures.pNext = nullptr;
+      // Requested bits start clear; the contributor sets what it needs.
+      mutableDescriptorFeatures.mutableDescriptorType = VK_FALSE;
+      R_VK_ADD_STRUCT(&features, &mutableDescriptorFeatures);
+      engineFeatureNodes[engineFeatureNodeCount++] =
+          reinterpret_cast<const VkBaseOutStructure *>(&mutableDescriptorFeatures);
+      mutableDescriptorFeaturesChained = true;
+    };
 
     auto restorePlainRequirements = [&]() {
       arrsetlen(enabledExtensionNames, plainExtensionCount);
@@ -1497,6 +1594,11 @@ int RIDevice::init(struct RIDeviceDesc *init) {
       rayQueryFeatures = supportedRayQueryFeatures;
       fragmentBarycentricFeatures = supportedFragmentBarycentricFeatures;
       amdCoherentMemoryFeatures = supportedAmdCoherentMemoryFeatures;
+      computeShaderDerivativesFeatures =
+          supportedComputeShaderDerivativesFeatures;
+      // `features` above restored the original pNext head, which unlinks it.
+      mutableDescriptorFeaturesChained = false;
+      engineFeatureNodeCount = plainEngineFeatureNodeCount;
     };
 
     // Merges one contributor's extensions and feature chain, or declines it and
@@ -1555,6 +1657,7 @@ int RIDevice::init(struct RIDeviceDesc *init) {
         return true;
       }
 
+      chainContributorFeatureNodes();
       if (!req.mergeFeatureChain(req.userData, &foreignFeatureChain)) {
         decline("required device feature query failed");
         return false;
@@ -1642,6 +1745,20 @@ int RIDevice::init(struct RIDeviceDesc *init) {
                                     supportedAmdCoherentMemoryFeatures,
                                     debugName) &&
           featuresSupported;
+      featuresSupported =
+          VK_FOREIGN_CHECK_FEATURES(
+              VkPhysicalDeviceComputeShaderDerivativesFeaturesKHR,
+              computeDerivativeGroupQuads, computeShaderDerivativesFeatures,
+              supportedComputeShaderDerivativesFeatures, debugName) &&
+          featuresSupported;
+
+      if (mutableDescriptorFeaturesChained)
+        featuresSupported =
+            VK_FOREIGN_CHECK_FEATURES(
+                VkPhysicalDeviceMutableDescriptorTypeFeaturesEXT,
+                mutableDescriptorType, mutableDescriptorFeatures,
+                supportedMutableDescriptorFeatures, debugName) &&
+            featuresSupported;
 
       if (!chainValid || !featuresSupported) {
         if (chainValid)
@@ -1752,6 +1869,9 @@ int RIDevice::init(struct RIDeviceDesc *init) {
             qCToStrRef(VK_KHR_FRAGMENT_SHADER_BARYCENTRIC_EXTENSION_NAME),
             enabledExtensionNames, arrlen(enabledExtensionNames)) &&
         fragmentBarycentricFeatures.fragmentShaderBarycentric != VK_FALSE;
+    device->computeShaderDerivativesEnabled =
+        computeShaderDerivativesExtensionEnabled &&
+        computeShaderDerivativesFeatures.computeDerivativeGroupQuads != VK_FALSE;
     device->shaderInt16Enabled = features.features.shaderInt16 != VK_FALSE;
     device->shaderFloat16Enabled = features12.shaderFloat16 != VK_FALSE;
     device->geometryShaderEnabled = features.features.geometryShader != VK_FALSE;

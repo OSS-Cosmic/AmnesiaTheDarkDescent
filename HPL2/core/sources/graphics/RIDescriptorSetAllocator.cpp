@@ -11,11 +11,12 @@
 #include <vector>
 
 namespace {
-// D3D12 permits one shader-visible CBV/SRV/UAV heap of up to 1M entries and
-// one sampler heap of up to 2048 entries.  All bindless and raw geometry SRVs
-// therefore use this device-wide arena; command lists cannot bind a second
-// shader-visible resource heap concurrently.
-static const uint32_t kResourceCapacity = 1024u * 1024u;
+// D3D12 permits one shader-visible CBV/SRV/UAV heap of up to 1,000,000 entries
+// and one sampler heap of up to 2048 entries.  All bindless and raw geometry
+// SRVs therefore use this device-wide arena; command lists cannot bind a second
+// shader-visible resource heap concurrently.  The limit is decimal, not 2^20:
+// NVIDIA rejects a 1024*1024 heap with E_INVALIDARG, which failed device init.
+static const uint32_t kResourceCapacity = D3D12_MAX_SHADER_VISIBLE_DESCRIPTOR_HEAP_SIZE_TIER_2;
 static const uint32_t kSamplerCapacity = 2048u;
 
 struct ArenaRange {
@@ -340,13 +341,13 @@ bool initDescriptorArena( struct RIDevice *device )
 	resourceDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
 	resourceDesc.NumDescriptors = kResourceCapacity;
 	resourceDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
-	if( FAILED( device->d3d12.device->CreateDescriptorHeap( &resourceDesc,
+	if( !D3D12_WrapResult( device->d3d12.device->CreateDescriptorHeap( &resourceDesc,
 		IID_PPV_ARGS( &arena.resourceHeap ) ) ) ) return false;
 	D3D12_DESCRIPTOR_HEAP_DESC samplerDesc = {};
 	samplerDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER;
 	samplerDesc.NumDescriptors = kSamplerCapacity;
 	samplerDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
-	if( FAILED( device->d3d12.device->CreateDescriptorHeap( &samplerDesc,
+	if( !D3D12_WrapResult( device->d3d12.device->CreateDescriptorHeap( &samplerDesc,
 		IID_PPV_ARGS( &arena.samplerHeap ) ) ) ) {
 		arena.resourceHeap->Release();
 		return false;

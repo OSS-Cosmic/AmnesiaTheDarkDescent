@@ -342,7 +342,7 @@ bool cTemporalReactiveMask::RecordMasks(
       &graphics->device, desc.cmd, desc.frameIndex, bindings.data(),
       bindings.size(), VK_PIPELINE_BIND_POINT_COMPUTE);
 
-  TemporalReactiveMaskParams params = {};
+  const TemporalReactiveMaskParams &params = desc.params;
   ReactiveMaskPushConstants push = {};
   push.extent[0] = desc.extent.width;
   push.extent[1] = desc.extent.height;

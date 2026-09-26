@@ -6,6 +6,7 @@
 #include "graphics/StandardMeshDecalStreams.h"
 #include "graphics/VertexBuffer.h"
 #include "math/Math.h"
+#include "resources/Resources.h"
 #include "scene/BillBoard.h"
 #include "system/Hasher.h"
 #include "system/LowLevelSystem.h"
@@ -83,8 +84,8 @@ void ResolveStandardHaloQueries(StandardHaloQueryState &state,
 
 //-----------------------------------------------------------------------
 
-cStandardHaloPass::cStandardHaloPass(cGraphics *graphics)
-    : mpGraphics(graphics) {}
+cStandardHaloPass::cStandardHaloPass(cGraphics *graphics, cResources *resources)
+    : mpGraphics(graphics), mpResources(resources) {}
 
 cStandardHaloPass::~cStandardHaloPass() { DestroyData(); }
 
@@ -93,6 +94,42 @@ void cStandardHaloPass::DestroyData() {
     mpGraphics->graphicsDefer.push(
         std::function<void()>([box = std::move(m_box)]() {}));
   m_box.reset();
+  auto old = std::move(m_program);
+  if (old && mpGraphics) {
+    mpGraphics->graphicsDefer.push(std::function<void()>(
+        [old = std::move(old), device = &mpGraphics->device]() mutable {
+          old->dispose(device);
+        }));
+  }
+  m_program.reset();
+  m_programTried = false;
+}
+
+bool cStandardHaloPass::LoadProgram() {
+  if (m_program)
+    return true;
+  if (m_programTried)
+    return false;
+  m_programTried = true;
+  if (!mpGraphics || !mpResources || !mpGraphics->globalset)
+    return false;
+  auto vert = RIProgram::loadShaderStage(mpResources->GetFileSearcher(),
+                                         "Decal.vert", "vsOcclusion");
+  auto frag = RIProgram::loadShaderStage(mpResources->GetFileSearcher(),
+                                         "Decal.frag", "psOcclusion");
+  if (vert.empty() || frag.empty())
+    return false;
+  const RIBindlessLayout external[] = {
+      mpGraphics->globalset->m_bindlessSet.layout()};
+  std::array<RIProgram::ModuleStage, 2> stages = {
+      RIProgram::ModuleStage{RIProgram::PROGRAM_STAGE_VERTEX, vert,
+                             "vsOcclusion"},
+      RIProgram::ModuleStage{RIProgram::PROGRAM_STAGE_FRAGMENT, frag,
+                             "psOcclusion"}};
+  auto program = std::make_shared<RIProgram>();
+  program->initialize(&mpGraphics->device, stages, external, "Standard.halo");
+  m_program = std::move(program);
+  return true;
 }
 
 std::vector<cBillboard *>
@@ -137,7 +174,7 @@ void cStandardHaloPass::Resolve(StandardHaloQueryState &state,
 void cStandardHaloPass::Record(cGraphics::FrameContext *frame,
                                StandardHaloQueryState &state,
                                std::span<iRenderable *> translucents,
-                               RIProgram *meshDecal, RITexture *depthTexture,
+                               RITexture *depthTexture,
                                RITextureView *depthView, uint32_t width,
                                uint32_t height,
                                RIProgram::DescriptorBinding frameBinding,
@@ -154,7 +191,7 @@ void cStandardHaloPass::Record(cGraphics::FrameContext *frame,
   const std::vector<cBillboard *> halos = CollectHalos(translucents);
   if (halos.empty())
     return;
-  if (!meshDecal) {
+  if (!LoadProgram()) {
     if (!m_warnedUnavailable) {
       Warning("Standard renderer: Decal.vert/frag missing; billboard halo "
               "occlusion "
@@ -272,9 +309,9 @@ void cStandardHaloPass::Record(cGraphics::FrameContext *frame,
   bool recorded = false;
   uint32_t presentMask = 0;
   if (BindMeshDecalStreams(cmd, mpGraphics, m_box.get(), &presentMask)) {
-    meshDecal->bindBindlessDescriptorSet(
+    m_program->bindBindlessDescriptorSet(
         cmd, &mpGraphics->globalset->m_bindlessSet, 0);
-    meshDecal->bindDescriptors(&mpGraphics->device, cmd, mpGraphics->frameIndex,
+    m_program->bindDescriptors(&mpGraphics->device, cmd, mpGraphics->frameIndex,
                                &frameBinding, 1);
 
     // Depth-only variants of the decal pipeline: no colour output, no depth
@@ -290,6 +327,8 @@ void cStandardHaloPass::Record(cGraphics::FrameContext *frame,
       // Depth-only: blendCount must track colorCount, both drop to zero.
       pd.renderTarget.colorCount = 0;
       pd.blendCount = 0;
+      // vsOcclusion reads position only; attribute 0 is POSITION.
+      pd.vertexInput.attributeCount = 1;
       pd.depthStencil.depthCompare =
           variant ? RI_COMPARE_ALWAYS : RI_COMPARE_LESS_EQUAL;
     }
@@ -308,7 +347,7 @@ void cStandardHaloPass::Record(cGraphics::FrameContext *frame,
     const uint32_t indexCount = static_cast<uint32_t>(m_box->GetIndexNum());
     for (size_t h = 0; h < cookies.size(); ++h) {
       for (uint32_t variant = 0; variant < 2; ++variant) {
-        meshDecal->bindPipeline(&mpGraphics->device, cmd,
+        m_program->bindPipeline(&mpGraphics->device, cmd,
                                 pipelineHashes[variant], pipelineNames[variant],
                                 pipelines[variant]);
         const uint32_t queryIndex = static_cast<uint32_t>(h * 2 + variant);

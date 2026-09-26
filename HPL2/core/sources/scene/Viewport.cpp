@@ -27,6 +27,7 @@
 #include "graphics/Renderer.h"
 #include "graphics/StandardRenderer.h"
 #include "graphics/TemporalReactiveMask.h"
+#include "Constants.h" // kSceneExposure
 #include "graphics/TemporalPresentation.h"
 #include "graphics/WaterReflectionPass.h"
 
@@ -49,6 +50,7 @@
 #include <functional>
 
 namespace hpl {
+
 namespace {
 
 constexpr const char *kTemporalProviderInvalidRenderExtent =
@@ -1426,6 +1428,10 @@ void ReleaseViewportAttachmentTexture(RISharedPointer<RITexture> *tex,
 								maskRasterCamera.jitterPixels[1];
 						}
 						maskRecord.provider = mTemporalUpscalerSettings.provider;
+						maskRecord.params = TemporalReactiveMaskDefaultParams(
+								maskRecord.provider,
+								std::holds_alternative<StandardViewportState>(m_state),
+								kSceneExposure);
 						// RecordMasks restores the scene color to the exit state,
 						// exactly what the feed blit below expects.
 						mpTemporalReactiveMask->RecordMasks(maskRecord);
@@ -1555,8 +1561,8 @@ void ReleaseViewportAttachmentTexture(RISharedPointer<RITexture> *tex,
 						},
 						m_state);
 
-					// Explicit, caller-produced masks. GetBindings is frame- and
-					// and the provider falls back to its own neutral default; an old
+					// GetBindings validates the frame and viewport. If unavailable,
+					// the provider falls back to its own neutral default; an old
 					// frame's or another viewport's resource can never be passed.
 					if (mTemporalReactiveMaskActive && mpTemporalReactiveMask) {
 						const TemporalReactiveMaskBindings maskBindings =

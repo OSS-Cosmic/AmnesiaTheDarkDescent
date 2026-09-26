@@ -766,8 +766,11 @@ bool cFsrUpscaler::PrepareContext(const TemporalUpscalerSettings &settings,
   ffxCreateContextDescUpscale description = {};
   description.header.type = FFX_API_CREATE_CONTEXT_DESC_TYPE_UPSCALE;
   description.header.pNext = nullptr;
-  description.flags = FFX_UPSCALE_ENABLE_HIGH_DYNAMIC_RANGE |
-                      FFX_UPSCALE_ENABLE_AUTO_EXPOSURE;
+  // No FFX_UPSCALE_ENABLE_AUTO_EXPOSURE: the scene exposure is a fixed
+  // constant applied at tonemap, after FSR. Auto exposure metered these dark,
+  // candle-lit frames and chased every flame flicker, which pulsed the
+  // accumulated history. With no exposure texture FSR uses a stable 1.0.
+  description.flags = FFX_UPSCALE_ENABLE_HIGH_DYNAMIC_RANGE;
 #if !defined(NDEBUG)
   description.flags |= FFX_UPSCALE_ENABLE_DEBUG_CHECKING;
 #endif
