@@ -824,7 +824,7 @@ cStandardRenderer::cStandardRenderer(cGraphics *apGraphics,
   m_shadowCull =
       std::make_unique<cStandardShadowCullPass>(mpGraphics, apResources);
   m_hiZ = std::make_unique<cStandardHiZPass>(mpGraphics, apResources);
-  m_halo = std::make_unique<cStandardHaloPass>(mpGraphics);
+  m_halo = std::make_unique<cStandardHaloPass>(mpGraphics, apResources);
   m_translucent =
       std::make_unique<cStandardTranslucentPass>(mpGraphics, apResources);
   m_water = std::make_unique<cStandardWaterPass>(mpGraphics, apResources);
@@ -3687,7 +3687,6 @@ void cStandardRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
         m_rendererList.GetRenderableItems(eRenderListType_Translucent);
     m_halo->Resolve(*state->haloQueries, haloCandidates, apFrustum);
     m_halo->Record(cntx, *state->haloQueries, haloCandidates,
-                   m_meshDecalLoaded ? m_meshDecal.get() : nullptr,
                    state->depthTextures[index].Get(),
                    state->depthView[index].Get(), state->width, state->height,
                    frameBinding, paneSalt);
@@ -4054,6 +4053,9 @@ void cStandardRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
     }
     const uint32_t particleSalt =
         hash_u64(HASH_INITIAL_VALUE, reinterpret_cast<uintptr_t>(viewport));
+    // Set by the pyramid build below, before any segment is drawn. A pyramid
+    // that was never built is still UNDEFINED, so the cull must not bind it.
+    bool hiZBuilt = false;
 
     auto drawOrdinary = [&](std::span<iRenderable *> segment) {
       if (segment.empty() || !translucentReady)
@@ -4076,8 +4078,7 @@ void cStandardRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
       RISegmentReq cameraReq = {};
       RISegmentReq groupReq = {};
       const bool reserved =
-          m_hiZ && m_hiZLoaded && m_shadowCull && m_shadowCull->IsLoaded() &&
-          state->hiZ.IsUsable(index) &&
+          hiZBuilt && m_shadowCull && m_shadowCull->IsLoaded() &&
           worstCase > 0 && worstCase <= kStandardTranslucentMaxDraws &&
           m_translucentCandidateSegment.request(mpGraphics->frameIndex,
                                                 worstCase, &candidateReq) &&
@@ -4258,9 +4259,10 @@ void cStandardRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
     // Depth is in SHADER_RESOURCE at this point (the barrier above leaves it
     // there), which is what the build reads it as.
     if (m_hiZ && m_hiZLoaded && !state->depthSampleView[index].isEmpty()) {
-      m_hiZ->Build(&mpGraphics->primary.cmds[0], mpGraphics->frameIndex,
-                   state->hiZ, index, state->width, state->height,
-                   state->depthSampleView[index].Get());
+      hiZBuilt = m_hiZ->Build(&mpGraphics->primary.cmds[0],
+                              mpGraphics->frameIndex, state->hiZ, index,
+                              state->width, state->height,
+                              state->depthSampleView[index].Get());
     }
 
     auto translucent =

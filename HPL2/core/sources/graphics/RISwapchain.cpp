@@ -2,6 +2,7 @@
 #include "graphics/RIRenderer.h"
 #include "graphics/RITypes.h"
 #include "system/Types.h"
+#include "system/LowLevelSystem.h"
 
 #include "graphics/RIVK.h"
 #include "graphics/RID3D12.h"
@@ -118,6 +119,35 @@ VkSurfaceKHR RICreateWindowSurface(const struct RIWindowHandle *handle) {
 #endif
 }
 
+#if (DEVICE_IMPL_D3D12)
+struct RID3D12SwapchainFormat {
+  DXGI_FORMAT dxgiFormat;
+  DXGI_COLOR_SPACE_TYPE colorSpace;
+  RI_Format riFormat;
+};
+
+static RID3D12SwapchainFormat
+ri_d3d12_swapchain_format(RISwapchainFormat_e format) {
+  switch (format) {
+  case RI_SWAPCHAIN_BT709_G10_16BIT:
+    return {DXGI_FORMAT_R16G16B16A16_FLOAT,
+            DXGI_COLOR_SPACE_RGB_FULL_G10_NONE_P709, RI_FORMAT_RGBA16_SFLOAT};
+  case RI_SWAPCHAIN_BT709_G22_10BIT:
+    return {DXGI_FORMAT_R10G10B10A2_UNORM,
+            DXGI_COLOR_SPACE_RGB_FULL_G22_NONE_P709,
+            RI_FORMAT_R10_G10_B10_A2_UNORM};
+  case RI_SWAPCHAIN_BT2020_G2084_10BIT:
+    return {DXGI_FORMAT_R10G10B10A2_UNORM,
+            DXGI_COLOR_SPACE_RGB_FULL_G2084_NONE_P2020,
+            RI_FORMAT_R10_G10_B10_A2_UNORM};
+  case RI_SWAPCHAIN_BT709_G22_8BIT:
+  default:
+    return {DXGI_FORMAT_R8G8B8A8_UNORM, DXGI_COLOR_SPACE_RGB_FULL_G22_NONE_P709,
+            RI_FORMAT_RGBA8_UNORM};
+  }
+}
+#endif
+
 RISwapchain RISwapchain::create(struct RIDevice *device,
                                 const struct RISwapchainDesc &desc) {
   RISwapchain sc = {};
@@ -147,66 +177,91 @@ RISwapchain RISwapchain::create(struct RIDevice *device,
     const UINT bufferCount = std::min<UINT>(
         std::max<UINT>(desc.requestImageCount, 2u), RI_MAX_SWAPCHAIN_IMAGES);
     const bool recreate = oldSwapchain != nullptr;
+    RID3D12SwapchainFormat format =
+        ri_d3d12_swapchain_format(RISwapchainFormat_e(desc.format));
+
+    // Tags the back buffers with the colour space that matches their format.
+    // False when the output cannot present it, e.g. HDR10 on an SDR display.
+    auto applyColorSpace = [&]() -> bool {
+      UINT support = 0;
+      if (FAILED(sc.d3d12.swapchain->CheckColorSpaceSupport(format.colorSpace,
+                                                            &support)) ||
+          !(support & DXGI_SWAP_CHAIN_COLOR_SPACE_SUPPORT_FLAG_PRESENT))
+        return false;
+      return D3D12_WrapResult(sc.d3d12.swapchain->SetColorSpace1(format.colorSpace));
+    };
 
     // Create a fresh DXGI swapchain for the initial path and for a recreate
     // whose requested buffer configuration is incompatible with ResizeBuffers.
     auto createSwapchain = [&]() -> bool {
-      IDXGIFactory6 *factory = nullptr;
-      HRESULT hr = CreateDXGIFactory2(0, IID_PPV_ARGS(&factory));
-      if (!D3D12_WrapResult(hr))
+      // Borrowed from the renderer, which owns it and created it with the
+      // DXGI debug flag when validation is on.
+      IDXGIFactory6 *factory = RIGetDXGIFactory();
+      if (!factory)
         return false;
+      HRESULT hr = S_OK;
       if (!recreate) {
         BOOL tearingSupport = FALSE;
         hr = factory->CheckFeatureSupport(DXGI_FEATURE_PRESENT_ALLOW_TEARING,
                                           &tearingSupport,
                                           sizeof(tearingSupport));
-        if (!D3D12_WrapResult(hr)) {
-          factory->Release();
+        if (!D3D12_WrapResult(hr))
           return false;
-        }
         allowTearing = tearingSupport == TRUE;
       }
-      DXGI_SWAP_CHAIN_DESC1 sd = {};
-      sd.Width = desc.width;
-      sd.Height = desc.height;
-      sd.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
-      sd.Stereo = FALSE;
-      sd.SampleDesc = {1, 0};
-      sd.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
-      sd.BufferCount = bufferCount;
-      sd.Scaling = DXGI_SCALING_STRETCH;
-      sd.SwapEffect = DXGI_SWAP_EFFECT_FLIP_DISCARD;
-      sd.AlphaMode = DXGI_ALPHA_MODE_UNSPECIFIED;
-      sd.Flags = allowTearing ? DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING : 0;
-      IDXGISwapChain1 *swapChain1 = nullptr;
-      hr = factory->CreateSwapChainForHwnd(desc.queue->d3d12.queue, hwnd, &sd,
-                                           nullptr, nullptr, &swapChain1);
-      if (!D3D12_WrapResult(hr)) {
-        factory->Release();
-        return false;
-      }
-      hr = swapChain1->QueryInterface(IID_PPV_ARGS(&sc.d3d12.swapchain));
-      swapChain1->Release();
-      if (!D3D12_WrapResult(hr)) {
-        factory->Release();
-        return false;
+      for (;;) {
+        DXGI_SWAP_CHAIN_DESC1 sd = {};
+        sd.Width = desc.width;
+        sd.Height = desc.height;
+        sd.Format = format.dxgiFormat;
+        sd.Stereo = FALSE;
+        sd.SampleDesc = {1, 0};
+        sd.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
+        sd.BufferCount = bufferCount;
+        sd.Scaling = DXGI_SCALING_STRETCH;
+        sd.SwapEffect = DXGI_SWAP_EFFECT_FLIP_DISCARD;
+        sd.AlphaMode = DXGI_ALPHA_MODE_UNSPECIFIED;
+        sd.Flags = allowTearing ? DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING : 0;
+        IDXGISwapChain1 *swapChain1 = nullptr;
+        hr = factory->CreateSwapChainForHwnd(desc.queue->d3d12.queue, hwnd, &sd,
+                                             nullptr, nullptr, &swapChain1);
+        if (!D3D12_WrapResult(hr))
+          return false;
+        hr = swapChain1->QueryInterface(IID_PPV_ARGS(&sc.d3d12.swapchain));
+        swapChain1->Release();
+        if (!D3D12_WrapResult(hr))
+          return false;
+        if (applyColorSpace())
+          break;
+        const RID3D12SwapchainFormat sdr =
+            ri_d3d12_swapchain_format(RI_SWAPCHAIN_BT709_G22_8BIT);
+        if (format.dxgiFormat == sdr.dxgiFormat &&
+            format.colorSpace == sdr.colorSpace) {
+          // The default SDR colour space is implicit; nothing to fall back to.
+          break;
+        }
+        hpl::Warning("RI D3D12: swapchain colour space %d not presentable; "
+                     "falling back to 8-bit sRGB\n",
+                     int(format.colorSpace));
+        sc.d3d12.swapchain->Release();
+        sc.d3d12.swapchain = nullptr;
+        format = sdr;
       }
       if (!recreate)
         factory->MakeWindowAssociation(hwnd, DXGI_MWA_NO_ALT_ENTER);
-      factory->Release();
       return true;
     };
 
     if (recreate) {
       allowTearing = oldSwapchain->d3d12.allowTearing != 0;
-      const DXGI_FORMAT requestedFormat = DXGI_FORMAT_R8G8B8A8_UNORM;
       const UINT requestedFlags =
           allowTearing ? DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING : 0;
       const UINT oldFlags =
           allowTearing ? DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING : 0;
-      const bool compatible = oldSwapchain->imageCount == bufferCount &&
-                              requestedFormat == DXGI_FORMAT_R8G8B8A8_UNORM &&
-                              oldFlags == requestedFlags;
+      const bool compatible =
+          oldSwapchain->imageCount == bufferCount &&
+          RIFormatToD3D12(oldSwapchain->format) == format.dxgiFormat &&
+          oldFlags == requestedFlags;
       desc.queue->waitIdle(device);
       for (uint32_t i = 0; i < RI_MAX_SWAPCHAIN_IMAGES; ++i) {
         oldSwapchain->views[i] = RITextureView{};
@@ -220,12 +275,21 @@ RISwapchain RISwapchain::create(struct RIDevice *device,
         sc.d3d12.swapchain = oldSwapchain->d3d12.swapchain;
         oldSwapchain->d3d12.swapchain = nullptr;
         HRESULT hr = sc.d3d12.swapchain->ResizeBuffers(
-            bufferCount, desc.width, desc.height, DXGI_FORMAT_R8G8B8A8_UNORM,
+            bufferCount, desc.width, desc.height, format.dxgiFormat,
             requestedFlags);
         if (!D3D12_WrapResult(hr)) {
           sc.d3d12.swapchain->Release();
           sc.d3d12.swapchain = nullptr;
           return sc;
+        }
+        if (!applyColorSpace()) {
+          // Same buffer format, different colour space (e.g. 10-bit SDR to
+          // HDR10) that the output rejects: rebuild so createSwapchain can
+          // fall back.
+          sc.d3d12.swapchain->Release();
+          sc.d3d12.swapchain = nullptr;
+          if (!createSwapchain())
+            return sc;
         }
       } else {
         if (oldSwapchain->d3d12.swapchain) {
@@ -255,10 +319,9 @@ RISwapchain RISwapchain::create(struct RIDevice *device,
       }
     };
     HRESULT hr = S_OK;
-    // The D3D12 path currently creates an R8G8B8A8_UNORM swapchain. Keep the
-    // neutral RI format in sync with that actual DXGI format; desc.format is
-    // a RISwapchainFormat_e, not an RI_Format_e.
-    const RI_Format swapchainRIFormat = RI_FORMAT_RGBA8_UNORM;
+    // Keep the neutral RI format in sync with the DXGI format actually
+    // created, which may be the 8-bit fallback rather than desc.format.
+    const RI_Format swapchainRIFormat = format.riFormat;
     sc.format = swapchainRIFormat;
     for (UINT i = 0; i < bufferCount; ++i) {
       hr = sc.d3d12.swapchain->GetBuffer(i, IID_PPV_ARGS(&sc.d3d12.images[i]));
@@ -323,7 +386,6 @@ RISwapchain RISwapchain::create(struct RIDevice *device,
   }
 #endif
 #if (DEVICE_IMPL_VULKAN)
-
   if (RIIsTargetSelected(RI_DEVICE_API_VK)) {
     VkResult result = VK_SUCCESS;
     // The swapchain owns its surface. desc.source selects where it comes from:

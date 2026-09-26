@@ -10,8 +10,13 @@ RIGraphicsPipelineDesc MakeDecalPipelineDesc(RI_Format_e colorFormat,
                                              uint32_t vertexPresentMask) {
   RIGraphicsPipelineDesc desc = {};
   // Decal.vert.slang reuses the translucent 5-stream layout; normal and
-  // tangent are bound but ignored by the shader.
+  // tangent stay bound but are ignored by the shader. Their attributes are
+  // dropped (locations 0, 3, 4 remain) so validation does not flag inputs the
+  // vertex shader never consumes.
   desc.vertexInput = MakeMeshVertexInputDesc(vertexPresentMask);
+  desc.vertexInput.attributes[1] = desc.vertexInput.attributes[3]; // COLOR
+  desc.vertexInput.attributes[2] = desc.vertexInput.attributes[4]; // TEXCOORD0
+  desc.vertexInput.attributeCount = 3;
   desc.topology = RI_TOPOLOGY_TRIANGLE_LIST;
 
   desc.raster.polygonMode = RI_POLYGON_MODE_FILL;

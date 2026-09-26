@@ -1,9 +1,11 @@
 #include "graphics/TemporalReactiveMaskMath.h"
+#include "Constants.h"
 #include "utest.h"
 
 #include <cmath>
 #include <cstdint>
 #include <limits>
+#include <initializer_list>
 
 namespace {
 
@@ -34,6 +36,90 @@ void CheckUV(int *utest_result, uint32_t x, uint32_t y,
 }
 
 } // namespace
+
+UTEST(TemporalReactiveMask, StandardFsrHaloPreservesDetailProtection) {
+  const auto params = hpl::TemporalReactiveMaskDefaultParams(
+      hpl::TemporalUpscalerProvider::Fsr, true, hpl::kSceneExposure);
+  const float darkWall[3] = {0.001f, 0.001f, 0.001f};
+  const float faintHalo[3] = {0.003f, 0.002f, 0.001f};
+  const auto sample =
+      hpl::TemporalReactiveMaskEvaluate(darkWall, faintHalo, params);
+  const auto previous =
+      hpl::TemporalReactiveMaskEvaluate(darkWall, faintHalo);
+  EXPECT_GT(sample.reactive, 0.0f);
+  EXPECT_LT(sample.reactive, previous.reactive);
+  EXPECT_GT(previous.composition, 0.0f);
+  EXPECT_EQ(sample.composition, 0.0f);
+  const auto unchanged =
+      hpl::TemporalReactiveMaskEvaluate(darkWall, darkWall, params);
+  EXPECT_EQ(unchanged.reactive, 0.0f);
+  EXPECT_EQ(unchanged.composition, 0.0f);
+}
+
+UTEST(TemporalReactiveMask, StandardFsrFlameRemainsReactive) {
+  const auto params = hpl::TemporalReactiveMaskDefaultParams(
+      hpl::TemporalUpscalerProvider::Fsr, true, hpl::kSceneExposure);
+  const float black[3] = {};
+  const float flame[3] = {2.0f, 1.0f, 0.1f};
+  const auto sample = hpl::TemporalReactiveMaskEvaluate(black, flame, params);
+  EXPECT_GT(sample.reactive, 0.49f);
+  EXPECT_LE(sample.reactive, 0.5f);
+  EXPECT_EQ(sample.composition, 0.0f);
+}
+
+UTEST(TemporalReactiveMask, StandardFsrExposureScaling) {
+  // Scaling the color buffers and exposure together must preserve the mask.
+  const float exposures[] = {1.0f, hpl::kSceneExposure, 10.0f};
+  const float opaque[3] = {0.01f, 0.02f, 0.03f};
+  const float finalColor[3] = {0.04f, 0.03f, 0.03f};
+  const auto reference = hpl::TemporalReactiveMaskEvaluate(
+      opaque, finalColor, hpl::TemporalReactiveMaskDefaultParams(
+          hpl::TemporalUpscalerProvider::Fsr, true, 1.0f));
+  for (float exposure : exposures) {
+    float scaledOpaque[3], scaledFinal[3];
+    for (int channel = 0; channel < 3; ++channel) {
+      scaledOpaque[channel] = opaque[channel] / exposure;
+      scaledFinal[channel] = finalColor[channel] / exposure;
+    }
+    const auto sample = hpl::TemporalReactiveMaskEvaluate(
+        scaledOpaque, scaledFinal, hpl::TemporalReactiveMaskDefaultParams(
+            hpl::TemporalUpscalerProvider::Fsr, true, exposure));
+    EXPECT_NEAR(sample.reactive, reference.reactive, 1.0e-6f);
+    EXPECT_EQ(sample.composition, 0.0f);
+  }
+}
+
+UTEST(TemporalReactiveMask, OtherProvidersAndRenderersKeepDefaults) {
+  const hpl::TemporalUpscalerProvider providers[] = {
+      hpl::TemporalUpscalerProvider::Off, hpl::TemporalUpscalerProvider::Fsr,
+      hpl::TemporalUpscalerProvider::XeSS};
+  const hpl::TemporalReactiveMaskParams defaults;
+  for (auto provider : providers) {
+    for (bool standard : {false, true}) {
+      if (standard && provider == hpl::TemporalUpscalerProvider::Fsr)
+        continue;
+      const auto params = hpl::TemporalReactiveMaskDefaultParams(
+          provider, standard, hpl::kSceneExposure);
+      EXPECT_EQ(params.luminanceFloor, defaults.luminanceFloor);
+      EXPECT_EQ(params.reactiveScale, defaults.reactiveScale);
+      EXPECT_EQ(params.compositionScale, defaults.compositionScale);
+      EXPECT_EQ(params.compositionKnee, defaults.compositionKnee);
+      EXPECT_EQ(params.changeEpsilon, defaults.changeEpsilon);
+    }
+  }
+}
+
+UTEST(TemporalReactiveMask, InvalidPolicyExposureHasFiniteFloor) {
+  const float exposures[] = {0.0f, -1.0f,
+      std::numeric_limits<float>::quiet_NaN(),
+      std::numeric_limits<float>::infinity(),
+      std::numeric_limits<float>::denorm_min()};
+  for (float exposure : exposures) {
+    const auto params = hpl::TemporalReactiveMaskDefaultParams(
+        hpl::TemporalUpscalerProvider::Fsr, true, exposure);
+    EXPECT_EQ(params.luminanceFloor, 0.05f);
+  }
+}
 
 UTEST(TemporalReactiveMask, IdenticalImages) {
   const float midGrey[3] = {0.5f, 0.5f, 0.5f};

@@ -284,23 +284,19 @@ SHARED_CONST uint kMaterialBlendModeMulX2       = 3u;
 SHARED_CONST uint kMaterialBlendModeAlpha       = 4u;
 SHARED_CONST uint kMaterialBlendModePremulAlpha = 5u;
 
-// -----------------------------------------------------------------------------
-// World-space cell-grid sizing. This grid was owned by the retired surfel cache;
-// kCellDimension / kCellUnit survive because the light grid derives its world
-// coverage (kLightGridExtent) from them.
-//   kCellDimension: linear cell count along each axis of the uniform grid.
-//   kCellUnit:      world-space side length of one cell.
-// -----------------------------------------------------------------------------
-SHARED_CONST uint  kCellDimension       = 250u;
-SHARED_CONST float kCellUnit            = 0.25f;
 SHARED_CONST uint2 kTileSize            = uint2(16, 16);
 
 // World-space light grid (coarse, camera-centered) for NEE importance
 // sampling. kLightGridExtent sets the per-axis world coverage; kLightGridUnit
 // is derived from it. Built each frame by LightGridBuildPass; read by the
 // direct pass and the path tracer's getCellLights.
+//
+// Reach is ±kLightGridExtent/2 around the camera: a surface outside the grid
+// gets no cell and so no direct light at all. Widening the extent at a fixed
+// kLightGridDim costs nothing in memory or dispatch, but coarsens the cells,
+// so more lights compete for each cell's kLightsPerCellMax slots.
 SHARED_CONST uint  kLightGridDim       = 32u;
-SHARED_CONST float kLightGridExtent    = float(kCellDimension) * kCellUnit;
+SHARED_CONST float kLightGridExtent    = 125.0f;  // ±62.5m, ~3.9m cells
 SHARED_CONST float kLightGridUnit      = kLightGridExtent / float(kLightGridDim);
 SHARED_CONST uint  kLightGridCellCount = kLightGridDim * kLightGridDim * kLightGridDim;  // 32768
 // Per-cell light-list cap. binLights keeps the TOP-K lights by estimated

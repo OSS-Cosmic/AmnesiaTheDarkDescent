@@ -218,7 +218,14 @@ bool cStandardShadowCullPass::Dispatch(RICmd *cmd, uint32_t frameIndex,
            : buffers.indirectCapacity *
                  (sizeof(VkDrawIndirectCommand) / sizeof(uint32_t)));
 
-  RITextureView *hiZ = buffers.hiZ ? buffers.hiZ : m_hiZFallbackView.Get();
+  // Replay (phase 1 of the two-phase cull) is frustum-only and never samples
+  // the pyramid, and it runs before this frame's Build: a pyramid image on its
+  // first use is still UNDEFINED, which validation rejects even for a binding
+  // the branch skips. Bind the stand-in instead.
+  RITextureView *hiZ =
+      (buffers.hiZ && constants.cullMode != kStandardCullModeVisibilityReplay)
+          ? buffers.hiZ
+          : m_hiZFallbackView.Get();
   if (!hiZ)
     return false;
   if (hiZ == m_hiZFallbackView.Get() && m_hiZFallbackPendingTransition) {

@@ -21,10 +21,6 @@
 // RI*Renderer functions below, never by referencing this object directly.
 static RIRenderer g_renderer;
 
-// Backs the multi-backend path of RIIsTargetSelected (see RITypes.h). Defined
-// unconditionally: single-backend builds fold that check at compile time, but
-// callers that cache something per backend still need the value at runtime.
-uint8_t RIActiveBackendApi() { return g_renderer.api; }
 
 #if (DEVICE_IMPL_VULKAN)
 
@@ -36,6 +32,11 @@ uint8_t RIActiveBackendApi() { return g_renderer.api; }
 #include "vk_mem_alloc.h"
 
 VkInstance RIGetVkInstance() { return g_renderer.vk.instance; }
+uint8_t RIActiveBackendApi() { return g_renderer.api; }
+#if (DEVICE_IMPL_D3D12)
+IDXGIFactory6 *RIGetDXGIFactory() { return g_renderer.d3d12.factory; }
+#endif
+
 
 static inline enum RIVendor_e VendorFromID(uint32_t vendorID) {
   switch (vendorID) {
@@ -322,6 +323,7 @@ static bool __VK_ValidateForeignFeatureChain(
       }
     }
     if (!isEngineNode) {
+      hpl::Log("RI: foreign feature structure sType %d\n", (int)node->sType);
       if (reason)
         *reason = "returned a feature structure not owned by the engine";
       return false;
@@ -1481,6 +1483,41 @@ int RIDevice::init(struct RIDeviceDesc *init) {
     const VkPhysicalDeviceCoherentMemoryFeaturesAMD
         supportedAmdCoherentMemoryFeatures = amdCoherentMemoryFeatures;
 
+    // Feature structures for extensions the engine never enables itself but a
+    // contributor may (XeSS asks for VK_EXT_mutable_descriptor_type). If the
+    // chain already holds an engine-owned node for it, the contributor patches
+    // that in place instead of appending a structure of its own, which the
+    // validation above rightly refuses. Spliced in only once a contributor has
+    // enabled the extension, and dropped again by restorePlainRequirements.
+    VkPhysicalDeviceMutableDescriptorTypeFeaturesEXT mutableDescriptorFeatures = {
+        VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MUTABLE_DESCRIPTOR_TYPE_FEATURES_EXT};
+    VkPhysicalDeviceMutableDescriptorTypeFeaturesEXT
+        supportedMutableDescriptorFeatures = mutableDescriptorFeatures;
+    bool mutableDescriptorFeaturesChained = false;
+    const size_t plainEngineFeatureNodeCount = engineFeatureNodeCount;
+    auto chainContributorFeatureNodes = [&]() {
+      if (mutableDescriptorFeaturesChained ||
+          engineFeatureNodeCount == sizeof(engineFeatureNodes) /
+                                        sizeof(engineFeatureNodes[0]) ||
+          !__VK_isExtensionNamesSupported(
+              qCToStrRef(VK_EXT_MUTABLE_DESCRIPTOR_TYPE_EXTENSION_NAME),
+              enabledExtensionNames, arrlen(enabledExtensionNames)))
+        return;
+      VkPhysicalDeviceFeatures2 supportQuery = {
+          VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2};
+      supportedMutableDescriptorFeatures.pNext = nullptr;
+      supportQuery.pNext = &supportedMutableDescriptorFeatures;
+      vkGetPhysicalDeviceFeatures2(physicalAdapter->vk.physicalDevice,
+                                   &supportQuery);
+      supportedMutableDescriptorFeatures.pNext = nullptr;
+      // Requested bits start clear; the contributor sets what it needs.
+      mutableDescriptorFeatures.mutableDescriptorType = VK_FALSE;
+      R_VK_ADD_STRUCT(&features, &mutableDescriptorFeatures);
+      engineFeatureNodes[engineFeatureNodeCount++] =
+          reinterpret_cast<const VkBaseOutStructure *>(&mutableDescriptorFeatures);
+      mutableDescriptorFeaturesChained = true;
+    };
+
     auto restorePlainRequirements = [&]() {
       arrsetlen(enabledExtensionNames, plainExtensionCount);
       foreignFeatureChain = &features;
@@ -1497,6 +1534,9 @@ int RIDevice::init(struct RIDeviceDesc *init) {
       rayQueryFeatures = supportedRayQueryFeatures;
       fragmentBarycentricFeatures = supportedFragmentBarycentricFeatures;
       amdCoherentMemoryFeatures = supportedAmdCoherentMemoryFeatures;
+      // `features` above restored the original pNext head, which unlinks it.
+      mutableDescriptorFeaturesChained = false;
+      engineFeatureNodeCount = plainEngineFeatureNodeCount;
     };
 
     // Merges one contributor's extensions and feature chain, or declines it and
@@ -1555,6 +1595,7 @@ int RIDevice::init(struct RIDeviceDesc *init) {
         return true;
       }
 
+      chainContributorFeatureNodes();
       if (!req.mergeFeatureChain(req.userData, &foreignFeatureChain)) {
         decline("required device feature query failed");
         return false;
@@ -1642,6 +1683,14 @@ int RIDevice::init(struct RIDeviceDesc *init) {
                                     supportedAmdCoherentMemoryFeatures,
                                     debugName) &&
           featuresSupported;
+
+      if (mutableDescriptorFeaturesChained)
+        featuresSupported =
+            VK_FOREIGN_CHECK_FEATURES(
+                VkPhysicalDeviceMutableDescriptorTypeFeaturesEXT,
+                mutableDescriptorType, mutableDescriptorFeatures,
+                supportedMutableDescriptorFeatures, debugName) &&
+            featuresSupported;
 
       if (!chainValid || !featuresSupported) {
         if (chainValid)

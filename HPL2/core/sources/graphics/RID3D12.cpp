@@ -13,6 +13,7 @@ std::atomic<uint32_t> g_riD3D12DescriptorCacheEntries{0};
 #include "system/LowLevelSystem.h"
 
 #include <d3d12sdklayers.h>
+#include <dxgidebug.h>
 #include <D3D12MemAlloc.h>
 #include <algorithm>
 #include <cstdarg>
@@ -160,6 +161,15 @@ static bool ri_d3d12_populate_adapter(IDXGIAdapter4 *src, bool isWarp,
     return false;
   }
 
+  // A UMA adapter shares system memory with the CPU: an integrated GPU. Rank
+  // it below a discrete one so adapter selection prefers dedicated hardware.
+  D3D12_FEATURE_DATA_ARCHITECTURE1 architecture = {};
+  if (!isWarp && SUCCEEDED(probe->CheckFeatureSupport(
+                     D3D12_FEATURE_ARCHITECTURE1, &architecture,
+                     sizeof(architecture))) &&
+      architecture.UMA)
+    dst.type = RI_ADAPTER_TYPE_INTEGRATED_GPU;
+
   D3D12_FEATURE_DATA_D3D12_OPTIONS options = {};
   if (D3D12_WrapResult(probe->CheckFeatureSupport(
           D3D12_FEATURE_D3D12_OPTIONS, &options, sizeof(options)))) {
@@ -296,7 +306,17 @@ int RID3D12_InitRenderer(struct RIRenderer &renderer,
     }
   }
 
-  hr = CreateDXGIFactory2(0, IID_PPV_ARGS(&renderer.d3d12.factory));
+  // The DXGI debug layer ships with the Graphics Tools optional feature, so a
+  // debug factory can fail where the D3D12 debug layer works; fall back to a
+  // plain factory.
+  const UINT factoryFlags =
+      g_riD3D12EnableDebugLayer ? DXGI_CREATE_FACTORY_DEBUG : 0;
+  hr = CreateDXGIFactory2(factoryFlags, IID_PPV_ARGS(&renderer.d3d12.factory));
+  if (FAILED(hr) && factoryFlags != 0) {
+    hpl::Warning("RI D3D12: DXGI debug factory unavailable (hr=0x%08x); using a plain factory\n",
+                 unsigned(hr));
+    hr = CreateDXGIFactory2(0, IID_PPV_ARGS(&renderer.d3d12.factory));
+  }
   if (!D3D12_WrapResult(hr)) {
     if (renderer.d3d12.debug)
       renderer.d3d12.debug->Release();
@@ -310,6 +330,7 @@ int RID3D12_InitRenderer(struct RIRenderer &renderer,
 
 void RID3D12_ShutdownRenderer(struct RIRenderer &renderer) {
   std::lock_guard<std::mutex> lock(g_riD3D12AdapterMutex);
+  const bool reportLiveObjects = renderer.d3d12.enableDebugLayer != 0;
   for (IDXGIAdapter4 *adapter : g_riD3D12Adapters)
     adapter->Release();
   g_riD3D12Adapters.clear();
@@ -318,6 +339,18 @@ void RID3D12_ShutdownRenderer(struct RIRenderer &renderer) {
   if (renderer.d3d12.debug)
     renderer.d3d12.debug->Release();
   memset(&renderer.d3d12, 0, sizeof(renderer.d3d12));
+  // Everything the renderer owns is released by now, so any D3D12/DXGI object
+  // still alive is a leak. The report goes to the debugger output.
+  if (reportLiveObjects) {
+    IDXGIDebug1 *dxgiDebug = nullptr;
+    if (SUCCEEDED(DXGIGetDebugInterface1(0, IID_PPV_ARGS(&dxgiDebug)))) {
+      hpl::Log("RI D3D12: reporting live DXGI/D3D12 objects to the debugger\n");
+      dxgiDebug->ReportLiveObjects(
+          DXGI_DEBUG_ALL, DXGI_DEBUG_RLO_FLAGS(DXGI_DEBUG_RLO_SUMMARY |
+                                               DXGI_DEBUG_RLO_IGNORE_INTERNAL));
+      dxgiDebug->Release();
+    }
+  }
   if (g_riD3D12OwnsCOM) {
     CoUninitialize();
     g_riD3D12OwnsCOM = false;
@@ -347,7 +380,7 @@ int RID3D12_EnumerateAdapters(struct RIRenderer &renderer,
         break;
       DXGI_ADAPTER_DESC3 desc = {};
       hr = hardware->GetDesc3(&desc);
-      if (!D3D12_WrapResult(hr) || (desc.Flags & DXGI_ADAPTER_FLAG3_REMOTE)) {
+      if (!D3D12_WrapResult(hr) || (desc.Flags & (DXGI_ADAPTER_FLAG3_REMOTE | DXGI_ADAPTER_FLAG3_SOFTWARE))) {
         hardware->Release();
         continue;
       }
@@ -355,8 +388,8 @@ int RID3D12_EnumerateAdapters(struct RIRenderer &renderer,
       if (ri_d3d12_populate_adapter(hardware, false, temp)) {
         if (adapters && count < capacity)
           adapters[count] = temp;
-        hpl::Log("RI D3D12 adapter: %s vendor=%u FL=%u.%u SM=%u.%u RT=%u\n",
-                 temp.name, temp.vendor, temp.d3d12.highestFeatureLevelMajor,
+        hpl::Log("RI D3D12 adapter: %s vendor=%u type=%u FL=%u.%u SM=%u.%u RT=%u\n",
+                 temp.name, temp.vendor, temp.type, temp.d3d12.highestFeatureLevelMajor,
                  temp.d3d12.highestFeatureLevelMinor,
                  temp.d3d12.highestShaderModelMajor,
                  temp.d3d12.highestShaderModelMinor,
@@ -374,8 +407,8 @@ int RID3D12_EnumerateAdapters(struct RIRenderer &renderer,
       if (ri_d3d12_populate_adapter(warp, true, temp)) {
         if (adapters && count < capacity)
           adapters[count] = temp;
-        hpl::Log("RI D3D12 adapter: %s vendor=%u FL=%u.%u SM=%u.%u RT=%u\n",
-                 temp.name, temp.vendor, temp.d3d12.highestFeatureLevelMajor,
+        hpl::Log("RI D3D12 adapter: %s vendor=%u type=%u FL=%u.%u SM=%u.%u RT=%u\n",
+                 temp.name, temp.vendor, temp.type, temp.d3d12.highestFeatureLevelMajor,
                  temp.d3d12.highestFeatureLevelMinor,
                  temp.d3d12.highestShaderModelMajor,
                  temp.d3d12.highestShaderModelMinor,
@@ -392,7 +425,12 @@ int RID3D12_EnumerateAdapters(struct RIRenderer &renderer,
     hpl::Warning("RI D3D12: adapter enumeration returned 0; retrying after IDXGIFactory reset\n");
     renderer.d3d12.factory->Release();
     renderer.d3d12.factory = nullptr;
-    HRESULT hr = CreateDXGIFactory2(0, IID_PPV_ARGS(&renderer.d3d12.factory));
+    const UINT factoryFlags =
+        g_riD3D12EnableDebugLayer ? DXGI_CREATE_FACTORY_DEBUG : 0;
+    HRESULT hr =
+        CreateDXGIFactory2(factoryFlags, IID_PPV_ARGS(&renderer.d3d12.factory));
+    if (FAILED(hr) && factoryFlags != 0)
+      hr = CreateDXGIFactory2(0, IID_PPV_ARGS(&renderer.d3d12.factory));
     if (!D3D12_WrapResult(hr))
       return RI_FAIL;
     enumerate_pass();
@@ -592,13 +630,28 @@ int RID3D12_InitDevice(struct RIDevice &device, const struct RIDeviceDesc *init)
       const BOOL breakOnError = breakEnv && atoi(breakEnv) != 0 ? TRUE : FALSE;
       device.d3d12.infoQueue->SetBreakOnSeverity(D3D12_MESSAGE_SEVERITY_ERROR, breakOnError);
       device.d3d12.infoQueue->SetBreakOnSeverity(D3D12_MESSAGE_SEVERITY_CORRUPTION, breakOnError);
+      // Warnings the renderer triggers by design: D3D12MA places several
+      // buffers in one heap range, and enhanced-barrier resources ignore the
+      // legacy initial state.
+      D3D12_MESSAGE_ID denyIds[] = {
+          D3D12_MESSAGE_ID_HEAP_ADDRESS_RANGE_INTERSECTS_MULTIPLE_BUFFERS,
+          D3D12_MESSAGE_ID_CREATERESOURCE_STATE_IGNORED,
+      };
+      D3D12_INFO_QUEUE_FILTER filter = {};
+      filter.DenyList.NumIDs = UINT(sizeof(denyIds) / sizeof(denyIds[0]));
+      filter.DenyList.pIDList = denyIds;
+      D3D12_WrapResult(device.d3d12.infoQueue->PushStorageFilter(&filter));
       HRESULT hr1 = device.d3d12.infoQueue->QueryInterface(
           IID_PPV_ARGS(&device.d3d12.infoQueue1));
       if (SUCCEEDED(hr1) && device.d3d12.infoQueue1) {
-        if (!D3D12_WrapResult(device.d3d12.infoQueue1->RegisterMessageCallback(
+        if (D3D12_WrapResult(device.d3d12.infoQueue1->RegisterMessageCallback(
                 &ri_d3d12_info_queue_callback,
                 D3D12_MESSAGE_CALLBACK_FLAG_NONE, nullptr,
                 &device.d3d12.infoQueueCookie))) {
+          // The callback already logs every message; stop the debug layer
+          // printing each one a second time to the debugger output.
+          device.d3d12.infoQueue1->SetMuteDebugOutput(TRUE);
+        } else {
           device.d3d12.infoQueue1->Release();
           device.d3d12.infoQueue1 = nullptr;
           device.d3d12.infoQueueCookie = 0;

@@ -1,6 +1,8 @@
 #ifndef HPL_TEMPORAL_REACTIVE_MASK_MATH_H
 #define HPL_TEMPORAL_REACTIVE_MASK_MATH_H
 
+#include "graphics/TemporalUpscalerTypes.h"
+
 #include <cmath>
 #include <cstdint>
 
@@ -13,6 +15,15 @@ struct TemporalReactiveMaskParams {
   float compositionKnee = 0.25f;
   float changeEpsilon = 1.0e-4f;
 };
+
+// Standard's scene color is display-linear radiance divided by sceneExposure.
+// Its generic color-difference mask should affect FSR accumulation without
+// independently removing detail protection across additive halos. Other
+// renderer/provider combinations retain the shared defaults. Invalid exposure
+// or an unrepresentable floor falls back to a 0.05 scene-linear floor.
+TemporalReactiveMaskParams TemporalReactiveMaskDefaultParams(
+    TemporalUpscalerProvider provider, bool standardRenderer,
+    float sceneExposure);
 
 struct TemporalReactiveMaskSample {
   float reactive = 0.0f;

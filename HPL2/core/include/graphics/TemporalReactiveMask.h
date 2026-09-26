@@ -63,6 +63,8 @@ struct TemporalReactiveMaskRecordDesc {
   RIResourceState_e finalColorExitState = RI_RESOURCE_STATE_SHADER_RESOURCE;
   float jitterPixels[2] = {};
   TemporalUpscalerProvider provider = TemporalUpscalerProvider::Off;
+  // Selected by the viewport for the active renderer and upscaler.
+  TemporalReactiveMaskParams params = {};
 };
 
 // Explicitly named variants so an adapter cannot bind the wrong one.

@@ -146,6 +146,11 @@ static inline bool RIIsTargetSelected(uint8_t targetApi) {
 VkInstance RIGetVkInstance();
 #endif
 
+#if (DEVICE_IMPL_D3D12)
+// The renderer's DXGI factory; borrowed, valid until ShutdownRIRenderer.
+IDXGIFactory6 *RIGetDXGIFactory();
+#endif
+
 #if (DEVICE_IMPL_VULKAN)
 // Vulkan prerequisites contributed by a caller outside RI -- an upscaler SDK, a
 // capture layer -- that has to be accounted for while the instance or the

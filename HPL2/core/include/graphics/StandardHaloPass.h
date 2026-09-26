@@ -18,6 +18,7 @@
 namespace hpl {
 class cBillboard;
 class cFrustum;
+class cResources;
 class cVertexBuffer;
 class iRenderable;
 
@@ -82,7 +83,7 @@ void ResolveStandardHaloQueries(StandardHaloQueryState &state, uint64_t complete
 // the box times visible / all, so a glow fades as it is occluded.
 class cStandardHaloPass {
 public:
-  explicit cStandardHaloPass(cGraphics *graphics);
+  cStandardHaloPass(cGraphics *graphics, cResources *resources);
   ~cStandardHaloPass();
   void DestroyData();
 
@@ -93,18 +94,24 @@ public:
   // Records this frame's queries against the opaque depth, which arrives and
   // leaves in `depthState`. SHADER_RESOURCE (Standard) is flipped to
   // DEPTH_READ around the queries; a state that already admits DEPTH_READ
-  // (the hybrid renderer's read-only depth) is used as-is. `meshDecal` is the
-  // Decal.vert/frag program; the pass warns once and records nothing without it.
+  // (the hybrid renderer's read-only depth) is used as-is. Without its
+  // program the pass warns once and records nothing.
   void Record(cGraphics::FrameContext *frame, StandardHaloQueryState &state,
-              std::span<iRenderable *> translucents, RIProgram *meshDecal,
-              RITexture *depthTexture, RITextureView *depthView, uint32_t width,
+              std::span<iRenderable *> translucents, RITexture *depthTexture, RITextureView *depthView, uint32_t width,
               uint32_t height, RIProgram::DescriptorBinding frameBinding, uint32_t paneSalt,
               RIResourceState_e depthState = RI_RESOURCE_STATE_SHADER_RESOURCE);
 
 private:
   std::vector<cBillboard *> CollectHalos(std::span<iRenderable *> translucents) const;
+  // Decal.vert:vsOcclusion + Decal.frag:psOcclusion, loaded on first Record. The
+  // queries render with no colour attachment and read position only, so the
+  // decal's own entries would leave a colour write and two attributes unused.
+  bool LoadProgram();
 
   cGraphics *mpGraphics;
+  cResources *mpResources;
+  std::shared_ptr<RIProgram> m_program;
+  bool m_programTried = false;
   // Unit box scaled by each halo's source size (legacy m_box).
   std::shared_ptr<cVertexBuffer> m_box;
   bool m_warnedUnavailable = false;

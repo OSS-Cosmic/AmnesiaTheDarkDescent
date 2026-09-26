@@ -61,3 +61,11 @@ float4 psMain(DecalVSOut psIn) : SV_TARGET
 
     return float4(c, 1.0f);
 }
+
+// Colour-less entry for the billboard-halo occlusion queries
+// (cStandardHaloPass, paired with Decal.vert:vsOcclusion). They render with no
+// colour attachment, so psMain's SV_TARGET write would have nowhere to go.
+[shader("fragment")]
+void psOcclusion()
+{
+}

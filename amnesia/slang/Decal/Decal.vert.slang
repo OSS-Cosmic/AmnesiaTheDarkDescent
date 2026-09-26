@@ -72,3 +72,23 @@ DecalVSOut vsMain(DecalVSIn vin,
     vsOut.posH     = mul(modelViewPrj, float4(vin.a_position, 1.0f));
     return vsOut;
 }
+
+// Position-only entry for the billboard-halo occlusion queries
+// (cStandardHaloPass). The queries only count samples that pass the depth
+// test, so nothing but the clip position is needed; the halo pipeline declares
+// location 0 alone to match.
+struct DecalOcclusionVSIn
+{
+    float3 a_position : POSITION;
+};
+
+[shader("vertex")]
+float4 vsOcclusion(DecalOcclusionVSIn vin,
+                   uint drawInst : SV_InstanceID,
+                   uint baseInst : SV_StartInstanceLocation) : SV_POSITION
+{
+    UniformObject obj     = gSceneObjects[drawInst + baseInst];
+    float4x4 modelViewPrj = mul(gPerFrame.projMat,
+                                mul(gPerFrame.viewMat, obj.modelMat));
+    return mul(modelViewPrj, float4(vin.a_position, 1.0f));
+}

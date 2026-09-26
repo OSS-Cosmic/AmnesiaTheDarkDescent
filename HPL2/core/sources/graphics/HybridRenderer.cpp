@@ -375,7 +375,7 @@ cHybridRenderer::cHybridRenderer(cGraphics *apGraphics, cResources *apResources)
 
     m_hiZ = std::make_unique<cStandardHiZPass>(mpGraphics, apResources);
     m_cull = std::make_unique<cStandardShadowCullPass>(mpGraphics, apResources);
-    m_halo = std::make_unique<cStandardHaloPass>(mpGraphics);
+    m_halo = std::make_unique<cStandardHaloPass>(mpGraphics, apResources);
     // Non-fatal: without these the translucent families draw exactly as they
     // did before, just without occlusion culling.
     m_cullLoaded = m_hiZ->LoadData() && m_cull->LoadData();
@@ -1144,6 +1144,17 @@ void cHybridRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
     }
   }
 
+  // Solids that are not TLAS instances (ropes: CPU-rebuilt, camera-facing
+  // geometry) are never uploaded by cWorld::PrepareFrame, so without this the
+  // GPU keeps a stale orientation that back-face culls from the other side.
+  // SubmitToGPU is a no-op when the generation is unchanged, so SubMeshes
+  // already submitted for the TLAS cost nothing here.
+  for (iRenderable *pObj : m_rendererList.GetSolidObjects()) {
+    if (pObj && pObj->GetVertexBuffer())
+      static_cast<cVertexBuffer *>(pObj->GetVertexBuffer())
+          ->SubmitToGPU(&mpGraphics->device);
+  }
+
   SceneConstants perFrame{};
   std::memcpy(perFrame.viewMat, mainFrustumViewMat.a, sizeof(perFrame.viewMat));
   std::memcpy(perFrame.invViewMat, mainFrustumViewInvMat.a,
@@ -1351,10 +1362,12 @@ void cHybridRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
     if (!pVB)
       continue;
 
-    // Object slot for the indirect draw's firstInstance. cWorld::PrepareFrame
-    // already submitted this object (same cookie), built its BLAS, and uploaded
-    // its geometry for the TLAS this frame, so this is an idempotent cache hit
-    // returning the same slot. Skips on material/pool exhaustion.
+    // Object slot for the indirect draw's firstInstance. For SubMeshes,
+    // cWorld::PrepareFrame already submitted this object (same cookie), built
+    // its BLAS, and uploaded its geometry for the TLAS this frame, so this is an
+    // idempotent cache hit returning the same slot. Other solids (ropes) were
+    // uploaded by the solids prepare loop above. Skips on material/pool
+    // exhaustion.
     const uint32_t slot =
         apWorld->SubmitRenderableObject(pObject, cntx, apFrustum);
     if (slot == UINT32_MAX)
@@ -1923,12 +1936,16 @@ void cHybridRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
   if (m_cullLoaded && m_hiZ &&
       state.hiZ.IsUsable(mpGraphics->swapchainIndex) &&
       !state.depthSampleView[mpGraphics->swapchainIndex].isEmpty()) {
-    m_hiZ->Build(&mpGraphics->primary.cmds[0], mpGraphics->frameIndex, state.hiZ,
-                 mpGraphics->swapchainIndex, state.width, state.height,
-                 state.depthSampleView[mpGraphics->swapchainIndex].Get());
+    // No camera record without a built pyramid: the translucent culls key off
+    // cullCameraIndex, and an unbuilt pyramid is still UNDEFINED.
+    const bool built =
+        m_hiZ->Build(&mpGraphics->primary.cmds[0], mpGraphics->frameIndex,
+                     state.hiZ, mpGraphics->swapchainIndex, state.width,
+                     state.height,
+                     state.depthSampleView[mpGraphics->swapchainIndex].Get());
 
     RISegmentReq cameraReq = {};
-    if (m_cullCameraSegment.request(mpGraphics->frameIndex, 1, &cameraReq) &&
+    if (built && m_cullCameraSegment.request(mpGraphics->frameIndex, 1, &cameraReq) &&
         m_cullCameraBuffer.mappedAddress) {
       auto *cameraSlot = reinterpret_cast<StandardCullCamera *>(
           static_cast<uint8_t *>(m_cullCameraBuffer.mappedAddress) +
@@ -3527,7 +3544,7 @@ void cHybridRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
     mpGraphics->UpdateFrameUBO(&haloFrame.descriptor, &perFrame, sizeof(perFrame));
     const uint32_t paneSalt =
         hash_u64(HASH_INITIAL_VALUE, reinterpret_cast<uintptr_t>(viewport));
-    m_halo->Record(cntx, *state.haloQueries, haloCandidates, &m_decal,
+    m_halo->Record(cntx, *state.haloQueries, haloCandidates,
                    state.depthTextures[mpGraphics->swapchainIndex].Get(),
                    state.depthView[mpGraphics->swapchainIndex].Get(),
                    renderWidth, renderHeight, haloFrame, paneSalt,

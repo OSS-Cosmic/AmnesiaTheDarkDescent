@@ -272,9 +272,6 @@ void cGraphics::Init(const cEngineInitVars::cGraphicsVars &aVars,
 #error "No RI graphics backend compiled"
 #endif
   {
-    struct RIBackendInit backendInit = {};
-    backendInit.applicationName = "HPL2";
-
     // D3D12 wherever it is compiled in (Windows), Vulkan everywhere else,
     // unless the command line asked for one of them specifically.
     uint8_t requestedApi;
@@ -290,6 +287,25 @@ void cGraphics::Init(const cEngineInitVars::cGraphicsVars &aVars,
       requestedApi = DEVICE_IMPL_D3D12 ? RI_DEVICE_API_D3D12 : RI_DEVICE_API_VK;
       break;
     }
+
+    // An explicit --d3d12 still fails hard (see below), but the default must
+    // not strand a player whose driver rejects D3D12 when Vulkan would run:
+    // under Auto a D3D12 bring-up failure is logged and retried on Vulkan.
+    const bool bCanFallBackToVulkan =
+        aVars.mRenderApi == eRenderApiPreference_Auto && DEVICE_IMPL_D3D12 &&
+        DEVICE_IMPL_VULKAN;
+    auto fallBackToVulkan = [&](const char *apReason) {
+      if (!bCanFallBackToVulkan || requestedApi != RI_DEVICE_API_D3D12)
+        return false;
+      Log("WARNING: Direct3D 12 %s; falling back to Vulkan\n", apReason);
+      ShutdownRIRenderer();
+      requestedApi = RI_DEVICE_API_VK;
+      return true;
+    };
+
+  selectRenderApi:
+    struct RIBackendInit backendInit = {};
+    backendInit.applicationName = "HPL2";
 
     // Asking for a backend this build does not contain is a hard stop rather
     // than a fallback: the renderer never silently substitutes another API, and
@@ -365,6 +381,8 @@ void cGraphics::Init(const cEngineInitVars::cGraphicsVars &aVars,
     Log("Graphics API: %s\n", pBackendDisplayName);
 
     if (InitRIRenderer(&backendInit) != RI_SUCCESS) {
+      if (fallBackToVulkan("renderer initialization failed"))
+        goto selectRenderApi;
       FatalError(
           "Failed to initialize the %s renderer! Make sure your graphics "
           "card supports %s and your drivers are up to date.\n",
@@ -374,6 +392,8 @@ void cGraphics::Init(const cEngineInitVars::cGraphicsVars &aVars,
     uint32_t numAdapters = 0;
     if (EnumerateRIAdapters(NULL, &numAdapters) != RI_SUCCESS ||
         numAdapters == 0) {
+      if (fallBackToVulkan("found no compatible adapter"))
+        goto selectRenderApi;
       FatalError("No %s-compatible graphics adapter found! Make sure your "
                  "drivers are up to date.\n",
                  pBackendDisplayName);
@@ -382,6 +402,8 @@ void cGraphics::Init(const cEngineInitVars::cGraphicsVars &aVars,
 
     if (EnumerateRIAdapters(physicalAdapters.data(), &numAdapters) !=
         RI_SUCCESS) {
+      if (fallBackToVulkan("adapter enumeration failed"))
+        goto selectRenderApi;
       FatalError("Failed to enumerate %s graphics adapters!\n",
                  pBackendDisplayName);
     }
@@ -410,6 +432,9 @@ void cGraphics::Init(const cEngineInitVars::cGraphicsVars &aVars,
     // shortfall is named rather than surfacing as a generic device failure.
     if (const char *pUnmetRequirement =
             RendererUnmetAdapterRequirement(selectedAdapter)) {
+      Log("Adapter '%s' lacks %s\n", selectedAdapter.name, pUnmetRequirement);
+      if (fallBackToVulkan("adapter misses a renderer requirement"))
+        goto selectRenderApi;
       FatalError("The %s renderer requires %s, which adapter '%s' does not "
                  "support. Update your graphics driver or use a different "
                  "GPU.\n",
@@ -424,6 +449,10 @@ void cGraphics::Init(const cEngineInitVars::cGraphicsVars &aVars,
       const uint32_t smMajor = selectedAdapter.d3d12.highestShaderModelMajor;
       const uint32_t smMinor = selectedAdapter.d3d12.highestShaderModelMinor;
       if (smMajor < 6 || (smMajor == 6 && smMinor < 8)) {
+        Log("Adapter '%s' reports Shader Model %u.%u; 6.8 is required\n",
+            selectedAdapter.name, smMajor, smMinor);
+        if (fallBackToVulkan("shader model is too old"))
+          goto selectRenderApi;
         FatalError("The %s renderer requires Shader Model 6.8, but adapter "
                    "'%s' reports %u.%u. Update your graphics driver or use "
                    "the Vulkan renderer.\n",
@@ -481,6 +510,8 @@ void cGraphics::Init(const cEngineInitVars::cGraphicsVars &aVars,
     }
 #endif
     if (device.init(&deviceInit) != RI_SUCCESS) {
+      if (fallBackToVulkan("device creation failed"))
+        goto selectRenderApi;
       FatalError("Failed to create %s device on adapter '%s'! Make sure "
                  "your drivers are up to date.\n",
                  pBackendDisplayName, selectedAdapter.name);
