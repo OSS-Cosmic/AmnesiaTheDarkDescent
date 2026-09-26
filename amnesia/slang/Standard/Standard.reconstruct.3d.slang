@@ -57,8 +57,8 @@ void triangleUVGradients(float4 c0, float4 c1, float4 c2,
     TriangleHit hit = hitInfo.getTriangleHit();
     UniformObject obj = gSceneObjects[hit.instanceID];
     // Visibility is already coverage-tested. Do not re-run material alpha
-    // after half-precision barycentric reconstruction, and do not reject the
-    // valid far-plane hit accepted by the LEQUAL visibility depth test.
+    // after barycentric reconstruction, and do not reject the valid
+    // far-plane hit accepted by the LEQUAL visibility depth test.
     uint baseVertex = hit.primitiveIndex * 3u;
     StandardRasterVertex v0 = fetchStandardRasterVertex(obj, baseVertex + 0u);
     StandardRasterVertex v1 = fetchStandardRasterVertex(obj, baseVertex + 1u);

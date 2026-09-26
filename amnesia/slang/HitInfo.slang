@@ -16,14 +16,23 @@ public extension HitInfo
         return any(packed != uint4(0u, 0u, 0u, 0u));
     }
 
+    // Barycentrics are stored as full fp32 (b1 in .z, b2 in .w). Half floats
+    // quantise b1/b2 to ~1/2048 of the triangle's extent, which snaps the
+    // reconstructed UV to multi-texel blocks on large or heavily tiled
+    // triangles (visible as stair-stepped texels in every RT pass that
+    // rebuilds UVs from the V-buffer).
+    //
+    // b2 is in [0, 1], so its sign bit is free: it is always set in the
+    // packed form so that .w is never zero and the all-zero "no hit" clear
+    // value stays distinguishable via isValid().
     public TriangleHit getTriangleHit()
     {
         TriangleHit h;
         h.instanceID     = packed.x;
         h.primitiveIndex = packed.y;
         h.barycentrics   = float2(
-            f16tof32(packed.z & 0xFFFFu),
-            f16tof32((packed.z >> 16) & 0xFFFFu));
+            asfloat(packed.z),
+            asfloat(packed.w & 0x7FFFFFFFu));
         return h;
     }
 };
@@ -35,10 +44,8 @@ public extension TriangleHit
         uint4 r;
         r.x = instanceID;
         r.y = primitiveIndex;
-        r.z = (f32tof16(barycentrics.x) & 0xFFFFu)
-            | ((f32tof16(barycentrics.y) & 0xFFFFu) << 16);
-        r.w = 1u;  // non-zero w so HitInfo::isValid() returns true even when
-                   // instance id, prim index, and barys all hash to zero.
+        r.z = asuint(barycentrics.x);
+        r.w = asuint(barycentrics.y) | 0x80000000u;  // sign bit = "valid" flag
         return r;
     }
 };
