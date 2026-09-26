@@ -21,6 +21,10 @@
 // RI*Renderer functions below, never by referencing this object directly.
 static RIRenderer g_renderer;
 
+uint8_t RIActiveBackendApi() { return g_renderer.api; }
+#if (DEVICE_IMPL_D3D12)
+IDXGIFactory6 *RIGetDXGIFactory() { return g_renderer.d3d12.factory; }
+#endif
 
 #if (DEVICE_IMPL_VULKAN)
 
@@ -32,10 +36,6 @@ static RIRenderer g_renderer;
 #include "vk_mem_alloc.h"
 
 VkInstance RIGetVkInstance() { return g_renderer.vk.instance; }
-uint8_t RIActiveBackendApi() { return g_renderer.api; }
-#if (DEVICE_IMPL_D3D12)
-IDXGIFactory6 *RIGetDXGIFactory() { return g_renderer.d3d12.factory; }
-#endif
 
 
 static inline enum RIVendor_e VendorFromID(uint32_t vendorID) {

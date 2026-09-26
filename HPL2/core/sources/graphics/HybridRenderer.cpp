@@ -45,7 +45,6 @@
 #include <cmath>
 #include <cstring>
 
-
 namespace hpl {
 
 // Ring capacities for the translucent occlusion cull. A family that needs more
@@ -75,15 +74,15 @@ static constexpr uint32_t kHybridCullMaxGroups =
     kHybridCullMaxTiles;
 // The command ring is addressed by the kernel as a flat uint[] through
 // gCullIndirectWords, and a slot is five words.
-static constexpr uint32_t kHybridCullCommandWords =
-    static_cast<uint32_t>(sizeof(VkDrawIndexedIndirectCommand) / sizeof(uint32_t));
+static constexpr uint32_t kHybridCullCommandWords = static_cast<uint32_t>(
+    sizeof(VkDrawIndexedIndirectCommand) / sizeof(uint32_t));
 
 namespace detail {
 
 static inline bool BindVertexStreams(struct RICmd *cmd, cVertexBuffer *pVB,
                                      const char *passLabel,
                                      uint32_t *outPresentMask) {
-  cGraphics* pGraphics = Interface<cGraphics>::Get();
+  cGraphics *pGraphics = Interface<cGraphics>::Get();
   auto *vbri = static_cast<cVertexBuffer *>(pVB);
   auto bufOf = [&](eVertexBufferElement type) -> RIBuffer * {
     const auto *element = vbri->GetElement(type);
@@ -156,7 +155,8 @@ cHybridRenderer::cHybridRenderer(cGraphics *apGraphics, cResources *apResources)
                                  "vsMain"},
           RIProgram::ModuleStage{RIProgram::PROGRAM_STAGE_FRAGMENT, gbuffer_ps,
                                  "psMain"}};
-      m_gbuffer.initialize(&mpGraphics->device, stages, externalLayouts, "Hybrid.gbuffer");
+      m_gbuffer.initialize(&mpGraphics->device, stages, externalLayouts,
+                           "Hybrid.gbuffer");
     }
 
     auto loadComputeProgram = [&](RIProgram &prog, const char *name) {
@@ -195,7 +195,8 @@ cHybridRenderer::cHybridRenderer(cGraphics *apGraphics, cResources *apResources)
                                  "ptCloseHit"},
           RIProgram::ModuleStage{RIProgram::PROGRAM_STAGE_ANY_HIT, pt_bin,
                                  "ptAnyHit"}};
-      m_pathTrace.initialize(&mpGraphics->device, stages, externalLayouts, "Hybrid.pathTrace");
+      m_pathTrace.initialize(&mpGraphics->device, stages, externalLayouts,
+                             "Hybrid.pathTrace");
     }
     // LightGridBuildPass — single compute entry (binLights) that bins
     // point/spot lights into the coarse world-space light grid each frame.
@@ -223,7 +224,8 @@ cHybridRenderer::cHybridRenderer(cGraphics *apGraphics, cResources *apResources)
                                  "vsMain"},
           RIProgram::ModuleStage{RIProgram::PROGRAM_STAGE_FRAGMENT, p_frag,
                                  "psMain"}};
-      m_particle.initialize(&mpGraphics->device, stages, externalLayouts, "Hybrid.particle");
+      m_particle.initialize(&mpGraphics->device, stages, externalLayouts,
+                            "Hybrid.particle");
     }
     {
       // Translucent mesh pass (amnesia/slang/Translucent). Shares
@@ -238,7 +240,8 @@ cHybridRenderer::cHybridRenderer(cGraphics *apGraphics, cResources *apResources)
                                  "vsMain"},
           RIProgram::ModuleStage{RIProgram::PROGRAM_STAGE_FRAGMENT, t_frag,
                                  "psMain"}};
-      m_translucentMesh.initialize(&mpGraphics->device, stages, externalLayouts, "Hybrid.translucentMesh");
+      m_translucentMesh.initialize(&mpGraphics->device, stages, externalLayouts,
+                                   "Hybrid.translucentMesh");
     }
     {
       // Decal pass (amnesia/slang/Decal). Reuses the translucent 5-stream
@@ -255,7 +258,8 @@ cHybridRenderer::cHybridRenderer(cGraphics *apGraphics, cResources *apResources)
                                  "vsMain"},
           RIProgram::ModuleStage{RIProgram::PROGRAM_STAGE_FRAGMENT, d_frag,
                                  "psMain"}};
-      m_decal.initialize(&mpGraphics->device, stages, externalLayouts, "Hybrid.decal");
+      m_decal.initialize(&mpGraphics->device, stages, externalLayouts,
+                         "Hybrid.decal");
     }
     {
       auto w_vert = RIProgram::loadShaderStage(apResources->GetFileSearcher(),
@@ -267,7 +271,8 @@ cHybridRenderer::cHybridRenderer(cGraphics *apGraphics, cResources *apResources)
                                  "vsMain"},
           RIProgram::ModuleStage{RIProgram::PROGRAM_STAGE_FRAGMENT, w_frag,
                                  "psMain"}};
-      m_water.initialize(&mpGraphics->device, stages, externalLayouts, "Hybrid.water");
+      m_water.initialize(&mpGraphics->device, stages, externalLayouts,
+                         "Hybrid.water");
       m_waterReflection.Initialize(mpGraphics, apResources);
     }
 
@@ -290,8 +295,8 @@ cHybridRenderer::cHybridRenderer(cGraphics *apGraphics, cResources *apResources)
     // copy would buy nothing. Anything the kernel writes is device-local or a
     // StagedIndirectBuffer instead: D3D12 upload heaps cannot be UAVs.
     const auto makeSegment =
-        [&](RISegmentAlloc<RI_NUMBER_FRAME_SEGMENTS> *segment, uint32_t elements,
-            uint32_t stride) {
+        [&](RISegmentAlloc<RI_NUMBER_FRAME_SEGMENTS> *segment,
+            uint32_t elements, uint32_t stride) {
           RISegmentAllocDesc desc = {};
           desc.numSegments = RI_NUMBER_FRAMES_FLIGHT;
           desc.elementStride = static_cast<uint16_t>(stride);
@@ -299,19 +304,18 @@ cHybridRenderer::cHybridRenderer(cGraphics *apGraphics, cResources *apResources)
           *segment = RISegmentAlloc<RI_NUMBER_FRAME_SEGMENTS>(&desc);
         };
     const auto makeCullBuffer =
-        [&](RISegmentAlloc<RI_NUMBER_FRAME_SEGMENTS> *segment, uint32_t elements,
-            uint32_t stride, uint32_t usage, const char *debugName,
-            bool deviceLocal = false) {
+        [&](RISegmentAlloc<RI_NUMBER_FRAME_SEGMENTS> *segment,
+            uint32_t elements, uint32_t stride, uint32_t usage,
+            const char *debugName, bool deviceLocal = false) {
           makeSegment(segment, elements, stride);
           return detail::CreateBindlessSlotBuffer(&mpGraphics->device, elements,
                                                   stride, usage, deviceLocal,
                                                   debugName);
         };
-    m_cullCandidateBuffer =
-        makeCullBuffer(&m_cullCandidateSegment, kHybridCullMaxDraws,
-                       sizeof(StandardCullCandidate),
-                       RI_BUFFER_USAGE_SHADER_RESOURCE_STORAGE,
-                       "HybridRenderer.cullCandidates");
+    m_cullCandidateBuffer = makeCullBuffer(
+        &m_cullCandidateSegment, kHybridCullMaxDraws,
+        sizeof(StandardCullCandidate), RI_BUFFER_USAGE_SHADER_RESOURCE_STORAGE,
+        "HybridRenderer.cullCandidates");
     // A uniform 5-word slot (the indexed command's size) for indexed and
     // non-indexed draws alike: every draw is its own drawIndirect with
     // drawCount 1, so Vulkan never reads the stride and a uniform one keeps
@@ -323,21 +327,15 @@ cHybridRenderer::cHybridRenderer(cGraphics *apGraphics, cResources *apResources)
                                /*hostWritten*/ true,
                                "HybridRenderer.cullCommands");
     m_cullCommandFirstUse = true;
-    m_cullTileBuffer =
-        makeCullBuffer(&m_cullTileSegment, kHybridCullMaxTiles,
-                       sizeof(StandardCullTile),
-                       RI_BUFFER_USAGE_SHADER_RESOURCE_STORAGE,
-                       "HybridRenderer.cullTiles");
-    m_cullGroupBuffer =
-        makeCullBuffer(&m_cullGroupSegment, kHybridCullMaxGroups,
-                       sizeof(StandardCullGroup),
-                       RI_BUFFER_USAGE_SHADER_RESOURCE_STORAGE,
-                       "HybridRenderer.cullGroups");
-    m_cullCameraBuffer =
-        makeCullBuffer(&m_cullCameraSegment, kHybridCullMaxCameras,
-                       sizeof(StandardCullCamera),
-                       RI_BUFFER_USAGE_SHADER_RESOURCE_STORAGE,
-                       "HybridRenderer.cullCameras");
+    m_cullTileBuffer = makeCullBuffer(
+        &m_cullTileSegment, kHybridCullMaxTiles, sizeof(StandardCullTile),
+        RI_BUFFER_USAGE_SHADER_RESOURCE_STORAGE, "HybridRenderer.cullTiles");
+    m_cullGroupBuffer = makeCullBuffer(
+        &m_cullGroupSegment, kHybridCullMaxGroups, sizeof(StandardCullGroup),
+        RI_BUFFER_USAGE_SHADER_RESOURCE_STORAGE, "HybridRenderer.cullGroups");
+    m_cullCameraBuffer = makeCullBuffer(
+        &m_cullCameraSegment, kHybridCullMaxCameras, sizeof(StandardCullCamera),
+        RI_BUFFER_USAGE_SHADER_RESOURCE_STORAGE, "HybridRenderer.cullCameras");
     m_cullDrawCountBuffer = makeCullBuffer(
         &m_cullDrawCountSegment, kHybridCullMaxTiles, sizeof(uint32_t),
         RI_BUFFER_USAGE_INDIRECT | RI_BUFFER_USAGE_SHADER_RESOURCE_STORAGE,
@@ -372,9 +370,8 @@ cHybridRenderer::cHybridRenderer(cGraphics *apGraphics, cResources *apResources)
     }
     m_cameraCandidateBuffer = makeCullBuffer(
         &m_cameraCandidateSegment, kHybridCameraMaxDraws,
-                       sizeof(StandardCullCandidate),
-                       RI_BUFFER_USAGE_SHADER_RESOURCE_STORAGE,
-                       "HybridRenderer.cameraCullCandidates");
+        sizeof(StandardCullCandidate), RI_BUFFER_USAGE_SHADER_RESOURCE_STORAGE,
+        "HybridRenderer.cameraCullCandidates");
 
     m_hiZ = std::make_unique<cStandardHiZPass>(mpGraphics, apResources);
     m_cull = std::make_unique<cStandardShadowCullPass>(mpGraphics, apResources);
@@ -428,16 +425,14 @@ bool cHybridRenderer::ReserveCull(uint32_t worstCase,
   out.groupBase = groupReq.elementOffset;
   out.capacity = worstCase;
   out.groupCapacity = groupCount;
-  out.candidates =
-      reinterpret_cast<StandardCullCandidate *>(
-          static_cast<uint8_t *>(m_cullCandidateBuffer.mappedAddress) +
-          static_cast<size_t>(candidateReq.elementOffset) *
-              sizeof(StandardCullCandidate));
-  out.commandWords =
-      reinterpret_cast<uint32_t *>(
-          static_cast<uint8_t *>(m_cullCommandBuffer.mapped()) +
-          static_cast<size_t>(commandReq.elementOffset) *
-              sizeof(VkDrawIndexedIndirectCommand));
+  out.candidates = reinterpret_cast<StandardCullCandidate *>(
+      static_cast<uint8_t *>(m_cullCandidateBuffer.mappedAddress) +
+      static_cast<size_t>(candidateReq.elementOffset) *
+          sizeof(StandardCullCandidate));
+  out.commandWords = reinterpret_cast<uint32_t *>(
+      static_cast<uint8_t *>(m_cullCommandBuffer.mapped()) +
+      static_cast<size_t>(commandReq.elementOffset) *
+          sizeof(VkDrawIndexedIndirectCommand));
   out.tile = reinterpret_cast<StandardCullTile *>(
       static_cast<uint8_t *>(m_cullTileBuffer.mappedAddress) +
       static_cast<size_t>(tileReq.elementOffset) * sizeof(StandardCullTile));
@@ -470,21 +465,21 @@ void cHybridRenderer::WriteCullDraw(TranslucentCull &cull, uint32_t slot,
   if (!cull.usable || slot >= cull.capacity)
     return;
 
-  uint32_t *words = cull.commandWords +
-                    static_cast<size_t>(slot) * kHybridCullCommandWords;
+  uint32_t *words =
+      cull.commandWords + static_cast<size_t>(slot) * kHybridCullCommandWords;
   if (indexed) {
     // VkDrawIndexedIndirectCommand
-    words[0] = elementCount;   // indexCount
-    words[1] = 1u;             // instanceCount -- the word the kernel rewrites
-    words[2] = 0u;             // firstIndex
-    words[3] = 0u;             // vertexOffset
-    words[4] = objectSlot;     // firstInstance
+    words[0] = elementCount; // indexCount
+    words[1] = 1u;           // instanceCount -- the word the kernel rewrites
+    words[2] = 0u;           // firstIndex
+    words[3] = 0u;           // vertexOffset
+    words[4] = objectSlot;   // firstInstance
   } else {
     // VkDrawIndirectCommand, in the first four words of the same 5-word slot.
-    words[0] = elementCount;   // vertexCount
-    words[1] = 1u;             // instanceCount
-    words[2] = 0u;             // firstVertex
-    words[3] = objectSlot;     // firstInstance
+    words[0] = elementCount; // vertexCount
+    words[1] = 1u;           // instanceCount
+    words[2] = 0u;           // firstVertex
+    words[3] = objectSlot;   // firstInstance
     words[4] = 0u;
   }
 
@@ -506,9 +501,9 @@ void cHybridRenderer::WriteCullDraw(TranslucentCull &cull, uint32_t slot,
       kStandardCullShadowCasterBit | (isStatic ? kStandardCullStaticBit : 0u);
   candidate.cullFlags = neverOcclude ? kStandardCullFlagNeverOcclude : 0u;
   candidate.commandWordOffset =
-      static_cast<uint32_t>(
-          (static_cast<size_t>(cull.commandBase) + slot) * kHybridCullCommandWords) +
-      1u;  // instanceCount
+      static_cast<uint32_t>((static_cast<size_t>(cull.commandBase) + slot) *
+                            kHybridCullCommandWords) +
+      1u; // instanceCount
 
   if (slot + 1u > cull.commandCount)
     cull.commandCount = slot + 1u;
@@ -520,7 +515,8 @@ bool cHybridRenderer::DispatchCull(RICmd *cmd, TranslucentCull &cull,
     return false;
 
   const uint32_t groupCount =
-      (cull.commandCount + kStandardCullGroupSize - 1u) / kStandardCullGroupSize;
+      (cull.commandCount + kStandardCullGroupSize - 1u) /
+      kStandardCullGroupSize;
   if (groupCount > cull.groupCapacity)
     return false;
 
@@ -561,15 +557,16 @@ bool cHybridRenderer::DispatchCull(RICmd *cmd, TranslucentCull &cull,
   // barrier covers the write-then-read this family needs.
   // D3D12 only: land this family's host-written commands in the device copy
   // the kernel rewrites and the draw reads.
-  m_cullCommandBuffer.Flush(
-      &mpGraphics->device, cmd,
-      static_cast<uint64_t>(cull.commandBase) * sizeof(VkDrawIndexedIndirectCommand),
-      static_cast<uint64_t>(cull.commandCount) * sizeof(VkDrawIndexedIndirectCommand),
-      m_cullCommandFirstUse, /*cullFollows*/ true);
+  m_cullCommandBuffer.Flush(&mpGraphics->device, cmd,
+                            static_cast<uint64_t>(cull.commandBase) *
+                                sizeof(VkDrawIndexedIndirectCommand),
+                            static_cast<uint64_t>(cull.commandCount) *
+                                sizeof(VkDrawIndexedIndirectCommand),
+                            m_cullCommandFirstUse, /*cullFollows*/ true);
   m_cullCommandFirstUse = false;
-  const bool dispatched =
-      m_cull->Dispatch(cmd, mpGraphics->frameIndex, buffers, cull.tileBase, 1u,
-                       cull.groupBase, groupCount, kStandardCullModeInstanceMask);
+  const bool dispatched = m_cull->Dispatch(
+      cmd, mpGraphics->frameIndex, buffers, cull.tileBase, 1u, cull.groupBase,
+      groupCount, kStandardCullModeInstanceMask);
   // Flush left the device copy in STORAGE_WRITE for the kernel; without it the
   // caller draws directly, so restore the state every later Flush assumes.
   if (!dispatched && m_cullCommandBuffer.staged)
@@ -582,7 +579,7 @@ bool cHybridRenderer::DispatchCull(RICmd *cmd, TranslucentCull &cull,
 
 void cViewport::HybridViewportState::Update(cGraphics::FrameContext *cntx,
                                             cVector2l size) {
-  cGraphics* pGraphics = Interface<cGraphics>::Get();
+  cGraphics *pGraphics = Interface<cGraphics>::Get();
   if (size.x <= 0 || size.y <= 0) {
     return;
   }
@@ -642,9 +639,10 @@ void cViewport::HybridViewportState::Update(cGraphics::FrameContext *cntx,
       dsv.format = cGraphics::DepthFormat;
       dsv.mipNum = 1;
       dsv.layerNum = 1;
-      RITextureView v =
-          RITextureView::create(&pGraphics->device, depthTextures[i].Get(), dsv);
-      depthSampleView[i] = RISharedPointer<RITextureView>(&pGraphics->device, v);
+      RITextureView v = RITextureView::create(&pGraphics->device,
+                                              depthTextures[i].Get(), dsv);
+      depthSampleView[i] =
+          RISharedPointer<RITextureView>(&pGraphics->device, v);
     }
 
     // Depth pyramid the translucent occlusion cull tests against. Failure is
@@ -852,7 +850,7 @@ void cViewport::HybridViewportState::Update(cGraphics::FrameContext *cntx,
 }
 
 cViewport::HybridViewportState::~HybridViewportState() {
-  cGraphics* pGraphics = Interface<cGraphics>::Get();
+  cGraphics *pGraphics = Interface<cGraphics>::Get();
   for (uint32_t i = 0; i < RI_MAX_SWAPCHAIN_IMAGES; i++) {
     pGraphics->graphicsDefer.push(renderTarget[i]);
     pGraphics->graphicsDefer.push(depthTextures[i]);
@@ -894,8 +892,8 @@ cViewport::HybridViewportState::~HybridViewportState() {
   // renderer, which is torn down after the device is idle). So hand ownership
   // to the deferral: the lambda runs once the GPU has passed this frame.
   if (nrd)
-    pGraphics->graphicsDefer.push(
-        std::function<void()>([keep = std::move(nrd)]() mutable { keep.reset(); }));
+    pGraphics->graphicsDefer.push(std::function<void()>(
+        [keep = std::move(nrd)]() mutable { keep.reset(); }));
   if (directNrd)
     pGraphics->graphicsDefer.push(std::function<void()>(
         [keep = std::move(directNrd)]() mutable { keep.reset(); }));
@@ -962,11 +960,10 @@ static void appendWorldLightFog(std::vector<RIProgram::DescriptorBinding> &bnd,
       bnd.emplace_back(name, RIDescriptor(), 0, true);
       return;
     }
-    bnd.emplace_back(
-        name, RIDescriptor::storageBuffer(
-                  &Interface<cGraphics>::Get()->device, buf, 0,
-                  std::max<uint32_t>(cnt, 1u) * stride,
-                  static_cast<uint32_t>(stride), false, true));
+    bnd.emplace_back(name, RIDescriptor::storageBuffer(
+                               &Interface<cGraphics>::Get()->device, buf, 0,
+                               std::max<uint32_t>(cnt, 1u) * stride,
+                               static_cast<uint32_t>(stride), false, true));
   };
   add("gPointLights", apWorld->GetPointLightBuffer(),
       apWorld->GetPointLightCount(), sizeof(PointLight));
@@ -1036,8 +1033,8 @@ void cHybridRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
       cMath::Vector3Dot(state.waterPrevCameraDir, waterCameraDir) <
           cosf(45.0f * 3.14159265358979323846f / 180.0f) ||
       waterProjectionChanged;
-  const bool waterResetForFrame = historyResetForFrame ||
-                                  state.waterHistoryReset || waterCameraCut;
+  const bool waterResetForFrame =
+      historyResetForFrame || state.waterHistoryReset || waterCameraCut;
   state.waterPrevCameraPos = waterCameraPos;
   state.waterPrevCameraDir = waterCameraDir;
   state.waterPrevProjMat = waterProjectionMat;
@@ -1191,11 +1188,11 @@ void cHybridRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
   // accumulation across jittered frames; applying it here buys aliasing, not
   // detail. Thus the dev override and a same-extent provider deliberately
   // do not sample the same mips.
-  perFrame.materialMipBias = hpl::TemporalMaterialMipBias(
-      {renderWidth, renderHeight},
-      {static_cast<uint32_t>(displayExtent.x),
-       static_cast<uint32_t>(displayExtent.y)},
-      viewport->IsTemporalProviderPrepared());
+  perFrame.materialMipBias =
+      hpl::TemporalMaterialMipBias({renderWidth, renderHeight},
+                                   {static_cast<uint32_t>(displayExtent.x),
+                                    static_cast<uint32_t>(displayExtent.y)},
+                                   viewport->IsTemporalProviderPrepared());
   // Accumulated animation time (iRenderer::mfTimeCount, advanced each frame in
   // iRenderer::Update via cGraphics::Update) — NOT the per-frame delta. The
   // water wave phase is afT * waveSpeed; feeding the delta froze the waves and
@@ -1281,8 +1278,8 @@ void cHybridRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
   // the per-world light buffers (rebuilt once per frame by
   // cWorld::PrepareFrame, driven from cScene before the viewport loop).
   RISegmentReq indirectReq = {};
-  const bool indirectOk =
-      m_indirectSegment.request(mpGraphics->frameIndex, solids.size(), &indirectReq);
+  const bool indirectOk = m_indirectSegment.request(
+      mpGraphics->frameIndex, solids.size(), &indirectReq);
   assert(indirectOk);
   auto *indirectDst = reinterpret_cast<VkDrawIndirectCommand *>(
       static_cast<uint8_t *>(m_indirectDrawBuffer.mapped()) +
@@ -1304,9 +1301,9 @@ void cHybridRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
   const auto snapToCell = [](float v) {
     return std::floor(v / kLightGridUnit) * kLightGridUnit;
   };
-  perFrame.lightGridOriginW = float3(snapToCell(perFrame.posW.x),
-                                     snapToCell(perFrame.posW.y),
-                                     snapToCell(perFrame.posW.z));
+  perFrame.lightGridOriginW =
+      float3(snapToCell(perFrame.posW.x), snapToCell(perFrame.posW.y),
+             snapToCell(perFrame.posW.z));
   perFrame._padLightGridOrigin = 0.0f;
   // Fog composition is order-dependent. Reuse the visible, back-to-front
   // list that RenderList builds for this camera, rather than treating the
@@ -1340,8 +1337,7 @@ void cHybridRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
   VkDrawIndirectCommand *opaquePhaseTwoDst = nullptr;
   StandardCullCandidate *opaqueCandidates = nullptr;
   const bool opaqueCullReady =
-      indirectOk && indirectDst != nullptr &&
-      m_cullLoaded && m_cull && m_hiZ &&
+      indirectOk && indirectDst != nullptr && m_cullLoaded && m_cull && m_hiZ &&
       state.hiZ.IsUsable(mpGraphics->swapchainIndex) &&
       solids.size() <= kHybridCameraMaxDraws &&
       m_indirectSegment.request(mpGraphics->frameIndex, solids.size(),
@@ -1422,7 +1418,7 @@ void cHybridRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
             static_cast<uint32_t>(
                 (indirectReq.elementOffset + writtenDraws) *
                 (sizeof(VkDrawIndirectCommand) / sizeof(uint32_t))) +
-            1u;  // instanceCount
+            1u; // instanceCount
         opaqueCandidates[writtenDraws] = candidate;
         opaquePhaseTwoDst[writtenDraws] = command;
       }
@@ -1480,7 +1476,8 @@ void cHybridRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
         // target (loadOp=CLEAR, so prior contents don't matter).
         {state.velocityTexture[mpGraphics->swapchainIndex].Get(),
          RI_RESOURCE_STATE_UNDEFINED, RI_RESOURCE_STATE_RENDER_TARGET}};
-    mpGraphics->primary.cmds[0].vk_d3d12_textureBarriers<3>(3, attachmentBarriers);
+    mpGraphics->primary.cmds[0].vk_d3d12_textureBarriers<3>(3,
+                                                            attachmentBarriers);
   }
 
   // MRT color targets, both cleared to all-zero. Visibility: psMain writes .w=1
@@ -1516,12 +1513,13 @@ void cHybridRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
   {
     const hash_t kHash = hash_u32(HASH_INITIAL_VALUE, /*variant=*/0u);
     RIGpuScope _gsLightGrid(&mpGraphics->profiler, &mpGraphics->primary.cmds[0],
-                               "LightGrid");
-    m_lightGrid.bindComputePipeline(&mpGraphics->device, &mpGraphics->primary.cmds[0], kHash,
-                                       "LightGrid.cs:binLights");
-    m_lightGrid.bindBindlessDescriptorSet(&mpGraphics->primary.cmds[0],
-                                             &mpGraphics->globalset->m_bindlessSet, uint32_t(0),
-                                             VK_PIPELINE_BIND_POINT_COMPUTE);
+                            "LightGrid");
+    m_lightGrid.bindComputePipeline(&mpGraphics->device,
+                                    &mpGraphics->primary.cmds[0], kHash,
+                                    "LightGrid.cs:binLights");
+    m_lightGrid.bindBindlessDescriptorSet(
+        &mpGraphics->primary.cmds[0], &mpGraphics->globalset->m_bindlessSet,
+        uint32_t(0), VK_PIPELINE_BIND_POINT_COMPUTE);
     std::vector<RIProgram::DescriptorBinding> bnd;
     bnd.reserve(1);
     {
@@ -1531,13 +1529,14 @@ void cHybridRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
       bnd.push_back(b);
     }
     appendWorldLightFog(bnd, apWorld);
-    m_lightGrid.bindDescriptors(&mpGraphics->device, &mpGraphics->primary.cmds[0],
-                                   mpGraphics->frameIndex, bnd.data(), bnd.size(),
-                                   VK_PIPELINE_BIND_POINT_COMPUTE);
+    m_lightGrid.bindDescriptors(&mpGraphics->device,
+                                &mpGraphics->primary.cmds[0],
+                                mpGraphics->frameIndex, bnd.data(), bnd.size(),
+                                VK_PIPELINE_BIND_POINT_COMPUTE);
     // One thread per grid cell (the shader early-outs past
     // kLightGridCellCount).
-    mpGraphics->primary.cmds[0].dispatch(&mpGraphics->device, (kLightGridCellCount + 63u) / 64u,
-                                1u, 1u);
+    mpGraphics->primary.cmds[0].dispatch(
+        &mpGraphics->device, (kLightGridCellCount + 63u) / 64u, 1u, 1u);
   }
 
   {
@@ -1574,8 +1573,8 @@ void cHybridRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
     // submitting an unoccluded measurement.
     RIBuffer *pRequests = pProbe->GetRequestBuffer(mpGraphics->frameIndex);
     RIBuffer *pResults = pProbe->GetResultBuffer(mpGraphics->frameIndex);
-    if (pProbe->WantsDispatch() && apWorld->GetTlas() != nullptr &&
-        pRequests && pResults && pProbe->BeginFrame(mpGraphics->frameIndex)) {
+    if (pProbe->WantsDispatch() && apWorld->GetTlas() != nullptr && pRequests &&
+        pResults && pProbe->BeginFrame(mpGraphics->frameIndex)) {
       const hash_t kHash = hash_u32(HASH_INITIAL_VALUE, /*variant=*/0u);
       RIGpuScope _gsLightProbe(&mpGraphics->profiler,
                                &mpGraphics->primary.cmds[0], "LightProbe");
@@ -1583,8 +1582,8 @@ void cHybridRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
                                        &mpGraphics->primary.cmds[0], kHash,
                                        "LightProbe.cs");
       m_lightProbe.bindBindlessDescriptorSet(
-          &mpGraphics->primary.cmds[0], &mpGraphics->globalset->m_bindlessSet, 0,
-          VK_PIPELINE_BIND_POINT_COMPUTE);
+          &mpGraphics->primary.cmds[0], &mpGraphics->globalset->m_bindlessSet,
+          0, VK_PIPELINE_BIND_POINT_COMPUTE);
 
       std::vector<RIProgram::DescriptorBinding> bnd;
       bnd.reserve(8);
@@ -1597,14 +1596,12 @@ void cHybridRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
       bnd.emplace_back("gRtAccel",
                        RIDescriptor::accelerationStructure(&mpGraphics->device,
                                                            apWorld->GetTlas()));
-      bnd.emplace_back("gProbeRequests",
-                       RIDescriptor::storageBuffer(
-                           &mpGraphics->device, pRequests, 0,
-                           pProbe->GetRequestBufferRange()));
-      bnd.emplace_back("gProbeResults",
-                       RIDescriptor::storageBuffer(
-                           &mpGraphics->device, pResults, 0,
-                           pProbe->GetResultBufferRange()));
+      bnd.emplace_back("gProbeRequests", RIDescriptor::storageBuffer(
+                                             &mpGraphics->device, pRequests, 0,
+                                             pProbe->GetRequestBufferRange()));
+      bnd.emplace_back("gProbeResults", RIDescriptor::storageBuffer(
+                                            &mpGraphics->device, pResults, 0,
+                                            pProbe->GetResultBufferRange()));
       appendWorldLightFog(bnd, apWorld);
       m_lightProbe.bindDescriptors(&mpGraphics->device,
                                    &mpGraphics->primary.cmds[0],
@@ -1617,7 +1614,7 @@ void cHybridRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
 
       // One group per probe; its lanes gather and reduce one-bounce lighting.
       mpGraphics->primary.cmds[0].dispatch(&mpGraphics->device,
-                                         push.mlProbeCount, 1u, 1u);
+                                           push.mlProbeCount, 1u, 1u);
 
       // The copy rides this frame's submit, so it has executed once the
       // graphics timeline passes the value that submit will signal.
@@ -1635,6 +1632,12 @@ void cHybridRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
   // the transposed dump the shaders are handed.
   const cMatrixf cullViewProjection = cMath::MatrixMul(
       apFrustum->GetProjectionMatrix(), apFrustum->GetViewMatrix());
+  // Occlusion samples this frame's jittered depth; frustum culling keeps the
+  // original camera. Temporal matrices are column-major, cMatrixf is row-major.
+  cMatrixf rasterProjection;
+  rasterProjection.FromTranspose(temporalFrame.projMat);
+  const cMatrixf occlusionViewProjection =
+      cMath::MatrixMul(rasterProjection, apFrustum->GetViewMatrix());
 
   // Phase 1 of the opaque cull: mark the commands that were visible last frame.
   // Recorded before the scope opens -- a dispatch cannot run inside one.
@@ -1659,7 +1662,7 @@ void cHybridRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
           static_cast<size_t>(opaqueCameraReq.elementOffset) *
               sizeof(StandardCullCamera));
       StandardCullCamera camera{};
-      std::memcpy(camera.viewProjection, cullViewProjection.v,
+      std::memcpy(camera.viewProjection, occlusionViewProjection.v,
                   sizeof(camera.viewProjection));
       camera.hiZWidth = state.hiZ.width;
       camera.hiZHeight = state.hiZ.height;
@@ -1704,7 +1707,8 @@ void cHybridRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
       opaqueCullBuffers.drawCounts = &m_cullDrawCountBuffer;
       opaqueCullBuffers.cameras = &m_cullCameraBuffer;
       opaqueCullBuffers.visibility = &m_cullVisibilityBuffer;
-      opaqueCullBuffers.hiZ = state.hiZ.sampleView[mpGraphics->swapchainIndex].Get();
+      opaqueCullBuffers.hiZ =
+          state.hiZ.sampleView[mpGraphics->swapchainIndex].Get();
       opaqueCullBuffers.candidateCapacity = kHybridCameraMaxDraws;
       opaqueCullBuffers.indirectCapacity = kObjectSlotCapacity;
       opaqueCullBuffers.indirectWordCapacity =
@@ -1728,23 +1732,22 @@ void cHybridRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
       const uint64_t last =
           std::max(indirectReq.elementOffset, opaquePhaseTwoReq.elementOffset) +
           writtenDraws;
-      m_indirectDrawBuffer.Flush(
-          &mpGraphics->device, &mpGraphics->primary.cmds[0],
-          first * sizeof(VkDrawIndirectCommand),
-          (last - first) * sizeof(VkDrawIndirectCommand),
-          m_indirectDrawFirstUse, /*cullFollows*/ true);
+      m_indirectDrawBuffer.Flush(&mpGraphics->device,
+                                 &mpGraphics->primary.cmds[0],
+                                 first * sizeof(VkDrawIndirectCommand),
+                                 (last - first) * sizeof(VkDrawIndirectCommand),
+                                 m_indirectDrawFirstUse, /*cullFollows*/ true);
       m_indirectDrawFirstUse = false;
       opaqueIndirectFlushed = true;
       opaqueCullDispatched = m_cull->Dispatch(
           &mpGraphics->primary.cmds[0], mpGraphics->frameIndex,
-          opaqueCullBuffers,
-          static_cast<uint32_t>(opaqueTileReq.elementOffset), 1u,
-          static_cast<uint32_t>(opaqueGroupReq.elementOffset), groupCount,
+          opaqueCullBuffers, static_cast<uint32_t>(opaqueTileReq.elementOffset),
+          1u, static_cast<uint32_t>(opaqueGroupReq.elementOffset), groupCount,
           kStandardCullModeVisibilityReplay);
       if (!opaqueCullDispatched && m_indirectDrawBuffer.staged)
         mpGraphics->primary.cmds[0].vk_d3d12_bufferBarrier(RIBufferBarrier(
             m_indirectDrawBuffer.gpu(), RI_RESOURCE_STATE_STORAGE_WRITE,
-            RI_RESOURCE_STATE_INDIRECT_ARGUMENT, RI_STAGE_COPY,
+            RI_RESOURCE_STATE_INDIRECT_ARGUMENT, RI_STAGE_COMPUTE,
             RI_STAGE_DRAW_INDIRECT));
     }
   }
@@ -1766,8 +1769,10 @@ void cHybridRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
   gbufferBeginDesc.colors = gbufferColorAttachments;
   gbufferBeginDesc.depthStencil = &depthAttachment;
   {
-    RIGpuScope _gsGBuffer(&mpGraphics->profiler, &mpGraphics->primary.cmds[0], "GBuffer");
-    mpGraphics->primary.cmds[0].vk_d3d12_beginRendering(&mpGraphics->device, gbufferBeginDesc);
+    RIGpuScope _gsGBuffer(&mpGraphics->profiler, &mpGraphics->primary.cmds[0],
+                          "GBuffer");
+    mpGraphics->primary.cmds[0].vk_d3d12_beginRendering(&mpGraphics->device,
+                                                        gbufferBeginDesc);
 
     RIViewport vkViewport = {};
     vkViewport.x = 0.0f;
@@ -1790,14 +1795,16 @@ void cHybridRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
                              HASH_INITIAL_VALUE, "VBufferRaster.3d",
                              pipelineDesc);
       m_gbuffer.bindBindlessDescriptorSet(&mpGraphics->primary.cmds[0],
-                                          &mpGraphics->globalset->m_bindlessSet, uint32_t(0));
-      m_gbuffer.bindDescriptors(&mpGraphics->device, &mpGraphics->primary.cmds[0], mpGraphics->frameIndex,
-                                bindings.data(), bindings.size());
-      mpGraphics->primary.cmds[0].drawIndirect(&mpGraphics->device, m_indirectDrawBuffer.gpu(),
-                                      (VkDeviceSize)indirectReq.elementOffset *
-                                          sizeof(VkDrawIndirectCommand),
-                                      writtenDraws,
-                                      (uint32_t)sizeof(VkDrawIndirectCommand));
+                                          &mpGraphics->globalset->m_bindlessSet,
+                                          uint32_t(0));
+      m_gbuffer.bindDescriptors(
+          &mpGraphics->device, &mpGraphics->primary.cmds[0],
+          mpGraphics->frameIndex, bindings.data(), bindings.size());
+      mpGraphics->primary.cmds[0].drawIndirect(
+          &mpGraphics->device, m_indirectDrawBuffer.gpu(),
+          (VkDeviceSize)indirectReq.elementOffset *
+              sizeof(VkDrawIndirectCommand),
+          writtenDraws, (uint32_t)sizeof(VkDrawIndirectCommand));
     }
 
     mpGraphics->primary.cmds[0].vk_d3d12_endRendering(&mpGraphics->device);
@@ -1839,14 +1846,18 @@ void cHybridRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
     const uint32_t groupCount =
         (writtenDraws + kStandardCullGroupSize - 1u) / kStandardCullGroupSize;
     const bool culled =
-        built && m_cull->Dispatch(
-                     opaqueCmd, mpGraphics->frameIndex, opaqueCullBuffers,
-                     static_cast<uint32_t>(opaqueTileReq.elementOffset), 1u,
-                     static_cast<uint32_t>(opaqueGroupReq.elementOffset),
-                     groupCount, kStandardCullModeVisibilityUpdate,
-                     opaqueCommandWordDelta);
+        built &&
+        m_cull->Dispatch(opaqueCmd, mpGraphics->frameIndex, opaqueCullBuffers,
+                         static_cast<uint32_t>(opaqueTileReq.elementOffset), 1u,
+                         static_cast<uint32_t>(opaqueGroupReq.elementOffset),
+                         groupCount, kStandardCullModeVisibilityUpdate,
+                         opaqueCommandWordDelta);
 
     if (culled) {
+      // Dynamic rendering does not synchronize attachment stores with the
+      // next scope's LOAD. Depth was transitioned above; publish both MRTs.
+      opaqueCmd->vk_d3d12_memoryBarrier({RI_RESOURCE_STATE_RENDER_TARGET,
+                                         RI_RESOURCE_STATE_RENDER_TARGET_READ});
       gbufferColorAttachments[0].loadOp = RI_ATTACHMENT_LOAD_OP_LOAD;
       gbufferColorAttachments[1].loadOp = RI_ATTACHMENT_LOAD_OP_LOAD;
       depthAttachment.loadOp = RI_ATTACHMENT_LOAD_OP_LOAD;
@@ -1936,26 +1947,25 @@ void cHybridRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
   uint32_t cullCameraIndex = kStandardCullNoCamera;
   // cullViewProjection is hoisted above the G-buffer, where the opaque cull's
   // phase 1 needs it too.
-  if (m_cullLoaded && m_hiZ &&
-      state.hiZ.IsUsable(mpGraphics->swapchainIndex) &&
+  if (m_cullLoaded && m_hiZ && state.hiZ.IsUsable(mpGraphics->swapchainIndex) &&
       !state.depthSampleView[mpGraphics->swapchainIndex].isEmpty()) {
     // No camera record without a built pyramid: the translucent culls key off
     // cullCameraIndex, and an unbuilt pyramid is still UNDEFINED.
-    const bool built =
-        m_hiZ->Build(&mpGraphics->primary.cmds[0], mpGraphics->frameIndex,
-                     state.hiZ, mpGraphics->swapchainIndex, state.width,
-                     state.height,
-                     state.depthSampleView[mpGraphics->swapchainIndex].Get());
+    const bool built = m_hiZ->Build(
+        &mpGraphics->primary.cmds[0], mpGraphics->frameIndex, state.hiZ,
+        mpGraphics->swapchainIndex, state.width, state.height,
+        state.depthSampleView[mpGraphics->swapchainIndex].Get());
 
     RISegmentReq cameraReq = {};
-    if (built && m_cullCameraSegment.request(mpGraphics->frameIndex, 1, &cameraReq) &&
+    if (built &&
+        m_cullCameraSegment.request(mpGraphics->frameIndex, 1, &cameraReq) &&
         m_cullCameraBuffer.mappedAddress) {
       auto *cameraSlot = reinterpret_cast<StandardCullCamera *>(
           static_cast<uint8_t *>(m_cullCameraBuffer.mappedAddress) +
           static_cast<size_t>(cameraReq.elementOffset) *
               sizeof(StandardCullCamera));
       StandardCullCamera camera{};
-      std::memcpy(camera.viewProjection, cullViewProjection.v,
+      std::memcpy(camera.viewProjection, occlusionViewProjection.v,
                   sizeof(camera.viewProjection));
       camera.hiZWidth = state.hiZ.width;
       camera.hiZHeight = state.hiZ.height;
@@ -1975,14 +1985,15 @@ void cHybridRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
   // hit in gPackedHitInfo until a future sparse refraction RT pass lands.
   // ----------------------------------------------------------------------
   {
-    RIGpuScope _gsVBufferPomBary(&mpGraphics->profiler, &mpGraphics->primary.cmds[0],
-                                "VBufferPomBary");
+    RIGpuScope _gsVBufferPomBary(
+        &mpGraphics->profiler, &mpGraphics->primary.cmds[0], "VBufferPomBary");
     const hash_t kPomHash = hash_u32(HASH_INITIAL_VALUE, /*variant=*/0u);
-    m_vBufferPomBary.bindComputePipeline(&mpGraphics->device, &mpGraphics->primary.cmds[0],
-                                        kPomHash, "VBufferPomBary.cs");
-    m_vBufferPomBary.bindBindlessDescriptorSet(&mpGraphics->primary.cmds[0],
-                                              &mpGraphics->globalset->m_bindlessSet, uint32_t(0),
-                                              VK_PIPELINE_BIND_POINT_COMPUTE);
+    m_vBufferPomBary.bindComputePipeline(&mpGraphics->device,
+                                         &mpGraphics->primary.cmds[0], kPomHash,
+                                         "VBufferPomBary.cs");
+    m_vBufferPomBary.bindBindlessDescriptorSet(
+        &mpGraphics->primary.cmds[0], &mpGraphics->globalset->m_bindlessSet,
+        uint32_t(0), VK_PIPELINE_BIND_POINT_COMPUTE);
 
     std::vector<RIProgram::DescriptorBinding> pomBnd;
     pomBnd.reserve(3);
@@ -1992,21 +2003,25 @@ void cHybridRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
       mpGraphics->UpdateFrameUBO(&b.descriptor, &perFrame, sizeof(perFrame));
       pomBnd.push_back(b);
     }
-    pomBnd.emplace_back("gPackedHitInfoRaster",
-                        RIDescriptor::sampledImage(
-                            &mpGraphics->device,
-                            state.visibilityView[mpGraphics->swapchainIndex].Get(),
-                            RI_RESOURCE_STATE_SHADER_RESOURCE));
+    pomBnd.emplace_back(
+        "gPackedHitInfoRaster",
+        RIDescriptor::sampledImage(
+            &mpGraphics->device,
+            state.visibilityView[mpGraphics->swapchainIndex].Get(),
+            RI_RESOURCE_STATE_SHADER_RESOURCE));
     pomBnd.emplace_back(
         "gPackedHitInfo",
         RIDescriptor::storageImage(
-            &mpGraphics->device, state.packedHitInfoView[mpGraphics->swapchainIndex].Get()));
+            &mpGraphics->device,
+            state.packedHitInfoView[mpGraphics->swapchainIndex].Get()));
 
-    m_vBufferPomBary.bindDescriptors(&mpGraphics->device, &mpGraphics->primary.cmds[0],
-                                    mpGraphics->frameIndex, pomBnd.data(), pomBnd.size(),
-                                    VK_PIPELINE_BIND_POINT_COMPUTE);
-    mpGraphics->primary.cmds[0].dispatch(&mpGraphics->device, (renderWidth + 15u) / 16u,
-                                (renderHeight + 15u) / 16u, 1u);
+    m_vBufferPomBary.bindDescriptors(
+        &mpGraphics->device, &mpGraphics->primary.cmds[0],
+        mpGraphics->frameIndex, pomBnd.data(), pomBnd.size(),
+        VK_PIPELINE_BIND_POINT_COMPUTE);
+    mpGraphics->primary.cmds[0].dispatch(&mpGraphics->device,
+                                         (renderWidth + 15u) / 16u,
+                                         (renderHeight + 15u) / 16u, 1u);
   }
   {
     // packedHitInfo storage write -> shader read for integrate/generate/
@@ -2050,7 +2065,8 @@ void cHybridRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
 
       const float clr[4] = {0.0f, 0.0f, 0.0f, 0.0f};
       for (uint32_t i = 0; i < 6; ++i)
-        mpGraphics->primary.cmds[0].clearStorageImage(&mpGraphics->device, toGen[i].texture, clr);
+        mpGraphics->primary.cmds[0].clearStorageImage(&mpGraphics->device,
+                                                      toGen[i].texture, clr);
 
       // Establish the per-role states the two passes below expect. These used
       // to be left in GENERAL behind a single memory barrier, which Vulkan
@@ -2062,15 +2078,18 @@ void cHybridRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
           {state.directLightingTexture.Get(), RI_RESOURCE_STATE_CLEAR_STORAGE,
            RI_RESOURCE_STATE_STORAGE_WRITE, RI_STAGE_NONE, RI_STAGE_COMPUTE},
           // History, sampled by the temporal pass.
-          {state.directKeyTexture[dlPrev].Get(), RI_RESOURCE_STATE_CLEAR_STORAGE,
-           RI_RESOURCE_STATE_SHADER_RESOURCE, RI_STAGE_NONE, RI_STAGE_COMPUTE},
-          {state.reservoirTexture[dlPrev].Get(), RI_RESOURCE_STATE_CLEAR_STORAGE,
-           RI_RESOURCE_STATE_SHADER_RESOURCE, RI_STAGE_NONE, RI_STAGE_COMPUTE},
+          {state.directKeyTexture[dlPrev].Get(),
+           RI_RESOURCE_STATE_CLEAR_STORAGE, RI_RESOURCE_STATE_SHADER_RESOURCE,
+           RI_STAGE_NONE, RI_STAGE_COMPUTE},
+          {state.reservoirTexture[dlPrev].Get(),
+           RI_RESOURCE_STATE_CLEAR_STORAGE, RI_RESOURCE_STATE_SHADER_RESOURCE,
+           RI_STAGE_NONE, RI_STAGE_COMPUTE},
           // Written by the temporal pass, then sampled by the spatial pass.
           {state.directKeyTexture[dlCur].Get(), RI_RESOURCE_STATE_CLEAR_STORAGE,
            RI_RESOURCE_STATE_STORAGE_WRITE, RI_STAGE_NONE, RI_STAGE_COMPUTE},
-          {state.reservoirTemporalTexture.Get(), RI_RESOURCE_STATE_CLEAR_STORAGE,
-           RI_RESOURCE_STATE_STORAGE_WRITE, RI_STAGE_NONE, RI_STAGE_COMPUTE},
+          {state.reservoirTemporalTexture.Get(),
+           RI_RESOURCE_STATE_CLEAR_STORAGE, RI_RESOURCE_STATE_STORAGE_WRITE,
+           RI_STAGE_NONE, RI_STAGE_COMPUTE},
           // Written by the spatial pass; starts read-side so the single
           // pre-spatial barrier below is the same on every frame.
           {state.reservoirTexture[dlCur].Get(), RI_RESOURCE_STATE_CLEAR_STORAGE,
@@ -2081,7 +2100,8 @@ void cHybridRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
       // Last frame's RELAX input becomes this frame's resolve output.
       mpGraphics->primary.cmds[0].vk_d3d12_textureBarrier(
           {state.directLightingTexture.Get(), RI_RESOURCE_STATE_SHADER_RESOURCE,
-           RI_RESOURCE_STATE_STORAGE_WRITE, RI_STAGE_COMPUTE, RI_STAGE_COMPUTE});
+           RI_RESOURCE_STATE_STORAGE_WRITE, RI_STAGE_COMPUTE,
+           RI_STAGE_COMPUTE});
       // Flip the ping-pong textures into this frame's roles. The indices swap
       // every frame, so each texture alternates between being sampled as
       // history and being written as the current target, and D3D12 needs a
@@ -2095,12 +2115,15 @@ void cHybridRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
       //   directKey[dlPrev]   SHADER_RESOURCE (already correct, no transition)
       //   reservoir[dlCur]    SHADER_RESOURCE (flipped before the spatial pass)
       RITextureBarrier toRole[3] = {
-          {state.reservoirTexture[dlPrev].Get(), RI_RESOURCE_STATE_STORAGE_WRITE,
-           RI_RESOURCE_STATE_SHADER_RESOURCE, RI_STAGE_COMPUTE, RI_STAGE_COMPUTE},
-          {state.reservoirTemporalTexture.Get(), RI_RESOURCE_STATE_SHADER_RESOURCE,
-           RI_RESOURCE_STATE_STORAGE_WRITE, RI_STAGE_COMPUTE, RI_STAGE_COMPUTE},
-          {state.directKeyTexture[dlCur].Get(), RI_RESOURCE_STATE_SHADER_RESOURCE,
-           RI_RESOURCE_STATE_STORAGE_WRITE, RI_STAGE_COMPUTE, RI_STAGE_COMPUTE}};
+          {state.reservoirTexture[dlPrev].Get(),
+           RI_RESOURCE_STATE_STORAGE_WRITE, RI_RESOURCE_STATE_SHADER_RESOURCE,
+           RI_STAGE_COMPUTE, RI_STAGE_COMPUTE},
+          {state.reservoirTemporalTexture.Get(),
+           RI_RESOURCE_STATE_SHADER_RESOURCE, RI_RESOURCE_STATE_STORAGE_WRITE,
+           RI_STAGE_COMPUTE, RI_STAGE_COMPUTE},
+          {state.directKeyTexture[dlCur].Get(),
+           RI_RESOURCE_STATE_SHADER_RESOURCE, RI_RESOURCE_STATE_STORAGE_WRITE,
+           RI_STAGE_COMPUTE, RI_STAGE_COMPUTE}};
       mpGraphics->primary.cmds[0].vk_d3d12_textureBarriers<3>(3, toRole);
 
       if (historyResetForFrame) {
@@ -2108,15 +2131,13 @@ void cHybridRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
         // The passes below overwrite every current texel.
         RITextureBarrier resetToClear[2] = {
             {state.directKeyTexture[dlPrev].Get(),
-             RI_RESOURCE_STATE_SHADER_RESOURCE,
-             RI_RESOURCE_STATE_CLEAR_STORAGE, RI_STAGE_COMPUTE,
-             RI_STAGE_NONE},
+             RI_RESOURCE_STATE_SHADER_RESOURCE, RI_RESOURCE_STATE_CLEAR_STORAGE,
+             RI_STAGE_COMPUTE, RI_STAGE_NONE},
             {state.reservoirTexture[dlPrev].Get(),
-             RI_RESOURCE_STATE_SHADER_RESOURCE,
-             RI_RESOURCE_STATE_CLEAR_STORAGE, RI_STAGE_COMPUTE,
-             RI_STAGE_NONE}};
+             RI_RESOURCE_STATE_SHADER_RESOURCE, RI_RESOURCE_STATE_CLEAR_STORAGE,
+             RI_STAGE_COMPUTE, RI_STAGE_NONE}};
         mpGraphics->primary.cmds[0].vk_d3d12_textureBarriers<2>(2,
-                                                                  resetToClear);
+                                                                resetToClear);
 
         const float clr[4] = {0.0f, 0.0f, 0.0f, 0.0f};
         mpGraphics->primary.cmds[0].clearStorageImage(
@@ -2134,20 +2155,22 @@ void cHybridRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
             {state.reservoirTexture[dlPrev].Get(),
              RI_RESOURCE_STATE_CLEAR_STORAGE, RI_RESOURCE_STATE_SHADER_RESOURCE,
              RI_STAGE_NONE, RI_STAGE_COMPUTE}};
-        mpGraphics->primary.cmds[0].vk_d3d12_textureBarriers<2>(2,
-                                                                  resetAfterClear);
+        mpGraphics->primary.cmds[0].vk_d3d12_textureBarriers<2>(
+            2, resetAfterClear);
       }
     }
 
     const hash_t kHash = hash_u32(HASH_INITIAL_VALUE, /*variant=*/0u);
     {
-      RIGpuScope _gsDirectLighting(&mpGraphics->profiler, &mpGraphics->primary.cmds[0],
+      RIGpuScope _gsDirectLighting(&mpGraphics->profiler,
+                                   &mpGraphics->primary.cmds[0],
                                    "DirectLighting");
-      m_directLighting.bindComputePipeline(&mpGraphics->device, &mpGraphics->primary.cmds[0],
-                                           kHash, "DirectLightingPass.cs");
+      m_directLighting.bindComputePipeline(&mpGraphics->device,
+                                           &mpGraphics->primary.cmds[0], kHash,
+                                           "DirectLightingPass.cs");
       m_directLighting.bindBindlessDescriptorSet(
-          &mpGraphics->primary.cmds[0], &mpGraphics->globalset->m_bindlessSet, uint32_t(0),
-          VK_PIPELINE_BIND_POINT_COMPUTE);
+          &mpGraphics->primary.cmds[0], &mpGraphics->globalset->m_bindlessSet,
+          uint32_t(0), VK_PIPELINE_BIND_POINT_COMPUTE);
 
       std::vector<RIProgram::DescriptorBinding> bnd;
       bnd.reserve(8);
@@ -2161,33 +2184,38 @@ void cHybridRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
       bnd.emplace_back(
           "gPackedHitInfo",
           RIDescriptor::storageImage(
-              &mpGraphics->device, state.packedHitInfoView[mpGraphics->swapchainIndex].Get()));
+              &mpGraphics->device,
+              state.packedHitInfoView[mpGraphics->swapchainIndex].Get()));
       bnd.emplace_back("gVelocity",
                        RIDescriptor::sampledImage(
                            &mpGraphics->device,
                            state.velocityView[mpGraphics->swapchainIndex].Get(),
                            RI_RESOURCE_STATE_SHADER_RESOURCE));
-      bnd.emplace_back("gReservoirHistory",
-                       RIDescriptor::sampledImage(
-                           &mpGraphics->device, state.reservoirView[dlPrev].Get(),
-                           RI_RESOURCE_STATE_SHADER_RESOURCE));
-      bnd.emplace_back("gDirectKeyHistory",
-                       RIDescriptor::sampledImage(
-                           &mpGraphics->device, state.directKeyView[dlPrev].Get(),
-                           RI_RESOURCE_STATE_SHADER_RESOURCE));
-      bnd.emplace_back("gReservoirOut",
-                       RIDescriptor::storageImage(
-                           &mpGraphics->device, state.reservoirTemporalView.Get()));
-      bnd.emplace_back("gDirectKeyOut",
-                       RIDescriptor::storageImage(
-                           &mpGraphics->device, state.directKeyView[dlCur].Get()));
+      bnd.emplace_back(
+          "gReservoirHistory",
+          RIDescriptor::sampledImage(&mpGraphics->device,
+                                     state.reservoirView[dlPrev].Get(),
+                                     RI_RESOURCE_STATE_SHADER_RESOURCE));
+      bnd.emplace_back(
+          "gDirectKeyHistory",
+          RIDescriptor::sampledImage(&mpGraphics->device,
+                                     state.directKeyView[dlPrev].Get(),
+                                     RI_RESOURCE_STATE_SHADER_RESOURCE));
+      bnd.emplace_back("gReservoirOut", RIDescriptor::storageImage(
+                                            &mpGraphics->device,
+                                            state.reservoirTemporalView.Get()));
+      bnd.emplace_back("gDirectKeyOut", RIDescriptor::storageImage(
+                                            &mpGraphics->device,
+                                            state.directKeyView[dlCur].Get()));
 
       appendWorldLightFog(bnd, apWorld);
-      m_directLighting.bindDescriptors(&mpGraphics->device, &mpGraphics->primary.cmds[0],
-                                       mpGraphics->frameIndex, bnd.data(), bnd.size(),
-                                       VK_PIPELINE_BIND_POINT_COMPUTE);
-      mpGraphics->primary.cmds[0].dispatch(&mpGraphics->device, (renderWidth + 15u) / 16u,
-                                  (renderHeight + 15u) / 16u, 1u);
+      m_directLighting.bindDescriptors(
+          &mpGraphics->device, &mpGraphics->primary.cmds[0],
+          mpGraphics->frameIndex, bnd.data(), bnd.size(),
+          VK_PIPELINE_BIND_POINT_COMPUTE);
+      mpGraphics->primary.cmds[0].dispatch(&mpGraphics->device,
+                                           (renderWidth + 15u) / 16u,
+                                           (renderHeight + 15u) / 16u, 1u);
     }
 
     // Temporal pass writes -> spatial pass sampled reads, plus the flip of
@@ -2208,14 +2236,15 @@ void cHybridRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
     // frame's temporal history) and raw directLighting for RELAX.
     // ----------------------------------------------------------------
     {
-      RIGpuScope _gsDirectSpatialReuse(&mpGraphics->profiler, &mpGraphics->primary.cmds[0],
+      RIGpuScope _gsDirectSpatialReuse(&mpGraphics->profiler,
+                                       &mpGraphics->primary.cmds[0],
                                        "DirectSpatialReuse");
       m_directSpatialReuse.bindComputePipeline(
           &mpGraphics->device, &mpGraphics->primary.cmds[0], kHash,
           "DirectSpatialReusePass.cs");
       m_directSpatialReuse.bindBindlessDescriptorSet(
-          &mpGraphics->primary.cmds[0], &mpGraphics->globalset->m_bindlessSet, uint32_t(0),
-          VK_PIPELINE_BIND_POINT_COMPUTE);
+          &mpGraphics->primary.cmds[0], &mpGraphics->globalset->m_bindlessSet,
+          uint32_t(0), VK_PIPELINE_BIND_POINT_COMPUTE);
 
       std::vector<RIProgram::DescriptorBinding> sb;
       sb.reserve(8);
@@ -2228,7 +2257,8 @@ void cHybridRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
       sb.emplace_back(
           "gPackedHitInfo",
           RIDescriptor::storageImage(
-              &mpGraphics->device, state.packedHitInfoView[mpGraphics->swapchainIndex].Get()));
+              &mpGraphics->device,
+              state.packedHitInfoView[mpGraphics->swapchainIndex].Get()));
       // optional: the TLAS is null until the first build, and this call site
       // (unlike the path tracer's) isn't guarded on it.
       sb.emplace_back(
@@ -2236,27 +2266,29 @@ void cHybridRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
           RIDescriptor::accelerationStructure(
               &mpGraphics->device, apWorld->GetTlas()), // resolve shadow ray
           0, true);
-      sb.emplace_back("gReservoirIn",
-                      RIDescriptor::sampledImage(
-                          &mpGraphics->device, state.reservoirTemporalView.Get(),
-                          RI_RESOURCE_STATE_SHADER_RESOURCE));
+      sb.emplace_back("gReservoirIn", RIDescriptor::sampledImage(
+                                          &mpGraphics->device,
+                                          state.reservoirTemporalView.Get(),
+                                          RI_RESOURCE_STATE_SHADER_RESOURCE));
       sb.emplace_back("gDirectKey",
                       RIDescriptor::sampledImage(
                           &mpGraphics->device, state.directKeyView[dlCur].Get(),
                           RI_RESOURCE_STATE_SHADER_RESOURCE));
-      sb.emplace_back("gReservoirOut",
-                      RIDescriptor::storageImage(
-                          &mpGraphics->device, state.reservoirView[dlCur].Get()));
+      sb.emplace_back("gReservoirOut", RIDescriptor::storageImage(
+                                           &mpGraphics->device,
+                                           state.reservoirView[dlCur].Get()));
       sb.emplace_back("gDirectLighting",
                       RIDescriptor::storageImage(
                           &mpGraphics->device, state.directLightingView.Get()));
 
       appendWorldLightFog(sb, apWorld);
-      m_directSpatialReuse.bindDescriptors(&mpGraphics->device, &mpGraphics->primary.cmds[0],
-                                           mpGraphics->frameIndex, sb.data(), sb.size(),
-                                           VK_PIPELINE_BIND_POINT_COMPUTE);
-      mpGraphics->primary.cmds[0].dispatch(&mpGraphics->device, (renderWidth + 15u) / 16u,
-                                  (renderHeight + 15u) / 16u, 1u);
+      m_directSpatialReuse.bindDescriptors(
+          &mpGraphics->device, &mpGraphics->primary.cmds[0],
+          mpGraphics->frameIndex, sb.data(), sb.size(),
+          VK_PIPELINE_BIND_POINT_COMPUTE);
+      mpGraphics->primary.cmds[0].dispatch(&mpGraphics->device,
+                                           (renderWidth + 15u) / 16u,
+                                           (renderHeight + 15u) / 16u, 1u);
     }
 
     // Make the spatial pass's writes visible. reservoir[dlCur] is deliberately
@@ -2271,8 +2303,8 @@ void cHybridRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
     // so it does not consume the unused alpha as a hit distance.
     mpGraphics->primary.cmds[0].vk_d3d12_textureBarrier(
         {state.directLightingTexture.Get(), RI_RESOURCE_STATE_STORAGE_WRITE,
-         RI_RESOURCE_STATE_SHADER_RESOURCE, RI_STAGE_COMPUTE, RI_STAGE_COMPUTE});
-
+         RI_RESOURCE_STATE_SHADER_RESOURCE, RI_STAGE_COMPUTE,
+         RI_STAGE_COMPUTE});
   }
 
   // REBLUR only filters indirect diffuse (demodulated) and specular radiance.
@@ -2314,7 +2346,8 @@ void cHybridRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
 
     const float clr[4] = {0.0f, 0.0f, 0.0f, 0.0f};
     for (uint32_t i = 0; i < 8; ++i)
-      mpGraphics->primary.cmds[0].clearStorageImage(&mpGraphics->device, toGen[i].texture, clr);
+      mpGraphics->primary.cmds[0].clearStorageImage(&mpGraphics->device,
+                                                    toGen[i].texture, clr);
 
     mpGraphics->primary.cmds[0].vk_d3d12_memoryBarrier(
         {RI_RESOURCE_STATE_CLEAR_STORAGE,
@@ -2352,13 +2385,17 @@ void cHybridRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
   if (state.indirectInShaderResource) {
     RITextureBarrier toStorage[4] = {
         {state.indirectRadianceTexture.Get(), RI_RESOURCE_STATE_SHADER_RESOURCE,
-         RI_RESOURCE_STATE_STORAGE_WRITE, RI_STAGE_COMPUTE, RI_STAGE_RAY_TRACING},
+         RI_RESOURCE_STATE_STORAGE_WRITE, RI_STAGE_COMPUTE,
+         RI_STAGE_RAY_TRACING},
         {state.indirectSpecularTexture.Get(), RI_RESOURCE_STATE_SHADER_RESOURCE,
-         RI_RESOURCE_STATE_STORAGE_WRITE, RI_STAGE_COMPUTE, RI_STAGE_RAY_TRACING},
+         RI_RESOURCE_STATE_STORAGE_WRITE, RI_STAGE_COMPUTE,
+         RI_STAGE_RAY_TRACING},
         {state.indirectKeyTexture.Get(), RI_RESOURCE_STATE_SHADER_RESOURCE,
-         RI_RESOURCE_STATE_STORAGE_WRITE, RI_STAGE_COMPUTE, RI_STAGE_RAY_TRACING},
+         RI_RESOURCE_STATE_STORAGE_WRITE, RI_STAGE_COMPUTE,
+         RI_STAGE_RAY_TRACING},
         {state.indirectKeyExtraTexture.Get(), RI_RESOURCE_STATE_SHADER_RESOURCE,
-         RI_RESOURCE_STATE_STORAGE_WRITE, RI_STAGE_COMPUTE, RI_STAGE_RAY_TRACING}};
+         RI_RESOURCE_STATE_STORAGE_WRITE, RI_STAGE_COMPUTE,
+         RI_STAGE_RAY_TRACING}};
     mpGraphics->primary.cmds[0].vk_d3d12_textureBarriers<4>(4, toStorage);
     state.indirectInShaderResource = false;
   }
@@ -2379,11 +2416,12 @@ void cHybridRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
     ptCreate.maxPayloadSize = kScatterPayloadSize;
     ptCreate.maxAttributeSize = kTriangleAttributeSize;
     const hash_t kPtHash = hash_u32(HASH_INITIAL_VALUE, /*variant=*/0u);
-    m_pathTrace.bindRayTracingPipeline(&mpGraphics->device, &mpGraphics->primary.cmds[0],
-                                       kPtHash, "PathTracePass.rt", ptCreate);
+    m_pathTrace.bindRayTracingPipeline(&mpGraphics->device,
+                                       &mpGraphics->primary.cmds[0], kPtHash,
+                                       "PathTracePass.rt", ptCreate);
     m_pathTrace.bindBindlessDescriptorSet(
-        &mpGraphics->primary.cmds[0], &mpGraphics->globalset->m_bindlessSet, uint32_t(0),
-        VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR);
+        &mpGraphics->primary.cmds[0], &mpGraphics->globalset->m_bindlessSet,
+        uint32_t(0), VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR);
 
     std::vector<RIProgram::DescriptorBinding> ptBnd;
     ptBnd.reserve(8);
@@ -2396,29 +2434,35 @@ void cHybridRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
     ptBnd.emplace_back(
         "gPackedHitInfo",
         RIDescriptor::storageImage(
-            &mpGraphics->device, state.packedHitInfoView[mpGraphics->swapchainIndex].Get()));
-    ptBnd.emplace_back("gRtAccel", RIDescriptor::accelerationStructure(
-                                       &mpGraphics->device, apWorld->GetTlas()));
+            &mpGraphics->device,
+            state.packedHitInfoView[mpGraphics->swapchainIndex].Get()));
+    ptBnd.emplace_back("gRtAccel",
+                       RIDescriptor::accelerationStructure(&mpGraphics->device,
+                                                           apWorld->GetTlas()));
     // Two radiance channels: diffuse is albedo-demodulated (the composite
     // re-applies albedo), specular is left undemodulated.
-    ptBnd.emplace_back("gIndirectDiffuse",
-                       RIDescriptor::storageImage(
-                           &mpGraphics->device, state.indirectRadianceView.Get()));
-    ptBnd.emplace_back("gIndirectSpecular",
-                       RIDescriptor::storageImage(
-                           &mpGraphics->device, state.indirectSpecularView.Get()));
+    ptBnd.emplace_back(
+        "gIndirectDiffuse",
+        RIDescriptor::storageImage(&mpGraphics->device,
+                                   state.indirectRadianceView.Get()));
+    ptBnd.emplace_back(
+        "gIndirectSpecular",
+        RIDescriptor::storageImage(&mpGraphics->device,
+                                   state.indirectSpecularView.Get()));
     ptBnd.emplace_back("gIndirectKeyOut",
-                       RIDescriptor::storageImage(
-                           &mpGraphics->device, state.indirectKeyView.Get()));
+                       RIDescriptor::storageImage(&mpGraphics->device,
+                                                  state.indirectKeyView.Get()));
     // Key extra: primary-hit GGX alpha in .x, diffuse primary hit distance in .y,
     // specular primary hit distance in .z, and .w reserved.
-    ptBnd.emplace_back("gIndirectKeyExtra",
-                       RIDescriptor::storageImage(
-                           &mpGraphics->device, state.indirectKeyExtraView.Get()));
+    ptBnd.emplace_back(
+        "gIndirectKeyExtra",
+        RIDescriptor::storageImage(&mpGraphics->device,
+                                   state.indirectKeyExtraView.Get()));
     appendWorldLightFog(ptBnd, apWorld);
-    m_pathTrace.bindDescriptors(&mpGraphics->device, &mpGraphics->primary.cmds[0],
-                                mpGraphics->frameIndex, ptBnd.data(), ptBnd.size(),
-                                VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR);
+    m_pathTrace.bindDescriptors(
+        &mpGraphics->device, &mpGraphics->primary.cmds[0],
+        mpGraphics->frameIndex, ptBnd.data(), ptBnd.size(),
+        VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR);
     m_pathTrace.traceRays(&mpGraphics->primary.cmds[0], kPtHash, renderWidth,
                           renderHeight, 1u);
   }
@@ -2429,13 +2473,17 @@ void cHybridRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
   {
     RITextureBarrier toSampled[4] = {
         {state.indirectRadianceTexture.Get(), RI_RESOURCE_STATE_STORAGE_WRITE,
-         RI_RESOURCE_STATE_SHADER_RESOURCE, RI_STAGE_RAY_TRACING, RI_STAGE_COMPUTE},
+         RI_RESOURCE_STATE_SHADER_RESOURCE, RI_STAGE_RAY_TRACING,
+         RI_STAGE_COMPUTE},
         {state.indirectSpecularTexture.Get(), RI_RESOURCE_STATE_STORAGE_WRITE,
-         RI_RESOURCE_STATE_SHADER_RESOURCE, RI_STAGE_RAY_TRACING, RI_STAGE_COMPUTE},
+         RI_RESOURCE_STATE_SHADER_RESOURCE, RI_STAGE_RAY_TRACING,
+         RI_STAGE_COMPUTE},
         {state.indirectKeyTexture.Get(), RI_RESOURCE_STATE_STORAGE_WRITE,
-         RI_RESOURCE_STATE_SHADER_RESOURCE, RI_STAGE_RAY_TRACING, RI_STAGE_COMPUTE},
+         RI_RESOURCE_STATE_SHADER_RESOURCE, RI_STAGE_RAY_TRACING,
+         RI_STAGE_COMPUTE},
         {state.indirectKeyExtraTexture.Get(), RI_RESOURCE_STATE_STORAGE_WRITE,
-         RI_RESOURCE_STATE_SHADER_RESOURCE, RI_STAGE_RAY_TRACING, RI_STAGE_COMPUTE}};
+         RI_RESOURCE_STATE_SHADER_RESOURCE, RI_STAGE_RAY_TRACING,
+         RI_STAGE_COMPUTE}};
     mpGraphics->primary.cmds[0].vk_d3d12_textureBarriers<4>(4, toSampled);
     state.indirectInShaderResource = true;
   }
@@ -2460,26 +2508,28 @@ void cHybridRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
       if (state.nrdInputInShaderResource) {
         RITextureBarrier toStorage[5] = {
             {state.nrdNormalRoughnessTexture.Get(),
-             RI_RESOURCE_STATE_SHADER_RESOURCE,
-             RI_RESOURCE_STATE_STORAGE_WRITE, RI_STAGE_COMPUTE, RI_STAGE_COMPUTE},
+             RI_RESOURCE_STATE_SHADER_RESOURCE, RI_RESOURCE_STATE_STORAGE_WRITE,
+             RI_STAGE_COMPUTE, RI_STAGE_COMPUTE},
             {state.nrdViewZTexture.Get(), RI_RESOURCE_STATE_SHADER_RESOURCE,
-             RI_RESOURCE_STATE_STORAGE_WRITE, RI_STAGE_COMPUTE, RI_STAGE_COMPUTE},
+             RI_RESOURCE_STATE_STORAGE_WRITE, RI_STAGE_COMPUTE,
+             RI_STAGE_COMPUTE},
             {state.nrdDiffuseRadianceHitDistTexture.Get(),
-             RI_RESOURCE_STATE_SHADER_RESOURCE,
-             RI_RESOURCE_STATE_STORAGE_WRITE, RI_STAGE_COMPUTE, RI_STAGE_COMPUTE},
+             RI_RESOURCE_STATE_SHADER_RESOURCE, RI_RESOURCE_STATE_STORAGE_WRITE,
+             RI_STAGE_COMPUTE, RI_STAGE_COMPUTE},
             {state.nrdSpecularRadianceHitDistTexture.Get(),
-             RI_RESOURCE_STATE_SHADER_RESOURCE,
-             RI_RESOURCE_STATE_STORAGE_WRITE, RI_STAGE_COMPUTE, RI_STAGE_COMPUTE}};
-        toStorage[4] = {
-            state.nrdMotionVectorsTexture.Get(),
-            RI_RESOURCE_STATE_SHADER_RESOURCE | RI_RESOURCE_STATE_STORAGE_WRITE,
-            RI_RESOURCE_STATE_STORAGE_WRITE, RI_STAGE_COMPUTE, RI_STAGE_COMPUTE};
+             RI_RESOURCE_STATE_SHADER_RESOURCE, RI_RESOURCE_STATE_STORAGE_WRITE,
+             RI_STAGE_COMPUTE, RI_STAGE_COMPUTE}};
+        toStorage[4] = {state.nrdMotionVectorsTexture.Get(),
+                        RI_RESOURCE_STATE_SHADER_RESOURCE |
+                            RI_RESOURCE_STATE_STORAGE_WRITE,
+                        RI_RESOURCE_STATE_STORAGE_WRITE, RI_STAGE_COMPUTE,
+                        RI_STAGE_COMPUTE};
         mpGraphics->primary.cmds[0].vk_d3d12_textureBarriers<5>(5, toStorage);
       }
 
       {
-        RIGpuScope _gsNrdPack(&mpGraphics->profiler, &mpGraphics->primary.cmds[0],
-                              "NRD.Pack");
+        RIGpuScope _gsNrdPack(&mpGraphics->profiler,
+                              &mpGraphics->primary.cmds[0], "NRD.Pack");
         m_nrdPack.bindComputePipeline(&mpGraphics->device,
                                       &mpGraphics->primary.cmds[0], kHash,
                                       "NrdPack.cs");
@@ -2492,40 +2542,42 @@ void cHybridRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
         {
           RIProgram::DescriptorBinding b;
           b.handle = DescriptorBindingID::Create("gPerFrame");
-          mpGraphics->UpdateFrameUBO(&b.descriptor, &perFrame, sizeof(perFrame));
+          mpGraphics->UpdateFrameUBO(&b.descriptor, &perFrame,
+                                     sizeof(perFrame));
           nb.push_back(b);
         }
         nb.emplace_back("gIndirectKey",
                         RIDescriptor::sampledImage(
                             &mpGraphics->device, state.indirectKeyView.Get(),
                             RI_RESOURCE_STATE_SHADER_RESOURCE));
-        nb.emplace_back("gIndirectKeyExtra",
-                        RIDescriptor::sampledImage(
-                            &mpGraphics->device,
-                            state.indirectKeyExtraView.Get(),
-                            RI_RESOURCE_STATE_SHADER_RESOURCE));
-        nb.emplace_back("gIndirectDiffuse",
-                        RIDescriptor::sampledImage(
-                            &mpGraphics->device,
-                            state.indirectRadianceView.Get(),
-                            RI_RESOURCE_STATE_SHADER_RESOURCE));
-        nb.emplace_back("gIndirectSpecular",
-                        RIDescriptor::sampledImage(
-                            &mpGraphics->device,
-                            state.indirectSpecularView.Get(),
-                            RI_RESOURCE_STATE_SHADER_RESOURCE));
-        nb.emplace_back("gVelocity",
-                        RIDescriptor::sampledImage(
-                            &mpGraphics->device,
-                            state.velocityView[mpGraphics->swapchainIndex].Get(),
-                            RI_RESOURCE_STATE_SHADER_RESOURCE));
-        nb.emplace_back("gNrdNormalRoughness",
-                        RIDescriptor::storageImage(
-                            &mpGraphics->device,
-                            state.nrdNormalRoughnessView.Get()));
+        nb.emplace_back(
+            "gIndirectKeyExtra",
+            RIDescriptor::sampledImage(&mpGraphics->device,
+                                       state.indirectKeyExtraView.Get(),
+                                       RI_RESOURCE_STATE_SHADER_RESOURCE));
+        nb.emplace_back(
+            "gIndirectDiffuse",
+            RIDescriptor::sampledImage(&mpGraphics->device,
+                                       state.indirectRadianceView.Get(),
+                                       RI_RESOURCE_STATE_SHADER_RESOURCE));
+        nb.emplace_back(
+            "gIndirectSpecular",
+            RIDescriptor::sampledImage(&mpGraphics->device,
+                                       state.indirectSpecularView.Get(),
+                                       RI_RESOURCE_STATE_SHADER_RESOURCE));
+        nb.emplace_back(
+            "gVelocity",
+            RIDescriptor::sampledImage(
+                &mpGraphics->device,
+                state.velocityView[mpGraphics->swapchainIndex].Get(),
+                RI_RESOURCE_STATE_SHADER_RESOURCE));
+        nb.emplace_back(
+            "gNrdNormalRoughness",
+            RIDescriptor::storageImage(&mpGraphics->device,
+                                       state.nrdNormalRoughnessView.Get()));
         nb.emplace_back("gNrdViewZ",
-                        RIDescriptor::storageImage(
-                            &mpGraphics->device, state.nrdViewZView.Get()));
+                        RIDescriptor::storageImage(&mpGraphics->device,
+                                                   state.nrdViewZView.Get()));
         nb.emplace_back("gNrdDiffuseRadianceHitDist",
                         RIDescriptor::storageImage(
                             &mpGraphics->device,
@@ -2534,17 +2586,18 @@ void cHybridRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
                         RIDescriptor::storageImage(
                             &mpGraphics->device,
                             state.nrdSpecularRadianceHitDistView.Get()));
-        nb.emplace_back("gNrdMotionVectors",
-                        RIDescriptor::storageImage(
-                            &mpGraphics->device,
-                            state.nrdMotionVectorsView.Get()));
+        nb.emplace_back(
+            "gNrdMotionVectors",
+            RIDescriptor::storageImage(&mpGraphics->device,
+                                       state.nrdMotionVectorsView.Get()));
 
-        m_nrdPack.bindDescriptors(&mpGraphics->device, &mpGraphics->primary.cmds[0],
+        m_nrdPack.bindDescriptors(&mpGraphics->device,
+                                  &mpGraphics->primary.cmds[0],
                                   mpGraphics->frameIndex, nb.data(), nb.size(),
                                   VK_PIPELINE_BIND_POINT_COMPUTE);
-        mpGraphics->primary.cmds[0].dispatch(
-            &mpGraphics->device, (renderWidth + 15u) / 16u,
-            (renderHeight + 15u) / 16u, 1u);
+        mpGraphics->primary.cmds[0].dispatch(&mpGraphics->device,
+                                             (renderWidth + 15u) / 16u,
+                                             (renderHeight + 15u) / 16u, 1u);
       }
 
       RITextureBarrier toSampled[5] = {
@@ -2552,7 +2605,8 @@ void cHybridRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
            RI_RESOURCE_STATE_STORAGE_WRITE, RI_RESOURCE_STATE_SHADER_RESOURCE,
            RI_STAGE_COMPUTE, RI_STAGE_COMPUTE},
           {state.nrdViewZTexture.Get(), RI_RESOURCE_STATE_STORAGE_WRITE,
-           RI_RESOURCE_STATE_SHADER_RESOURCE, RI_STAGE_COMPUTE, RI_STAGE_COMPUTE},
+           RI_RESOURCE_STATE_SHADER_RESOURCE, RI_STAGE_COMPUTE,
+           RI_STAGE_COMPUTE},
           {state.nrdDiffuseRadianceHitDistTexture.Get(),
            RI_RESOURCE_STATE_STORAGE_WRITE, RI_RESOURCE_STATE_SHADER_RESOURCE,
            RI_STAGE_COMPUTE, RI_STAGE_COMPUTE},
@@ -2561,8 +2615,7 @@ void cHybridRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
            RI_STAGE_COMPUTE, RI_STAGE_COMPUTE},
           // IN_MV is sampled by most NRD dispatches and written by temporal
           // stabilization, so leave it in GENERAL with both accesses enabled.
-          {state.nrdMotionVectorsTexture.Get(),
-           RI_RESOURCE_STATE_STORAGE_WRITE,
+          {state.nrdMotionVectorsTexture.Get(), RI_RESOURCE_STATE_STORAGE_WRITE,
            RI_RESOURCE_STATE_SHADER_RESOURCE | RI_RESOURCE_STATE_STORAGE_WRITE,
            RI_STAGE_COMPUTE, RI_STAGE_COMPUTE}};
       mpGraphics->primary.cmds[0].vk_d3d12_textureBarriers<5>(5, toSampled);
@@ -2595,8 +2648,7 @@ void cHybridRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
       NrdDenoiseInputs nrdInputs = {};
       nrdInputs.normalRoughness = state.nrdNormalRoughnessView.Get();
       nrdInputs.viewZ = state.nrdViewZView.Get();
-      nrdInputs.motionVectors =
-          state.nrdMotionVectorsView.Get();
+      nrdInputs.motionVectors = state.nrdMotionVectorsView.Get();
       nrdInputs.diffuseRadianceHitDistance =
           state.nrdDiffuseRadianceHitDistView.Get();
       nrdInputs.specularRadianceHitDistance =
@@ -2607,8 +2659,8 @@ void cHybridRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
         {
           RIGpuScope _gsNrdDenoise(&mpGraphics->profiler,
                                    &mpGraphics->primary.cmds[0], "NRD.Denoise");
-          nrdOutputs = state.nrd->Denoise(&mpGraphics->primary.cmds[0], nrdFrame,
-                                     nrdInputs);
+          nrdOutputs = state.nrd->Denoise(&mpGraphics->primary.cmds[0],
+                                          nrdFrame, nrdInputs);
         }
         indirectResultView = nrdOutputs.diffuseRadianceHitDistance;
         indirectSpecularResultView = nrdOutputs.specularRadianceHitDistance;
@@ -2628,12 +2680,14 @@ void cHybridRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
         // REBLUR's private copy that its stabilization pass may have changed.
         directInputs.motionVectors =
             state.velocityView[mpGraphics->swapchainIndex].Get();
-        directInputs.diffuseRadianceHitDistance = state.directLightingView.Get();
+        directInputs.diffuseRadianceHitDistance =
+            state.directLightingView.Get();
         {
           RIGpuScope scope(&mpGraphics->profiler, &mpGraphics->primary.cmds[0],
                            "NRD.DirectDenoise");
-          directResultView = state.directNrd->Denoise(
-              &mpGraphics->primary.cmds[0], nrdFrame, directInputs)
+          directResultView = state.directNrd
+                                 ->Denoise(&mpGraphics->primary.cmds[0],
+                                           nrdFrame, directInputs)
                                  .diffuseRadianceHitDistance;
         }
       } else {
@@ -2678,8 +2732,8 @@ void cHybridRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
          RI_RESOURCE_STATE_UNDEFINED, RI_RESOURCE_STATE_STORAGE_WRITE,
          RI_STAGE_NONE, RI_STAGE_COMPUTE}};
 
-    mpGraphics->primary.cmds[0].vk_d3d12_resourceBarrier<1, 0, 1>(1, &mem, 0, NULL, 1,
-                                                         imageBarriers);
+    mpGraphics->primary.cmds[0].vk_d3d12_resourceBarrier<1, 0, 1>(
+        1, &mem, 0, NULL, 1, imageBarriers);
   }
 
   // Depth flip shared by the decal pre-pass (below) and the particle /
@@ -2717,7 +2771,8 @@ void cHybridRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
   // Add is a close linear approximation.)
   // --------------------------------------------------------------------
   {
-    RIGpuScope _gsDecal(&mpGraphics->profiler, &mpGraphics->primary.cmds[0], "Decal");
+    RIGpuScope _gsDecal(&mpGraphics->profiler, &mpGraphics->primary.cmds[0],
+                        "Decal");
     std::vector<iRenderable *> mulDecals; // Mul / MulX2 -> decalMul
     std::vector<iRenderable *> addDecals; // Add        -> decalAdd
     for (iRenderable *pObj :
@@ -2792,7 +2847,8 @@ void cHybridRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
       beginDesc.colorCount = 1;
       beginDesc.colors = &color;
       beginDesc.depthStencil = &depth;
-      mpGraphics->primary.cmds[0].vk_d3d12_beginRendering(&mpGraphics->device, beginDesc);
+      mpGraphics->primary.cmds[0].vk_d3d12_beginRendering(&mpGraphics->device,
+                                                          beginDesc);
 
       RIViewport vp = {};
       vp.x = 0.0f;
@@ -2809,14 +2865,17 @@ void cHybridRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
 
       if (!list.empty()) {
         m_decal.bindBindlessDescriptorSet(&mpGraphics->primary.cmds[0],
-                                          &mpGraphics->globalset->m_bindlessSet, uint32_t(0));
+                                          &mpGraphics->globalset->m_bindlessSet,
+                                          uint32_t(0));
         {
           // VS reads gPerFrame (view/proj) + gSceneObjects; FS emits the linear
           // decal colour. No fog/light buffers — the composite lights and fogs.
           RIProgram::DescriptorBinding b;
           b.handle = DescriptorBindingID::Create("gPerFrame");
-          mpGraphics->UpdateFrameUBO(&b.descriptor, &perFrame, sizeof(perFrame));
-          m_decal.bindDescriptors(&mpGraphics->device, &mpGraphics->primary.cmds[0],
+          mpGraphics->UpdateFrameUBO(&b.descriptor, &perFrame,
+                                     sizeof(perFrame));
+          m_decal.bindDescriptors(&mpGraphics->device,
+                                  &mpGraphics->primary.cmds[0],
                                   mpGraphics->frameIndex, &b, 1);
         }
 
@@ -2826,7 +2885,8 @@ void cHybridRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
           const int indexCount = pVB->GetIndexNum();
 
           uint32_t materialId =
-              mpGraphics->globalset->submitMaterial(cntx, pMat, (uint32_t)mpGraphics->frameIndex)
+              mpGraphics->globalset
+                  ->submitMaterial(cntx, pMat, (uint32_t)mpGraphics->frameIndex)
                   .materialId;
           if (materialId == UINT32_MAX) {
             Warning("Material Slot exhausted (decal)");
@@ -2849,8 +2909,8 @@ void cHybridRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
           }
 
           uint32_t vtxMask = 0;
-          if (!detail::BindVertexStreams(&mpGraphics->primary.cmds[0], pVB, "decal",
-                                         &vtxMask))
+          if (!detail::BindVertexStreams(&mpGraphics->primary.cmds[0], pVB,
+                                         "decal", &vtxMask))
             continue;
 
           m_decal.bindPipeline(
@@ -2860,8 +2920,8 @@ void cHybridRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
                                     cGraphics::DepthFormat,
                                     decalBlend(pMat->GetBlendMode()), vtxMask));
 
-          mpGraphics->primary.cmds[0].drawIndexed(&mpGraphics->device, (uint32_t)indexCount, 1u,
-                                         0u, 0, slot);
+          mpGraphics->primary.cmds[0].drawIndexed(
+              &mpGraphics->device, (uint32_t)indexCount, 1u, 0u, 0, slot);
         }
       }
 
@@ -2891,12 +2951,13 @@ void cHybridRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
   {
     const hash_t kHash = hash_u32(HASH_INITIAL_VALUE, /*variant=*/0u);
     RIGpuScope _gsComposite(&mpGraphics->profiler, &mpGraphics->primary.cmds[0],
-                                "Composite");
-    m_composite.bindComputePipeline(&mpGraphics->device, &mpGraphics->primary.cmds[0], kHash,
-                                        "Composite.cs");
-    m_composite.bindBindlessDescriptorSet(&mpGraphics->primary.cmds[0],
-                                              &mpGraphics->globalset->m_bindlessSet, uint32_t(0),
-                                              VK_PIPELINE_BIND_POINT_COMPUTE);
+                            "Composite");
+    m_composite.bindComputePipeline(&mpGraphics->device,
+                                    &mpGraphics->primary.cmds[0], kHash,
+                                    "Composite.cs");
+    m_composite.bindBindlessDescriptorSet(
+        &mpGraphics->primary.cmds[0], &mpGraphics->globalset->m_bindlessSet,
+        uint32_t(0), VK_PIPELINE_BIND_POINT_COMPUTE);
 
     std::vector<RIProgram::DescriptorBinding> bnd;
     bnd.reserve(11);
@@ -2909,7 +2970,8 @@ void cHybridRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
     bnd.emplace_back(
         "gPackedHitInfo",
         RIDescriptor::storageImage(
-            &mpGraphics->device, state.packedHitInfoView[mpGraphics->swapchainIndex].Get()));
+            &mpGraphics->device,
+            state.packedHitInfoView[mpGraphics->swapchainIndex].Get()));
     // optional: the TLAS is null until the first build, and this call site
     // isn't guarded on it (the composite shader may or may not reflect it).
     bnd.emplace_back("gRtAccel",
@@ -2939,19 +3001,20 @@ void cHybridRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
     bnd.emplace_back(
         "gOutput",
         RIDescriptor::storageImage(
-            &mpGraphics->device, state.renderTargetView[mpGraphics->swapchainIndex].Get()));
+            &mpGraphics->device,
+            state.renderTargetView[mpGraphics->swapchainIndex].Get()));
 
     // Decal accumulators from the pre-pass above (already in SHADER_RESOURCE):
     // the composite applies albedo = albedo*gDecalMul + gDecalAdd before
     // lighting.
-    bnd.emplace_back(
-        "gDecalMul",
-        RIDescriptor::sampledImage(
-            &mpGraphics->device, state.decalMulView[mpGraphics->swapchainIndex].Get()));
-    bnd.emplace_back(
-        "gDecalAdd",
-        RIDescriptor::sampledImage(
-            &mpGraphics->device, state.decalAddView[mpGraphics->swapchainIndex].Get()));
+    bnd.emplace_back("gDecalMul",
+                     RIDescriptor::sampledImage(
+                         &mpGraphics->device,
+                         state.decalMulView[mpGraphics->swapchainIndex].Get()));
+    bnd.emplace_back("gDecalAdd",
+                     RIDescriptor::sampledImage(
+                         &mpGraphics->device,
+                         state.decalAddView[mpGraphics->swapchainIndex].Get()));
 
     // Per-world static decal buffers (set kWorldDecalSet), baked once by
     // cWorld::Compile. RIProgram reflects them as set 2 and binds a rotated
@@ -2982,16 +3045,18 @@ void cHybridRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
     }
 
     appendWorldLightFog(bnd, apWorld);
-    m_composite.bindDescriptors(&mpGraphics->device, &mpGraphics->primary.cmds[0],
-                                    mpGraphics->frameIndex, bnd.data(), bnd.size(),
-                                    VK_PIPELINE_BIND_POINT_COMPUTE);
+    m_composite.bindDescriptors(&mpGraphics->device,
+                                &mpGraphics->primary.cmds[0],
+                                mpGraphics->frameIndex, bnd.data(), bnd.size(),
+                                VK_PIPELINE_BIND_POINT_COMPUTE);
 
     // Use this viewport's actual exposure (camera captures can override it).
     // Without an active tone map, keep the original linear diffuse response.
     float diffuseColorExposure = 0.0f;
     if (auto *postEffects = viewport->GetPostEffectComposite()) {
       for (int i = 0; i < postEffects->GetPostEffectNum(); ++i) {
-        auto *toneMap = dynamic_cast<cPostEffect_ToneMap *>(postEffects->GetPostEffect(i));
+        auto *toneMap =
+            dynamic_cast<cPostEffect_ToneMap *>(postEffects->GetPostEffect(i));
         if (!toneMap || !toneMap->IsActive())
           continue;
         cPostEffectParams_ToneMap params;
@@ -3008,15 +3073,16 @@ void cHybridRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
       float diffuseColorExposure;
     };
     static_assert(sizeof(MainCompositePushConstants) == 12);
-    static_assert(offsetof(MainCompositePushConstants, diffuseColorExposure) == 8);
-    const MainCompositePushConstants push{m_overlayMode,
-                                         apWorld->GetTlas() ? 1u : 0u,
-                                         diffuseColorExposure};
+    static_assert(offsetof(MainCompositePushConstants, diffuseColorExposure) ==
+                  8);
+    const MainCompositePushConstants push{
+        m_overlayMode, apWorld->GetTlas() ? 1u : 0u, diffuseColorExposure};
     mpGraphics->primary.cmds[0].vk_d3d12_setPushConstants(
         &mpGraphics->device, m_composite, 0, sizeof(push), &push);
 
-    mpGraphics->primary.cmds[0].dispatch(&mpGraphics->device, (renderWidth + 15u) / 16u,
-                                (renderHeight + 15u) / 16u, 1u);
+    mpGraphics->primary.cmds[0].dispatch(&mpGraphics->device,
+                                         (renderWidth + 15u) / 16u,
+                                         (renderHeight + 15u) / 16u, 1u);
   }
 
   // Toggle the ReSTIR key/reservoir ping-pong: this frame's writes become next
@@ -3039,14 +3105,16 @@ void cHybridRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
   // in cScene::Render consume it.
   {
     mpGraphics->primary.cmds[0].vk_d3d12_textureBarrier(RI_PogoShaderBarrier(
-        state.renderTarget[mpGraphics->swapchainIndex].Get(), /*initial=*/false));
+        state.renderTarget[mpGraphics->swapchainIndex].Get(),
+        /*initial=*/false));
   }
 
   // The composite has finished the opaque scene image, while water, particles,
   // and translucent meshes have not modified it yet. RecordOpaqueSnapshot
   // restores SHADER_RESOURCE/FRAGMENT, so the water pass sees the same state as
   // before; this boundary is outside any dynamic-rendering scope.
-  if (cTemporalReactiveMask *reactiveMask = viewport->GetTemporalReactiveMask()) {
+  if (cTemporalReactiveMask *reactiveMask =
+          viewport->GetTemporalReactiveMask()) {
     TemporalReactiveMaskSnapshotDesc snapshot = {};
     snapshot.cmd = &mpGraphics->primary.cmds[0];
     snapshot.sceneColor = state.renderTarget[mpGraphics->swapchainIndex].Get();
@@ -3090,7 +3158,8 @@ void cHybridRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
   // Pogo-read-half barriers as the other translucent sub-passes.
   // --------------------------------------------------------------------
   {
-    RIGpuScope _gsWater(&mpGraphics->profiler, &mpGraphics->primary.cmds[0], "Water");
+    RIGpuScope _gsWater(&mpGraphics->profiler, &mpGraphics->primary.cmds[0],
+                        "Water");
     std::vector<iRenderable *> waters;
     for (iRenderable *pObj :
          m_rendererList.GetRenderableItems(eRenderListType_Translucent)) {
@@ -3119,7 +3188,8 @@ void cHybridRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
       const uint32_t imageIndex = mpGraphics->swapchainIndex;
 
       if (!state.waterReflection)
-        state.waterReflection = std::make_unique<WaterReflectionViewportState>();
+        state.waterReflection =
+            std::make_unique<WaterReflectionViewportState>();
 
       WaterReflectionFrameDesc waterFrame = {};
       waterFrame.width = renderWidth;
@@ -3141,10 +3211,8 @@ void cHybridRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
       // pixel offsets into this instance's half-resolution input units.
       waterFrame.nrd.cameraJitter[0] = temporalFrame.jitterPixels[0];
       waterFrame.nrd.cameraJitter[1] = temporalFrame.jitterPixels[1];
-      waterFrame.nrd.cameraJitterPrev[0] =
-          temporalFrame.prevJitterPixels[0];
-      waterFrame.nrd.cameraJitterPrev[1] =
-          temporalFrame.prevJitterPixels[1];
+      waterFrame.nrd.cameraJitterPrev[0] = temporalFrame.prevJitterPixels[0];
+      waterFrame.nrd.cameraJitterPrev[1] = temporalFrame.prevJitterPixels[1];
       waterFrame.nrd.frameIndex = perFrame.totalFrames;
       waterFrame.nrd.denoisingRange = apFrustum->GetFarPlane();
       waterFrame.nrd.timeDeltaMs = afFrameTime * 1000.0f;
@@ -3160,11 +3228,10 @@ void cHybridRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
         mpGraphics->UpdateFrameUBO(&b.descriptor, &perFrame, sizeof(perFrame));
         sharedBindings.push_back(b);
       }
-      sharedBindings.emplace_back(
-          "gRtAccel",
-          RIDescriptor::accelerationStructure(&mpGraphics->device,
-                                               apWorld->GetTlas()),
-          0, true);
+      sharedBindings.emplace_back("gRtAccel",
+                                  RIDescriptor::accelerationStructure(
+                                      &mpGraphics->device, apWorld->GetTlas()),
+                                  0, true);
       appendWorldLightFog(sharedBindings, apWorld);
 
       // The raster water shader no longer declares gRtAccel. Keep its per-frame
@@ -3244,7 +3311,7 @@ void cHybridRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
         uint32_t slot = 0;
         uint32_t materialId = 0;
         uint32_t indexCount = 0;
-        uint32_t commandSlot = 0;   // first of the MUL/ADD pair
+        uint32_t commandSlot = 0; // first of the MUL/ADD pair
       };
       std::vector<WaterDraw> waterDraws;
       waterDraws.reserve(waters.size());
@@ -3317,9 +3384,9 @@ void cHybridRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
 
         // The cookie identifies the material instance and Generation changes
         // only when its data changes; neither component varies per frame.
-        const uint64_t materialSignature = hash_u64(
-            hash_u64(HASH_INITIAL_VALUE, pMat->GetUniqueCookie()),
-            static_cast<uint64_t>(pMat->Generation()));
+        const uint64_t materialSignature =
+            hash_u64(hash_u64(HASH_INITIAL_VALUE, pMat->GetUniqueCookie()),
+                     static_cast<uint64_t>(pMat->Generation()));
 
         WaterReflectionSurfaceDesc surface = {};
         surface.renderableCookie = pObj->GetUniqueCookie();
@@ -3327,7 +3394,8 @@ void cHybridRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
         surface.objectSlot = slot;
         surface.indexCount = static_cast<uint32_t>(indexCount);
         surface.vertexPresentMask = vtxMask;
-        surface.opaqueDepthView = state.depthView[mpGraphics->swapchainIndex].Get();
+        surface.opaqueDepthView =
+            state.depthView[mpGraphics->swapchainIndex].Get();
         surface.tlas = apWorld->GetTlas();
         surface.sharedBindings = sharedBindings.data();
         surface.sharedBindingCount = sharedBindings.size();
@@ -3371,19 +3439,19 @@ void cHybridRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
             // the transitions at the end of its Build.
             graphicsBindings.emplace_back(
                 "gWaterReflectionSpecular",
-                RIDescriptor::sampledImage(
-                    &mpGraphics->device, result.specularRadianceHitDist,
-                    RI_RESOURCE_STATE_GENERAL));
+                RIDescriptor::sampledImage(&mpGraphics->device,
+                                           result.specularRadianceHitDist,
+                                           RI_RESOURCE_STATE_GENERAL));
             graphicsBindings.emplace_back(
                 "gWaterReflectionGuidePosViewZ",
-                RIDescriptor::sampledImage(
-                    &mpGraphics->device, result.halfPositionViewZ,
-                    RI_RESOURCE_STATE_SHADER_RESOURCE));
+                RIDescriptor::sampledImage(&mpGraphics->device,
+                                           result.halfPositionViewZ,
+                                           RI_RESOURCE_STATE_SHADER_RESOURCE));
             graphicsBindings.emplace_back(
                 "gWaterReflectionGuideNormalWeight",
-                RIDescriptor::sampledImage(
-                    &mpGraphics->device, result.halfNormalWeight,
-                    RI_RESOURCE_STATE_SHADER_RESOURCE));
+                RIDescriptor::sampledImage(&mpGraphics->device,
+                                           result.halfNormalWeight,
+                                           RI_RESOURCE_STATE_SHADER_RESOURCE));
           } else {
             // The shader branches before sampling when unavailable, but all
             // three reflected descriptors must still be valid and written.
@@ -3393,8 +3461,8 @@ void cHybridRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
                                           placeholder);
             graphicsBindings.emplace_back("gWaterReflectionGuidePosViewZ",
                                           placeholder);
-            graphicsBindings.emplace_back(
-                "gWaterReflectionGuideNormalWeight", placeholder);
+            graphicsBindings.emplace_back("gWaterReflectionGuideNormalWeight",
+                                          placeholder);
           }
           m_water.bindDescriptors(
               &mpGraphics->device, &mpGraphics->primary.cmds[0],
@@ -3410,13 +3478,12 @@ void cHybridRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
               TranslucentMeshPipelineDesc::BLEND_MUL,
               TranslucentMeshPipelineDesc::BLEND_ADD};
           for (uint32_t pass = 0; pass < 2u; ++pass) {
-            m_water.bindPipeline(&mpGraphics->device,
-                                 &mpGraphics->primary.cmds[0],
-                                 HASH_INITIAL_VALUE, "Water",
-                                 MakeTranslucentMeshPipelineDesc(
-                                     cGraphics::PogoColorFormat,
-                                     cGraphics::DepthFormat, modes[pass],
-                                     vtxMask));
+            m_water.bindPipeline(
+                &mpGraphics->device, &mpGraphics->primary.cmds[0],
+                HASH_INITIAL_VALUE, "Water",
+                MakeTranslucentMeshPipelineDesc(cGraphics::PogoColorFormat,
+                                                cGraphics::DepthFormat,
+                                                modes[pass], vtxMask));
             WaterPush push = {pass, result.available ? 1u : 0u, 0u, 0u};
             mpGraphics->primary.cmds[0].vk_d3d12_setPushConstants(
                 &mpGraphics->device, m_water, 0, sizeof(push), &push);
@@ -3440,15 +3507,13 @@ void cHybridRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
           mpGraphics->primary.cmds[0].vk_d3d12_endRendering(
               &mpGraphics->device);
           waterSurfaceComposited = true;
-
         }
       }
 
       m_waterReflection.EndFrame(*state.waterReflection);
-      mpGraphics->primary.cmds[0].vk_d3d12_textureBarrier(
-          RI_PogoShaderBarrier(
-              state.renderTarget[mpGraphics->swapchainIndex].Get(),
-              /*initial=*/false));
+      mpGraphics->primary.cmds[0].vk_d3d12_textureBarrier(RI_PogoShaderBarrier(
+          state.renderTarget[mpGraphics->swapchainIndex].Get(),
+          /*initial=*/false));
     }
   }
 
@@ -3459,7 +3524,8 @@ void cHybridRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
   float particleGammaRatio = 1.0f;
   if (auto *composite = viewport->GetPostEffectComposite()) {
     for (int i = 0; i < composite->GetPostEffectNum(); ++i) {
-      auto *toneMap = dynamic_cast<cPostEffect_ToneMap *>(composite->GetPostEffect(i));
+      auto *toneMap =
+          dynamic_cast<cPostEffect_ToneMap *>(composite->GetPostEffect(i));
       if (!toneMap || !toneMap->IsActive())
         continue;
       cPostEffectParams_ToneMap params;
@@ -3475,14 +3541,16 @@ void cHybridRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
   // Temporarily store authored/display RGB in the HDR attachment. Each
   // compute lane owns one pixel; there is no cross-pixel read/write hazard.
   // Restore linear scene RGB before any other pass samples the target.
-  auto convertParticleColorSpace = [&](bool toLinear, bool linearBlend = false) {
+  auto convertParticleColorSpace = [&](bool toLinear,
+                                       bool linearBlend = false) {
     auto *cmd = &mpGraphics->primary.cmds[0];
     auto *target = state.renderTarget[mpGraphics->swapchainIndex].Get();
     cmd->vk_d3d12_textureBarrier(RITextureBarrier(
-        target, toLinear ? RI_RESOURCE_STATE_RENDER_TARGET_READ
-                         : RI_RESOURCE_STATE_SHADER_RESOURCE,
-        RI_RESOURCE_STATE_GENERAL,
-        toLinear ? RI_STAGE_NONE : RI_STAGE_FRAGMENT, RI_STAGE_COMPUTE));
+        target,
+        toLinear ? RI_RESOURCE_STATE_RENDER_TARGET_READ
+                 : RI_RESOURCE_STATE_SHADER_RESOURCE,
+        RI_RESOURCE_STATE_GENERAL, toLinear ? RI_STAGE_NONE : RI_STAGE_FRAGMENT,
+        RI_STAGE_COMPUTE));
     m_particleColorSpace.bindComputePipeline(
         &mpGraphics->device, cmd, HASH_INITIAL_VALUE, "ParticleColorSpace");
     // The base image's contents only live between one encode and its
@@ -3504,18 +3572,18 @@ void cHybridRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
             RIDescriptor::storageImage(
                 &mpGraphics->device,
                 state.forwardBlendBaseView[mpGraphics->swapchainIndex].Get()))};
-    m_particleColorSpace.bindDescriptors(
-        &mpGraphics->device, cmd, mpGraphics->frameIndex, bindings, 2,
-        VK_PIPELINE_BIND_POINT_COMPUTE);
+    m_particleColorSpace.bindDescriptors(&mpGraphics->device, cmd,
+                                         mpGraphics->frameIndex, bindings, 2,
+                                         VK_PIPELINE_BIND_POINT_COMPUTE);
     struct ColorSpacePush {
       uint32_t toLinear;
       uint32_t linearBlend;
       float gammaRatio;
     };
-    const ColorSpacePush direction{toLinear ? 1u : 0u,
-                                  linearBlend ? 1u : 0u, particleGammaRatio};
-    cmd->vk_d3d12_setPushConstants(&mpGraphics->device,
-        m_particleColorSpace, 0, sizeof(direction), &direction);
+    const ColorSpacePush direction{toLinear ? 1u : 0u, linearBlend ? 1u : 0u,
+                                   particleGammaRatio};
+    cmd->vk_d3d12_setPushConstants(&mpGraphics->device, m_particleColorSpace, 0,
+                                   sizeof(direction), &direction);
     cmd->dispatch(&mpGraphics->device, (renderWidth + 15u) / 16u,
                   (renderHeight + 15u) / 16u, 1u);
     if (!toLinear)
@@ -3544,16 +3612,17 @@ void cHybridRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
     flipDepthToReadOnly();
     RIProgram::DescriptorBinding haloFrame;
     haloFrame.handle = DescriptorBindingID::Create("gPerFrame");
-    mpGraphics->UpdateFrameUBO(&haloFrame.descriptor, &perFrame, sizeof(perFrame));
+    mpGraphics->UpdateFrameUBO(&haloFrame.descriptor, &perFrame,
+                               sizeof(perFrame));
     const uint32_t paneSalt =
         hash_u64(HASH_INITIAL_VALUE, reinterpret_cast<uintptr_t>(viewport));
-    m_halo->Record(cntx, *state.haloQueries, haloCandidates,
-                   state.depthTextures[mpGraphics->swapchainIndex].Get(),
-                   state.depthView[mpGraphics->swapchainIndex].Get(),
-                   renderWidth, renderHeight, haloFrame, paneSalt,
-                   static_cast<RIResourceState_e>(
-                       RI_RESOURCE_STATE_DEPTH_READ |
-                       RI_RESOURCE_STATE_SHADER_RESOURCE));
+    m_halo->Record(
+        cntx, *state.haloQueries, haloCandidates,
+        state.depthTextures[mpGraphics->swapchainIndex].Get(),
+        state.depthView[mpGraphics->swapchainIndex].Get(), renderWidth,
+        renderHeight, haloFrame, paneSalt,
+        static_cast<RIResourceState_e>(RI_RESOURCE_STATE_DEPTH_READ |
+                                       RI_RESOURCE_STATE_SHADER_RESOURCE));
   }
 
   // Translucent pass — two sub-passes, both into the pogo "read" half:
@@ -3576,7 +3645,8 @@ void cHybridRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
   {
     // Collect particle emitters from the translucent list once so we can
     // skip the whole pass (and its barriers/begin-rendering) when empty.
-    RIGpuScope _gsParticle(&mpGraphics->profiler, &mpGraphics->primary.cmds[0], "Particle");
+    RIGpuScope _gsParticle(&mpGraphics->profiler, &mpGraphics->primary.cmds[0],
+                           "Particle");
     std::vector<iParticleEmitter *> emitters;
     for (iRenderable *pObj :
          m_rendererList.GetRenderableItems(eRenderListType_Translucent)) {
@@ -3655,8 +3725,8 @@ void cHybridRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
       // so a consumer still anchored to the slot's previous opaque occupant
       // self-invalidates before it dereferences this slot's smaller streams.
       const uint32_t slot = mpGraphics->globalset->submitObject(
-          pEmitter->GetUniqueCookie(), (uint32_t)mpGraphics->frameIndex, nullptr,
-          d, kSubmitData);
+          pEmitter->GetUniqueCookie(), (uint32_t)mpGraphics->frameIndex,
+          nullptr, d, kSubmitData);
       if (slot == UINT32_MAX) {
         Warning("bindless pool exhausted (particle)");
         continue;
@@ -3718,7 +3788,8 @@ void cHybridRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
       beginDesc.colorCount = 1;
       beginDesc.colors = &color;
       beginDesc.depthStencil = &depth;
-      mpGraphics->primary.cmds[0].vk_d3d12_beginRendering(&mpGraphics->device, beginDesc);
+      mpGraphics->primary.cmds[0].vk_d3d12_beginRendering(&mpGraphics->device,
+                                                          beginDesc);
 
       RIViewport vp = {};
       vp.x = 0.0f;
@@ -3733,8 +3804,9 @@ void cHybridRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
       mpGraphics->primary.cmds[0].setViewport(&mpGraphics->device, vp);
       mpGraphics->primary.cmds[0].setScissor(&mpGraphics->device, sc);
 
-      m_particle.bindBindlessDescriptorSet(&mpGraphics->primary.cmds[0],
-                                           &mpGraphics->globalset->m_bindlessSet, uint32_t(0));
+      m_particle.bindBindlessDescriptorSet(
+          &mpGraphics->primary.cmds[0], &mpGraphics->globalset->m_bindlessSet,
+          uint32_t(0));
 
       std::vector<RIProgram::DescriptorBinding> particleBindings;
       particleBindings.reserve(2);
@@ -3755,13 +3827,16 @@ void cHybridRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
       particleBindings.emplace_back(
           "gSceneDepth",
           RIDescriptor::sampledImage(
-              &mpGraphics->device, state.depthSampleView[mpGraphics->swapchainIndex].Get(),
-              static_cast<RIResourceState_e>(RI_RESOURCE_STATE_DEPTH_READ |
-                                             RI_RESOURCE_STATE_SHADER_RESOURCE)));
+              &mpGraphics->device,
+              state.depthSampleView[mpGraphics->swapchainIndex].Get(),
+              static_cast<RIResourceState_e>(
+                  RI_RESOURCE_STATE_DEPTH_READ |
+                  RI_RESOURCE_STATE_SHADER_RESOURCE)));
       appendWorldLightFog(particleBindings, apWorld);
-      m_particle.bindDescriptors(&mpGraphics->device, &mpGraphics->primary.cmds[0], mpGraphics->frameIndex,
-                                 particleBindings.data(),
-                                 particleBindings.size());
+      m_particle.bindDescriptors(
+          &mpGraphics->device, &mpGraphics->primary.cmds[0],
+          mpGraphics->frameIndex, particleBindings.data(),
+          particleBindings.size());
 
       // Map eMaterialBlendMode -> ParticlePipelineDesc::BlendMode +
       // shader-side BLEND_MODE_*. eMaterialBlendMode_None is filtered above.
@@ -3808,27 +3883,28 @@ void cHybridRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
         // mesh path and any future per-object alpha gates.
         const float sceneAlpha = 1.0f;
         PushBlock push = {(uint32_t)mode, sceneAlpha};
-        mpGraphics->primary.cmds[0].vk_d3d12_setPushConstants(&mpGraphics->device, m_particle, 0,
-                                                     sizeof(push), &push);
+        mpGraphics->primary.cmds[0].vk_d3d12_setPushConstants(
+            &mpGraphics->device, m_particle, 0, sizeof(push), &push);
 
         if (particleCulled) {
           // drawCount is 1, so Vulkan never reads the stride and the uniform
           // 5-word slot serves the 4-word non-indexed command fine.
           const uint64_t offset =
-              static_cast<uint64_t>(particleCull.commandBase + draw.commandSlot) *
+              static_cast<uint64_t>(particleCull.commandBase +
+                                    draw.commandSlot) *
               sizeof(VkDrawIndexedIndirectCommand);
           mpGraphics->primary.cmds[0].drawIndirect(
               &mpGraphics->device, m_cullCommandBuffer.gpu(), offset, 1,
               sizeof(VkDrawIndexedIndirectCommand));
         } else {
-          mpGraphics->primary.cmds[0].draw(&mpGraphics->device, (uint32_t)indexCount, 1u, 0u, slot);
+          mpGraphics->primary.cmds[0].draw(&mpGraphics->device,
+                                           (uint32_t)indexCount, 1u, 0u, slot);
         }
       }
 
       mpGraphics->primary.cmds[0].vk_d3d12_endRendering(&mpGraphics->device);
 
       convertParticleColorSpace(true);
-
     }
   }
 
@@ -3849,8 +3925,8 @@ void cHybridRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
   // background.
   // --------------------------------------------------------------------
   {
-    RIGpuScope _gsTranslucent(&mpGraphics->profiler, &mpGraphics->primary.cmds[0],
-                              "TranslucentMesh");
+    RIGpuScope _gsTranslucent(&mpGraphics->profiler,
+                              &mpGraphics->primary.cmds[0], "TranslucentMesh");
     std::vector<iRenderable *> meshes;
     for (iRenderable *pObj :
          m_rendererList.GetRenderableItems(eRenderListType_Translucent)) {
@@ -3890,7 +3966,7 @@ void cHybridRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
       uint32_t materialId = 0;
       uint32_t indexCount = 0;
       bool cubeMap = false;
-      uint32_t commandSlot = 0;   // first of 1 or 2 consecutive slots
+      uint32_t commandSlot = 0; // first of 1 or 2 consecutive slots
     };
     std::vector<MeshDraw> meshDraws;
     meshDraws.reserve(meshes.size());
@@ -3993,7 +4069,8 @@ void cHybridRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
       beginDesc.colorCount = 1;
       beginDesc.colors = &color;
       beginDesc.depthStencil = &depth;
-      mpGraphics->primary.cmds[0].vk_d3d12_beginRendering(&mpGraphics->device, beginDesc);
+      mpGraphics->primary.cmds[0].vk_d3d12_beginRendering(&mpGraphics->device,
+                                                          beginDesc);
 
       RIViewport vp = {};
       vp.x = 0.0f;
@@ -4009,7 +4086,8 @@ void cHybridRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
       mpGraphics->primary.cmds[0].setScissor(&mpGraphics->device, sc);
 
       m_translucentMesh.bindBindlessDescriptorSet(
-          &mpGraphics->primary.cmds[0], &mpGraphics->globalset->m_bindlessSet, uint32_t(0));
+          &mpGraphics->primary.cmds[0], &mpGraphics->globalset->m_bindlessSet,
+          uint32_t(0));
 
       std::vector<RIProgram::DescriptorBinding> meshBindings;
       meshBindings.reserve(1);
@@ -4022,11 +4100,12 @@ void cHybridRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
       appendWorldLightFog(meshBindings, apWorld);
       // Lit diffuse is guarded by a push flag until the first TLAS build.
       meshBindings.emplace_back("gRtAccel",
-          RIDescriptor::accelerationStructure(&mpGraphics->device, apWorld->GetTlas()),
-          0, true);
-      m_translucentMesh.bindDescriptors(&mpGraphics->device, &mpGraphics->primary.cmds[0],
-                                        mpGraphics->frameIndex, meshBindings.data(),
-                                        meshBindings.size());
+                                RIDescriptor::accelerationStructure(
+                                    &mpGraphics->device, apWorld->GetTlas()),
+                                0, true);
+      m_translucentMesh.bindDescriptors(
+          &mpGraphics->device, &mpGraphics->primary.cmds[0],
+          mpGraphics->frameIndex, meshBindings.data(), meshBindings.size());
 
       // Map eMaterialBlendMode -> TranslucentMeshPipelineDesc::BlendMode +
       // shader-side BLEND_MODE_*. Mirrors the same remap used by the
@@ -4059,7 +4138,8 @@ void cHybridRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
       };
       constexpr uint32_t kTransOptUseIllumination = 1u << 0;
       constexpr uint32_t kTransOptHasTlas = 1u << 1;
-      const uint32_t lightingOptions = apWorld->GetTlas() ? kTransOptHasTlas : 0u;
+      const uint32_t lightingOptions =
+          apWorld->GetTlas() ? kTransOptHasTlas : 0u;
 
       for (const MeshDraw &draw : meshDraws) {
         iRenderable *pObj = draw.object;
@@ -4082,8 +4162,8 @@ void cHybridRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
         // detail::BindVertexStreams binds pos/normal/tangent/color/uv0 + index
         // (with fallbacks for absent optional streams) for both draws below.
         uint32_t vtxMask = 0;
-        if (!detail::BindVertexStreams(&mpGraphics->primary.cmds[0], pVB, "translucent",
-                                       &vtxMask))
+        if (!detail::BindVertexStreams(&mpGraphics->primary.cmds[0], pVB,
+                                       "translucent", &vtxMask))
           continue;
 
         const TranslucentMeshPipelineDesc::BlendMode mode =
@@ -4115,8 +4195,8 @@ void cHybridRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
               &mpGraphics->device, m_cullCommandBuffer.gpu(), offset, 1,
               sizeof(VkDrawIndexedIndirectCommand));
         } else {
-          mpGraphics->primary.cmds[0].drawIndexed(&mpGraphics->device, (uint32_t)indexCount, 1u, 0u,
-                                         0, slot);
+          mpGraphics->primary.cmds[0].drawIndexed(
+              &mpGraphics->device, (uint32_t)indexCount, 1u, 0u, 0, slot);
         }
 
         // Second draw for the cube-map Fresnel + rim contribution.
@@ -4138,7 +4218,8 @@ void cHybridRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
               (uint32_t)TranslucentMeshPipelineDesc::BLEND_ADD, sceneAlpha,
               kTransOptUseIllumination | lightingOptions, 0u};
           mpGraphics->primary.cmds[0].vk_d3d12_setPushConstants(
-              &mpGraphics->device, m_translucentMesh, 0, sizeof(pushIllum), &pushIllum);
+              &mpGraphics->device, m_translucentMesh, 0, sizeof(pushIllum),
+              &pushIllum);
           // Vertex / index buffers stay bound from the main draw above —
           // same renderable, just a second pipeline + push-constant set.
           // It owns the NEXT command slot: its own candidate, so the cull can
@@ -4152,8 +4233,8 @@ void cHybridRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
                 &mpGraphics->device, m_cullCommandBuffer.gpu(), offset, 1,
                 sizeof(VkDrawIndexedIndirectCommand));
           } else {
-            mpGraphics->primary.cmds[0].drawIndexed(&mpGraphics->device, (uint32_t)indexCount, 1u,
-                                           0u, 0, slot);
+            mpGraphics->primary.cmds[0].drawIndexed(
+                &mpGraphics->device, (uint32_t)indexCount, 1u, 0u, 0, slot);
           }
         }
       }
@@ -4173,10 +4254,10 @@ void cHybridRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
   // mismatch here is rejected as INCOMPATIBLE_BARRIER_LAYOUT. On Vulkan both
   // spell DEPTH_READ_ONLY_OPTIMAL, since DEPTH_READ wins the layout choice.
   {
-    const uint32_t beforeState = depthFlippedForReadOnly
-                                     ? (RI_RESOURCE_STATE_DEPTH_READ |
-                                        RI_RESOURCE_STATE_SHADER_RESOURCE)
-                                     : RI_RESOURCE_STATE_SHADER_RESOURCE;
+    const uint32_t beforeState =
+        depthFlippedForReadOnly
+            ? (RI_RESOURCE_STATE_DEPTH_READ | RI_RESOURCE_STATE_SHADER_RESOURCE)
+            : RI_RESOURCE_STATE_SHADER_RESOURCE;
     const uint32_t beforeStages = depthFlippedForReadOnly
                                       ? RI_STAGE_NONE
                                       : (RI_STAGE_FRAGMENT | RI_STAGE_COMPUTE);
@@ -4223,15 +4304,17 @@ void cHybridRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
       beginDesc.colorCount = 1;
       beginDesc.colors = &color;
       beginDesc.depthStencil = &depth;
-      mpGraphics->primary.cmds[0].vk_d3d12_beginRendering(&mpGraphics->device, beginDesc);
+      mpGraphics->primary.cmds[0].vk_d3d12_beginRendering(&mpGraphics->device,
+                                                          beginDesc);
 
-      debugDraw->flush(cntx, &mpGraphics->primary.cmds[0], apFrustum, renderWidth,
-                       renderHeight, cGraphics::PogoColorFormat);
+      debugDraw->flush(cntx, &mpGraphics->primary.cmds[0], apFrustum,
+                       renderWidth, renderHeight, cGraphics::PogoColorFormat);
 
       mpGraphics->primary.cmds[0].vk_d3d12_endRendering(&mpGraphics->device);
     }
     mpGraphics->primary.cmds[0].vk_d3d12_textureBarrier(RI_PogoShaderBarrier(
-        state.renderTarget[mpGraphics->swapchainIndex].Get(), /*initial=*/false));
+        state.renderTarget[mpGraphics->swapchainIndex].Get(),
+        /*initial=*/false));
   }
 
   // Commit every bindless handle / slot-generation write made this frame. The
@@ -4256,12 +4339,13 @@ cHybridRenderer::~cHybridRenderer() {
   m_waterReflection.Dispose(mpGraphics);
 
   RIProgram *programs[] = {
-      &m_gbuffer,        &m_vBufferPomBary,
-      &m_lightGrid,      &m_composite,           &m_directLighting,
-      &m_directSpatialReuse, &m_nrdPack,         &m_lightProbe,
-      &m_particle, &m_particleColorSpace,
-      &m_translucentMesh, &m_decal,               &m_water,
-      &m_pathTrace,
+      &m_gbuffer,         &m_vBufferPomBary,
+      &m_lightGrid,       &m_composite,
+      &m_directLighting,  &m_directSpatialReuse,
+      &m_nrdPack,         &m_lightProbe,
+      &m_particle,        &m_particleColorSpace,
+      &m_translucentMesh, &m_decal,
+      &m_water,           &m_pathTrace,
   };
   for (RIProgram *p : programs)
     p->dispose(&mpGraphics->device);
@@ -4291,10 +4375,10 @@ cHybridRenderer::~cHybridRenderer() {
   // The cull rings: the translucent families' plus the opaque two-phase
   // candidate ring and its persistent visibility table. Anything created in the
   // constructor has to appear here or it outlives the device.
-  RIBuffer *cullBuffers[] = {
-      &m_cullCandidateBuffer,  &m_cullTileBuffer,
-      &m_cullGroupBuffer,      &m_cullCameraBuffer,    &m_cullDrawCountBuffer,
-      &m_cullVisibilityBuffer, &m_cameraCandidateBuffer};
+  RIBuffer *cullBuffers[] = {&m_cullCandidateBuffer,  &m_cullTileBuffer,
+                             &m_cullGroupBuffer,      &m_cullCameraBuffer,
+                             &m_cullDrawCountBuffer,  &m_cullVisibilityBuffer,
+                             &m_cameraCandidateBuffer};
   for (RIBuffer *b : cullBuffers) {
     b->dispose(&mpGraphics->device);
     *b = {};

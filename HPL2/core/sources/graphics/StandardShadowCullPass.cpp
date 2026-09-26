@@ -255,6 +255,29 @@ bool cStandardShadowCullPass::Dispatch(RICmd *cmd, uint32_t frameIndex,
                         RI_STAGE_COMPUTE));
   }
 
+  if (constants.cullMode == kStandardCullModeVisibilityReplay ||
+      constants.cullMode == kStandardCullModeVisibilityUpdate) {
+    // History is shared across frames and viewports. Replay must see the
+    // previous update; update must finish after all replay reads.
+    RIBufferBarrier visibilityBarriers[2] = {
+        RIBufferBarrier(buffers.visibility, RI_RESOURCE_STATE_UNORDERED_ACCESS,
+                        RI_RESOURCE_STATE_UNORDERED_ACCESS, RI_STAGE_COMPUTE,
+                        RI_STAGE_COMPUTE),
+        // Phase two reads each candidate's phase-one instanceCount instead of
+        // rereading mutable, hashed history. Replay's closing barrier handed
+        // the buffer to the phase-one draw; take it back once that draw has
+        // consumed it. Replay's compute writes were made available by that
+        // closing barrier and this one chains through DRAW_INDIRECT to make
+        // them visible here, so no separate global barrier is needed.
+        RIBufferBarrier(buffers.indirect, RI_RESOURCE_STATE_INDIRECT_ARGUMENT,
+                        RI_RESOURCE_STATE_UNORDERED_ACCESS,
+                        RI_STAGE_DRAW_INDIRECT, RI_STAGE_COMPUTE)};
+    const uint32_t count =
+        constants.cullMode == kStandardCullModeVisibilityUpdate ? 2u : 1u;
+    cmd->vk_d3d12_resourceBarrier<0, 2, 0>(0, nullptr, count,
+                                           visibilityBarriers, 0, nullptr);
+  }
+
   record(m_cull, "Standard.cull.cs:cullShadowTiles", groupCount);
 
   // Hand both buffers to the draw. Counts are only read as a draw count when

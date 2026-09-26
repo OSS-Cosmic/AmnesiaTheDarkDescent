@@ -34,29 +34,29 @@
 
 namespace hpl {
 
-	//////////////////////////////////////////////////////////////////////////
-	// DECAL
-	//////////////////////////////////////////////////////////////////////////
-	
-	cMaterialType_Decal::cMaterialType_Decal(cGraphics *apGraphics, cResources *apResources) : iMaterialType(apGraphics, apResources)
-	{
-		mbIsTranslucent = true;
-		mbIsDecal = true;
+//////////////////////////////////////////////////////////////////////////
+// DECAL
+//////////////////////////////////////////////////////////////////////////
 
-		AddUsedTexture(eMaterialTexture_Diffuse);
-	}
+cMaterialType_Decal::cMaterialType_Decal(cGraphics *apGraphics,
+                                         cResources *apResources)
+    : iMaterialType(apGraphics, apResources) {
+  mbIsTranslucent = true;
+  mbIsDecal = true;
 
-	cMaterialType_Decal::~cMaterialType_Decal() {}
-
-	void cMaterialType_Decal::LoadVariables(cMaterial *apMaterial, cResourceVarsObject *apVars)
-	{
-		// Decals carry no per-type parameters; the diffuse texture is bound by the
-		// loader (cMaterial::SlotForTexture) and the blend mode lives in cMaterial's
-		// pipeline-settings bucket.
-		apMaterial->IncreaseGeneration();
-	}
-
-	void cMaterialType_Decal::GetVariableValues(cMaterial* apMaterial, cResourceVarsObject* apVars)
-	{
-	}
+  AddUsedTexture(eMaterialTexture_Diffuse);
 }
+
+cMaterialType_Decal::~cMaterialType_Decal() {}
+
+void cMaterialType_Decal::LoadVariables(cMaterial *apMaterial,
+                                        cResourceVarsObject *apVars) {
+  // Decals carry no per-type parameters; the diffuse texture is bound by the
+  // loader (cMaterial::SlotForTexture) and the blend mode lives in cMaterial's
+  // pipeline-settings bucket.
+  apMaterial->IncreaseGeneration();
+}
+
+void cMaterialType_Decal::GetVariableValues(cMaterial *apMaterial,
+                                            cResourceVarsObject *apVars) {}
+} // namespace hpl

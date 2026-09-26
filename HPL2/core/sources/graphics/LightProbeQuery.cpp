@@ -36,18 +36,22 @@ namespace hpl {
 
 //------------------------------------------------------------------------
 
-static_assert(cLightProbeQuery::kMaxProbes == (int)kMaxLightProbes,
-              "kMaxProbes must match kMaxLightProbes in amnesia/slang/Constants.h");
+static_assert(
+    cLightProbeQuery::kMaxProbes == (int)kMaxLightProbes,
+    "kMaxProbes must match kMaxLightProbes in amnesia/slang/Constants.h");
 static_assert(cLightProbeQuery::kMaxExcludes == (int)kMaxLightProbeExcludes,
-              "kMaxExcludes must match kMaxLightProbeExcludes in amnesia/slang/Constants.h");
+              "kMaxExcludes must match kMaxLightProbeExcludes in "
+              "amnesia/slang/Constants.h");
 static_assert(kLightProbeSampleCount > 0u && kLightProbeSampleCount <= 1024u &&
-                  (kLightProbeSampleCount & (kLightProbeSampleCount - 1u)) == 0u,
+                  (kLightProbeSampleCount & (kLightProbeSampleCount - 1u)) ==
+                      0u,
               "Light probe reduction needs a power-of-two workgroup size");
 
 // Scalar layout: probeCount, excludeCount, then kMaxExcludes ids, all uint.
-static_assert(sizeof(cLightProbeQuery::cPushConstants) ==
-                  sizeof(uint32_t) * (2 + cLightProbeQuery::kMaxExcludes),
-              "cPushConstants must match LightProbePC in LightProbePass.cs.slang");
+static_assert(
+    sizeof(cLightProbeQuery::cPushConstants) ==
+        sizeof(uint32_t) * (2 + cLightProbeQuery::kMaxExcludes),
+    "cPushConstants must match LightProbePC in LightProbePass.cs.slang");
 
 // packLightId in Scene.slang: top 2 bits type, low 30 bits the light's stable
 // per-type GPU slot. Mirrored here so the exclusion list the probe compares
@@ -121,9 +125,10 @@ void cLightProbeQuery::Init(RIDevice *apDevice) {
             "will report 'no answer'. See the RI warning above for the backend "
             "reason.\n",
             (int)i,
-            slot.mRequests.isEmpty()   ? "request (host-upload, shader-resource)"
-            : slot.mResults.isEmpty()  ? "result (device, storage)"
-                                       : "readback (host-readback, transfer-dst)");
+            slot.mRequests.isEmpty() ? "request (host-upload, shader-resource)"
+            : slot.mResults.isEmpty()
+                ? "result (device, storage)"
+                : "readback (host-readback, transfer-dst)");
       Dispose(apDevice);
       return;
     }
@@ -156,8 +161,7 @@ void cLightProbeQuery::Dispose(RIDevice *apDevice) {
 
 //------------------------------------------------------------------------
 
-void cLightProbeQuery::SetProbes(const cVector3f *apPositions,
-                                 int alCount) {
+void cLightProbeQuery::SetProbes(const cVector3f *apPositions, int alCount) {
   if (apPositions == NULL)
     alCount = 0;
   if (alCount < 0)
@@ -218,8 +222,8 @@ bool cLightProbeQuery::GetResult(int alIndex, cVector3f &avIrradiance) const {
     return false;
 
   const cGpuResult &res = mvResults[alIndex];
-  avIrradiance = cVector3f(res.mvIrradiance[0], res.mvIrradiance[1],
-                           res.mvIrradiance[2]);
+  avIrradiance =
+      cVector3f(res.mvIrradiance[0], res.mvIrradiance[1], res.mvIrradiance[2]);
   return true;
 }
 

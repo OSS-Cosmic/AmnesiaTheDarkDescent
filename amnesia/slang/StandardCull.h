@@ -371,12 +371,12 @@ SLANG_PUBLIC inline uint standardCullReplayInstanceCount(bool frustumKeep,
     return (frustumKeep && wasVisible != 0u) ? 1u : 0u;
 }
 
-// Phase 2. `visibleNow` already carries frustum AND occlusion. Subtracting what
-// phase 1 drew is what keeps a still-visible object from being drawn twice.
+// Phase 2. Read phaseOneDrawn from this candidate's phase-one command, not
+// shared history: another candidate may have overwritten a colliding key.
 SLANG_PUBLIC inline uint standardCullUpdateInstanceCount(bool visibleNow,
-                                                         uint wasVisible)
+                                                         uint phaseOneDrawn)
 {
-    return (visibleNow && wasVisible == 0u) ? 1u : 0u;
+    return (visibleNow && phaseOneDrawn == 0u) ? 1u : 0u;
 }
 
 // What phase 2 stores for next frame's phase 1.

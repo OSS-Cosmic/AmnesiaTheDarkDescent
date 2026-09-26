@@ -36,8 +36,8 @@
 // Persistent across frames, indexed by StandardCullCandidate::visibilityKey.
 // Not a per-frame ring: phase 1 of frame N reads what phase 2 of frame N-1
 // wrote. A key collision makes phase 1 draw something hidden (depth rejects it)
-// or skip something visible (phase 2 draws it), so it costs efficiency and
-// never correctness.
+// or skip something visible (phase 2 draws it). Phase two must use the actual
+// phase-one command for subtraction, since collisions can change this table.
 [vk::binding(8, 2)] RWStructuredBuffer<uint>                gCullVisibility;
 
 // Bases are absolute element offsets, not zero: the host hands out tile and
@@ -160,14 +160,8 @@ void cullShadowTiles(uint3 groupID : SV_GroupID, uint3 groupThreadID : SV_GroupT
     bool frustumKeep = standardCullKeepCandidate(tile, candidate);
 
     if (gPushConstants.gCullMode == kStandardCullModeVisibilityReplay) {
-        // FRUSTUM ONLY, deliberately. The pyramid still holds the last frame
-        // that used this image, and phase 2 subtracts `wasVisible` -- the
-        // STORED bit, not what phase 1 actually drew. If an occlusion test
-        // could suppress a draw here, an object with wasVisible = 1 that this
-        // phase skipped would be subtracted out of phase 2 as well and never
-        // drawn at all. Keeping phase 1 purely frustum-gated is what makes
-        // "phase 1 drew exactly frustumKeep && wasVisible" true, and that
-        // identity is the whole basis of the subtraction.
+        // No current pyramid exists yet. Replay the previous visible set
+        // against this frame's frustum, then build depth from those draws.
         uint wasVisible = gCullVisibility[candidate.visibilityKey];
         gCullIndirectWords[candidate.commandWordOffset] =
             standardCullReplayInstanceCount(frustumKeep, wasVisible);
@@ -180,14 +174,15 @@ void cullShadowTiles(uint3 groupID : SV_GroupID, uint3 groupThreadID : SV_GroupT
         // `keep` already carries the occlusion test against the pyramid phase 1
         // filled. Phase 2 draws what is visible now MINUS what phase 1 already
         // drew, so nothing is rasterized twice.
-        uint wasVisible = gCullVisibility[candidate.visibilityKey];
+        uint phaseOneDrawn = gCullIndirectWords[candidate.commandWordOffset];
         gCullIndirectWords[candidate.commandWordOffset + gPushConstants.gCommandWordDelta] =
-            standardCullUpdateInstanceCount(keep, wasVisible);
-        // The answer for next frame's phase 1. Written after the read above,
-        // and each candidate owns its own key, so there is no ordering hazard
-        // beyond a collision -- which is already benign.
-        gCullVisibility[candidate.visibilityKey] =
-            standardCullNextVisibility(keep);
+            standardCullUpdateInstanceCount(keep, phaseOneDrawn);
+        // Colliding candidates may publish different hints, but atomic writes
+        // avoid a data race. The hint affects next frame's replay efficiency;
+        // it cannot change this frame's per-command subtraction.
+        uint previous;
+        InterlockedExchange(gCullVisibility[candidate.visibilityKey],
+                            standardCullNextVisibility(keep), previous);
         return;
     }
 
