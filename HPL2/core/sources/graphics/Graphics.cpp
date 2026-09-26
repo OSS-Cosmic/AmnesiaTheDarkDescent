@@ -472,8 +472,19 @@ void cGraphics::Init(const cEngineInitVars::cGraphicsVars &aVars,
     // RIProgram. The ray-traced WORK stays gated on the active backend
     // (cWorld::BuildTlas), so a Standard session pays for the capability, not
     // for acceleration structures nothing reads.
-    const bool bAdapterCanRayTrace = selectedAdapter.isRayTracingSupported &&
-                                     selectedAdapter.isRayQuerySupported;
+    // Named rather than a bare boolean so the log says which capability was
+    // missing, the way RendererUnmetAdapterRequirement does above. Quad
+    // derivatives are in the list because NRD's REBLUR passes read across the
+    // quad from a compute shader: without them the denoiser cannot run, and
+    // without the denoiser there is no ray-traced image. Catching it here turns
+    // what was a fatal error at the first NRD dispatch into a fallback.
+    const char *pMissingRtCapability =
+        !selectedAdapter.isRayTracingSupported ? "hardware ray tracing"
+        : !selectedAdapter.isRayQuerySupported ? "inline ray queries"
+        : !selectedAdapter.isComputeShaderDerivativesSupported
+            ? "compute shader quad derivatives (NRD denoiser)"
+            : NULL;
+    const bool bAdapterCanRayTrace = pMissingRtCapability == NULL;
     // Decided from what the adapter advertises, before the device exists: the
     // RI layer no longer rejects a request it cannot service, so an
     // unserviceable one must never be made. Only the active backend that NEEDS
@@ -481,14 +492,12 @@ void cGraphics::Init(const cEngineInitVars::cGraphicsVars &aVars,
     // backend it asked for and loses the switch.
     if (!bAdapterCanRayTrace) {
       if (mRendererBackend == eRendererBackend_RayTraced) {
-        Log("Renderer backend: ray tracing unsupported on '%s', falling back to "
-            "Standard\n",
-            selectedAdapter.name);
+        Log("Renderer backend: '%s' lacks %s, falling back to Standard\n",
+            selectedAdapter.name, pMissingRtCapability);
         mRendererBackend = eRendererBackend_Standard;
       } else {
-        Log("Renderer backend: ray tracing unavailable on '%s', backend "
-            "switching disabled\n",
-            selectedAdapter.name);
+        Log("Renderer backend: '%s' lacks %s, backend switching disabled\n",
+            selectedAdapter.name, pMissingRtCapability);
       }
     }
     deviceInit.requestRayTracing = bAdapterCanRayTrace ? 1 : 0;
@@ -520,7 +529,9 @@ void cGraphics::Init(const cEngineInitVars::cGraphicsVars &aVars,
     // that claims ray tracing but whose device comes up without it must not be
     // offered a switch it cannot perform.
     mbRayTracedSupported = device.accelerationStructureEnabled &&
-                           device.rayTracingPipelineEnabled && device.rayQueryEnabled;
+                           device.rayTracingPipelineEnabled &&
+                           device.rayQueryEnabled &&
+                           device.computeShaderDerivativesEnabled;
     RI_InitResourceUploader(&device, &uploader);
 
     // Swapchain + per-image views. Same RISwapchain::create path as the rebuild
@@ -812,9 +823,12 @@ void cGraphics::Init(const cEngineInitVars::cGraphicsVars &aVars,
     // cHybridRenderer's constructor creates ray-tracing pipelines with no
     // capability check, so it may only ever be built on a device that actually
     // came up ray-tracing-capable — not merely on an adapter that could.
+    // Its NrdIntegration likewise assumes the denoiser's quad derivatives are
+    // available, so that flag belongs here with the ray-tracing ones.
     const bool bDeviceRayTraced = device.accelerationStructureEnabled &&
                                   device.rayTracingPipelineEnabled &&
-                                  device.rayQueryEnabled;
+                                  device.rayQueryEnabled &&
+                                  device.computeShaderDerivativesEnabled;
     const bool bBuildBoth = mbRuntimeBackendSwitchAllowed && bDeviceRayTraced;
 
     if (bBuildBoth || mRendererBackend == eRendererBackend_Standard)

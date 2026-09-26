@@ -110,6 +110,22 @@ static bool ri_d3d12_feature_level(IDXGIAdapter4 *adapter,
   return false;
 }
 
+// One summary line per enumerated adapter. Both enumeration passes (hardware
+// and WARP) print the same fields, so they share this: a field added to only
+// one of two copies is a log that disagrees with itself. `dxr` is the raw tier
+// the driver reported, which is what tells a bug report apart from a mapping
+// bug in the saturating RT value beside it.
+static void ri_d3d12_log_adapter(const struct RIPhysicalAdapter &adapter) {
+  hpl::Log("RI D3D12 adapter: %s vendor=%u type=%u FL=%u.%u SM=%u.%u "
+           "RT=%u (dxr=%u)\n",
+           adapter.name, adapter.vendor, adapter.type,
+           adapter.d3d12.highestFeatureLevelMajor,
+           adapter.d3d12.highestFeatureLevelMinor,
+           adapter.d3d12.highestShaderModelMajor,
+           adapter.d3d12.highestShaderModelMinor,
+           adapter.d3d12.rayTracingTier, adapter.d3d12.rayTracingTierNative);
+}
+
 static bool ri_d3d12_populate_adapter(IDXGIAdapter4 *src, bool isWarp,
                                       struct RIPhysicalAdapter &dst) {
   DXGI_ADAPTER_DESC3 desc = {};
@@ -183,9 +199,15 @@ static bool ri_d3d12_populate_adapter(IDXGIAdapter4 *src, bool isWarp,
   D3D12_FEATURE_DATA_D3D12_OPTIONS5 options5 = {};
   if (D3D12_WrapResult(probe->CheckFeatureSupport(
           D3D12_FEATURE_D3D12_OPTIONS5, &options5, sizeof(options5)))) {
+    // D3D12_RAYTRACING_TIER is ordered and open-ended -- 1.2 (=12) already
+    // exists and ships on Turing and later -- so compare with >=. An equality
+    // chain makes every tier past the newest one it names read as "not
+    // supported", which is how an RTX 3070 came up as a raster-only adapter
+    // while WARP, still reporting 1.1, looked ray-tracing capable.
+    dst.d3d12.rayTracingTierNative = uint8_t(options5.RaytracingTier);
     dst.d3d12.rayTracingTier =
-        options5.RaytracingTier == D3D12_RAYTRACING_TIER_1_1 ? 2 :
-        options5.RaytracingTier == D3D12_RAYTRACING_TIER_1_0 ? 1 : 0;
+        options5.RaytracingTier >= D3D12_RAYTRACING_TIER_1_1 ? 2 :
+        options5.RaytracingTier >= D3D12_RAYTRACING_TIER_1_0 ? 1 : 0;
   }
   // Publish the backend-neutral capability bits every caller reads. Without
   // these the adapter looks incapable of everything, because nothing outside
@@ -201,6 +223,8 @@ static bool ri_d3d12_populate_adapter(IDXGIAdapter4 *src, bool isWarp,
   dst.isBufferDeviceAddressSupported = 1;
   dst.isShaderStorageScalarLayoutSupported = 1;
   dst.isDynamicRenderingSupported = 1;
+  // Quad wave intrinsics (QuadReadAcrossX/Y, what NRD's REBLUR passes use) are core DXIL from SM 6.0
+  dst.isComputeShaderDerivativesSupported = 1;
   D3D12_FEATURE_DATA_D3D12_OPTIONS7 options7 = {};
   if (D3D12_WrapResult(probe->CheckFeatureSupport(
           D3D12_FEATURE_D3D12_OPTIONS7, &options7, sizeof(options7))))
@@ -388,12 +412,7 @@ int RID3D12_EnumerateAdapters(struct RIRenderer &renderer,
       if (ri_d3d12_populate_adapter(hardware, false, temp)) {
         if (adapters && count < capacity)
           adapters[count] = temp;
-        hpl::Log("RI D3D12 adapter: %s vendor=%u type=%u FL=%u.%u SM=%u.%u RT=%u\n",
-                 temp.name, temp.vendor, temp.type, temp.d3d12.highestFeatureLevelMajor,
-                 temp.d3d12.highestFeatureLevelMinor,
-                 temp.d3d12.highestShaderModelMajor,
-                 temp.d3d12.highestShaderModelMinor,
-                 temp.d3d12.rayTracingTier);
+        ri_d3d12_log_adapter(temp);
         g_riD3D12Adapters.push_back(temp.d3d12.adapter);
         ++count;
       }
@@ -407,12 +426,7 @@ int RID3D12_EnumerateAdapters(struct RIRenderer &renderer,
       if (ri_d3d12_populate_adapter(warp, true, temp)) {
         if (adapters && count < capacity)
           adapters[count] = temp;
-        hpl::Log("RI D3D12 adapter: %s vendor=%u type=%u FL=%u.%u SM=%u.%u RT=%u\n",
-                 temp.name, temp.vendor, temp.type, temp.d3d12.highestFeatureLevelMajor,
-                 temp.d3d12.highestFeatureLevelMinor,
-                 temp.d3d12.highestShaderModelMajor,
-                 temp.d3d12.highestShaderModelMinor,
-                 temp.d3d12.rayTracingTier);
+        ri_d3d12_log_adapter(temp);
         g_riD3D12Adapters.push_back(temp.d3d12.adapter);
         ++count;
       }
@@ -527,6 +541,8 @@ int RID3D12_InitDevice(struct RIDevice &device, const struct RIDeviceDesc *init)
     // D3D12_QUERY_TYPE_OCCLUSION always returns exact sample counts; there is
     // no equivalent of Vulkan's occlusionQueryPrecise feature gate.
     device.occlusionQueryPreciseEnabled = true;
+    // Nothing to enable: quad wave intrinsics come with the shader model.
+    device.computeShaderDerivativesEnabled = true;
     if (tier >= 1) {
       device.physicalAdapter.rayTracingShaderGroupIdentifierSize =
           D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES;

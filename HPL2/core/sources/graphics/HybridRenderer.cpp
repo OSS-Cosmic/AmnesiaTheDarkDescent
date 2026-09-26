@@ -243,10 +243,13 @@ cHybridRenderer::cHybridRenderer(cGraphics *apGraphics, cResources *apResources)
     {
       // Decal pass (amnesia/slang/Decal). Reuses the translucent 5-stream
       // vertex layout + bindless/UBO layouts.
+      // Two entry points per source (vsOcclusion/psOcclusion serve the Standard
+      // renderer's halo queries), so name the entry point for the same reason as
+      // the gbuffer pass above.
       auto d_vert = RIProgram::loadShaderStage(apResources->GetFileSearcher(),
-                                               "Decal.vert");
+                                               "Decal.vert", "vsMain");
       auto d_frag = RIProgram::loadShaderStage(apResources->GetFileSearcher(),
-                                               "Decal.frag");
+                                               "Decal.frag", "psMain");
       std::array<RIProgram::ModuleStage, 2> stages = {
           RIProgram::ModuleStage{RIProgram::PROGRAM_STAGE_VERTEX, d_vert,
                                  "vsMain"},

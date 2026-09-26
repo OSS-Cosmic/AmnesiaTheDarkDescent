@@ -350,8 +350,10 @@ struct RIPhysicalAdapter {
 
   // Tiers (0 - unsupported)
   // 1 - DXR 1.0: full raytracing functionality, except features below
-  // 2 - DXR 1.1: adds ray query, indirect dispatch, "GeometryIndex()"
-  // intrinsic, additional ray flags & vertex formats
+  // 2 - DXR 1.1 or newer: adds ray query, indirect dispatch,
+  // "GeometryIndex()" intrinsic, additional ray flags & vertex formats. A
+  // newer DXR tier is a superset, so it saturates here rather than adding a
+  // value nothing in the engine would read.
   uint8_t rayTracingTier;
 
   // 1 - unbound arrays with dynamic indexing
@@ -402,6 +404,8 @@ struct RIPhysicalAdapter {
       : 1; // acceleration structures + ray tracing pipelines; DXR tier 1
   uint32_t isRayQuerySupported
       : 1; // VK_KHR_ray_query / DXR 1.1 inline ray queries
+  // Quad-scoped reads from a compute shader (HLSL QuadReadAcrossX/Y)
+  uint32_t isComputeShaderDerivativesSupported : 1;
 
   // The renderer owns the enumerated IDXGIAdapter4 array for its whole lifetime;
   // RIPhysicalAdapter values only borrow those pointers.
@@ -433,7 +437,10 @@ struct RIPhysicalAdapter {
       uint8_t highestShaderModelMajor;
       uint8_t highestShaderModelMinor;
       uint8_t resourceBindingTier;
-      uint8_t rayTracingTier; // 0=none, 1=DXR 1.0, 2=DXR 1.1
+      uint8_t rayTracingTier; // 0=none, 1=DXR 1.0, 2=DXR 1.1 or newer
+      // The raw D3D12_RAYTRACING_TIER behind the saturating value above
+      // (0, 10, 11, 12, ...), kept so a log names what the driver reported.
+      uint8_t rayTracingTierNative;
       uint8_t meshShaderTier;
       uint8_t isWarp : 1;
     } d3d12;
@@ -457,6 +464,8 @@ struct RIDevice {
   bool rayTracingPipelineEnabled;
   bool rayQueryEnabled;
   bool fragmentShaderBarycentricEnabled;
+  // Quad derivatives in compute; see isComputeShaderDerivativesSupported above.
+  bool computeShaderDerivativesEnabled;
   bool shaderInt16Enabled;
   bool shaderFloat16Enabled;
   bool geometryShaderEnabled;

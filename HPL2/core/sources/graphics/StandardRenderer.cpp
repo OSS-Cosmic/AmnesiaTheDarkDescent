@@ -1263,10 +1263,15 @@ bool cStandardRenderer::LoadData() {
   // Type="Decal" meshes are optional: without the program the accumulators
   // still clear to identity and the resolve is unchanged.
   if (!m_meshDecalLoaded) {
+    // Decal.vert/frag each carry two entry points (vsMain/psMain for this pass,
+    // vsOcclusion/psOcclusion for cStandardHaloPass), so the entry name is
+    // required: on D3D12 a multi-entry source compiles to a lib_6_8 library that
+    // no graphics PSO can consume, and loadShaderStage uses the name to pick the
+    // per-entry executable. Vulkan resolves to the same .spv either way.
     auto vert = RIProgram::loadShaderStage(mpResources->GetFileSearcher(),
-                                           "Decal.vert");
+                                           "Decal.vert", "vsMain");
     auto frag = RIProgram::loadShaderStage(mpResources->GetFileSearcher(),
-                                           "Decal.frag");
+                                           "Decal.frag", "psMain");
     if (!vert.empty() && !frag.empty()) {
       auto replacement = std::make_shared<RIProgram>();
       std::array<RIProgram::ModuleStage, 2> stages = {

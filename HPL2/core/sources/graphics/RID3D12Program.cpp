@@ -112,6 +112,32 @@ void RIProgram::bindD3D12Pipeline(struct RIDevice *device, struct RICmd *cmd,
         out.InputSlotClass = ri_d3d12_RIVertexInputRateToD3D12(binding->inputRate);
         out.InstanceDataStepRate = perInstance ? 1 : 0;
       }
+      // D3D12 requires an input-layout element for every entry in the vertex
+      // shader's input signature, including one the shader never reads
+      // (ReadWriteMask == 0) -- DXC keeps such an input in the signature where
+      // Slang's SPIR-V backend prunes it, so a layout that satisfies Vulkan can
+      // be short here. Unchecked, that surfaces only as a bare E_INVALIDARG
+      // from CreateGraphicsPipelineState; name the missing semantic instead.
+      if (vs.reflection) {
+        for (const auto &input : vs.reflection->vertexInputs) {
+          if (input.semanticName.empty() ||
+              input.semanticName.rfind("SV_", 0) == 0)
+            continue;
+          const bool covered =
+              std::any_of(in.attributes, in.attributes + in.attributeCount,
+                          [&](const RIVertexAttributeDesc &a) {
+                            return a.location == input.location;
+                          });
+          if (!covered)
+            FatalError("RIProgram: D3D12 input layout for '%s' omits vertex "
+                       "shader input '%s%u' (location %u); D3D12 requires an "
+                       "element for every input-signature entry, including one "
+                       "the shader never reads\n",
+                       debugName ? debugName : "<unnamed>",
+                       input.semanticName.c_str(), input.semanticIndex,
+                       input.location);
+        }
+      }
     }
     desc.InputLayout = {inputs.data(), static_cast<UINT>(inputs.size())};
 
@@ -221,12 +247,36 @@ void RIProgram::createD3D12GraphicsPipeline(
     // rather than blaming this pipeline's description.
     RID3D12_CheckDeviceRemoved(
         *device, debugName ? debugName : "CreateGraphicsPipelineState");
+    // The render-target formats and the input layout are the two parts D3D12
+    // rejects most often and the two the caller cannot infer from the counts
+    // alone, so spell them out: a mismatch against the shader signatures is
+    // otherwise invisible without the debug layer.
+    std::string rtvFormats;
+    for (UINT i = 0; i < desc.NumRenderTargets; ++i) {
+      if (i)
+        rtvFormats += ' ';
+      rtvFormats += std::to_string(static_cast<unsigned>(desc.RTVFormats[i]));
+    }
+    std::string layout;
+    for (UINT i = 0; i < desc.InputLayout.NumElements; ++i) {
+      const D3D12_INPUT_ELEMENT_DESC &e = desc.InputLayout.pInputElementDescs[i];
+      if (i)
+        layout += ' ';
+      layout += e.SemanticName ? e.SemanticName : "<null>";
+      layout += std::to_string(e.SemanticIndex);
+      layout += "@slot" + std::to_string(e.InputSlot);
+    }
     FatalError("RIProgram: CreateGraphicsPipelineState failed for '%s' "
-               "(HRESULT 0x%08lX, RTs=%u, DSV=%u, samples=%u, topology=%u)\n",
+               "(HRESULT 0x%08lX, RTs=%u [%s], DSV=%u, samples=%u, "
+               "topology=%u, inputs=%u [%s])\n"
+               "RI D3D12: rerun with HPL_D3D12_VALIDATION=1 for the "
+               "debug-layer message naming the rejected field\n",
                debugName ? debugName : "<unnamed>",
                static_cast<unsigned long>(psoResult), desc.NumRenderTargets,
-               static_cast<unsigned>(desc.DSVFormat), desc.SampleDesc.Count,
-               static_cast<unsigned>(desc.PrimitiveTopologyType));
+               rtvFormats.c_str(), static_cast<unsigned>(desc.DSVFormat),
+               desc.SampleDesc.Count,
+               static_cast<unsigned>(desc.PrimitiveTopologyType),
+               desc.InputLayout.NumElements, layout.c_str());
   }
   if (debugName && slot.d3d12.handle) {
     const size_t n = strlen(debugName);

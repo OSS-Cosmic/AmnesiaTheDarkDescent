@@ -9,13 +9,16 @@ RIGraphicsPipelineDesc MakeDecalPipelineDesc(RI_Format_e colorFormat,
                                              DecalPipelineDesc::BlendMode mode,
                                              uint32_t vertexPresentMask) {
   RIGraphicsPipelineDesc desc = {};
-  // Decal.vert.slang reuses the translucent 5-stream layout; normal and
-  // tangent stay bound but are ignored by the shader. Their attributes are
-  // dropped (locations 0, 3, 4 remain) so validation does not flag inputs the
-  // vertex shader never consumes.
+  // Decal.vert.slang declares only position / colour / texcoord, so the layout
+  // carries three attributes at locations 0..2 -- matching the shader exactly,
+  // because D3D12 requires an input-layout element for every entry in the
+  // vertex shader's input signature (even an unread one) while Vulkan flags an
+  // attribute the shader does not consume. Their bindings stay at the
+  // translucent 5-stream slots (0, 3, 4), and bindingCount stays 5, so
+  // BindMeshDecalStreams and its fallback buffers are unchanged.
   desc.vertexInput = MakeMeshVertexInputDesc(vertexPresentMask);
-  desc.vertexInput.attributes[1] = desc.vertexInput.attributes[3]; // COLOR
-  desc.vertexInput.attributes[2] = desc.vertexInput.attributes[4]; // TEXCOORD0
+  desc.vertexInput.attributes[1] = {1, 3, RI_FORMAT_RGBA32_SFLOAT, 0}; // COLOR
+  desc.vertexInput.attributes[2] = {2, 4, RI_FORMAT_RG32_SFLOAT, 0};  // TEXCOORD0
   desc.vertexInput.attributeCount = 3;
   desc.topology = RI_TOPOLOGY_TRIANGLE_LIST;
 
