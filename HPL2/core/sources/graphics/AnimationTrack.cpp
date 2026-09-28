@@ -107,8 +107,12 @@ namespace hpl {
 	{
 		if(mvKeyFrames.empty()) return;
 
+#ifdef AMFP
+		cKeyFrame Frame = GetInterpolatedKeyFrame(afTime, bLoop);
+#else
 		cKeyFrame Frame = GetInterpolatedKeyFrame(afTime);
-        		
+#endif
+
 		//Scale
 		//Skip this for now...
 		/*cVector3f vOne(1,1,1);
@@ -205,7 +209,60 @@ namespace hpl {
 	{
 		float fTotalAnimLength = mpParent->GetLength();
 
-		// Wrap time 
+#ifdef AMFP
+		//////////////////////////
+		// AMFP: binary search, and looping animations interpolate from the
+		// last keyframe back to the first instead of clamping/popping.
+		const int lSize = (int)mvKeyFrames.size();
+		int lFirst = 0, lLast = lSize - 1;
+
+		//Find the second frame.
+		int lIdxB=-1;
+		while(lFirst <= lLast)
+		{
+			int lMid = (lFirst + lLast) >> 1;
+			int lBefore = lMid > 0 ? lMid - 1 : 0;
+
+			if(afTime < mvKeyFrames[lBefore]->time)
+				lLast = lMid - 1;
+			else if(afTime > mvKeyFrames[lMid]->time)
+				lFirst = lMid + 1;
+			else
+			{
+				lIdxB = lMid;
+				break;
+			}
+		}
+
+		if(lIdxB <= 0)
+		{
+			// Return the first and last frame if the animation is looping
+			if(bLoop)
+			{
+				afTime = fmod(afTime, fTotalAnimLength + kEpsilonf);
+
+				if(afTime < mvKeyFrames[0]->time)
+				{
+					*apKeyFrameA = mvKeyFrames[mvKeyFrames.size() - 1];
+					*apKeyFrameB = mvKeyFrames[0];
+
+					return afTime / (mvKeyFrames[0]->time + kEpsilonf);
+				}
+			}
+
+			*apKeyFrameA = mvKeyFrames[0];
+			*apKeyFrameB = mvKeyFrames[0];
+			return 0.0f;
+		}
+
+		*apKeyFrameA = mvKeyFrames[lIdxB-1];
+		*apKeyFrameB = mvKeyFrames[lIdxB];
+
+		float fDeltaT = (*apKeyFrameB)->time - (*apKeyFrameA)->time + kEpsilonf;
+
+		return (afTime - (*apKeyFrameA)->time) / fDeltaT;
+#else
+		// Wrap time
 		//Not sure it is a good idea to clamp the length.
 		//But wrapping screws loop mode up. 
 		//Wrap(..., totalLength + kEpislon), migh work though.
@@ -254,8 +311,9 @@ namespace hpl {
 		*apKeyFrameB = mvKeyFrames[lIdxB];
         
 		float fDeltaT = (*apKeyFrameB)->time - (*apKeyFrameA)->time;
-        
+
 		return (afTime - (*apKeyFrameA)->time) / fDeltaT;
+#endif
 	}
 
 	//-----------------------------------------------------------------------

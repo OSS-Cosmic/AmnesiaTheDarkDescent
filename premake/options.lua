@@ -8,6 +8,17 @@ newoption {
 }
 
 newoption {
+    trigger = "product",
+    value = "PRODUCT",
+    description = "Select the product/runtime context for product-specific declarations (default amnesia); existing targets remain unchanged.",
+    allowed = {
+        { "amnesia", "Use the existing Amnesia runtime context" },
+        { "amfp", "Prepare the Amnesia: A Machine for Pigs product context" },
+    },
+    default = "amnesia",
+}
+
+newoption {
     trigger = "slangc",
     value = "PATH",
     description = "Path to a slangc executable. If omitted, the script reuses one already "

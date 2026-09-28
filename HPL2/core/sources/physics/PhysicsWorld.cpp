@@ -419,7 +419,7 @@ namespace hpl {
 							bool abCollideCharacter,
 							int alMinPushStrength,
 							tFlag alCollideFlags,
-							bool abDebug)
+							bool abDebug, bool abSkipStaticVolatile)
 	{
 		cCollideData collideData;
 
@@ -452,6 +452,7 @@ namespace hpl {
 			if(abIsCharacter==false && pBody->GetCollide()==false) continue;
 			if(alMinPushStrength > pBody->GetPushStrength()) continue;
 			if( (alCollideFlags & pBody->GetCollideFlags()) == 0)continue; 
+			if(abSkipStaticVolatile && pBody->GetMass()==0 && pBody->IsVolatile()) continue;
 
 			//Note: Still make this check, since GetBodiesInBV is not exact.
 			if(cMath::CheckBVIntersection(boundingVolume,*pBody->GetBoundingVolume())==false)

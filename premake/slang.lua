@@ -156,14 +156,18 @@ end
 -- <runtime>/compiled_shaders. Each entry-point shader gets an incremental
 -- per-file build rule, so only changed shaders recompile.
 -- Must be called inside the consuming project so files{}/filter{} apply to it.
-function slang_prebuild()
+function slang_prebuild(product)
+    if type(product) == "table" then
+        product = product.product or product.context
+    end
+    product = runtime_context(product)
     -- slangc is resolved (and auto-downloaded if needed) here at configure time.
     local slangc = resolve_slangc()
     local src = ROOT .. "/amnesia/slang"
     -- Each backend owns a sibling folder under compiled_shaders. Both producers
     -- emit the same %{file.basename} spelling into their own folder, so the
     -- loader resolves a logical shader name by picking the extension.
-    local out = runtime_dir("") .. "/compiled_shaders/vk"
+    local out = runtime_dir(product, "compiled_shaders/vk")
 
     -- Add only the entry shaders to the file list; the per-file rule below matches
     -- them via "files:**.slang". Include-only headers stay off the list (uncompiled)
@@ -312,7 +316,12 @@ end
 -- Explicit Slang-to-DXIL rules for fixture entry points. A source may contain
 -- multiple entries, so entries sharing a file use one fail-fast custom rule
 -- with separate declared outputs.
-function slang_dxil_prebuild(spec)
+function slang_dxil_prebuild(spec, product)
+    local requested_product = product or spec.product or spec.context
+    if type(requested_product) == "table" then
+        requested_product = requested_product.product or requested_product.context
+    end
+    product = runtime_context(requested_product)
     local slangc = resolve_slangc()
     local unique_sources = {}
     local source_entries = {}
@@ -326,6 +335,12 @@ function slang_dxil_prebuild(spec)
         table.insert(source_entries[entry.path], entry)
     end
     files(unique_sources)
+
+    -- Existing fixture specs provide an explicit tests output directory. An
+    -- explicit product context takes precedence so a caller can reuse the
+    -- same fixture rules for an isolated product runtime.
+    local output_dir = requested_product and runtime_dir(product, "compiled_shaders/d3d12") or
+        spec.output_dir or runtime_dir(product, "compiled_shaders/d3d12")
 
     local include_flags = ""
     for _, include_dir in ipairs(spec.include_dirs or {}) do
@@ -343,10 +358,10 @@ function slang_dxil_prebuild(spec)
         -- non-zero exit code from any step stops the chain -- unlike a single
         -- "&&"-joined string, which under cmd.exe's `if exist X del X && ...`
         -- rule swallows the tail whenever the guarded branch is skipped.
-        table.insert(win_commands, 'if not exist "' .. spec.output_dir .. '" mkdir "' .. spec.output_dir .. '"')
-        table.insert(nix_commands, 'mkdir -p "' .. spec.output_dir .. '"')
+        table.insert(win_commands, 'if not exist "' .. output_dir .. '" mkdir "' .. output_dir .. '"')
+        table.insert(nix_commands, 'mkdir -p "' .. output_dir .. '"')
         for _, entry in ipairs(source_entries[source]) do
-            local output = spec.output_dir .. "/" .. entry.output
+            local output = output_dir .. "/" .. entry.output
             table.insert(outputs, output)
             table.insert(outputs, output .. ".meta")
             local reflection = output .. ".reflection-v1.json"
@@ -407,10 +422,14 @@ end
 -- with multiple entries retain that DXIL library for ray-tracing state-object
 -- creation, and also emit executable per-entry blobs for normal graphics and
 -- compute PSOs (which cannot consume a lib_6_6 container).
-function slang_dxil_production_prebuild()
+function slang_dxil_production_prebuild(product)
+    if type(product) == "table" then
+        product = product.product or product.context
+    end
+    product = runtime_context(product)
     local slangc = resolve_slangc()
     local src = ROOT .. "/amnesia/slang"
-    local out = runtime_dir("compiled_shaders/d3d12")
+    local out = runtime_dir(product, "compiled_shaders/d3d12")
     local generated = BUILD_OUT .. "/generated/%{cfg.buildcfg}/dxil"
     local embedder = BUILD_OUT .. "/tools/%{cfg.buildcfg}/ri_shader_embed.exe"
     dependson { "RIShaderEmbed" }
@@ -574,7 +593,13 @@ end
 -- The D3D12 mip shader is private to HPL2. Compile each entry separately and
 -- embed the resulting DXIL into generated headers; no runtime compiler or
 -- checked-in binary is part of the engine.
-function slang_d3d12_mips_prebuild()
+function slang_d3d12_mips_prebuild(product)
+    if type(product) == "table" then
+        product = product.product or product.context
+    end
+    -- This shader embeds into generated engine headers rather than a runtime
+    -- directory. Accept the product context for a uniform shader API, while
+    -- preserving the shared generated-header location consumed by HPL2.
     local slangc = resolve_slangc()
     local shader = ROOT .. "/HPL2/core/sources/graphics/shaders/ri_d3d12_mips.slang"
     local out = BUILD_OUT .. "/generated/%{cfg.buildcfg}"

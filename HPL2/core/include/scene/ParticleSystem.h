@@ -111,6 +111,11 @@ namespace hpl {
 		void SetMaxFadeDistanceEnd(float afX){ mfMaxFadeDistanceEnd = afX;}
 
 		cColor GetColor(){ return mColor;}
+
+		// Multiplies the rendered colour (rgba) on top of SetColor; used by
+		// AMFP lamps to dim their particles while the light flickers off.
+		void SetFlickerMultiplier(const float afFlickerMultiplier){ mfFlickerMultiplier = afFlickerMultiplier; }
+		float GetFlickerMultiplier(){ return mfFlickerMultiplier; }
 		bool GetFadeAtDistance(){ return mbFadeAtDistance;}
 		float GetMinFadeDistanceStart(){ return mfMinFadeDistanceStart;}
 		float GetMinFadeDistanceEnd(){ return mfMinFadeDistanceEnd;}
@@ -137,6 +142,7 @@ namespace hpl {
 		bool mbIsVisible;
 
 		cColor mColor;
+		float mfFlickerMultiplier;
 		bool mbFadeAtDistance;
 		float mfMinFadeDistanceStart;
 		float mfMinFadeDistanceEnd;

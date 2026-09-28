@@ -211,17 +211,20 @@ namespace hpl {
 
 	//-----------------------------------------------------------------------
 
-	void cCharacterBodyRay::Clear()
+	void cCharacterBodyRay::Clear(bool abCollideVolatile)
 	{
 		mfMinDist = 10000.0f;
 		mbCollide = false;
+		mbCollideVolatile = abCollideVolatile;
 	}
 
 	//-----------------------------------------------------------------------
 
 	bool cCharacterBodyRay::OnIntersect(iPhysicsBody *pBody,cPhysicsRayParams *apParams)
 	{
-		if(	pBody->IsCharacter()==false && pBody->GetCollideCharacter() && 
+		bool bVolatile = pBody->GetMass()==0 && pBody->IsVolatile();
+
+		if(	pBody->IsCharacter()==false && pBody->GetCollideCharacter() && (bVolatile==false || mbCollideVolatile) &&
 			apParams->mfDist < mfMinDist)
 		{
 			mfMinDist = apParams->mfDist;
@@ -293,6 +296,7 @@ namespace hpl {
 		
 		mbActive = true;
 		mbCollideCharacter = true;
+		mbCollideStaticVolatile = true;
 		mbTestCollision = true;
 
 		mbEntitySmoothYPos = false;
@@ -643,6 +647,9 @@ namespace hpl {
 		if(mpConnectedBody && mbConnectionAlignCharacterRotation) return;
         
 		mfYaw = afX;
+#ifdef AMFP
+		UpdateMoveMatrix();
+#endif
 	}
 
 	float iCharacterBody::GetYaw()
@@ -806,6 +813,10 @@ namespace hpl {
 			mfMoveAcc[i] =0;
 			mfMoveSpeed[i]=0;
 		}
+#ifdef AMFP
+		// Otherwise the next velocity estimate spikes after a stop/teleport.
+		mvLastPosition = mvPosition;
+#endif
 	}
 
 	//-----------------------------------------------------------------------
@@ -1101,7 +1112,7 @@ namespace hpl {
 
 	bool iCharacterBody::CheckRayIntersection(const cVector3f &avStart, const cVector3f &avEnd, float *apDistance, cVector3f *apNormalVec)
 	{
-		mpRayCallback->Clear();
+		mpRayCallback->Clear(mbCollideStaticVolatile);
 		mpWorld->CastRay(mpRayCallback,avStart,avEnd,apDistance!=NULL,apNormalVec!=NULL,false);
 		bool bCollide = mpRayCallback->mbCollide;
 		if(bCollide)
@@ -1671,7 +1682,11 @@ namespace hpl {
 			
 			float fHeight = mvSize.y/2.0f - fMinDist[i];
 
+#ifdef AMFP
+			if(fHeight <= fMaxHeight && fHeight>0.015f)
+#else
 			if(fHeight <= fMaxHeight && fHeight>0.025f)
+#endif
 			{
 				//Check if there is any collision on the new pos
 				cVector3f vStepPos = mvPosition + cVector3f(0,fHeight+mfClimbHeightAdd,0)+ (vMoveDir*fForwadAdd*mfClimbForwardMul);
@@ -1894,7 +1909,7 @@ namespace hpl {
 				//If no collision and on ground and not climbing then cast ray to get ground normal
 				if(mlOnGroundCount > 0 && mbClimbing==false)
 				{
-					mpRayCallback->Clear();
+					mpRayCallback->Clear(mbCollideStaticVolatile);
 					cVector3f vStart = GetFeetPosition() + cVector3f(0,0.001f,0);
 					cVector3f vEnd = vStart - cVector3f(0,mvSize.x*2.0001f,0);
 					mpWorld->CastRay(mpRayCallback,vStart,vEnd,true,true,false);
@@ -2272,7 +2287,7 @@ namespace hpl {
 		return mpWorld->CheckShapeWorldCollision(apPushBackVector, pShape, cMath::MatrixTranslate(avPos),
 												mpCurrentBody, false, true, 
 												apCallback, true,mlMinBodyPushStrength, 
-												mlCollideFlags, false);
+												mlCollideFlags, false, !mbCollideStaticVolatile);
 	}
 	
 	//-----------------------------------------------------------------------

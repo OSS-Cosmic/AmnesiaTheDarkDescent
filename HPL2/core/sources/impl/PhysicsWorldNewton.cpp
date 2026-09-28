@@ -63,7 +63,11 @@ namespace hpl {
 		mvWorldSizeMin = cVector3f(0,0,0);
 		mvWorldSizeMax = cVector3f(0,0,0);
 
+#ifdef AMFP
+		mvGravity = cVector3f(0,-9.81f * 1.25f,0); //AMFP physics is tuned for 1.25x gravity
+#else
 		mvGravity = cVector3f(0,-9.81f,0);
+#endif
 		mfMaxTimeStep = 1.0f/60.0f;
 		
 		/////////////////////////////////
@@ -506,9 +510,16 @@ namespace hpl {
 		//Call the call back
 		bool bRet = gpRayCallback->OnIntersect(pRigidBody,&gRayParams);
 		
+#ifdef AMFP
+		// Clip the ray a bit past this body so Newton skips farther ones.
+		if(bRet == false) return 0;
+		float fLength = pRigidBody->GetBoundingVolume()->GetRadius() / gfRayLength;
+		return cMath::Min(1.0f, afIntersetParam + fLength);
+#else
 		//return correct value.
 		if(bRet) return 1;//afIntersetParam;
 		else return 0;
+#endif
 	}
 
 	//////////////////////////////////////

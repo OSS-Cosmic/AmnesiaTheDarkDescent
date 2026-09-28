@@ -8,10 +8,12 @@
 //
 // Record layout (scalar layout, 16-byte rows):
 //   Point: position.xyz, radius; color.rgb, specularScale;
-//          invViewRotation (4 rows); config, falloff, gobo, shadowIndex
+//          invViewRotation (4 rows); config, falloff, gobo, shadowIndex;
+//          falloffExponent
 //   Spot:  position.xyz, radius; direction.xyz, oneMinusCosHalfFov;
 //          color.rgb, specularScale; spotViewProj (4 rows);
-//          config, radialFalloff, coneFalloff, gobo, shadowIndex, bias, resolution
+//          config, radialFalloff, coneFalloff, gobo, shadowIndex, bias, resolution,
+//          falloffExponent
 //   Shadow tile: viewProj (4 rows); atlasLayer, originX, originY, size;
 //          bias, clampToTile, reserved0, reserved1
 //
@@ -49,6 +51,7 @@ public struct StandardPointLight
     public uint falloffTexture;
     public uint goboTexture;
     public uint shadowIndex; // first of six cube-face shadow tiles (+X,-X,+Y,-Y,+Z,-Z)
+    public float falloffExponent; // 0: authored ramp; > 0: AMFP pow curve
 };
 
 public struct StandardSpotLight
@@ -67,6 +70,7 @@ public struct StandardSpotLight
     public uint shadowIndex;      // shadow tile index
     public float shadowBias;
     public uint shadowResolution; // shadow tile size in texels
+    public float falloffExponent; // 0: authored ramp; > 0: AMFP pow curve
 };
 
 // StandardShadowTileData twin: one square tile of a shadow atlas page.
@@ -165,6 +169,21 @@ public float standardRadialFalloff(uint textureIndex, float distanceSquared)
     if (textureIndex == kInvalidTextureIndex) return 1.0f;
     return gTextures2D[NonUniformResourceIndex(textureIndex)].SampleLevel(
         standardRampSampler, float2(saturate(distanceSquared), 0.5f), 0.0f).x;
+}
+
+// Radial attenuation. A falloffExponent of 0 keeps the TDD ramp lookup; a
+// positive exponent is the AMFP deferred-light curve
+// pow(saturate(1 - d/r), Falloff * 0.8), which replaced the ramp there.
+public float standardLightAttenuation(uint textureIndex, float falloffExponent,
+                                      float distanceOverRadius)
+{
+    if (falloffExponent > 0.0f)
+    {
+        if (!isfinite(distanceOverRadius) || distanceOverRadius >= 1.0f)
+            return 0.0f;
+        return pow(saturate(1.0f - distanceOverRadius), falloffExponent);
+    }
+    return standardRadialFalloff(textureIndex, distanceOverRadius * distanceOverRadius);
 }
 
 public float standardConeFalloff(uint textureIndex, float oneMinusCos,
@@ -288,8 +307,9 @@ public float3 standardPointLight(StandardLightSurface s, float3 V,
     float scaledD2 = dot(scaledToLight, scaledToLight);
     float distanceOverRadius = (distanceScale / light.radius) * sqrt(scaledD2);
     float3 L = scaledToLight * rsqrt(scaledD2);
-    float attenuation = standardRadialFalloff(light.falloffTexture,
-                                               distanceOverRadius * distanceOverRadius);
+    float attenuation = standardLightAttenuation(light.falloffTexture,
+                                                 light.falloffExponent,
+                                                 distanceOverRadius);
 
     float3 gobo = float3(1.0f);
     if ((light.config & kStandardLightHasGobo) != 0u &&
@@ -334,8 +354,9 @@ public float3 standardSpotLight(StandardLightSurface s, float3 V,
     float scaledD2 = dot(scaledToLight, scaledToLight);
     float distanceOverRadius = (distanceScale / light.radius) * sqrt(scaledD2);
     float3 L = scaledToLight * rsqrt(scaledD2);
-    float attenuation = standardRadialFalloff(light.radialFalloffTexture,
-                                               distanceOverRadius * distanceOverRadius);
+    float attenuation = standardLightAttenuation(light.radialFalloffTexture,
+                                                 light.falloffExponent,
+                                                 distanceOverRadius);
     float3 gobo = float3(1.0f);
     if ((light.config & kStandardLightHasGobo) != 0u &&
         light.goboTexture != kInvalidTextureIndex)

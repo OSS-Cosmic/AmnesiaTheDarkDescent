@@ -1,0 +1,9 @@
+<EntDelta Version="1" Target="entities/lamp/candle_lamp/candle_lamp.ent">
+    <RemoveVar Name="CanBeTurnedOff" />
+    <RemoveVar Name="NeedsTinderbox" />
+    <Modify Category="Entities" ID="3" Name="PointLight_1">
+        <SetAttr FalloffMap="" Re_FlickerOffIntensity="2" Re_Intensity="0.25" Re_SourceRadius="0.1" WorldPos="0.0111008 0.602863 -0.257931" />
+        <RemoveAttr Name="Brightness" />
+        <RemoveAttr Name="Falloff" />
+    </Modify>
+</EntDelta>

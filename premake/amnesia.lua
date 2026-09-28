@@ -22,7 +22,7 @@ project "Amnesia"
         ROOT .. "/HPL2/core/include",
         AMN .. "/slang",
         AMN .. "/glsl",
-        DEPS_SOURCES .. "/AngelScript/include",
+        ANGELSCRIPT_INCLUDE,
         DEPS_EXTERN .. "/tinyxml2",
     }
     generated_includes()

@@ -1,0 +1,9 @@
+<EntDelta Version="1" Target="entities/lamp/gas_lamp_desk/gas_lamp_desk_flowers.ent">
+    <RemoveVar Name="CanBeTurnedOff" />
+    <RemoveVar Name="NeedsTinderbox" />
+    <Modify Category="Entities" ID="2" Name="PointLight_1">
+        <SetAttr FalloffMap="" Re_FlickerOffIntensity="0" Re_Intensity="1" Re_SourceRadius="0.01" />
+        <RemoveAttr Name="Brightness" />
+        <RemoveAttr Name="Falloff" />
+    </Modify>
+</EntDelta>

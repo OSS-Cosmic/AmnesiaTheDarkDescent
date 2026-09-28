@@ -34,6 +34,7 @@ in HPL2/core/sources/resources/XmlDelta.cpp. Keep the two in step.
 import argparse
 import copy
 import os
+import re
 import shutil
 import sys
 import xml.etree.ElementTree as ET
@@ -94,11 +95,26 @@ class DeltaError(Exception):
 # XML helpers
 # --------------------------------------------------------------------------
 
+# A closing attribute quote run straight into the next attribute name, e.g.
+# `Time="0 "Speed="1"` or `Material=""Name="x"`. Several retail AMFP .ent files
+# ship like this; TinyXML (what the engine loads with) accepts it, expat does not.
+_GLUED_ATTRIBUTE = re.compile(rb'''(=\s*(?:"[^"<]*"|'[^'<]*'))(?=[A-Za-z_:])''')
+
+
 def parse_xml(path):
     try:
         return ET.parse(path)
     except ET.ParseError as e:
-        raise DeltaError("could not parse '%s': %s" % (path, e))
+        error = e
+    with open(path, "rb") as f:
+        data = f.read()
+    repaired = _GLUED_ATTRIBUTE.sub(rb"\1 ", data)
+    if repaired != data:
+        try:
+            return ET.ElementTree(ET.fromstring(repaired))
+        except ET.ParseError:
+            pass
+    raise DeltaError("could not parse '%s': %s" % (path, error))
 
 
 def indent(elem, level=0):

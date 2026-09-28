@@ -17,12 +17,14 @@ Work in progress. It is playable end to end, but expect rendering artifacts and 
 
 ## You need the retail game
 
-This repository contains **engine, game, and tool code only**. It ships no game data. To play, you must own a
-copy of *Amnesia: The Dark Descent* (Steam, GOG, or the Frictional store) — the maps, entities, sounds,
-scripts, and configs all come from your install.
+This repository contains **engine, game, and tool code only**. It ships no retail game data. To play, you must
+own a matching copy of the game you are building — *Amnesia: The Dark Descent* (Steam, GOG, or the Frictional
+store) for TDD, or *Amnesia: A Machine for Pigs* for AMFP. The maps, entities, sounds, scripts, configs, and
+other retail files all come from your install.
 
-The itch.io and GitHub Release downloads carry the same restriction: rebuilt executables and compiled shaders
-only, nothing from the retail game. Frictional's engine source is GPL; its game assets are not.
+The itch.io and GitHub Release downloads carry the same restriction: rebuilt executables, compiled shaders, and
+repository-owned overlays only; nothing from either retail game. Frictional's engine source is GPL; its game
+assets are not.
 
 ## Getting a build
 
@@ -31,8 +33,9 @@ only, nothing from the retail game. Frictional's engine source is GPL; its game 
 - **GitHub Releases** — the same archives, attached to each tagged prerelease.
 - **From source** — see [Building](#building).
 
-Copy the contents of the download into your Amnesia install directory and run `Amnesia` / `Amnesia.exe` from
-there, so the executable finds the game's data files.
+For TDD, copy the contents of the download into your Amnesia install directory and run `Amnesia` / `Amnesia.exe`
+from there, so the executable finds the game's data files. AMFP uses the separate build and deployment contract
+below.
 
 ## Renderer
 
@@ -115,6 +118,51 @@ CI generates with `vs2022` instead; `premake5.lua` pins no `_ACTION`, so both pr
 Everything lands in `build-premake/amnesia/<Debug|Release>/`: `Amnesia`, the four editors (`LevelEditor`,
 `ModelEditor`, `MaterialEditor`, `ParticleEditor`), `MshConverter`, the `compiled_shaders/` directory, and on
 Linux the colocated SDL2/OpenAL shared libraries under `libs/` (found via an `$ORIGIN/libs` rpath).
+
+### AMFP build and deployment
+
+Amnesia: A Machine for Pigs (AMFP) is a separate product context. Select it when generating the build with
+`--product=amfp`; the AMFP executable is `AmnesiaAMFP` (or `AmnesiaAMFP.exe` on Windows), and its isolated
+runtime directory is `build-premake/amfp/<Debug|Release>/`. The normal TDD runtime remains
+`build-premake/amnesia/<Debug|Release>/` with the `Amnesia` executable.
+
+Wrapper examples:
+
+```
+./build-linux-docker.sh release -- --product=amfp
+./build-linux.sh release -- --product=amfp
+```
+
+```powershell
+.\build-windows.ps1 release --product=amfp
+```
+
+The equivalent direct generation commands are `premake5 gmake2 --product=amfp` on Linux and
+`premake5 vs2026 --product=amfp` on Windows, followed by the ordinary make or MSBuild command. Product
+selection does not supply retail files; an AMFP run still needs matching installed AMFP data.
+
+For deployment, select the AMFP runtime explicitly with `--product amfp`, and provide the matching installed
+game directory. The script defaults then resolve to `build-premake/amfp` and `amfp/resources`:
+
+```
+./deploy.sh --product amfp --overlay /path/to/amfp-overlay \
+    --game-dir "/path/to/Amnesia - A Machine for Pigs"
+```
+
+```powershell
+.\deploy.ps1 -Product amfp -Overlay C:\path\to\amfp-overlay `
+    -GameDir "C:\Games\Amnesia - A Machine for Pigs"
+```
+
+The output must contain the AMFP retail data plus the selected overlay, with `AmnesiaAMFP` launched from that
+directory. If no `amfp/resources` overlay exists, use `--resources none` (and optionally omit `--overlay`); the
+repository does not provide AMFP retail data, does not currently commit an `amfp/resources` overlay, and does
+not claim a validated AMFP runtime package. Any overlay used must be supplied for the deployment. The generic
+deployment wrappers default to the TDD output `build-premake/amnesia` and overlay `amnesia/resources`, so the
+TDD flow remains unchanged.
+
+The TDD deployment flow is unchanged: use `deploy.sh` / `deploy.ps1` with their existing defaults or explicit
+TDD `--game-dir`, `build-premake/amnesia/<Config>/`, and `amnesia/resources` overlay, then launch `Amnesia`.
 
 ### Options
 

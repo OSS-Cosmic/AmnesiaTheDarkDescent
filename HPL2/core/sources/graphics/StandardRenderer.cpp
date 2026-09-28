@@ -623,7 +623,15 @@ static bool BuildStandardLights(
                            light->GetVisibleVar() &&
                            light->IsLegacyRendererEnabled() &&
                            StandardFinite(radius) && radius > 0.0f;
+#ifdef AMFP
+      // AMFP: brightness scales rgb, and every point/spot light uses the
+      // pow falloff curve that replaced the ramp texture in AMFP.
+      const cColor diffuse = light->GetColor();
+      const float falloffExponent = std::max(light->GetFalloff(), 0.0f) * 0.8f;
+#else
       const cColor diffuse = light->GetDiffuseColor();
+      const float falloffExponent = 0.0f;
+#endif
       if (light->GetLightType() == eLightType_Point) {
         if (!enabled)
           continue;
@@ -645,6 +653,7 @@ static bool BuildStandardLights(
         std::memcpy(data.invViewRotation, lightWorld.a,
                     sizeof(data.invViewRotation));
         data.falloffTexture = StandardTextureSlot(light->GetFalloffImage());
+        data.falloffExponent = falloffExponent;
         data.goboTexture = StandardTextureSlot(light->GetGoboImage());
         // First of the six cube-face tiles rendered for this light this Draw.
         data.shadowIndex = kStandardInvalidShadow;
@@ -709,6 +718,7 @@ static bool BuildStandardLights(
             StandardTextureSlot(light->GetFalloffImage());
         data.coneFalloffTexture =
             StandardTextureSlot(spot->GetSpotFalloffImage());
+        data.falloffExponent = falloffExponent;
         data.goboTexture = StandardTextureSlot(light->GetGoboImage());
         data.shadowIndex = kStandardInvalidShadow;
         const float authoredBias = spot->GetShadowMapBiasMul();
