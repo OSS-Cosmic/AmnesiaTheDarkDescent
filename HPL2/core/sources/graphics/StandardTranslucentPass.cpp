@@ -156,7 +156,16 @@ float StandardTranslucentLightLevel(cWorld *world, iRenderable *object) {
         !light->GetVisibleVar() || !light->IsLegacyRendererEnabled() ||
         !light->CheckObjectIntersection(object))
       continue;
+#ifdef AMFP
+    // AMFP: the lantern does not affect translucent materials, and light
+    // brightness scales the level.
+    if (light->GetName() == "PlayerHands_LanternLight1" ||
+        light->GetName() == "PlayerHands_LanternLight2")
+      continue;
+    const cColor color = light->GetColor();
+#else
     const cColor color = light->GetDiffuseColor();
+#endif
     const float peak = std::max(std::max(color.r, color.g), color.b);
     if (light->GetLightType() == eLightType_Box) {
       level += peak;

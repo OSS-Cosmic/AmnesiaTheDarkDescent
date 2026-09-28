@@ -1,0 +1,10 @@
+<EntDelta Version="1" Target="entities/lamp/streetlight_wall/streetlight_wall_fog.ent">
+    <RemoveVar Name="CanBeTurnedOff" />
+    <RemoveVar Name="NeedsTinderbox" />
+    <Modify Category="Entities" ID="4" Name="PointLight_1">
+        <SetAttr RendererMask="1" />
+    </Modify>
+    <Add Category="Entities">
+        <SpotLight Active="true" Aspect="1" CastShadows="true" DiffuseColor="0.534 0.35 0.15 1" FOV="2.2" FalloffMap="" FlickerActive="false" FlickerFade="false" FlickerOffColor="0 0 0 1" FlickerOffFadeMaxLength="0" FlickerOffFadeMinLength="0" FlickerOffMaxLength="0" FlickerOffMinLength="0" FlickerOffPS="" FlickerOffRadius="0" FlickerOffSound="" FlickerOnFadeMaxLength="0" FlickerOnFadeMinLength="0" FlickerOnMaxLength="0" FlickerOnMinLength="0" FlickerOnPS="" FlickerOnSound="" Gobo="" GoboAnimFrameTime="0" GoboAnimMode="None" Name="SpotLight_1" NearClipPlane="0.05" Radius="10" RendererMask="2" Rotation="-1.5708 0 0" Scale="1 1 1" ShadowResolution="Low" ShadowsAffectDynamic="true" ShadowsAffectStatic="true" SpotFalloffMap="" Tag="" WorldPos="-1.83391 0.0238352 0.00593218" Re_Intensity="2.5" Re_Radius="20" Re_SourceRadius="0.03" />
+    </Add>
+</EntDelta>

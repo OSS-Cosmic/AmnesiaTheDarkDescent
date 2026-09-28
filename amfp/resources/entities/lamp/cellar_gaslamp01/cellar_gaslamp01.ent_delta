@@ -1,0 +1,14 @@
+<EntDelta Version="1" Target="entities/lamp/cellar_gaslamp01/cellar_gaslamp01.ent">
+    <RemoveVar Name="CanBeTurnedOff" />
+    <RemoveVar Name="NeedsTinderbox" />
+    <Modify Category="Entities" ID="14" Name="PointLight_1">
+        <SetAttr FalloffMap="" />
+        <RemoveAttr Name="Brightness" />
+        <RemoveAttr Name="Falloff" />
+    </Modify>
+    <Modify Category="Entities" ID="15" Name="SpotLight_1">
+        <SetAttr FalloffMap="" />
+        <RemoveAttr Name="Brightness" />
+        <RemoveAttr Name="Falloff" />
+    </Modify>
+</EntDelta>

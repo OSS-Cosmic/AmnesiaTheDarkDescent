@@ -519,7 +519,7 @@ namespace hpl {
 			// If the sound is looped and out of range, stop it
 			if(	mvSoundEntries[eSoundEntityType_Start]==NULL && mpData->GetLoop() && mpData->GetUse3D())
 			{
-				if(CheckIsOutOfRange())
+				if(CheckIsOutOfRange() && !mpData->GetKeepPlayingOutOfRange())
 				{
 					//////////////////////
 					//If fading out, then just stop the sound directly

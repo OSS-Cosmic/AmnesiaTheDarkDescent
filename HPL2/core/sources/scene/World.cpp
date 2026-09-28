@@ -541,6 +541,9 @@ static PointLight BuildPointLight(iLight *pLight) {
   pl.color[1] = sRGBToLinear(c.g);
   pl.color[2] = sRGBToLinear(c.b);
   pl.intensity = pLight->GetIntensity();
+#ifdef AMFP
+  pl.intensity *= std::max(pLight->GetBrightness(), 0.0f); // AMFP brightness
+#endif
   pl.radius = pLight->GetRadius();
   pl.sourceRadius = pLight->GetSourceRadius();
   pl.goboTextureIndex = PinnedBindlessSlot(pLight->GetGoboImage());
@@ -587,6 +590,9 @@ static SpotLight BuildSpotLight(iLight *pLight) {
   sl.color[1] = sRGBToLinear(c.g);
   sl.color[2] = sRGBToLinear(c.b);
   sl.intensity = pSpot->GetIntensity();
+#ifdef AMFP
+  sl.intensity *= std::max(pSpot->GetBrightness(), 0.0f); // AMFP brightness
+#endif
   sl.radius = pSpot->GetRadius();
   sl.sourceRadius = pSpot->GetSourceRadius();
   sl.goboTextureIndex = PinnedBindlessSlot(pSpot->GetGoboImage());
@@ -611,6 +617,9 @@ static RectLight BuildRectLight(iLight *pLight) {
   al.color[1] = sRGBToLinear(c.g);
   al.color[2] = sRGBToLinear(c.b);
   al.intensity = pArea->GetIntensity();
+#ifdef AMFP
+  al.intensity *= std::max(pArea->GetBrightness(), 0.0f); // AMFP brightness
+#endif
   al.radius = pArea->GetRadius();
   al.width = pArea->GetWidth();
   al.height = pArea->GetHeight();

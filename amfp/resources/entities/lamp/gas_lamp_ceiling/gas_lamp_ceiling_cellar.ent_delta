@@ -1,0 +1,10 @@
+<EntDelta Version="1" Target="entities/lamp/gas_lamp_ceiling/gas_lamp_ceiling_cellar.ent">
+    <RemoveVar Name="CanBeTurnedOff" />
+    <RemoveVar Name="NeedsTinderbox" />
+    <Modify Category="Entities" ID="8" Name="PointLight_1">
+        <SetAttr RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="9" Name="SpotLight_1">
+        <SetAttr Re_FlickerOffIntensity="0" Re_Intensity="5" Re_SourceRadius="0.1" />
+    </Modify>
+</EntDelta>

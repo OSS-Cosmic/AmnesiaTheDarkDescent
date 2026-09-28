@@ -158,6 +158,8 @@ namespace hpl {
 		mfMinFadeDistanceEnd = 1;
 		mfMaxFadeDistanceStart = 100;
 		mfMaxFadeDistanceEnd = 110;
+
+		mfFlickerMultiplier = 1.0f;
 	}
 
 	//-----------------------------------------------------------------------

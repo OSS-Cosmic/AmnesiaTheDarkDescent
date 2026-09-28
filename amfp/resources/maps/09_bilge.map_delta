@@ -1,0 +1,212 @@
+<MapDelta Version="1" Target="maps/09_bilge.map">
+    <Modify Category="Entities" ID="2438" Name="PointLight_4">
+        <SetAttr RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="5727" Name="PointLight_11">
+        <SetAttr RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="5728" Name="PointLight_12">
+        <SetAttr RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="5729" Name="PointLight_13">
+        <SetAttr RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="5794" Name="PointLight_14">
+        <SetAttr RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="5795" Name="PointLight_15">
+        <SetAttr RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="6311" Name="PointLight_16">
+        <SetAttr RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="6502" Name="PointLight_17">
+        <SetAttr RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="6503" Name="PointLight_18">
+        <SetAttr RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="6515" Name="PointLight_19">
+        <SetAttr RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="6517" Name="PointLight_20">
+        <SetAttr RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="6518" Name="PointLight_21">
+        <SetAttr RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="6519" Name="PointLight_22">
+        <SetAttr RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="6520" Name="PointLight_23">
+        <SetAttr RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="6521" Name="PointLight_24">
+        <SetAttr RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="6522" Name="PointLight_25">
+        <SetAttr RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="6523" Name="PointLight_26">
+        <SetAttr RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="6524" Name="PointLight_27">
+        <SetAttr RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="6601" Name="PointLight_28">
+        <SetAttr RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="6662" Name="PointLight_29">
+        <SetAttr RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="6663" Name="PointLight_30">
+        <SetAttr RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="6670" Name="PointLight_31">
+        <SetAttr RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="6674" Name="PointLight_32">
+        <SetAttr RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="6765" Name="PointLight_33">
+        <SetAttr RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="6767" Name="PointLight_34">
+        <SetAttr RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="8174" Name="PointLight_35">
+        <SetAttr RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="8176" Name="PointLight_36">
+        <SetAttr RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="8178" Name="PointLight_37">
+        <SetAttr RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="8179" Name="PointLight_5">
+        <SetAttr RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="8180" Name="PointLight_8">
+        <SetAttr RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="8181" Name="PointLight_38">
+        <SetAttr RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="8193" Name="PointLight_39">
+        <SetAttr RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="8197" Name="PointLight_40">
+        <SetAttr RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="8200" Name="PointLight_41">
+        <SetAttr RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="8202" Name="PointLight_42">
+        <SetAttr RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="8205" Name="PointLight_43">
+        <SetAttr RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="8206" Name="PointLight_44">
+        <SetAttr RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="8210" Name="PointLight_45">
+        <SetAttr RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="8211" Name="PointLight_46">
+        <SetAttr RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="8215" Name="PointLight_47">
+        <SetAttr RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="8403" Name="spraylock_center_pointlight">
+        <SetAttr RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="8635" Name="PointLight_48">
+        <SetAttr RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="9200" Name="PointLight_50">
+        <SetAttr RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="9202" Name="PointLight_51">
+        <SetAttr RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="9204" Name="PointLight_52">
+        <SetAttr RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="11678" Name="PointLight_1">
+        <SetAttr RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="11712" Name="PointLight_2">
+        <SetAttr RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="11773" Name="PointLight_64">
+        <SetAttr RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="11782" Name="PointLight_65">
+        <SetAttr RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="11785" Name="PointLight_66">
+        <SetAttr RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="11792" Name="PointLight_67">
+        <SetAttr RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="11805" Name="PointLight_68">
+        <SetAttr RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="12265" Name="PointLight_74">
+        <SetAttr RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="12351" Name="PointLight_81">
+        <SetAttr RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="12352" Name="PointLight_82">
+        <SetAttr RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="12355" Name="PointLight_85">
+        <SetAttr RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="12356" Name="PointLight_86">
+        <SetAttr RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="12595" Name="PointLight_49">
+        <SetAttr RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="12596" Name="PointLight_54">
+        <SetAttr RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="12597" Name="PointLight_56">
+        <SetAttr RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="12598" Name="PointLight_88">
+        <SetAttr RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="12599" Name="PointLight_89">
+        <SetAttr RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="12600" Name="PointLight_90">
+        <SetAttr RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="12601" Name="PointLight_91">
+        <SetAttr RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="12605" Name="PointLight_95">
+        <SetAttr RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="12990" Name="PointLight_69">
+        <SetAttr RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="12991" Name="PointLight_96">
+        <SetAttr RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="13080" Name="PointLight_97">
+        <SetAttr RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="13097" Name="PointLight_70">
+        <SetAttr RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="13115" Name="PointLight_92">
+        <SetAttr RendererMask="1" />
+    </Modify>
+</MapDelta>

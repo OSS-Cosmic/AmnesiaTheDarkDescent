@@ -29,6 +29,7 @@ jobs:
     runs-on: windows-2022
     env:
       CONFIG_NAME: "win-x86_64-${{ inputs.config }}${{ inputs.name_suffix }}"
+      AMFP_CONFIG_NAME: "amfp-win-x86_64-${{ inputs.config }}${{ inputs.name_suffix }}"
       BUILD_FOLDER: "${{ inputs.config == 'release' && 'Release' || 'Debug' }}"
       BUILD_VERSION: ${{ inputs.build_version }}
       # Keep in sync with the ARG in the repo-root Dockerfile.
@@ -129,11 +130,11 @@ jobs:
 
       # build-windows.ps1 uses vs2026 locally; hosted runners ship VS 2022 and
       # premake5.lua pins no _ACTION, so vs2022 generates the same projects.
-      - name: Generate solution
+      - name: Generate solution (TDD and AMFP)
         run: premake5 vs2022 "--build-version=$env:BUILD_VERSION" --python="${{ steps.setup-python.outputs.python-path }}" ${{ inputs.premake_args }}
 
       # PythonTests runs against the setup-python interpreter pinned above.
-      - name: Build
+      - name: Build TDD and AMFP
         run: msbuild build-premake\Amnesia.sln /p:Configuration=$env:BUILD_FOLDER /p:Platform=x64 /m /v:m
 
       # Exercise the FSR copy_dir deploy on a warm tree; this is one incremental
@@ -204,4 +205,68 @@ jobs:
           path: ${{ env.CONFIG_NAME }}.zip
           # Release keeps debug info, so this archive is large. Expire it
           # quickly to stay inside the storage quota.
+          retention-days: 7
+
+      - name: Assert AMFP runtime
+        run: |
+          $outputDir = "build-premake\amfp\$env:BUILD_FOLDER"
+          $gameExe = Join-Path $outputDir "AmnesiaAMFP.exe"
+          if (-not (Test-Path -LiteralPath $gameExe -PathType Leaf)) {
+            throw "Expected AMFP executable: $gameExe"
+          }
+          foreach ($tool in @("LevelEditor", "ModelEditor", "ParticleEditor", "MaterialEditor", "MshConverter")) {
+            $toolExe = Join-Path $outputDir "$tool.exe"
+            if (-not (Test-Path -LiteralPath $toolExe -PathType Leaf)) {
+              throw "Expected AMFP tool executable: $toolExe"
+            }
+          }
+
+          foreach ($shaderDir in @("compiled_shaders\vk", "compiled_shaders\d3d12")) {
+            $shaderPath = Join-Path $outputDir $shaderDir
+            if (-not (Test-Path -LiteralPath $shaderPath -PathType Container)) {
+              throw "Expected AMFP generated shader directory: $shaderPath"
+            }
+            if (-not (Get-ChildItem -LiteralPath $shaderPath -File -ErrorAction Stop | Select-Object -First 1)) {
+              throw "AMFP generated shader directory is empty: $shaderPath"
+            }
+          }
+
+          foreach ($runtimeFile in @(
+            "ffx_fsr3upscaler_api_vk.dll",
+            "ffx_fsr3upscaler_api_dx12.dll",
+            "NRD.dll",
+            "libxess.dll"
+          )) {
+            $runtimePath = Join-Path $outputDir $runtimeFile
+            if (-not (Test-Path -LiteralPath $runtimePath -PathType Leaf)) {
+              throw "Expected AMFP runtime dependency was not deployed: $runtimePath"
+            }
+          }
+
+          foreach ($agilityFile in @("D3D12Core.dll", "d3d12SDKLayers.dll")) {
+            $agilityPath = Join-Path $outputDir (Join-Path "D3D12" $agilityFile)
+            if (-not (Test-Path -LiteralPath $agilityPath -PathType Leaf)) {
+              throw "Expected AMFP Agility runtime dependency was not deployed: $agilityPath"
+            }
+          }
+
+          foreach ($licenseDir in @("licenses", "licenses\nrd", "licenses\xess", "licenses\agility")) {
+            $licensePath = Join-Path $outputDir $licenseDir
+            if (-not (Test-Path -LiteralPath $licensePath -PathType Container)) {
+              throw "Expected AMFP license directory was not deployed: $licensePath"
+            }
+            if (-not (Get-ChildItem -LiteralPath $licensePath -File -ErrorAction Stop | Select-Object -First 1)) {
+              throw "AMFP license directory is empty: $licensePath"
+            }
+          }
+
+      - name: Package AMFP
+        working-directory: build-premake\amfp\${{ inputs.config == 'release' && 'Release' || 'Debug' }}
+        run: 7z a "$env:GITHUB_WORKSPACE\${env:AMFP_CONFIG_NAME}.zip" * '-xr!*.lib' '-xr!*.exp'
+
+      - name: Upload AMFP artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.AMFP_CONFIG_NAME }}
+          path: ${{ env.AMFP_CONFIG_NAME }}.zip
           retention-days: 7

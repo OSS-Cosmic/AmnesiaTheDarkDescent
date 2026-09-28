@@ -23,7 +23,11 @@ int ExecuteString(asIScriptEngine *engine, const char *code, asIScriptModule *mo
 
 	// If no context was provided, request a new one from the engine
 	asIScriptContext *execCtx = ctx ? ctx : engine->CreateContext();
+#ifdef AMFP
+	r = execCtx->Prepare(func); // AngelScript 2.24 takes the function itself
+#else
 	r = execCtx->Prepare(func->GetId());
+#endif
 	if( r < 0 )
 	{
 		func->Release();

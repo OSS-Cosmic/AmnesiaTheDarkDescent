@@ -90,12 +90,12 @@ void cPostEffect_ColorConvTex::OnSetParams() {
 }
 
 void cPostEffect_ColorConvTex::RenderEffect(const PostEffectRenderCtx &ctx) {
-  // Without a valid LUT there's nothing useful to render — let the
-  // composite skip this effect while keeping the chain consistent.
-  if (!mpColorConvTex || !mpColorConvTex->GetTexture() ||
-      mpColorConvTex->GetTexture()->view.isEmpty()) {
-    return;
-  }
+  // Always draw: the composite toggles its ping-pong buffer after every
+  // active effect, so returning early would hand the next effect a stale
+  // buffer. Without a valid LUT, pass the image through (fade 0, with the
+  // source bound in the unused LUT slot).
+  const bool bHasLUT = mpColorConvTex && mpColorConvTex->GetTexture() &&
+                       !mpColorConvTex->GetTexture()->view.isEmpty();
 
   RIRenderingAttachment color = {};
   color.view = ctx.outputView;
@@ -138,13 +138,14 @@ void cPostEffect_ColorConvTex::RenderEffect(const PostEffectRenderCtx &ctx) {
   bindings[0].handle = DescriptorBindingID::Create("inputSampler");
   bindings[1].descriptor = ctx.inputSrv;
   bindings[1].handle = DescriptorBindingID::Create("sourceInput");
-  bindings[2].descriptor = mpColorConvTex->GetTexture()->descriptor();
+  bindings[2].descriptor =
+      bHasLUT ? mpColorConvTex->GetTexture()->descriptor() : ctx.inputSrv;
   bindings[2].handle = DescriptorBindingID::Create("colorConv");
   mpSpecificType->m_program.bindDescriptors(&mpGraphics->device, ctx.cmd,
                                             ctx.frameIndex, bindings, 3);
 
   ColorConvPushConstants pc{};
-  pc.alphaFade = cMath::Max(mParams.mfFadeAlpha, 0.0f);
+  pc.alphaFade = bHasLUT ? cMath::Max(mParams.mfFadeAlpha, 0.0f) : 0.0f;
   ctx.cmd->vk_d3d12_setPushConstants(
       &mpGraphics->device, mpSpecificType->m_program, 0, sizeof(pc), &pc);
 

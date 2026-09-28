@@ -254,7 +254,7 @@ namespace hpl {
 										bool abCollideCharacter=true,
 										int alMinPushStrength=0,
 										tFlag alCollideFlags = eFlagBit_All, 
-										bool abDebug=false);
+										bool abDebug=false, bool abSkipStaticVolatile=false);
 		
 		void DestroyAll();
 

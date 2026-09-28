@@ -82,12 +82,13 @@ namespace hpl {
 	public:
 		cCharacterBodyRay();
 
-		void Clear();
+		void Clear(bool abCollideVolatile);
 		bool OnIntersect(iPhysicsBody *pBody,cPhysicsRayParams *apParams);
 
 		float mfMinDist;
 		cVector3f mvNormal;
 		bool mbCollide;
+		bool mbCollideVolatile;
 	};
 
 	//------------------------------------------------
@@ -148,6 +149,12 @@ namespace hpl {
 		void SetCollideCharacter(bool abX);
 		bool GetCollideCharacter(){ return mbCollideCharacter;}
 
+		/**
+		 * false: rays and shape checks ignore static (mass 0) volatile bodies.
+		 */
+		void SetCollideStaticVolatile(bool abX) { mbCollideStaticVolatile = abX;}
+		bool GetCollideStaticVolatile() { return mbCollideStaticVolatile;}
+
 		void SetTestCollision(bool abX);
 		bool GetTestCollision(){return mbTestCollision;}
 
@@ -175,6 +182,9 @@ namespace hpl {
 		void SetPosition(const cVector3f& avPos, bool abSmooth=false);
 		const cVector3f& GetPosition();
 		const cVector3f& GetLastPosition();
+		// Last position drives the velocity estimate; set it too when
+		// teleporting a character that should keep its velocity.
+		void SetLastPosition(const cVector3f& avPos) { mvLastPosition = avPos; }
 		void SetFeetPosition(const cVector3f& avPos, bool abSmooth=false);
 		cVector3f GetFeetPosition();
 
@@ -388,6 +398,7 @@ namespace hpl {
 		bool mbActive;
 
 		bool mbCollideCharacter;
+		bool mbCollideStaticVolatile;
 
 		bool mbTestCollision;
 

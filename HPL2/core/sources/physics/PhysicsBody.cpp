@@ -96,6 +96,7 @@ namespace hpl {
 
 		mbIsCharacter = false;
 		mbCollideCharacter = true;
+		mbBlocksPathfinding = false;
 
 		mbIsRagDoll = false;
 		mbCollideRagDoll = true;

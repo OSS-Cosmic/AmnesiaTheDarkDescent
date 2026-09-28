@@ -1,0 +1,17 @@
+<EntDelta Version="1" Target="entities/lamp/cellar_gaslamp01/cellar_gaslamp01_long.ent">
+    <RemoveVar Name="CanBeTurnedOff" />
+    <RemoveVar Name="NeedsTinderbox" />
+    <Modify Category="Entities" ID="14" Name="PointLight_1">
+        <SetAttr FalloffMap="" RendererMask="1" />
+        <RemoveAttr Name="Brightness" />
+        <RemoveAttr Name="Falloff" />
+    </Modify>
+    <Modify Category="Entities" ID="15" Name="SpotLight_1">
+        <SetAttr FalloffMap="" />
+        <RemoveAttr Name="Brightness" />
+        <RemoveAttr Name="Falloff" />
+    </Modify>
+    <Add Category="Entities">
+        <SpotLight Active="true" Aspect="1" CastShadows="true" DiffuseColor="0.534 0.35 0.15 1" FOV="2.2" FalloffMap="" FlickerActive="false" FlickerFade="false" FlickerOffColor="0 0 0 1" FlickerOffFadeMaxLength="0" FlickerOffFadeMinLength="0" FlickerOffMaxLength="0" FlickerOffMinLength="0" FlickerOffPS="" FlickerOffRadius="0" FlickerOffSound="" FlickerOnFadeMaxLength="0" FlickerOnFadeMinLength="0" FlickerOnMaxLength="0" FlickerOnMinLength="0" FlickerOnPS="" FlickerOnSound="" Gobo="" GoboAnimFrameTime="0" GoboAnimMode="None" Name="SpotLight_2" NearClipPlane="0.05" Radius="10" RendererMask="2" Rotation="-1.5708 0 0" Scale="1 1 1" ShadowResolution="Low" ShadowsAffectDynamic="true" ShadowsAffectStatic="true" SpotFalloffMap="" Tag="" WorldPos="0 -2.62293 0" Re_Intensity="2" Re_Radius="15" Re_SourceRadius="0.03" />
+    </Add>
+</EntDelta>

@@ -249,6 +249,10 @@ namespace hpl {
 			pPS->SetMinFadeDistanceEnd(GetAttributeFloat(apElement, "MinFadeDistanceEnd"));
 			pPS->SetMaxFadeDistanceStart(GetAttributeFloat(apElement, "MaxFadeDistanceStart"));
 			pPS->SetMaxFadeDistanceEnd(GetAttributeFloat(apElement, "MaxFadeDistanceEnd"));
+#ifdef AMFP
+			// TDD maps also carry Active="false", but TDD never honoured it.
+			pPS->SetActive(GetAttributeBool(apElement, "Active", true));
+#endif
 		}
 		
 		kEndWorldEntityLoad(pPS);
@@ -406,6 +410,9 @@ namespace hpl {
 
 			pLightBox->SetSize(attr.GetVec3("Size", cVector3f(1,1,1)));
 			pLightBox->SetBlendFunc((eLightBoxBlendFunc)attr.GetInt("BlendFunc", (int)eLightBoxBlendFunc_Add));
+#ifdef AMFP
+			pLightBox->SetBoxLightPrio(attr.GetInt("Priority", 0));
+#endif
 		}
 		//////////////////////////
 		// Spotlightt
@@ -599,6 +606,13 @@ namespace hpl {
 		if(bShadowsAffectDynamic)	lFlags |= eObjectVariabilityFlag_Dynamic;
 		if(bShadowsAffectStatic)	lFlags |= eObjectVariabilityFlag_Static;
 		pLight->SetShadowCastersAffected(lFlags);
+
+#ifdef AMFP
+		pLight->SetBrightness(attr.GetFloat("Brightness", 1));
+		pLight->SetFalloff(attr.GetFloat("Falloff", 1));
+		// Inactive lights still render; this stops their flicker/fade logic.
+		pLight->SetActive(attr.GetBool("Active", true));
+#endif
 
 		//////////////////////
 		// Backwards compitabilty:

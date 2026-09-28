@@ -30,6 +30,9 @@ struct StandardPointLightData {
   // First of kStandardShadowCubeFaces shadow tiles (+X,-X,+Y,-Y,+Z,-Z), or
   // kStandardInvalidShadow.
   uint32_t shadowIndex;
+  // 0: TDD ramp (falloffTexture at d^2/r^2). > 0: AMFP curve
+  // pow(1 - d/r, falloffExponent). Only the AMFP build writes non-zero.
+  float falloffExponent;
 };
 
 struct StandardSpotLightData {
@@ -47,6 +50,7 @@ struct StandardSpotLightData {
   uint32_t shadowIndex;         // shadow tile index, or kStandardInvalidShadow
   float shadowBias;
   uint32_t shadowResolution;    // shadow tile size in texels
+  float falloffExponent;        // see StandardPointLightData::falloffExponent
 };
 
 // One square shadow-map tile inside a shadow atlas page. Spot lights own one
@@ -103,9 +107,9 @@ struct StandardLightCounts {
 using StandardPointLight = StandardPointLightData;
 using StandardSpotLight = StandardSpotLightData;
 
-static_assert(sizeof(StandardPointLightData) == 112,
+static_assert(sizeof(StandardPointLightData) == 116,
               "Standard point-light ABI changed");
-static_assert(sizeof(StandardSpotLightData) == 140,
+static_assert(sizeof(StandardSpotLightData) == 144,
               "Standard spot-light ABI changed");
 static_assert(sizeof(StandardBoxLightData) == 48,
               "Standard box-light ABI changed");

@@ -7,6 +7,7 @@ function Show-Usage {
 Usage: .\deploy.ps1 [options]
 
 Options:
+    -Product, --product <name>      amnesia (default) or amfp; -Mode is an alias
     -GameDir, --game-dir <path>      Installed Amnesia: The Dark Descent directory
     -Config, --config <value>        release | debug | all (default: all)
     -Resources, --resources <mode>   copy | merge | none (default: copy)
@@ -17,6 +18,7 @@ Options:
 
 Examples:
     .\deploy.ps1
+    .\deploy.ps1 -Product amfp -GameDir "C:\Games\Amnesia A Machine for Pigs"
     .\deploy.ps1 -Config release
     .\deploy.ps1 -GameDir "C:\Program Files (x86)\Steam\steamapps\common\Amnesia The Dark Descent"
     .\deploy.ps1 -Resources merge
@@ -125,9 +127,13 @@ function Deploy-Resources(
     [string] $ManifestName,
     [string] $BackupSuffix
 ) {
-    $allFiles = @(Get-ChildItem -LiteralPath $Overlay -File -Recurse -Force |
-        ForEach-Object { Get-RelativeFilePath $Overlay $_.FullName } |
-        Sort-Object)
+    if ([string]::IsNullOrEmpty($Overlay)) {
+        $allFiles = @()
+    } else {
+        $allFiles = @(Get-ChildItem -LiteralPath $Overlay -File -Recurse -Force |
+            ForEach-Object { Get-RelativeFilePath $Overlay $_.FullName } |
+            Sort-Object)
+    }
 
     $placed = @()
     if ($Mode -ne 'none') {
@@ -179,13 +185,14 @@ function Deploy-Resources(
 
 $root = if ($PSScriptRoot) { $PSScriptRoot } else { Split-Path -Parent $MyInvocation.MyCommand.Path }
 $root = Get-AbsolutePath $root
-$overlay = Join-Path $root 'amnesia\resources'
-$output = Join-Path $root 'build-premake\amnesia'
+$overlay = $null
+$output = $null
 $editorResources = Join-Path $root 'HPL2\tools\resources'
 $mapDelta = Join-Path $root 'scripts\mapdelta.py'
 $manifestName = '.redux_overlay_manifest'
 $backupSuffix = '.mapdelta-orig'
 $gameDir = $null
+$product = 'amnesia'
 $config = 'all'
 $resources = 'copy'
 $copyGameAssets = $true
@@ -194,7 +201,15 @@ $scriptArgs = @($args)
 $index = 0
 while ($index -lt $scriptArgs.Count) {
     $argument = [string] $scriptArgs[$index]
-    if ($argument -ieq '-GameDir' -or $argument -ieq '--game-dir') {
+    if ($argument -ieq '-Product' -or $argument -ieq '--product' -or
+        $argument -ieq '-Mode' -or $argument -ieq '--mode') {
+        if ($index + 1 -ge $scriptArgs.Count) { throw "$argument requires a product name." }
+        $product = ([string] $scriptArgs[$index + 1]).ToLowerInvariant()
+        $index += 2
+    } elseif ($argument.StartsWith('--product=') -or $argument.StartsWith('--mode=')) {
+        $product = $argument.Substring($argument.IndexOf('=') + 1).ToLowerInvariant()
+        $index++
+    } elseif ($argument -ieq '-GameDir' -or $argument -ieq '--game-dir') {
         if ($index + 1 -ge $scriptArgs.Count) { throw "$argument requires a path argument." }
         $gameDir = [string] $scriptArgs[$index + 1]
         $index += 2
@@ -241,6 +256,13 @@ while ($index -lt $scriptArgs.Count) {
     }
 }
 
+if ($product -eq 'tdd') { $product = 'amnesia' }
+if ($product -notin @('amnesia', 'amfp')) {
+    throw '--product must be amnesia or amfp.'
+}
+if (-not $output) { $output = Join-Path $root ("build-premake\{0}" -f $product) }
+if (-not $overlay) { $overlay = Join-Path $root ("{0}\resources" -f $product) }
+
 if ([System.Environment]::OSVersion.Platform -ne [System.PlatformID]::Win32NT) {
     throw 'deploy.ps1 must be run on Windows.'
 }
@@ -254,22 +276,36 @@ if ($resources -notin @('copy', 'merge', 'none')) {
 $overlay = Get-AbsolutePath $overlay
 $output = Get-AbsolutePath $output
 if (-not (Test-Path -LiteralPath $overlay -PathType Container)) {
-    throw "Overlay directory not found: $overlay"
+    if ($product -ne 'amfp' -or $resources -ne 'none') {
+        throw "Overlay directory not found: $overlay (for AMFP, use --resources none when no overlay is available)."
+    }
+    $overlay = $null
 }
 if ($resources -eq 'merge' -and -not (Test-Path -LiteralPath $mapDelta -PathType Leaf)) {
     throw "Map-delta tool not found: $mapDelta"
 }
 
 if ($copyGameAssets) {
-    if (-not $gameDir -and $env:AMNESIA_GAME_DIRECTORY) { $gameDir = $env:AMNESIA_GAME_DIRECTORY }
-    if (-not $gameDir -and $env:ATDD_DIR) { $gameDir = $env:ATDD_DIR }
-    if (-not $gameDir) {
-        $programFilesX86 = ${env:ProgramFiles(x86)}
-        if (-not $programFilesX86) { $programFilesX86 = $env:ProgramFiles }
-        $gameDir = Join-Path $programFilesX86 'Steam\steamapps\common\Amnesia The Dark Descent'
+    if ($product -eq 'amfp') {
+        if (-not $gameDir -and $env:AMFP_GAME_DIRECTORY) { $gameDir = $env:AMFP_GAME_DIRECTORY }
+        if (-not $gameDir -and $env:AMFP_GAME_DIR) { $gameDir = $env:AMFP_GAME_DIR }
+        if (-not $gameDir) {
+            throw 'AMFP game dir is required (pass -GameDir or set AMFP_GAME_DIRECTORY/AMFP_GAME_DIR); the TDD Steam install is never used.'
+        }
+    } else {
+        if (-not $gameDir -and $env:AMNESIA_GAME_DIRECTORY) { $gameDir = $env:AMNESIA_GAME_DIRECTORY }
+        if (-not $gameDir -and $env:ATDD_DIR) { $gameDir = $env:ATDD_DIR }
+        if (-not $gameDir) {
+            $programFilesX86 = ${env:ProgramFiles(x86)}
+            if (-not $programFilesX86) { $programFilesX86 = $env:ProgramFiles }
+            $gameDir = Join-Path $programFilesX86 'Steam\steamapps\common\Amnesia The Dark Descent'
+        }
     }
     $gameDir = Get-AbsolutePath $gameDir
     if (-not (Test-Path -LiteralPath $gameDir -PathType Container)) {
+        if ($product -eq 'amfp') {
+            throw "AMFP game directory not found: $gameDir (pass -GameDir or set AMFP_GAME_DIRECTORY/AMFP_GAME_DIR)."
+        }
         throw "Game directory not found: $gameDir (pass -GameDir or set AMNESIA_GAME_DIRECTORY/ATDD_DIR)."
     }
 }
@@ -296,8 +332,13 @@ foreach ($configuration in $configurations) {
         Write-Host "==> Deploying editor resources to $destination"
         Copy-DirectoryContents $editorResources $destination
     }
-    Write-Host "==> Redux resources ($resources) -> $destination"
-    Deploy-Resources $destination $overlay $resources $mapDelta $manifestName $backupSuffix
+    if ($overlay) {
+        Write-Host "==> $product resources ($resources) -> $destination"
+        Deploy-Resources $destination $overlay $resources $mapDelta $manifestName $backupSuffix
+    } else {
+        Write-Host "==> $product resources (none; overlay absent) -> $destination"
+        Deploy-Resources $destination $null 'none' $mapDelta $manifestName $backupSuffix
+    }
     $deployed++
 }
 
