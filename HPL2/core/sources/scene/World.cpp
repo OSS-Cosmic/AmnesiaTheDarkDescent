@@ -332,7 +332,25 @@ void cWorld::Compile(bool abCalcPhysicsWorldSize) {
 
   if (mpPhysicsWorld && abCalcPhysicsWorldSize) {
     cVector3f vMin, vMax;
-    if (mvRenderableSets[eWorldContainerType_Static].GetBounds(vMin, vMax)) {
+    bool bHasBounds = mvRenderableSets[eWorldContainerType_Static].GetBounds(vMin, vMax);
+
+    // Entities (props, doors, elevators, ...) can carry collision that reaches past the
+    // raw level-geometry bounds above, so fold the dynamic set in too. Otherwise this
+    // recompute can shrink the physics world below entity-provided floors/walls, and the
+    // broadphase AABB query used by every collision check silently rejects anything
+    // outside it from then on.
+    cVector3f vDynMin, vDynMax;
+    if (mvRenderableSets[eWorldContainerType_Dynamic].GetBounds(vDynMin, vDynMax)) {
+      if (bHasBounds) {
+        CheckMinMaxUpdate(vMin, vMax, vDynMin, vDynMax);
+      } else {
+        vMin = vDynMin;
+        vMax = vDynMax;
+        bHasBounds = true;
+      }
+    }
+
+    if (bHasBounds) {
       // Create a 10 m border around the world too
       mpPhysicsWorld->SetWorldSize(vMin - cVector3f(10, 10, 10),
                                    vMax + cVector3f(10, 10, 10));
