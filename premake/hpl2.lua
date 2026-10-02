@@ -56,7 +56,7 @@ project(name)
         "HplMainShim.cpp",
         "SDLFontData.cpp", "LowLevelSoundOpenAL.cpp", "OpenAL*",
         "MeshLoaderCollada.cpp", "MeshLoaderColladaHelpers.cpp",
-        "MeshLoaderColladaLoader.cpp", "MeshLoaderMSH.cpp", "MeshLoaderFBX.cpp",
+        "MeshLoaderColladaLoader.cpp", "MeshLoaderMSH.cpp", "MeshLoaderFBX.cpp", "FbxImport.cpp",
         "MeshLoaderGLTF.cpp",
         "ThreadSDL.cpp", "MutexSDL.cpp", "VertexBuffer.cpp",
     }
@@ -69,6 +69,8 @@ project(name)
     for _, p in ipairs(script_addons) do table.insert(patterns, IMPL .. p) end
     table.insert(patterns, CORE .. "/sources/platform/sdl2/*.cpp")
     local file_list = glob(patterns)
+    -- ufbx is a single C file (FbxImport); it builds as C beside the C++ sources.
+    table.insert(file_list, DEPS_EXTERN .. "/ufbx/ufbx.c")
     -- RID3D12.cpp is Windows-only (opt-in DX12 backend). Prune it from the source
     -- list on non-Windows targets so gmake doesn't emit a compile target for it;
     -- the file's own `#if DEVICE_IMPL_D3D12` guard already keeps it a trivially
@@ -111,6 +113,7 @@ project(name)
         DEPS_EXTERN .. "/rapidjson/include", -- RIProgram's reflection parser
         DEPS_EXTERN .. "/zlib",             -- zlib.h/zconf.h for BinaryBuffer/SerializeClass
         DEPS_EXTERN .. "/cgltf",            -- cgltf.h single-header glTF 2.0 parser (MeshLoaderGLTF)
+        DEPS_EXTERN .. "/ufbx",             -- ufbx single-file FBX parser (FbxImport / MeshLoaderFBX)
     }
     generated_includes()
     d3d12ma_includes()

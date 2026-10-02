@@ -1,6 +1,4 @@
 <EntDelta Version="1" Target="entities/lamp/chandelier_nice/chandelier_nice_short.ent">
-    <RemoveVar Name="CanBeTurnedOff" />
-    <RemoveVar Name="NeedsTinderbox" />
     <Modify Category="Shapes" ID="21" Name="BodyShape_1_clone_1_clone_1_clone_1">
         <SetAttr RelativeRotation="3.14159 1.5708 3.14159" Rotation="3.14159 1.5708 3.14159" />
     </Modify>

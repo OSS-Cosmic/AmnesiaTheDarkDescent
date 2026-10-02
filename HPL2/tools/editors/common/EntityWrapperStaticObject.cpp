@@ -130,6 +130,14 @@ bool cEntityWrapperStaticObject::GetProperty(int alPropID, bool& abX)
 	case eStaticObjectBool_CastShadows:
 		abX = GetCastShadows();
 		break;
+	case eStaticObjectBool_TwoSidedShadow:
+		abX = GetTwoSidedShadow();
+		break;
+#ifdef AMFP
+	case eStaticObjectBool_IsOccluder:
+		abX = IsOccluder();
+		break;
+#endif
 	default:
 		return false;
 	}
@@ -184,6 +192,14 @@ bool cEntityWrapperStaticObject::SetProperty(int alPropID, const bool& abX)
 	case eStaticObjectBool_CastShadows:
 		SetCastShadows(abX);
 		break;
+	case eStaticObjectBool_TwoSidedShadow:
+		SetTwoSidedShadow(abX);
+		break;
+#ifdef AMFP
+	case eStaticObjectBool_IsOccluder:
+		SetIsOccluder(abX);
+		break;
+#endif
 	default:
 		return false;
 	}
@@ -232,6 +248,15 @@ void cEntityWrapperStaticObject::SetCastShadows(bool abX)
 	mbCastShadows = abX;
 	if(mpEngineEntity)
 		((iEngineEntityMesh*)mpEngineEntity)->SetCastShadows(abX);
+}
+
+//---------------------------------------------------------------------------
+
+void cEntityWrapperStaticObject::SetTwoSidedShadow(bool abX)
+{
+	mbTwoSidedShadow = abX;
+	if(mpEngineEntity)
+		((iEngineEntityMesh*)mpEngineEntity)->SetTwoSidedShadow(abX);
 }
 
 //---------------------------------------------------------------------------

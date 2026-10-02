@@ -247,6 +247,9 @@ private:
 	iFontData *mpFont;
 	
 	cViewport *mpViewport;
+	// The gameplay viewport the menu set was added to while a map was loaded.
+	// Kept so the set is removed even after the map is gone (quit to menu).
+	cViewport *mpGuiSetHostViewport = NULL;
 	iPostEffect *mpPostEffect_ToneMap;
 
 	cGuiGfxElement *mpLogoGfx;

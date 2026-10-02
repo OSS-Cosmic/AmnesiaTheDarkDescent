@@ -43,6 +43,14 @@ UTEST(LightElementInfo, AreaLightIsRayTracedOnly) {
   ASSERT_EQ(kRendererMaskRayTraced, GetDefaultLightRendererMask(area));
 }
 
+UTEST(LightElementInfo, DirectionalLightIsRayTracedOnly) {
+  const cLightElementInfo sun = GetLightElementInfo("DirectionalLight");
+  ASSERT_TRUE(sun.mbValid);
+  ASSERT_EQ(eLightElementShape_Directional, sun.mShape);
+  ASSERT_TRUE(sun.mbRayTracedOnly);
+  ASSERT_EQ(kRendererMaskRayTraced, GetDefaultLightRendererMask(sun));
+}
+
 UTEST(LightElementInfo, LegacyShapeDefaultsToBothBackends) {
   // This is what lets a merged light drop RendererMask entirely: retail values
   // on Standard, Re_* overrides on ray-traced, from one element.

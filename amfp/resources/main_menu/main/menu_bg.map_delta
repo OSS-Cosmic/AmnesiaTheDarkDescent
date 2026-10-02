@@ -1,235 +1,112 @@
 <MapDelta Version="1" Target="main_menu/main/menu_bg.map">
     <Modify Category="StaticObjects" ID="8394" Name="ceiling_welder_wood_middle_363">
-        <RemoveAttr Name="IsOccluder" />
+        <SetAttr TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="9681" Name="spraylock">
-        <RemoveAttr Name="IsOccluder" />
+        <SetAttr TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="9747" Name="ceiling_welder_wood_middle_369">
-        <RemoveAttr Name="IsOccluder" />
+        <SetAttr TwoSidedShadow="false" />
     </Modify>
     <Modify Category="Entities" ID="8692" Name="moon_1">
-        <RemoveVar Name="ConnectedLight2" />
-        <RemoveVar Name="ConnectionLight2Amount" />
-        <RemoveVar Name="ConnectionLight2UseOnColor" />
-        <RemoveVar Name="ConnectionLight2UseSpec" />
-        <RemoveVar Name="FlickerActive" />
-        <RemoveVar Name="GlowColor" />
-        <RemoveVar Name="GlowEnabled" />
-        <RemoveVar Name="GlowOutlineColor" />
-        <RemoveVar Name="IsOccluder" />
-        <RemoveVar Name="SynchronizeFlickering" />
+        <SetVar Name="UpdateAnimationWhenCulled" Value="false" />
     </Modify>
     <Modify Category="Entities" ID="9684" Name="spraylock_bonfire_2">
-        <RemoveVar Name="ConnectedLight2" />
-        <RemoveVar Name="ConnectionLight2Amount" />
-        <RemoveVar Name="ConnectionLight2UseOnColor" />
-        <RemoveVar Name="ConnectionLight2UseSpec" />
-        <RemoveVar Name="FlickerActive" />
-        <RemoveVar Name="GlowColor" />
-        <RemoveVar Name="GlowEnabled" />
-        <RemoveVar Name="GlowOutlineColor" />
-        <RemoveVar Name="IsOccluder" />
-        <RemoveVar Name="SynchronizeFlickering" />
+        <SetVar Name="UpdateAnimationWhenCulled" Value="false" />
     </Modify>
     <Modify Category="Entities" ID="9685" Name="spraylock_fire_3">
         <SetAttr FalloffMap="" />
-        <RemoveAttr Name="Brightness" />
-        <RemoveAttr Name="Falloff" />
-    </Modify>
-    <Modify Category="Entities" ID="9686" Name="chain_beam_9">
-        <RemoveVar Name="IsOccluder" />
     </Modify>
     <Modify Category="Entities" ID="9688" Name="spraylock_fire_4">
-        <SetAttr FalloffMap="" />
-        <RemoveAttr Name="Brightness" />
-        <RemoveAttr Name="Falloff" />
+        <SetAttr FalloffMap="" RendererMask="1" />
     </Modify>
     <Modify Category="Entities" ID="9690" Name="rope_beam01_5">
-        <RemoveVar Name="GlowColor" />
-        <RemoveVar Name="GlowEnabled" />
-        <RemoveVar Name="GlowOutlineColor" />
-        <RemoveVar Name="IsOccluder" />
+        <SetVar Name="UpdateAnimationWhenCulled" Value="false" />
     </Modify>
     <Modify Category="Entities" ID="9697" Name="spraylock_spark_light">
         <SetAttr FalloffMap="" />
-        <RemoveAttr Name="Brightness" />
-        <RemoveAttr Name="Falloff" />
     </Modify>
     <Modify Category="Entities" ID="9703" Name="spraylock_center_pointlight">
-        <SetAttr FalloffMap="" />
-        <RemoveAttr Name="Brightness" />
-        <RemoveAttr Name="Falloff" />
+        <SetAttr FalloffMap="" RendererMask="1" />
     </Modify>
     <Modify Category="Entities" ID="9715" Name="spraylock_engines">
-        <RemoveVar Name="GlowColor" />
-        <RemoveVar Name="GlowEnabled" />
-        <RemoveVar Name="GlowOutlineColor" />
-        <RemoveVar Name="IsOccluder" />
+        <SetVar Name="UpdateAnimationWhenCulled" Value="false" />
+    </Modify>
+    <Modify Category="Entities" ID="9716" Name="spraylock_fan">
+        <SetVar Name="CallbackFunc" Value="" />
+        <SetVar Name="ConnectedProps" Value="" />
+        <SetVar Name="ConnectionStateChangeCallback" Value="" />
+        <SetVar Name="FullGameSave" Value="false" />
+        <SetVar Name="PlayerInteractCallback" Value="" />
+        <SetVar Name="PlayerInteractCallbackAutoRemove" Value="false" />
+        <SetVar Name="PlayerLookAtCallback" Value="" />
+        <SetVar Name="PlayerLookAtCallbackAutoRemove" Value="false" />
+        <SetVar Name="StaticPhysics" Value="false" />
     </Modify>
     <Modify Category="Entities" ID="9717" Name="spraylock_spray_switch_gauges">
-        <RemoveVar Name="GlowColor" />
-        <RemoveVar Name="GlowEnabled" />
-        <RemoveVar Name="GlowOutlineColor" />
-        <RemoveVar Name="IsOccluder" />
+        <SetVar Name="UpdateAnimationWhenCulled" Value="false" />
     </Modify>
     <Modify Category="Entities" ID="9718" Name="spraylock_power_switch">
-        <RemoveVar Name="GlowColor" />
-        <RemoveVar Name="GlowEnabled" />
-        <RemoveVar Name="GlowOutlineColor" />
-        <RemoveVar Name="IsOccluder" />
+        <SetVar Name="UpdateAnimationWhenCulled" Value="false" />
     </Modify>
     <Modify Category="Entities" ID="9720" Name="spraylock_electric_cabin">
-        <RemoveVar Name="GlowColor" />
-        <RemoveVar Name="GlowEnabled" />
-        <RemoveVar Name="GlowOutlineColor" />
-        <RemoveVar Name="IsOccluder" />
+        <SetVar Name="UpdateAnimationWhenCulled" Value="false" />
     </Modify>
     <Modify Category="Entities" ID="9721" Name="spraylock_door_1">
-        <RemoveVar Name="GlowColor" />
-        <RemoveVar Name="GlowEnabled" />
-        <RemoveVar Name="GlowOutlineColor" />
-        <RemoveVar Name="IsOccluder" />
+        <SetVar Name="UpdateAnimationWhenCulled" Value="false" />
     </Modify>
     <Modify Category="Entities" ID="9722" Name="spraylock_green_light">
-        <RemoveVar Name="ConnectedLight2" />
-        <RemoveVar Name="ConnectionLight2Amount" />
-        <RemoveVar Name="ConnectionLight2UseOnColor" />
-        <RemoveVar Name="ConnectionLight2UseSpec" />
-        <RemoveVar Name="FlickerActive" />
-        <RemoveVar Name="GlowColor" />
-        <RemoveVar Name="GlowEnabled" />
-        <RemoveVar Name="GlowOutlineColor" />
-        <RemoveVar Name="IsOccluder" />
-        <RemoveVar Name="SynchronizeFlickering" />
+        <SetVar Name="UpdateAnimationWhenCulled" Value="false" />
     </Modify>
     <Modify Category="Entities" ID="9723" Name="spraylock_power_gauges">
-        <RemoveVar Name="GlowColor" />
-        <RemoveVar Name="GlowEnabled" />
-        <RemoveVar Name="GlowOutlineColor" />
-        <RemoveVar Name="IsOccluder" />
-    </Modify>
-    <Modify Category="Entities" ID="9726" Name="spraylock_valve_inside_1">
-        <RemoveVar Name="IsOccluder" />
-    </Modify>
-    <Modify Category="Entities" ID="9727" Name="spraylock_valve_inside_2">
-        <RemoveVar Name="IsOccluder" />
+        <SetVar Name="UpdateAnimationWhenCulled" Value="false" />
     </Modify>
     <Modify Category="Entities" ID="9728" Name="spraylock_gauge_inside_1">
-        <RemoveVar Name="GlowColor" />
-        <RemoveVar Name="GlowEnabled" />
-        <RemoveVar Name="GlowOutlineColor" />
-        <RemoveVar Name="IsOccluder" />
+        <SetVar Name="UpdateAnimationWhenCulled" Value="false" />
     </Modify>
     <Modify Category="Entities" ID="9729" Name="spraylock_gauge_inside_2">
-        <RemoveVar Name="GlowColor" />
-        <RemoveVar Name="GlowEnabled" />
-        <RemoveVar Name="GlowOutlineColor" />
-        <RemoveVar Name="IsOccluder" />
+        <SetVar Name="UpdateAnimationWhenCulled" Value="false" />
     </Modify>
     <Modify Category="Entities" ID="9730" Name="spraylock_spray_switch_gauges_1">
-        <RemoveVar Name="GlowColor" />
-        <RemoveVar Name="GlowEnabled" />
-        <RemoveVar Name="GlowOutlineColor" />
-        <RemoveVar Name="IsOccluder" />
+        <SetVar Name="UpdateAnimationWhenCulled" Value="false" />
     </Modify>
     <Modify Category="Entities" ID="9731" Name="spraylock_railing_collision">
-        <RemoveVar Name="GlowColor" />
-        <RemoveVar Name="GlowEnabled" />
-        <RemoveVar Name="GlowOutlineColor" />
-        <RemoveVar Name="IsOccluder" />
+        <SetVar Name="UpdateAnimationWhenCulled" Value="false" />
     </Modify>
     <Modify Category="Entities" ID="9732" Name="spraylock_railing">
-        <RemoveVar Name="GlowColor" />
-        <RemoveVar Name="GlowEnabled" />
-        <RemoveVar Name="GlowOutlineColor" />
-        <RemoveVar Name="IsOccluder" />
+        <SetVar Name="UpdateAnimationWhenCulled" Value="false" />
     </Modify>
     <Modify Category="Entities" ID="9733" Name="spraylock_red_light">
-        <RemoveVar Name="ConnectedLight2" />
-        <RemoveVar Name="ConnectionLight2Amount" />
-        <RemoveVar Name="ConnectionLight2UseOnColor" />
-        <RemoveVar Name="ConnectionLight2UseSpec" />
-        <RemoveVar Name="FlickerActive" />
-        <RemoveVar Name="GlowColor" />
-        <RemoveVar Name="GlowEnabled" />
-        <RemoveVar Name="GlowOutlineColor" />
-        <RemoveVar Name="IsOccluder" />
-        <RemoveVar Name="SynchronizeFlickering" />
+        <SetVar Name="UpdateAnimationWhenCulled" Value="false" />
     </Modify>
     <Modify Category="Entities" ID="9734" Name="spraylock_steam_gauges">
-        <RemoveVar Name="GlowColor" />
-        <RemoveVar Name="GlowEnabled" />
-        <RemoveVar Name="GlowOutlineColor" />
-        <RemoveVar Name="IsOccluder" />
+        <SetVar Name="UpdateAnimationWhenCulled" Value="false" />
     </Modify>
     <Modify Category="Entities" ID="9735" Name="spraylock_door_2">
-        <RemoveVar Name="GlowColor" />
-        <RemoveVar Name="GlowEnabled" />
-        <RemoveVar Name="GlowOutlineColor" />
-        <RemoveVar Name="IsOccluder" />
+        <SetVar Name="UpdateAnimationWhenCulled" Value="false" />
     </Modify>
     <Modify Category="Entities" ID="9736" Name="spraylock_gauges">
-        <RemoveVar Name="GlowColor" />
-        <RemoveVar Name="GlowEnabled" />
-        <RemoveVar Name="GlowOutlineColor" />
-        <RemoveVar Name="IsOccluder" />
+        <SetVar Name="UpdateAnimationWhenCulled" Value="false" />
     </Modify>
     <Modify Category="Entities" ID="9737" Name="spraylock_spray_switch">
-        <RemoveVar Name="GlowColor" />
-        <RemoveVar Name="GlowEnabled" />
-        <RemoveVar Name="GlowOutlineColor" />
-        <RemoveVar Name="IsOccluder" />
+        <SetVar Name="UpdateAnimationWhenCulled" Value="false" />
     </Modify>
     <Modify Category="Entities" ID="9738" Name="spraylock_gauge_outside_2">
-        <RemoveVar Name="GlowColor" />
-        <RemoveVar Name="GlowEnabled" />
-        <RemoveVar Name="GlowOutlineColor" />
-        <RemoveVar Name="IsOccluder" />
+        <SetVar Name="UpdateAnimationWhenCulled" Value="false" />
     </Modify>
     <Modify Category="Entities" ID="9739" Name="spraylock_water">
-        <RemoveVar Name="GlowColor" />
-        <RemoveVar Name="GlowEnabled" />
-        <RemoveVar Name="GlowOutlineColor" />
-        <RemoveVar Name="IsOccluder" />
+        <SetVar Name="UpdateAnimationWhenCulled" Value="false" />
     </Modify>
     <Modify Category="Entities" ID="9740" Name="spraylock_fan_spotlight">
-        <SetAttr FalloffMap="" Re_FlickerOffIntensity="0" Re_Intensity="50" Re_SourceRadius="0" />
-        <RemoveAttr Name="Brightness" />
-        <RemoveAttr Name="Falloff" />
+        <SetAttr FalloffMap="" Re_FlickerOffIntensity="0" Re_Intensity="25" Re_SourceRadius="0" />
     </Modify>
     <Modify Category="Entities" ID="9741" Name="spraylock_bonfire_1">
-        <RemoveVar Name="ConnectedLight2" />
-        <RemoveVar Name="ConnectionLight2Amount" />
-        <RemoveVar Name="ConnectionLight2UseOnColor" />
-        <RemoveVar Name="ConnectionLight2UseSpec" />
-        <RemoveVar Name="FlickerActive" />
-        <RemoveVar Name="GlowColor" />
-        <RemoveVar Name="GlowEnabled" />
-        <RemoveVar Name="GlowOutlineColor" />
-        <RemoveVar Name="IsOccluder" />
-        <RemoveVar Name="SynchronizeFlickering" />
+        <SetVar Name="UpdateAnimationWhenCulled" Value="false" />
     </Modify>
     <Modify Category="Entities" ID="9742" Name="spraylock_fire_1">
-        <SetAttr FalloffMap="" />
-        <RemoveAttr Name="Brightness" />
-        <RemoveAttr Name="Falloff" />
+        <SetAttr FalloffMap="" RendererMask="1" />
     </Modify>
     <Modify Category="Entities" ID="9743" Name="spraylock_fire_2">
-        <SetAttr FalloffMap="" />
-        <RemoveAttr Name="Brightness" />
-        <RemoveAttr Name="Falloff" />
-    </Modify>
-    <Modify Category="Entities" ID="9754" Name="wood_box01_24">
-        <RemoveVar Name="IsOccluder" />
-    </Modify>
-    <Modify Category="Entities" ID="9755" Name="rope_pile_30">
-        <RemoveVar Name="IsOccluder" />
-    </Modify>
-    <Modify Category="Entities" ID="9756" Name="bag02_70">
-        <RemoveVar Name="IsOccluder" />
-    </Modify>
-    <Modify Category="Entities" ID="9757" Name="bag02_71">
-        <RemoveVar Name="IsOccluder" />
+        <SetAttr FalloffMap="" RendererMask="1" />
     </Modify>
 </MapDelta>

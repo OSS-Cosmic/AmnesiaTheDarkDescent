@@ -707,6 +707,10 @@ struct NrdIntegration::Impl {
       return inputs.diffuseRadianceHitDistance;
     case nrd::ResourceType::IN_SPEC_RADIANCE_HITDIST:
       return inputs.specularRadianceHitDistance;
+    case nrd::ResourceType::IN_DIFF_CONFIDENCE:
+      return inputs.diffuseConfidence;
+    case nrd::ResourceType::IN_SPEC_CONFIDENCE:
+      return inputs.specularConfidence;
     case nrd::ResourceType::OUT_DIFF_RADIANCE_HITDIST:
       NrdRequire(denoiser != nrd::Denoiser::REBLUR_SPECULAR,
                  "OUT_DIFF_RADIANCE_HITDIST is unavailable in specular mode");

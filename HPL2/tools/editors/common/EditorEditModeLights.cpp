@@ -26,6 +26,7 @@
 #include "EntityWrapperLightSpot.h"
 #include "EntityWrapperLightPoint.h"
 #include "EntityWrapperLightArea.h"
+#include "EntityWrapperLightDirectional.h"
 #include "EntityWrapperLightBox.h"
 
 #include "EditorWindowViewport.h"
@@ -171,5 +172,8 @@ void cEditorEditModeLights::CreateTypes()
 
 	mvTypes.push_back(hplNew(cEntityWrapperTypeLightBox,()));
 	mvShapeCreators.push_back(hplNew(cBoxCreator,(this)));
+
+	mvTypes.push_back(hplNew(cEntityWrapperTypeLightDirectional,()));
+	mvShapeCreators.push_back(NULL);
 }
 

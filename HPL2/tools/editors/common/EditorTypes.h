@@ -198,6 +198,7 @@ enum eEditorEntityLightType
 	eEditorEntityLightType_Spot,
 	eEditorEntityLightType_Area,         // ray-traced only (no legacy area light)
 	eEditorEntityLightType_Box,          // Standard only (no ray-traced box light)
+	eEditorEntityLightType_Directional,  // ray-traced only (sun / moon, no legacy class)
 
 	eEditorEntityLightType_LastEnum,
 };

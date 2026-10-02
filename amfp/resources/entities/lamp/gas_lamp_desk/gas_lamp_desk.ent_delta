@@ -1,6 +1,4 @@
 <EntDelta Version="1" Target="entities/lamp/gas_lamp_desk/gas_lamp_desk.ent">
-    <RemoveVar Name="CanBeTurnedOff" />
-    <RemoveVar Name="NeedsTinderbox" />
     <Modify Category="Shapes" ID="8" Name="Shape_2">
         <SetAttr RelativeScale="0.07 0.07 0.07" Scale="0.07 0.07 0.07" />
     </Modify>
@@ -8,8 +6,6 @@
         <SetAttr RelativeScale="0.18 0.18 0.18" Scale="0.18 0.18 0.18" />
     </Modify>
     <Modify Category="Entities" ID="2" Name="PointLight_1">
-        <SetAttr FalloffMap="" />
-        <RemoveAttr Name="Brightness" />
-        <RemoveAttr Name="Falloff" />
+        <SetAttr FalloffMap="" Re_FlickerOffIntensity="0" Re_Intensity="2.5" Re_SourceRadius="0.03" />
     </Modify>
 </EntDelta>

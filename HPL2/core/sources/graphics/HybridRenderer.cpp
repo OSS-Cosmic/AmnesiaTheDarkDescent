@@ -675,6 +675,13 @@ void cViewport::HybridViewportState::Update(cGraphics::FrameContext *cntx,
         RI_VIEWTYPE_SHADER_RESOURCE_2D, &forwardBlendBase[i],
         &forwardBlendBaseView[i], "HybridViewportState.forwardBlendBase");
 
+    CreateViewportColorTexture(
+        &pGraphics->device, renderW, renderH, cGraphics::PogoColorFormat,
+        RI_USAGE_SHADER_RESOURCE | RI_USAGE_TRANSFER_DST,
+        &refractionSceneCopy[i], &refractionSceneCopyView[i],
+        "HybridViewportState.refractionSceneCopy");
+    refractionSceneCopyInitialized[i] = false;
+
     // Screen-space velocity — gbuffer MRT #2, sampled by temporal passes.
     CreateViewportAttachmentTexture(
         &pGraphics->device, renderW, renderH, cGraphics::VelocityFormat,
@@ -739,6 +746,11 @@ void cViewport::HybridViewportState::Update(cGraphics::FrameContext *cntx,
           RI_USAGE_TRANSFER_DST,
       RI_VIEWTYPE_SHADER_RESOURCE_2D, &directLightingTexture,
       &directLightingView, "HybridViewportState.directLighting");
+  CreateViewportAttachmentTexture(
+      &pGraphics->device, renderW, renderH, RI_FORMAT_R8_UNORM,
+      RI_USAGE_SHADER_RESOURCE_STORAGE | RI_USAGE_SHADER_RESOURCE,
+      RI_VIEWTYPE_SHADER_RESOURCE_2D, &lightConfidenceTexture,
+      &lightConfidenceView, "HybridViewportState.lightConfidence");
   CreateViewportAttachmentTexture(
       &pGraphics->device, renderW, renderH, cGraphics::PogoColorFormat,
       RI_USAGE_SHADER_RESOURCE_STORAGE | RI_USAGE_SHADER_RESOURCE |
@@ -860,6 +872,7 @@ cViewport::HybridViewportState::~HybridViewportState() {
     pGraphics->graphicsDefer.push(decalMulTexture[i]);
     pGraphics->graphicsDefer.push(decalAddTexture[i]);
     pGraphics->graphicsDefer.push(forwardBlendBase[i]);
+    pGraphics->graphicsDefer.push(refractionSceneCopy[i]);
 
     pGraphics->graphicsDefer.push(renderTargetView[i]);
     pGraphics->graphicsDefer.push(depthView[i]);
@@ -870,6 +883,7 @@ cViewport::HybridViewportState::~HybridViewportState() {
     pGraphics->graphicsDefer.push(decalMulView[i]);
     pGraphics->graphicsDefer.push(decalAddView[i]);
     pGraphics->graphicsDefer.push(forwardBlendBaseView[i]);
+    pGraphics->graphicsDefer.push(refractionSceneCopyView[i]);
 
     // Companion COLOR_ATTACHMENT views of the same images.
     pGraphics->graphicsDefer.push(renderTargetAttachmentView[i]);
@@ -900,6 +914,7 @@ cViewport::HybridViewportState::~HybridViewportState() {
 
   // Single-slot, intra-frame resources.
   pGraphics->graphicsDefer.push(directLightingTexture);
+  pGraphics->graphicsDefer.push(lightConfidenceTexture);
   pGraphics->graphicsDefer.push(indirectRadianceTexture);
   pGraphics->graphicsDefer.push(indirectSpecularTexture);
   pGraphics->graphicsDefer.push(indirectKeyTexture);
@@ -911,6 +926,7 @@ cViewport::HybridViewportState::~HybridViewportState() {
   pGraphics->graphicsDefer.push(nrdMotionVectorsTexture);
 
   pGraphics->graphicsDefer.push(directLightingView);
+  pGraphics->graphicsDefer.push(lightConfidenceView);
   pGraphics->graphicsDefer.push(indirectRadianceView);
   pGraphics->graphicsDefer.push(indirectSpecularView);
   pGraphics->graphicsDefer.push(indirectKeyView);
@@ -944,7 +960,7 @@ cViewport::HybridViewportState::operator=(HybridViewportState &&rhs) noexcept {
 // its bindDescriptors; RIProgram routes them to kWorldSet by reflection and
 // caches the resulting set — stable world buffers hash to a cache hit, so the
 // descriptor set is written once and reused until a re-bake swaps a buffer.
-// Names a pass doesn't reflect are skipped, so binding all four everywhere is
+// Names a pass doesn't reflect are skipped, so binding all of them everywhere is
 // safe. The buffers are always >= 1 element after cWorld::PrepareFrame's bake
 // (which runs first in Draw), so a reflected binding is never left unbound.
 static void appendWorldLightFog(std::vector<RIProgram::DescriptorBinding> &bnd,
@@ -971,6 +987,8 @@ static void appendWorldLightFog(std::vector<RIProgram::DescriptorBinding> &bnd,
       apWorld->GetSpotLightCount(), sizeof(SpotLight));
   add("gAreaLights", apWorld->GetAreaLightBuffer(),
       apWorld->GetAreaLightCount(), sizeof(RectLight));
+  add("gDirectionalLights", apWorld->GetDirectionalLightBuffer(),
+      apWorld->GetDirectionalLightCount(), sizeof(DirectionalLight));
   add("gFogAreas", apWorld->GetFogAreaBuffer(), apWorld->GetFogAreaCount(),
       sizeof(FogAreaParams));
 }
@@ -1293,6 +1311,7 @@ void cHybridRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
   perFrame.pointLightCount = apWorld->GetPointLightCount();
   perFrame.spotLightCount = apWorld->GetSpotLightCount();
   perFrame.areaLightCount = apWorld->GetAreaLightCount();
+  perFrame.directionalLightCount = apWorld->GetDirectionalLightCount();
   // Light-grid origin: this camera's position snapped DOWN to a whole cell, so
   // the grid translates one cell at a time instead of sliding with the camera.
   // binLights and getCellLights both read this, so it must be computed once
@@ -1304,7 +1323,6 @@ void cHybridRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
   perFrame.lightGridOriginW =
       float3(snapToCell(perFrame.posW.x), snapToCell(perFrame.posW.y),
              snapToCell(perFrame.posW.z));
-  perFrame._padLightGridOrigin = 0.0f;
   // Fog composition is order-dependent. Reuse the visible, back-to-front
   // list that RenderList builds for this camera, rather than treating the
   // world's upload order as draw order (or rendering editor-hidden areas).
@@ -1915,11 +1933,11 @@ void cHybridRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
                  RI_STAGE_COMPUTE,
                  RI_BARRIER_ASPECT_DEPTH};
 
-    // Velocity (gbuffer MRT) -> SHADER_READ for the direct-lighting pass.
+    // Keep raster velocity aligned with opaque visibility and depth.
     toRead[2] = {state.velocityTexture[mpGraphics->swapchainIndex].Get(),
                  RI_RESOURCE_STATE_RENDER_TARGET,
                  RI_RESOURCE_STATE_SHADER_RESOURCE, RI_STAGE_NONE,
-                 RI_STAGE_COMPUTE};
+                 RI_STAGE_COMPUTE | RI_STAGE_FRAGMENT | RI_STAGE_RAY_TRACING};
 
     // packedHitInfo: UNDEFINED -> STORAGE_WRITE for the POM compute pass.
     // Previously written by the Stage B RT V-buffer; now produced by
@@ -1980,9 +1998,8 @@ void cHybridRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
   //
   // Copies visibilityTexture (raw raster hit, gPackedHitInfoRaster) into
   // packedHitInfoTexture (gPackedHitInfo) and applies the parallax-occlusion
-  // barycentric perturbation for height-mapped diffuse surfaces. Water/glass
-  // refraction is not handled here; those pixels carry the raster surface
-  // hit in gPackedHitInfo until a future sparse refraction RT pass lands.
+  // barycentric perturbation for height-mapped diffuse surfaces.
+  // Refraction is composed later by the forward glass and water passes.
   // ----------------------------------------------------------------------
   {
     RIGpuScope _gsVBufferPomBary(
@@ -2095,6 +2112,10 @@ void cHybridRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
           {state.reservoirTexture[dlCur].Get(), RI_RESOURCE_STATE_CLEAR_STORAGE,
            RI_RESOURCE_STATE_SHADER_RESOURCE, RI_STAGE_NONE, RI_STAGE_COMPUTE}};
       mpGraphics->primary.cmds[0].vk_d3d12_textureBarriers<6>(6, toRole);
+      // The temporal pass writes every texel, so no clear.
+      mpGraphics->primary.cmds[0].vk_d3d12_textureBarrier(
+          {state.lightConfidenceTexture.Get(), RI_RESOURCE_STATE_UNDEFINED,
+           RI_RESOURCE_STATE_STORAGE_WRITE, RI_STAGE_NONE, RI_STAGE_COMPUTE});
       state.directLightingInit = true;
     } else {
       // Last frame's RELAX input becomes this frame's resolve output.
@@ -2114,7 +2135,8 @@ void cHybridRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
       //   directKey[dlCur]    SHADER_RESOURCE (read by last frame's spatial)
       //   directKey[dlPrev]   SHADER_RESOURCE (already correct, no transition)
       //   reservoir[dlCur]    SHADER_RESOURCE (flipped before the spatial pass)
-      RITextureBarrier toRole[3] = {
+      //   lightConfidence     SHADER_RESOURCE (read by last frame's NRD)
+      RITextureBarrier toRole[4] = {
           {state.reservoirTexture[dlPrev].Get(),
            RI_RESOURCE_STATE_STORAGE_WRITE, RI_RESOURCE_STATE_SHADER_RESOURCE,
            RI_STAGE_COMPUTE, RI_STAGE_COMPUTE},
@@ -2123,8 +2145,11 @@ void cHybridRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
            RI_STAGE_COMPUTE, RI_STAGE_COMPUTE},
           {state.directKeyTexture[dlCur].Get(),
            RI_RESOURCE_STATE_SHADER_RESOURCE, RI_RESOURCE_STATE_STORAGE_WRITE,
+           RI_STAGE_COMPUTE, RI_STAGE_COMPUTE},
+          {state.lightConfidenceTexture.Get(),
+           RI_RESOURCE_STATE_SHADER_RESOURCE, RI_RESOURCE_STATE_STORAGE_WRITE,
            RI_STAGE_COMPUTE, RI_STAGE_COMPUTE}};
-      mpGraphics->primary.cmds[0].vk_d3d12_textureBarriers<3>(3, toRole);
+      mpGraphics->primary.cmds[0].vk_d3d12_textureBarriers<4>(4, toRole);
 
       if (historyResetForFrame) {
         // Invalidate the reservoir history; RELAX's history is reset below.
@@ -2207,6 +2232,9 @@ void cHybridRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
       bnd.emplace_back("gDirectKeyOut", RIDescriptor::storageImage(
                                             &mpGraphics->device,
                                             state.directKeyView[dlCur].Get()));
+      bnd.emplace_back("gLightConfidenceOut",
+                       RIDescriptor::storageImage(
+                           &mpGraphics->device, state.lightConfidenceView.Get()));
 
       appendWorldLightFog(bnd, apWorld);
       m_directLighting.bindDescriptors(
@@ -2220,14 +2248,18 @@ void cHybridRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
 
     // Temporal pass writes -> spatial pass sampled reads, plus the flip of
     // reservoir[dlCur] from its read-side state into the spatial pass's output.
-    RITextureBarrier toSpatial[3] = {
+    // lightConfidence goes straight to its read state: nothing writes it
+    // again this frame, and both NRD instances sample it.
+    RITextureBarrier toSpatial[4] = {
         {state.reservoirTemporalTexture.Get(), RI_RESOURCE_STATE_STORAGE_WRITE,
+         RI_RESOURCE_STATE_SHADER_RESOURCE, RI_STAGE_COMPUTE, RI_STAGE_COMPUTE},
+        {state.lightConfidenceTexture.Get(), RI_RESOURCE_STATE_STORAGE_WRITE,
          RI_RESOURCE_STATE_SHADER_RESOURCE, RI_STAGE_COMPUTE, RI_STAGE_COMPUTE},
         {state.directKeyTexture[dlCur].Get(), RI_RESOURCE_STATE_STORAGE_WRITE,
          RI_RESOURCE_STATE_SHADER_RESOURCE, RI_STAGE_COMPUTE, RI_STAGE_COMPUTE},
         {state.reservoirTexture[dlCur].Get(), RI_RESOURCE_STATE_SHADER_RESOURCE,
          RI_RESOURCE_STATE_STORAGE_WRITE, RI_STAGE_COMPUTE, RI_STAGE_COMPUTE}};
-    mpGraphics->primary.cmds[0].vk_d3d12_textureBarriers<3>(3, toSpatial);
+    mpGraphics->primary.cmds[0].vk_d3d12_textureBarriers<4>(4, toSpatial);
 
     // ----------------------------------------------------------------
     // DirectSpatialReusePass — ReSTIR DI spatial reuse + resolve. Merges a few
@@ -2653,6 +2685,10 @@ void cHybridRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
           state.nrdDiffuseRadianceHitDistView.Get();
       nrdInputs.specularRadianceHitDistance =
           state.nrdSpecularRadianceHitDistView.Get();
+      // One lighting confidence for both lobes (NRDDescs.h): it only tracks
+      // light changes at the primary hit, which both lobes share.
+      nrdInputs.diffuseConfidence = state.lightConfidenceView.Get();
+      nrdInputs.specularConfidence = state.lightConfidenceView.Get();
 
       if (state.nrd) {
         NrdDenoiseOutputs nrdOutputs = {};
@@ -2682,6 +2718,7 @@ void cHybridRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
             state.velocityView[mpGraphics->swapchainIndex].Get();
         directInputs.diffuseRadianceHitDistance =
             state.directLightingView.Get();
+        directInputs.diffuseConfidence = state.lightConfidenceView.Get();
         {
           RIGpuScope scope(&mpGraphics->profiler, &mpGraphics->primary.cmds[0],
                            "NRD.DirectDenoise");
@@ -3138,25 +3175,59 @@ void cHybridRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
   // composite folds that overlay onto the base albedo so they are lit +
   // fogged.)
 
-  // --------------------------------------------------------------------
-  // Water pass — raster the water surface over the background the GI
-  // composite already shaded. That background is NOT refracted: no refraction
-  // pass runs, so the primary hit under the water is the plain rasterized
-  // front surface. WaterReflectionPass produces a denoised half-resolution
-  // reflection and the m_water program samples it in the ADD draw; the MUL
-  // draw still applies tint + refraction exposure. The pair composes as a
-  // nested over, so this pass is order-dependent: water meshes are sorted
-  // back-to-front here explicitly instead of inheriting the shared translucent
-  // sort. The per-object MUL-then-ADD interleaving is deliberate and required —
-  // the reflection producer's guide images are one reusable scratch set, and
-  // hoisting all the MULs ahead of all the ADDs would both overwrite those
-  // guides before they are sampled and stop a far surface's reflection and fog
-  // from being attenuated through the near surface in front of it. The blend
-  // algebra is bg·M0·M1 + A0·M1 + A1. Reuses the translucent 5-stream layout +
-  // TranslucentMeshPipelineDesc state (depth ≤, no write); the m_water program
-  // supplies the shaders (Water.vert/frag).
-  // Pogo-read-half barriers as the other translucent sub-passes.
-  // --------------------------------------------------------------------
+  // A single scratch copy serves both forward families. Initialize its layout
+  // even when refraction is disabled, since the shaders still bind its SRV.
+  const uint32_t refractionImage = mpGraphics->swapchainIndex;
+  auto refractionSampler = mpGraphics->resolve_filter_descriptor(
+      eTextureWrap_ClampToEdge, eTextureWrap_ClampToEdge,
+      eTextureWrap_ClampToEdge, eTextureFilter_Bilinear);
+  const bool refractionEnabled =
+      iRenderer::GetRefractionEnabled() && bool(refractionSampler);
+  if (!state.refractionSceneCopyInitialized[refractionImage]) {
+    mpGraphics->primary.cmds[0].vk_d3d12_textureBarrier(
+        {state.refractionSceneCopy[refractionImage].Get(),
+         RI_RESOURCE_STATE_UNDEFINED, RI_RESOURCE_STATE_SHADER_RESOURCE,
+         RI_STAGE_NONE, RI_STAGE_FRAGMENT});
+    state.refractionSceneCopyInitialized[refractionImage] = true;
+  }
+  auto copyRefractionScene = [&]() {
+    auto *cmd = &mpGraphics->primary.cmds[0];
+    auto *target = state.renderTarget[refractionImage].Get();
+    auto *copy = state.refractionSceneCopy[refractionImage].Get();
+    const auto attachmentState = static_cast<RIResourceState_e>(
+        RI_RESOURCE_STATE_RENDER_TARGET | RI_RESOURCE_STATE_RENDER_TARGET_READ);
+    cmd->vk_d3d12_textureBarrier(
+        {target, attachmentState, RI_RESOURCE_STATE_COPY_SRC,
+         RI_STAGE_NONE, RI_STAGE_COPY});
+    cmd->vk_d3d12_textureBarrier(
+        {copy, RI_RESOURCE_STATE_SHADER_RESOURCE, RI_RESOURCE_STATE_COPY_DST,
+         RI_STAGE_FRAGMENT, RI_STAGE_COPY});
+    RIImageCopyDesc image = {};
+    image.width = renderWidth;
+    image.height = renderHeight;
+    image.depth = 1;
+    cmd->copyImage(&mpGraphics->device, target, copy, image);
+    cmd->vk_d3d12_textureBarrier(
+        {copy, RI_RESOURCE_STATE_COPY_DST, RI_RESOURCE_STATE_SHADER_RESOURCE,
+         RI_STAGE_COPY, RI_STAGE_FRAGMENT});
+    cmd->vk_d3d12_textureBarrier(
+        {target, RI_RESOURCE_STATE_COPY_SRC, attachmentState,
+         RI_STAGE_COPY, RI_STAGE_NONE});
+  };
+  auto appendRefractionBindings = [&](
+      std::vector<RIProgram::DescriptorBinding> &bindings) {
+    bindings.emplace_back("sceneColorInput", RIDescriptor::sampledImage(
+        &mpGraphics->device, state.refractionSceneCopyView[refractionImage].Get()));
+    bindings.emplace_back("sceneDepthInput", RIDescriptor::sampledImage(
+        &mpGraphics->device, state.depthSampleView[refractionImage].Get(),
+        static_cast<RIResourceState_e>(RI_RESOURCE_STATE_DEPTH_READ |
+                                       RI_RESOURCE_STATE_SHADER_RESOURCE)));
+    if (refractionSampler)
+      bindings.emplace_back("sceneColorSampler", *refractionSampler);
+  };
+
+  // Water surfaces compose back-to-front: refract/tint the preceding scene,
+  // then add the existing denoised ray-traced reflection and surface fog.
   {
     RIGpuScope _gsWater(&mpGraphics->profiler, &mpGraphics->primary.cmds[0],
                         "Water");
@@ -3286,7 +3357,7 @@ void cHybridRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
       struct WaterPush {
         uint32_t pass;
         uint32_t reflectionAvailable;
-        uint32_t p1, p2;
+        uint32_t refractive, p2;
       };
 
       // Each surface now opens its own rendering scope, so the blend chain
@@ -3411,7 +3482,10 @@ void cHybridRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
           RIGpuScope compositeScope(&mpGraphics->profiler,
                                     &mpGraphics->primary.cmds[0],
                                     "Water.Composite");
-          if (waterSurfaceComposited) {
+          const bool refractive = refractionEnabled && pMat->HasRefraction();
+          if (refractive)
+            copyRefractionScene();
+          else if (waterSurfaceComposited) {
             mpGraphics->primary.cmds[0].vk_d3d12_textureBarrier(
                 RITextureBarrier(
                     state.renderTarget[mpGraphics->swapchainIndex].Get(),
@@ -3431,6 +3505,7 @@ void cHybridRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
               &mpGraphics->globalset->m_bindlessSet, uint32_t(0));
           std::vector<RIProgram::DescriptorBinding> graphicsBindings =
               waterGraphicsBindings;
+          appendRefractionBindings(graphicsBindings);
           if (result.available) {
             // The specular result is an NRD output, which NRD keeps in GENERAL
             // for its whole lifetime; that stays legal on D3D12 because those
@@ -3471,11 +3546,13 @@ void cHybridRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
           mpGraphics->primary.cmds[0].setViewport(&mpGraphics->device, vp);
           mpGraphics->primary.cmds[0].setScissor(&mpGraphics->device, sc);
 
-          // Two draws into the pogo: tint (MUL) then denoised reflection (ADD).
+          // Refractive tint replaces the copied scene; otherwise tint uses
+          // MUL. The denoised reflection remains a separate ADD draw.
           // Salt the pipeline hash so it does not collide with the translucent
           // program's cache (same fixed-function state, different shaders).
           const TranslucentMeshPipelineDesc::BlendMode modes[2] = {
-              TranslucentMeshPipelineDesc::BLEND_MUL,
+              refractive ? TranslucentMeshPipelineDesc::BLEND_REPLACE
+                         : TranslucentMeshPipelineDesc::BLEND_MUL,
               TranslucentMeshPipelineDesc::BLEND_ADD};
           for (uint32_t pass = 0; pass < 2u; ++pass) {
             m_water.bindPipeline(
@@ -3484,7 +3561,8 @@ void cHybridRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
                 MakeTranslucentMeshPipelineDesc(cGraphics::PogoColorFormat,
                                                 cGraphics::DepthFormat,
                                                 modes[pass], vtxMask));
-            WaterPush push = {pass, result.available ? 1u : 0u, 0u, 0u};
+            WaterPush push = {pass, result.available ? 1u : 0u,
+                              refractive ? 1u : 0u, 0u};
             mpGraphics->primary.cmds[0].vk_d3d12_setPushConstants(
                 &mpGraphics->device, m_water, 0, sizeof(push), &push);
             // The MUL and ADD passes own consecutive command slots. Both carry
@@ -3916,13 +3994,8 @@ void cHybridRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
   // ordered the translucent list back-to-front, so iterating in list order
   // here gives correct Alpha-blend results.
   //
-  // Refraction is currently NOT implemented: the legacy screen-copy
-  // bend-behind distortion was dropped, and the RT V-buffer pass meant to
-  // replace it (bending the primary ray at refractive surfaces) was retired
-  // before it ever ran. So refractive translucents just alpha-blend over the
-  // unrefracted composite. Water is filtered out of the mesh collection
-  // below; it has its own raster pass (m_water) over that same unrefracted
-  // background.
+  // Refractive meshes sample the scene copied immediately before their draw.
+  // Water has its own sorted raster pass above.
   // --------------------------------------------------------------------
   {
     RIGpuScope _gsTranslucent(&mpGraphics->profiler,
@@ -3941,12 +4014,7 @@ void cHybridRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
       if (mode == eMaterialBlendMode_None ||
           mode >= eMaterialBlendMode_LastEnum)
         continue;
-      // No material-flag filtering here: HasRefraction draws through the
-      // standard blend pipeline (the background it blends over is the
-      // unrefracted composite — no refraction pass runs); HasWorldReflection
-      // is harmless (the legacy-only planar reflection buffer is unused).
-      // Water is skipped here because it has its own raster sub-pass
-      // (m_water, above) with the MUL + ADD draw pair.
+      // Water owns a separate refraction/tint and reflection draw pair.
       if (pMat->GetMaterialID() == MaterialID::Water)
         continue;
       cVertexBuffer *pVB = pObj->GetVertexBuffer();
@@ -4098,6 +4166,7 @@ void cHybridRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
         meshBindings.push_back(b);
       }
       appendWorldLightFog(meshBindings, apWorld);
+      appendRefractionBindings(meshBindings);
       // Lit diffuse is guarded by a push flag until the first TLAS build.
       meshBindings.emplace_back("gRtAccel",
                                 RIDescriptor::accelerationStructure(
@@ -4138,6 +4207,7 @@ void cHybridRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
       };
       constexpr uint32_t kTransOptUseIllumination = 1u << 0;
       constexpr uint32_t kTransOptHasTlas = 1u << 1;
+      constexpr uint32_t kTransOptRefraction = 1u << 2;
       const uint32_t lightingOptions =
           apWorld->GetTlas() ? kTransOptHasTlas : 0u;
 
@@ -4149,10 +4219,10 @@ void cHybridRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
         const int indexCount = static_cast<int>(draw.indexCount);
         // The material and object slots were resolved before the render scope
         // opened, so the cull could describe this draw. AffectedByLightLevel
-        // dimming is evaluated per-vertex on the GPU (Translucent.vert.slang →
-        // gScene.lightLevelAt, gated on kMaterialFlagAffectedByLightLevel in
-        // the material config) — the legacy per-object CPU light loop that
-        // used to live here is gone.
+        // dimming is evaluated per-pixel on the GPU (Translucent.frag.slang →
+        // lightLevelAt, gated on kMaterialFlagAffectedByLightLevel in the
+        // material config) — the legacy per-object CPU light loop that used to
+        // live here is gone.
         const uint32_t slot = draw.slot;
 
         // Per-vertex streams use fixed-function vertex fetch (the pipeline
@@ -4166,20 +4236,35 @@ void cHybridRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
                                        "translucent", &vtxMask))
           continue;
 
+        const bool refractive = refractionEnabled && pMat->HasRefraction();
+        if (refractive) {
+          mpGraphics->primary.cmds[0].vk_d3d12_endRendering(&mpGraphics->device);
+          copyRefractionScene();
+          mpGraphics->primary.cmds[0].vk_d3d12_beginRendering(&mpGraphics->device,
+                                                           beginDesc);
+          mpGraphics->primary.cmds[0].setViewport(&mpGraphics->device, vp);
+          mpGraphics->primary.cmds[0].setScissor(&mpGraphics->device, sc);
+        }
         const TranslucentMeshPipelineDesc::BlendMode mode =
             remapBlend(pMat->GetBlendMode());
         m_translucentMesh.bindPipeline(
             &mpGraphics->device, &mpGraphics->primary.cmds[0],
             HASH_INITIAL_VALUE, "TranslucentMesh",
             MakeTranslucentMeshPipelineDesc(meshTargetFormat,
-                                            cGraphics::DepthFormat, mode,
+                                            cGraphics::DepthFormat,
+                                            refractive
+                                                ? TranslucentMeshPipelineDesc::BLEND_REPLACE
+                                                : mode,
                                             vtxMask, pMat->GetDepthTest()));
 
         // Fog (world + per-area) is applied per-pixel in Translucent.frag.slang
         // by walking gFogAreas. sceneAlpha stays 1.0 for the no-extra-alpha
         // common path.
         const float sceneAlpha = 1.0f;
-        PushBlock push = {(uint32_t)mode, sceneAlpha, lightingOptions, 0u};
+        PushBlock push = {(uint32_t)mode, sceneAlpha,
+                          lightingOptions |
+                              (refractive ? kTransOptRefraction : 0u),
+                          0u};
         mpGraphics->primary.cmds[0].vk_d3d12_setPushConstants(
             &mpGraphics->device, m_translucentMesh, 0, sizeof(push), &push);
 
@@ -4199,13 +4284,8 @@ void cHybridRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
               &mpGraphics->device, (uint32_t)indexCount, 1u, 0u, 0, slot);
         }
 
-        // Second draw for the cube-map Fresnel + rim contribution.
-        // Reference gates this on `cubeMap && !isRefraction`
-        // (RendererDeferred.cpp:4660) because its refraction path consumed
-        // the screen copy the cube-map draw would have overwritten. Nothing
-        // here refracts (no refraction pass exists), so there is no such
-        // conflict and the cube-map second draw stays gated only on whether
-        // the material carries a cube map.
+        // Add cube reflection after refraction composition so Mul/MulX2 do
+        // not multiply the reflected radiance into the copied background.
         if (draw.cubeMap) {
           m_translucentMesh.bindPipeline(
               &mpGraphics->device, &mpGraphics->primary.cmds[0],

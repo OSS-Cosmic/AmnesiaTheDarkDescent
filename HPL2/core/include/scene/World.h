@@ -63,6 +63,7 @@ namespace hpl {
 	class cLightPoint;
 	class cLightArea;
 	class cLightBoxLegacy;
+	class cLightDirectional;
 	class cLightPoint;
 	class cLightSpot;
 	class cImageEntity;
@@ -161,6 +162,12 @@ namespace hpl {
 	class cWorld
 	{
 	public:
+		// One GPU light slot as it was uploaded last frame (LightChange.h).
+		struct GpuLightPrev {
+			float power = 0.0f;
+			float radius = 0.0f;
+		};
+
 		cWorld(tString asName,cGraphics *apGraphics,cResources *apResources,cSound* apSound,
 					cPhysics *apPhysics, cScene *apScene,cSystem *apSystem, cAI *apAI,
 					cHaptic *apHaptic);
@@ -343,6 +350,8 @@ namespace hpl {
 		uint32_t  GetSpotLightCount()   const { return mSpotLightCount; }
 		RIBuffer* GetAreaLightBuffer()  const { return mpAreaLightBuffer.Get(); }
 		uint32_t  GetAreaLightCount()   const { return mAreaLightCount; }
+		RIBuffer* GetDirectionalLightBuffer() const { return mpDirectionalLightBuffer.Get(); }
+		uint32_t  GetDirectionalLightCount()  const { return mDirectionalLightCount; }
 
 		// No-ops: the light / fog / decal buffers are all rebuilt from the live
 		// lists every frame in PrepareFrame, so membership changes need no flag.
@@ -367,6 +376,7 @@ namespace hpl {
 
 		cLightArea* CreateLightArea(const tString &asName="", bool abStatic=false);
 		cLightBoxLegacy* CreateLightBoxLegacy(const tString &asName="", bool abStatic=false);
+		cLightDirectional* CreateLightDirectional(const tString &asName="", bool abStatic=false);
 		// Redux light classes (ray traced). The *Legacy lights above are
 		// Standard-renderer lights and never take a GPU light slot.
 		cLightPoint* CreateLightPoint(const tString &asName="",const tString &asGobo="", bool abStatic=false);
@@ -607,6 +617,7 @@ namespace hpl {
 		IndexPool mPointLightPool{256};
 		IndexPool mSpotLightPool{256};
 		IndexPool mAreaLightPool{64};
+		IndexPool mDirectionalLightPool{4};
 
 		// Per-type slot pool for `apLight`'s type, or nullptr for light types not
 		// uploaded to the GPU (box lights). Centralizes the type→pool switch used by
@@ -623,6 +634,15 @@ namespace hpl {
 		size_t areaLightReserved = 0;
 		uint32_t mAreaLightCount = 0;
 		RISharedPointer<RIBuffer> mpAreaLightBuffer;
+		size_t directionalLightReserved = 0;
+		uint32_t mDirectionalLightCount = 0;
+		RISharedPointer<RIBuffer> mpDirectionalLightBuffer;
+		// Last uploaded power + grid reach per GPU slot (LightChange.h), per
+		// type, so each light can carry what it looked like the previous frame.
+		std::vector<GpuLightPrev> mvPrevPointLight;
+		std::vector<GpuLightPrev> mvPrevSpotLight;
+		std::vector<GpuLightPrev> mvPrevAreaLight;
+		std::vector<GpuLightPrev> mvPrevDirectionalLight;
 
 		tBillboardList mlstBillboards;
 		tBeamList mlstBeams;

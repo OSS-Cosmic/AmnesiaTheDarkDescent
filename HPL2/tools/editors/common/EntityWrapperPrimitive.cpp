@@ -35,7 +35,11 @@ iEntityWrapperTypePrimitive::iEntityWrapperTypePrimitive(const tString& asElemen
 
 	AddString(ePrimitiveStr_Material, "Material", "", ePropCopyStep_PreEnt);
 	AddBool(ePrimitiveBool_CastShadows, "CastShadows", false);
+	AddBool(ePrimitiveBool_TwoSidedShadow, "TwoSidedShadow", false);
 	AddBool(ePrimitiveBool_Collides, "Collides");
+#ifdef AMFP
+	AddBool(ePrimitiveBool_IsOccluder, "IsOccluder");
+#endif
 }
 
 //------------------------------------------------------------------------
@@ -70,9 +74,17 @@ bool iEntityWrapperPrimitive::GetProperty(int alPropID, bool& abX)
 	case ePrimitiveBool_CastShadows:
 		abX = GetCastShadows();
 		break;
+	case ePrimitiveBool_TwoSidedShadow:
+		abX = GetTwoSidedShadow();
+		break;
 	case ePrimitiveBool_Collides:
 		abX = GetCollides();
 		break;
+#ifdef AMFP
+	case ePrimitiveBool_IsOccluder:
+		abX = IsOccluder();
+		break;
+#endif
 	default:
 		return false;
 	}
@@ -108,9 +120,17 @@ bool iEntityWrapperPrimitive::SetProperty(int alPropID, const bool& abX)
 	case ePrimitiveBool_CastShadows:
 		SetCastShadows(abX);
 		break;
+	case ePrimitiveBool_TwoSidedShadow:
+		SetTwoSidedShadow(abX);
+		break;
 	case ePrimitiveBool_Collides:
 		SetCollides(abX);
 		break;
+#ifdef AMFP
+	case ePrimitiveBool_IsOccluder:
+		SetIsOccluder(abX);
+		break;
+#endif
 	default:
 		return false;
 	}
@@ -168,6 +188,17 @@ void iEntityWrapperPrimitive::SetCastShadows(bool abX)
 	if(mpEngineEntity)
 	{
 		((iEngineEntityMesh*)mpEngineEntity)->SetCastShadows(abX);
+	}
+}
+
+//------------------------------------------------------------------------
+
+void iEntityWrapperPrimitive::SetTwoSidedShadow(bool abX)
+{
+	mbTwoSidedShadow = abX;
+	if(mpEngineEntity)
+	{
+		((iEngineEntityMesh*)mpEngineEntity)->SetTwoSidedShadow(abX);
 	}
 }
 

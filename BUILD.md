@@ -12,7 +12,8 @@ Pick the path matching your host:
 | Linux (native)               | `./build-linux.sh` (native wrapper); or `premake5 gmake2`, then `make -C build-premake config=release -j"$(nproc)"` |
 | Windows (PowerShell)         | `.\build-windows.ps1`                                         |
 
-The wrappers default to a release build. Runtime output is placed under `build-premake/amnesia/<Debug|Release>/` (or the equivalent backslash-separated path on Windows).
+The wrappers default to a release build. TDD runtime output is placed under `build-premake/amnesia/<Debug|Release>/`
+(or the equivalent backslash-separated path on Windows). AMFP has a separate runtime tree described below.
 
 ## 1. Clone the repository
 
@@ -29,7 +30,7 @@ For an existing checkout:
 git submodule update --init --recursive
 ```
 
-## 2. Game assets (`deploy.sh` / `deploy.ps1`)
+## 2. TDD game assets (`deploy.sh` / `deploy.ps1`)
 
 [`deploy.sh`](deploy.sh) and [`deploy.ps1`](deploy.ps1) stage a self-contained run directory after a build: they copy the installed Amnesia: The Dark Descent assets into `build-premake/amnesia/Debug/` and `build-premake/amnesia/Release/` (whichever exist), then bring in the Redux resources from `amnesia/resources`. You need a legitimate copy of **Amnesia: The Dark Descent** (e.g. via Steam).
 
@@ -53,6 +54,61 @@ The native Windows equivalents are:
 - `--no-game-assets` — skip the install copy and refresh only the Redux resources
 
 Game assets skip names beginning with `Amnesia` and files ending in `.rar`, `.pdf`, `.dll`, or `.exe`; nothing is written into the game installation. Files the Redux step placed are listed in `<Config>/.redux_overlay_manifest`, and files no longer placed (deleted assets, or delta files after switching to `merge`) are removed on the next run.
+
+### AMFP product and deployment contract
+
+AMFP is generated as a separate product context with `--product=amfp`. The target is `AmnesiaAMFP`, and its
+default runtime output is isolated at `build-premake/amfp/Debug/` or `build-premake/amfp/Release/`; it must not
+be staged into the TDD `build-premake/amnesia/<Config>/` directory.
+
+The editors and tools (LevelEditor, ModelEditor, ParticleEditor, MaterialEditor, MshConverter) are also built
+against the AMFP engine (`HPL2_AMFP`, `-DAMFP`) as the `*_AMFP` projects and staged next to `AmnesiaAMFP` under
+the same executable names. `--with-tools=no` skips both the TDD and AMFP tool sets.
+
+Build it through the wrappers with the selector after `--`:
+
+```bash
+./build-linux-docker.sh release -- --product=amfp
+./build-linux.sh release -- --product=amfp
+```
+
+On Windows:
+
+```powershell
+.\build-windows.ps1 release --product=amfp
+```
+
+The direct equivalents are `premake5 gmake2 --product=amfp` and `premake5 vs2026 --product=amfp`, followed by
+the normal platform build command. The selector chooses the AMFP product context; it does not include retail
+data, and release archives do not include it either.
+
+An AMFP deployment must make all three inputs explicit:
+
+1. **Selector/output:** select AMFP with `--product amfp` and stage into `build-premake/amfp` so each configuration receives its own
+   `build-premake/amfp/<Config>/` directory.
+2. **Overlay:** pass the AMFP overlay directory explicitly with `--overlay <amfp-overlay>`. Never inherit the
+   TDD default `amnesia/resources` for AMFP.
+3. **Game directory:** pass `--game-dir <matching AMFP installation>`; the installed retail maps, entities,
+   sounds, scripts, configs, and other data are supplied by the user and are not copied from this repository or
+   a release archive.
+
+For the existing generic deployment wrappers, that contract is expressed as:
+
+```bash
+./deploy.sh --product amfp --overlay /path/to/amfp-overlay \
+    --game-dir "/path/to/Amnesia - A Machine for Pigs"
+```
+
+```powershell
+.\deploy.ps1 -Product amfp -Overlay C:\path\to\amfp-overlay `
+    -GameDir "C:\Games\Amnesia - A Machine for Pigs"
+```
+
+Launch `AmnesiaAMFP` / `AmnesiaAMFP.exe` from the staged AMFP runtime directory. The current repository does
+not provide retail AMFP data, does not currently commit an `amfp/resources` overlay, and does not claim a
+validated AMFP runtime deployment. When no AMFP overlay exists, pass `--resources none` (and optionally omit
+`--overlay`). The TDD deployment commands and defaults above remain unchanged: they target
+`build-premake/amnesia`, use `amnesia/resources`, and launch `Amnesia`.
 
 ## 3. Linux build (containerized or native)
 

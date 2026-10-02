@@ -17,6 +17,7 @@
 #   ./deploy.sh --game-dir "$HOME/.steam/steam/steamapps/common/Amnesia The Dark Descent"
 #   ./deploy.sh --product amfp --game-dir "/path/to/Amnesia A Machine for Pigs"
 #   ./deploy.sh --resources merge
+#   ./deploy.sh --product amfp --game-dir "/path/to/Amnesia A Machine for Pigs" --resources copy
 #   ./deploy.sh --config debug --no-game-assets     # refresh the Redux resources only
 #
 # Options:
@@ -26,7 +27,9 @@
 #                            AMFP requires this or $AMFP_GAME_DIRECTORY
 #                            (also $AMFP_GAME_DIR)
 #   --config <c>             release | debug | all (default: all that exist)
-#   --resources <mode>       copy (default) | merge | none
+#   --resources <mode>       copy | merge | none. Default: merge for AMFP (its
+#                            maps are edited in place, and the editors do not
+#                            apply deltas), copy for TDD
 #   --no-game-assets         Skip copying the game install
 #   --output <dir>           Parent of the <Config> dirs (default is product-specific)
 #   --overlay <dir>          Redux resources to deploy (default is product-specific)
@@ -38,13 +41,16 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 EDITOR_RESOURCES="$ROOT/HPL2/tools/resources"
+# AMFP editor class definitions (scripts/gen_amfp_editor_types.py), layered
+# over the shared TDD set for the AMFP product only.
+EDITOR_RESOURCES_AMFP="$ROOT/HPL2/tools/resources_amfp"
 MAPDELTA="$ROOT/scripts/mapdelta.py"
 MANIFEST_NAME=".redux_overlay_manifest"
 BACKUP_SUFFIX=".mapdelta-orig"
 
 GAME_DIR=""
 CONFIG="all"
-RESOURCES="copy"
+RESOURCES=""
 GAME_ASSETS=1
 PRODUCT="amnesia"
 OUTPUT=""
@@ -88,6 +94,9 @@ case "$CONFIG" in
     debug)   CONFIGS=(Debug) ;;
     *) echo "error: --config must be release, debug or all" >&2; exit 1 ;;
 esac
+if [[ -z "$RESOURCES" ]]; then
+    [[ "$PRODUCT" == "amfp" ]] && RESOURCES="merge" || RESOURCES="copy"
+fi
 case "$RESOURCES" in
     copy|merge|none) ;;
     *) echo "error: --resources must be copy, merge or none" >&2; exit 1 ;;
@@ -140,7 +149,8 @@ copy_game_assets() {
         -print0) |
     while IFS= read -r -d '' rel; do
         mkdir -p "$dest/$(dirname "$rel")"
-        cp -f "$GAME_DIR/$rel" "$dest/$rel"
+        # -p keeps shipped .msh caches from looking older than their .dae.
+        cp -pf "$GAME_DIR/$rel" "$dest/$rel"
     done
 }
 
@@ -200,7 +210,7 @@ deploy_resources() {
             exit 1
         }
         mkdir -p "$dest/$(dirname "$rel")"
-        cp -f "$OVERLAY/$rel" "$dest/$rel"
+        cp -pf "$OVERLAY/$rel" "$dest/$rel"
     done <<<"$placed"
 
     if [[ -n "$placed" ]]; then
@@ -226,6 +236,9 @@ for cfg in "${CONFIGS[@]}"; do
     if [[ -d "$EDITOR_RESOURCES" ]]; then
         echo "==> Deploying editor resources to $dest"
         cp -R "$EDITOR_RESOURCES/." "$dest/"
+        if [[ "$PRODUCT" == "amfp" && -d "$EDITOR_RESOURCES_AMFP" ]]; then
+            cp -R "$EDITOR_RESOURCES_AMFP/." "$dest/"
+        fi
     fi
     if [[ -n "$OVERLAY" ]]; then
         echo "==> $PRODUCT resources ($RESOURCES) -> $dest"

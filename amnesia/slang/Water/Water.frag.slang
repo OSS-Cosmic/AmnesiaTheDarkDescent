@@ -1,36 +1,10 @@
 /// Copyright 2023 Michael Pollind
 /// SPDX-License-Identifier: GPL-3.0
 //
-// Raster water surface — fragment stage. The underwater background is already
-// in the pogo (the composite-shaded scene behind the water, with NO refraction
-// bend applied to it). This pass adds the surface on top in TWO draws
-// (hardware blend can't tint-dst and add reflection in one):
-//   pass 0 (MUL blend): output surfaceTint·refractionExposure → dst *= that
-//                       (tints + lifts the refracted bottom, matching the old
-//                        surfaceTint · (refr·kWaterRefractionExposure)).
-//   pass 1 (ADD blend): wave normal + Fresnel·fade × a denoised half-resolution
-//                       reflection sampled from WaterReflectionPass before this draw
-//                       → dst += reflColor·fresnel.
-// Combined: surfaceTint·refr + reflColor·fresnel — the old water combine.
-//
-// The two draws are issued per mesh and INTERLEAVED (obj0 MUL, obj0 ADD, obj1
-// MUL, obj1 ADD, ...). That interleaving is required, not incidental. With the
-// surfaces drawn back-to-front it yields a correct nested over-composite; for
-// two surfaces the target ends up as
-//   bg·M0·M1 + A0·M1 + A1,   M_i = tint_i·exposure·visibility_i
-//                            A_i = refl_i·fresnel_i·visibility_i + fogColor_i
-// so the far surface's own reflection and fog colour are themselves tinted and
-// fogged by the near surface they are seen through. The pass is therefore
-// ORDER-DEPENDENT: the renderer sorts water meshes back-to-front before issuing
-// them (cHybridRenderer::Draw). Hoisting all MUL passes ahead of all ADD passes
-// would break this — the far surface's reflection and fog would come out
-// unattenuated by the near surface.
-//
-// Fog is not double-applied across overlapping surfaces: each surface
-// contributes its own fogColor exactly once, at its own layer. In the full-fog
-// limit every visibility_i → 0, so every M_i → 0 and each A_i → fogColor_i, and
-// the nesting telescopes to the nearest surface's fogColor — exactly fogColor,
-// for any number of surfaces.
+// Sorted water surfaces use two interleaved draws. The first tints the
+// background (MUL), or samples and tints a per-surface scene copy when
+// refractive (REPLACE). The second adds denoised ray-traced reflection and fog.
+// Each scene copy includes the preceding surfaces, including their reflections.
 
 #include "../HostDefinitions.h"
 #include "../Constants.h"
@@ -47,12 +21,15 @@ import Water.WaterReflectionSample;
 [vk::binding(0, 2)] Texture2D<float4> gWaterReflectionSpecular;
 [vk::binding(1, 2)] Texture2D<float4> gWaterReflectionGuidePosViewZ;
 [vk::binding(2, 2)] Texture2D<float4> gWaterReflectionGuideNormalWeight;
+[vk::binding(3, 2)] Texture2D<float4> sceneColorInput;
+[vk::binding(4, 2)] Texture2D<float> sceneDepthInput;
+[vk::binding(5, 2)] SamplerState sceneColorSampler;
 
 struct WaterPC
 {
     uint pass;   // 0 = tint (MUL), 1 = reflection (ADD), 2 = particle occlusion depth
     uint reflectionAvailable;
-    uint _p1;
+    uint refractive;
     uint _p2;
 };
 [vk::push_constant] WaterPC gPushConstants HPL_PUSH_CONSTANT_REGISTER;
@@ -93,6 +70,13 @@ float4 psMain(WaterVSOut psIn) : SV_TARGET
     // weakly-fogged the refracted background is.
     FogResult fog = computeFog(psIn.posW, gPerFrame.posW);
 
+    // Shared by refraction and reflection; derivatives were captured above.
+    float3 eye = normalize(psIn.posW - gPerFrame.posW);
+    WaterSurfaceFrame frame = waterSurfaceFrame(dpdx, dpdy, eye);
+    float3 waveN = waterWaveNormalWorld(water, psIn.uv,
+                                        dBaseUvDx, dBaseUvDy,
+                                        gPerFrame.afT, frame, eye);
+
     if (gPushConstants.pass == 0u)
     {
         // Tint (+ refraction-exposure lift) of the refracted background (MUL),
@@ -101,20 +85,28 @@ float4 psMain(WaterVSOut psIn) : SV_TARGET
         uint   diffuseTex = water.tex[0];
         if (diffuseTex != kInvalidTextureIndex)
             tint = sampleBindless2D(diffuseTex, psIn.uv).rgb;
-        return float4(tint * kWaterRefractionExposure * fog.visibility, 1.0f);
+        float3 multiplier = tint * kWaterRefractionExposure * fog.visibility;
+        if (gPushConstants.refractive != 0u)
+        {
+            float2 uv = psIn.posH.xy * gPerFrame.viewTexel;
+            float viewZ = max(abs(mul(gPerFrame.viewMat, float4(psIn.posW, 1.0f)).z), 1.0e-3f);
+            float2 distorted = uv + mul((float3x3)gPerFrame.viewMat, waveN).xy
+                                   * water.refractionScale / viewZ;
+            if (!all(isfinite(distorted)) || any(distorted < 0.0f) || any(distorted > 1.0f))
+                distorted = uv;
+            else
+            {
+                float sceneZ = sceneDepthInput.SampleLevel(sceneColorSampler, distorted, 0);
+                if (!isfinite(sceneZ) || sceneZ < psIn.posH.z - 1.0e-3f)
+                    distorted = uv;
+            }
+            return float4(sceneColorInput.SampleLevel(sceneColorSampler, distorted, 0).rgb
+                          * multiplier, 1.0f);
+        }
+        return float4(multiplier, 1.0f);
     }
 
-    // pass 1 — Fresnel-weighted lit reflection (ADD). The derivative inputs
-    // were captured before fog and pass control flow above.
-    // Category (a): this view vector is formed from the world position
-    // interpolated at the jittered full-resolution raster sample, not from a
-    // pixel-index ray reconstruction; the raster sample already carries the
-    // primary-sample alignment.
-    float3 eye  = normalize(psIn.posW - gPerFrame.posW); // camera -> surface
-    WaterSurfaceFrame frame = waterSurfaceFrame(dpdx, dpdy, eye);
-    float3 waveN = waterWaveNormalWorld(water, psIn.uv,
-                                        dBaseUvDx, dBaseUvDy,
-                                        gPerFrame.afT, frame, eye);
+    // pass 1 — Fresnel-weighted denoised reflection (ADD).
     float fresnel = waterFresnelTerm(water, eye, waveN);
 
     // Distance fade: fade the reflection out with view depth. Only when a real

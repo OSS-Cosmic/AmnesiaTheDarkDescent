@@ -1,0 +1,20 @@
+<EntDelta Version="1" Target="entities/lamp/reactor_wall_lamp/reactor_lamp.ent">
+    <Modify Category="Shapes" ID="36" Name="Shape_1">
+        <SetAttr RelativeScale="0.25 0.75 0.25" Scale="0.25 0.75 0.25" />
+    </Modify>
+    <Modify Category="Entities" ID="1" Name="PointLight_1">
+        <SetAttr Brightness="1" Falloff="1" RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="2" Name="SpotLight_1">
+        <SetAttr Brightness="1" Falloff="1" Re_FlickerOffIntensity="0" Re_Intensity="25" Re_SourceRadius="0.01" Rotation="-2.79744e-06 -1.5708 -2.41597e-06" />
+    </Modify>
+    <Modify Category="Entities" ID="20" Name="Billboard_16">
+        <SetAttr Rotation="-3.09121 -1.5708 1.51177" />
+    </Modify>
+    <Modify Category="Entities" ID="26" Name="Billboard_22">
+        <SetAttr Rotation="-0.255343 1.5708 -1.56263" />
+    </Modify>
+    <Modify Category="Entities" ID="27" Name="Billboard_23">
+        <SetAttr Rotation="-2.88521 1.5708 1.56261" />
+    </Modify>
+</EntDelta>

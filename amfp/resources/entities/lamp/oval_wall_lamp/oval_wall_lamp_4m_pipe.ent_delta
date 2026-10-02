@@ -1,0 +1,34 @@
+<EntDelta Version="1" Target="entities/lamp/oval_wall_lamp/oval_wall_lamp_4m_pipe.ent">
+    <SetVar Name="BreakActive" Value="false" />
+    <SetVar Name="BreakDestroyJoints" Value="false" />
+    <SetVar Name="BreakEntity" Value="" />
+    <SetVar Name="BreakEntityAlignBody" Value="" />
+    <SetVar Name="BreakImpulse" Value="4" />
+    <SetVar Name="BreakMinEnergy" Value="100" />
+    <SetVar Name="BreakParticleSystem" Value="" />
+    <SetVar Name="BreakSound" Value="" />
+    <SetVar Name="DissolveOnDestruction" Value="false" />
+    <SetVar Name="DissolveTime" Value="1.0" />
+    <SetVar Name="EffectsOffLightColor" Value="0 0 0 0" />
+    <SetVar Name="EffectsOffLightRadius" Value="-1" />
+    <SetVar Name="EffectsOffSound" Value="" />
+    <SetVar Name="EffectsOffTime" Value="1" />
+    <SetVar Name="EffectsOnSound" Value="" />
+    <SetVar Name="EffectsOnTime" Value="1" />
+    <SetVar Name="Health" Value="100" />
+    <SetVar Name="HitDamageAmount" Value="5" />
+    <SetVar Name="HitDamageStrength" Value="1" />
+    <SetVar Name="LifeLength" Value="0" />
+    <SetVar Name="MainPhysicsBody" Value="" />
+    <SetVar Name="MaxFocusDistance" Value="0" />
+    <SetVar Name="MinHitDamageSpeed" Value="3" />
+    <SetVar Name="RandomizeAnimationStart" Value="true" />
+    <SetVar Name="StaticMoveCheckCollision" Value="false" />
+    <SetVar Name="StaticMoveLoopSound" Value="" />
+    <SetVar Name="StaticMoveStartSound" Value="" />
+    <SetVar Name="StaticMoveStopSound" Value="" />
+    <SetVar Name="Toughness" Value="0" />
+    <Add Category="Entities">
+        <PointLight Name="PointLight_RT" WorldPos="0.0248642 0.213075 1.90735e-06" Rotation="0 -1.7053e-13 0" Scale="1 1 1" RendererMask="2" Tag="" Active="true" CastShadows="true" ShadowResolution="Low" ShadowsAffectStatic="true" ShadowsAffectDynamic="true" Radius="4" Brightness="1" Falloff="1" Re_Intensity="6" Re_Radius="4" Re_SourceRadius="0.04" FalloffMap="" Gobo="" GoboAnimMode="None" GoboAnimFrameTime="0" DiffuseColor="0.548 0.4 0.326 1" FlickerActive="false" FlickerOnMinLength="0" FlickerOnMaxLength="0" FlickerOnPS="" FlickerOnSound="" FlickerOffMinLength="0" FlickerOffMaxLength="0" FlickerOffPS="" FlickerOffSound="" FlickerOffColor="0 0 0 1" FlickerOffRadius="0" Re_FlickerOffIntensity="0" FlickerFade="false" FlickerOnFadeMinLength="0" FlickerOnFadeMaxLength="0" FlickerOffFadeMinLength="0" FlickerOffFadeMaxLength="0" />
+    </Add>
+</EntDelta>

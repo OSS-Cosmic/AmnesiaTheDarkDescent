@@ -235,6 +235,11 @@ void iEngineEntityMesh::SetCastShadows(bool abX)
 	((cMeshEntity*)mpEntity)->SetRenderFlagBit(eRenderableFlag_ShadowCaster,abX);
 }
 
+void iEngineEntityMesh::SetTwoSidedShadow(bool abX)
+{
+	((cMeshEntity*)mpEntity)->SetRenderFlagBit(eRenderableFlag_TwoSidedShadow,abX);
+}
+
 //-----------------------------------------------------------------------
 
 void iEngineEntityMesh::SetCoverage(float afX)

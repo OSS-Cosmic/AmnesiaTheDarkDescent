@@ -618,8 +618,9 @@ static bool BuildStandardLights(
       const float radius = light->GetRadius();
       // A light carries both tunings and resolves the Standard one here; the
       // renderer mask, not the class, decides whether it contributes. Area
-      // lights have no Standard tuning at all.
+      // and directional lights have no Standard tuning at all.
       const bool enabled = light->GetLightType() != eLightType_Area &&
+                           light->GetLightType() != eLightType_Directional &&
                            light->GetVisibleVar() &&
                            light->IsLegacyRendererEnabled() &&
                            StandardFinite(radius) && radius > 0.0f;
@@ -2021,6 +2022,7 @@ void cStandardRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
     int renderedLights = 0;
     for (iLight *light : *apWorld->GetLightList()) {
       if (light && light->GetLightType() != eLightType_Area &&
+          light->GetLightType() != eLightType_Directional &&
           light->GetVisibleVar() && light->IsLegacyRendererEnabled() &&
           (!apFrustum || apFrustum->CollideBoundingVolume(
                              light->GetBoundingVolume()) != eCollision_Outside))
@@ -2050,6 +2052,7 @@ void cStandardRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
       const bool point = light->GetLightType() == eLightType_Point;
       const float radius = light->GetRadius();
       if (light->GetLightType() == eLightType_Area ||
+          light->GetLightType() == eLightType_Directional ||
           !light->GetVisibleVar() || !light->IsLegacyRendererEnabled() ||
           !light->GetCastShadows() || light->GetShadowCastersAffected() == 0 ||
           !StandardFinite(radius) || radius <= 0.0f)

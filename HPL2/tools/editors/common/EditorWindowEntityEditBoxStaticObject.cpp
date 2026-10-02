@@ -85,6 +85,8 @@ void cEditorWindowEntityEditBoxStaticObject::Create()
 
 	mpInpCastShadows->SetPosition(vPos);
 	vPos.y += mpInpCastShadows->GetSize().y+5;
+	mpInpTwoSidedShadow->SetPosition(vPos);
+	vPos.y += mpInpTwoSidedShadow->GetSize().y+5;
 	mpInpCollides->SetPosition(vPos);
 }
 
@@ -99,6 +101,7 @@ void cEditorWindowEntityEditBoxStaticObject::Create()
 void cEditorWindowEntityEditBoxStaticObject::AddPropertySetStaticObject(cWidgetTab* apParentTab)
 {
 	mpInpCastShadows = CreateInputBool(0, _W("Cast shadows"), "", apParentTab);
+	mpInpTwoSidedShadow = CreateInputBool(0, _W("Two-sided shadow"), "", apParentTab);
 	mpInpCollides = CreateInputBool(0, _W("Collides"), "", apParentTab);
 }
 
@@ -121,6 +124,10 @@ bool cEditorWindowEntityEditBoxStaticObject::WindowSpecificInputCallback(iEditor
 	{
 		pAction = mpEntity->CreateSetPropertyActionBool( eStaticObjectBool_CastShadows, mpInpCastShadows->GetValue());
 	}
+	else if(apInput==mpInpTwoSidedShadow)
+	{
+		pAction = mpEntity->CreateSetPropertyActionBool( eStaticObjectBool_TwoSidedShadow, mpInpTwoSidedShadow->GetValue());
+	}
 	else if(apInput==mpInpCollides)
 	{
 		pAction = mpEntity->CreateSetPropertyActionBool( eStaticObjectBool_Collides, mpInpCollides->GetValue());
@@ -140,6 +147,7 @@ void cEditorWindowEntityEditBoxStaticObject::OnUpdate(float afTimeStep)
 	mpInpMeshFile->SetValue(cString::To16Char(mpEntity->GetFilename()), false);
 	mpInpMeshFile->GetInputWidget()->SetToolTip(mpEditor->GetPathRelToWD(mpInpMeshFile->GetFullPath()));
 	mpInpCastShadows->SetValue(mpEntity->GetCastShadows(), false);
+	mpInpTwoSidedShadow->SetValue(mpEntity->GetTwoSidedShadow(), false);
 	mpInpCollides->SetValue(mpEntity->GetCollides(), false);
 }
 

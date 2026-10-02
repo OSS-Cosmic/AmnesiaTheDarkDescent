@@ -9,6 +9,10 @@ local EDITORS = TOOLS .. "/editors"
 -- "editor/" as a resource dir -- so they must sit next to the built editor
 -- executables. Mirrors the CMake `install(DIRECTORY tools/resources/ ...)` hack.
 local RESOURCES = TOOLS .. "/resources"
+-- AMFP editor class definitions (scripts/gen_amfp_editor_types.py). Copied
+-- over RESOURCES for the AMFP product only: the shared EntityTypes.cfg /
+-- AreaTypes.cfg are TDD's, and the editors drop whatever those don't declare.
+local RESOURCES_AMFP = TOOLS .. "/resources_amfp"
 
 local function winpath(p) return (p:gsub("/", "\\")) end
 
@@ -65,11 +69,20 @@ local function tool_resources_postbuild(product)
             string.format('{MKDIR} "%s"', dest),
             string.format('cp -R "%s/." "%s/"', RESOURCES, dest),
         }
+        if product == "amfp" then
+            postbuildcommands { string.format('cp -R "%s/." "%s/"', RESOURCES_AMFP, dest) }
+        end
     filter "system:windows"
         postbuildcommands {
             string.format('xcopy /E /I /Y /Q "%s" "%s\\" >nul',
                 winpath(RESOURCES), winpath(dest)),
         }
+        if product == "amfp" then
+            postbuildcommands {
+                string.format('xcopy /E /I /Y /Q "%s" "%s\\" >nul',
+                    winpath(RESOURCES_AMFP), winpath(dest)),
+            }
+        end
     filter {}
 end
 
@@ -139,6 +152,7 @@ local leveleditor = {
     "EntityWrapperEntity.cpp", "EntityWrapperFogArea.cpp", "EntityWrapperLight.cpp",
     "EntityWrapperLightBox.cpp", "EntityWrapperLightPoint.cpp",
     "EntityWrapperLightSpot.cpp", "EntityWrapperLightArea.cpp",
+    "EntityWrapperLightDirectional.cpp",
     "EntityWrapperParticleSystem.cpp", "EntityWrapperPrimitive.cpp",
     "EntityWrapperPrimitivePlane.cpp", "EntityWrapperSound.cpp",
     "EntityWrapperStaticObject.cpp", "SphereCreator.cpp", "StdAfx.cpp",
@@ -211,7 +225,8 @@ local modeleditor = {
     "EntityWrapperJointScrew.cpp", "EntityWrapperJointSlider.cpp",
     "EntityWrapperLight.cpp", "EntityWrapperLightBox.cpp",
     "EntityWrapperLightPoint.cpp", "EntityWrapperLightSpot.cpp",
-    "EntityWrapperLightArea.cpp", "EntityWrapperParticleSystem.cpp",
+    "EntityWrapperLightArea.cpp", "EntityWrapperLightDirectional.cpp",
+    "EntityWrapperParticleSystem.cpp",
     "EntityWrapperSound.cpp", "EntityWrapperSubMesh.cpp", "SphereCreator.cpp",
     "StdAfx.cpp", "SurfacePicker.cpp",
     "ModelEditor.cpp", "ModelEditorActions.cpp", "ModelEditorLowerToolbar.cpp",

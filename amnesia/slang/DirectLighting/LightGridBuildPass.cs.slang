@@ -52,7 +52,7 @@
 
 import bindless;
 import SceneTypes;
-import Scene;                   // packLightId / kLightType*
+import Scene;                   // packLightId / kLightType* / LightChange.h helpers
 import ILight;                  // lightReachWindow (same window ILight.sample shades with)
 import PerFrame.resource;
 import Grid;                    // gridUnflattenCellIndex / sphereIntersectsGridCell
@@ -92,23 +92,49 @@ struct TopK
     }
 };
 
-// Cheap estimate of how much this light contributes anywhere in the cell, used
-// only to rank and to build the sampling pdf — it never scales radiance, so it
-// can be crude. Mirrors the shape of ILight.sample (windowed softened
-// inverse-square on the brightest channel) at the nearest point of the cell.
-// The source-radius term already prevents singularities. Using the centre or
-// flooring distance to the cell radius can zero lights that illuminate part
-// of the cell, even when there is room for them in the list.
-float cellLightWeight(float3 lightPos, float3 color, float intensity,
-                      float radius, float3 cellCenter)
+// How much of the cell's lighting moved since last frame (LightChange.h).
+// Summed over every light that reaches the cell, not just the kept top-K: a
+// light that switches on can enter the list and push one out in the same frame.
+struct CellChange
 {
+    float sumDelta;
+    float sumCur;
+    float sumPrev;
+
+    [mutating]
+    void init() { sumDelta = 0.f; sumCur = 0.f; sumPrev = 0.f; }
+
+    [mutating]
+    void add(float weight, float prevWeight)
+    {
+        sumDelta += abs(weight - prevWeight);
+        sumCur   += weight;
+        sumPrev  += prevWeight;
+    }
+
+    float fraction() { return lightChangeFraction(sumDelta, sumCur, sumPrev); }
+};
+
+// Cheap estimate of how much this light contributes anywhere in the cell, used
+// only to rank, to build the sampling pdf and to measure lighting change — it
+// never scales radiance, so it can be crude. Mirrors the shape of ILight.sample
+// (windowed softened inverse-square on the brightest channel) at the nearest
+// point of the cell. `power` is lightChangePower's brightest channel ×
+// intensity, so last frame's weight comes from the stamped prevPower /
+// prevRadius. The source-radius term already prevents singularities. Using the
+// centre or flooring distance to the cell radius can zero lights that
+// illuminate part of the cell, even when there is room for them in the list.
+float cellLightWeight(float3 lightPos, float power, float radius, float3 cellCenter)
+{
+    if (radius <= 0.f)
+        return 0.f;
     float3 delta = max(abs(lightPos - cellCenter) - kLightGridUnit * 0.5f,
                        float3(0.0f));
-    float d    = length(delta);
-    float maxC = max(color.x, max(color.y, color.z));
-    return maxC * intensity * lightReachWindow(d, radius)
-         / (d * d + kPointLightSourceRadiusSq);
+    float d = length(delta);
+    return power * lightReachWindow(d, radius) / (d * d + kPointLightSourceRadiusSq);
 }
+
+float lightMaxChannel(float3 c) { return max(c.x, max(c.y, c.z)); }
 
 [numthreads(64, 1, 1)]
 void binLights(uint3 dispatchThreadId: SV_DispatchThreadID)
@@ -131,26 +157,34 @@ void binLights(uint3 dispatchThreadId: SV_DispatchThreadID)
 
     TopK top;
     top.init();
+    CellChange change;
+    change.init();
 
     // Point lights — omnidirectional, reach sphere is exact.
     for (uint p = 0u; p < nPoint; ++p)
     {
         PointLight pl = gPointLights[p];
-        if (pl.radius <= 0.f)   // 0 ⇒ invisible / dim-to-skip / unused slot hole
+        // Radius 0 ⇒ invisible / dim-to-skip / unused slot hole. A light that
+        // was lit last frame is still visited so its loss counts as change.
+        float reach = max(pl.radius, pl.prevRadius);
+        if (reach <= 0.f)
             continue;
-        if (!sphereIntersectsGridCell(pl.position, pl.radius, cellPos, gridOrigin, kLightGridDim, kLightGridUnit))
+        if (!sphereIntersectsGridCell(pl.position, reach, cellPos, gridOrigin, kLightGridDim, kLightGridUnit))
             continue;
-        top.insert(packLightId(kLightTypePoint, p),
-                   cellLightWeight(pl.position, pl.color, pl.intensity, pl.radius, cellCenter));
+        float w = cellLightWeight(pl.position, lightMaxChannel(pl.color) * pl.intensity, pl.radius, cellCenter);
+        if (pl.radius > 0.f)
+            top.insert(packLightId(kLightTypePoint, p), w);
+        change.add(w, cellLightWeight(pl.position, pl.prevPower, pl.prevRadius, cellCenter));
     }
 
     // Spot lights — reach sphere + the shading path's angular footprint.
     for (uint s = 0u; s < nSpot; ++s)
     {
         SpotLight sl = gSpotLights[s];
-        if (sl.radius <= 0.f)
+        float reach = max(sl.radius, sl.prevRadius);
+        if (reach <= 0.f)
             continue;
-        if (!sphereIntersectsGridCell(sl.position, sl.radius, cellPos, gridOrigin, kLightGridDim, kLightGridUnit))
+        if (!sphereIntersectsGridCell(sl.position, reach, cellPos, gridOrigin, kLightGridDim, kLightGridUnit))
             continue;
         if (sl.goboTextureIndex != kInvalidTextureIndex)
         {
@@ -165,8 +199,10 @@ void binLights(uint3 dispatchThreadId: SV_DispatchThreadID)
         }
         // The conservative footprint test above owns angular rejection. A
         // centre-only cone weight would drop partially illuminated cells.
-        top.insert(packLightId(kLightTypeSpot, s),
-                   cellLightWeight(sl.position, sl.color, sl.intensity, sl.radius, cellCenter));
+        float w = cellLightWeight(sl.position, lightMaxChannel(sl.color) * sl.intensity, sl.radius, cellCenter);
+        if (sl.radius > 0.f)
+            top.insert(packLightId(kLightTypeSpot, s), w);
+        change.add(w, cellLightWeight(sl.position, sl.prevPower, sl.prevRadius, cellCenter));
     }
 
     // Area lights — planar emitters; the reach sphere is a conservative bound
@@ -174,15 +210,18 @@ void binLights(uint3 dispatchThreadId: SV_DispatchThreadID)
     for (uint a = 0u; a < nArea; ++a)
     {
         RectLight al = gAreaLights[a];
-        if (al.radius <= 0.f)
+        float reach = max(al.radius, al.prevRadius);
+        if (reach <= 0.f)
             continue;
-        if (!sphereIntersectsGridCell(al.position, al.radius, cellPos, gridOrigin, kLightGridDim, kLightGridUnit))
+        if (!sphereIntersectsGridCell(al.position, reach, cellPos, gridOrigin, kLightGridDim, kLightGridUnit))
             continue;
         // RectLight.sample divides intensity by the emitter area (UE semantics),
         // so rank on the same quantity or a large panel outranks everything.
         float area = max(al.width * al.height, 1.0e-4f);
-        top.insert(packLightId(kLightTypeArea, a),
-                   cellLightWeight(al.position, al.color, al.intensity / area, al.radius, cellCenter));
+        float w = cellLightWeight(al.position, lightMaxChannel(al.color) * al.intensity / area, al.radius, cellCenter);
+        if (al.radius > 0.f)
+            top.insert(packLightId(kLightTypeArea, a), w);
+        change.add(w, cellLightWeight(al.position, al.prevPower, al.prevRadius, cellCenter));
     }
 
     // Publish the list plus its running CDF. Entry k holds the sum over 0..k, so
@@ -197,5 +236,7 @@ void binLights(uint3 dispatchThreadId: SV_DispatchThreadID)
         gLightGridWeight[flat * kLightsPerCellMax + k] = running;
     }
 
-    gLightGridCount[flat] = top.count;          // every cell written → no host clear
+    // Every cell written → no host clear. The change fraction rides in the
+    // spare high bits; readers unpack through getCellLights.
+    gLightGridCount[flat] = lightGridPackCount(top.count, change.fraction());
 }

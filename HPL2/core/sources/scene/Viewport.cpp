@@ -1918,6 +1918,7 @@ void ReleaseViewportAttachmentTexture(RISharedPointer<RITexture> *tex,
 
 	void cViewport::AddGuiSet(cGuiSet *apSet)
 	{
+		assert(std::find(m_guiSets.begin(), m_guiSets.end(), apSet) == m_guiSets.end() && "cViewport::AddGuiSet called twice with the same set");
 		m_guiSets.push_back(apSet);
 	}
 	void cViewport::RemoveGuiSet(cGuiSet *apSet)

@@ -74,16 +74,18 @@ namespace hpl {
 		return amtxA;
 	}
 
+	// AMFP reads node translate/scale raw even for Z_UP files and fixes the axis
+	// later on the node hierarchy (CreateHierarchyNodes). AMFP content relies on
+	// it: plane_black's (2,2,1) node scale bakes to a 4x2 quad, not 4x4.
 	cVector3f cMeshLoaderCollada::GetVectorPosFromPtr(float *apVec)
 	{
+#ifndef AMFP
 		if(mbZToY)
 		{
 			return cVector3f(apVec[0],apVec[2],apVec[1]);
 		}
-		else
-		{
-			return cVector3f(apVec[0],apVec[1],apVec[2]);
-		}
+#endif
+		return cVector3f(apVec[0],apVec[1],apVec[2]);
 	}
 
 	cVector3f cMeshLoaderCollada::GetVectorRotationFromPtr(float *apVec)
@@ -93,14 +95,13 @@ namespace hpl {
 
 	cVector3f cMeshLoaderCollada::GetVectorScaleFromPtr(float *apVec)
 	{
+#ifndef AMFP
 		if(mbZToY)
 		{
 			return cVector3f(apVec[0],apVec[2],apVec[1]);
 		}
-		else
-		{
-			return cVector3f(apVec[0],apVec[1],apVec[2]);
-		}
+#endif
+		return cVector3f(apVec[0],apVec[1],apVec[2]);
 	}
 
 	//-----------------------------------------------------------------------

@@ -293,6 +293,15 @@ void cLuxMainMenu::OnEnterContainer(const tString& asOldContainer)
 	mpViewport->SetActive(true);
 	mpViewport->SetVisible(true);
 
+	// With no map the gameplay viewport must not stay up under the menu: it is
+	// left visible when the menu opens over a live map, and quitting destroys
+	// the map without leaving the menu container.
+	if(gpBase->mpMapHandler->MapIsLoaded()==false)
+	{
+		gpBase->mpMapHandler->GetViewport()->SetActive(false);
+		gpBase->mpMapHandler->GetViewport()->SetVisible(false);
+	}
+
 	
 //	gpBase->SetDrawOnLiveCursor(false);
 
@@ -1131,7 +1140,13 @@ void cLuxMainMenu::CreateBackground()
 	// A map is loaded; render the menu over the live gameplay viewport.
 	if(gpBase->mpMapHandler->MapIsLoaded())
 	{
-		gpBase->mpMapHandler->GetViewport()->AddGuiSet(mpGuiSet);
+		cViewport *pMapViewport = gpBase->mpMapHandler->GetViewport();
+		if(mpGuiSetHostViewport != pMapViewport)
+		{
+			if(mpGuiSetHostViewport) mpGuiSetHostViewport->RemoveGuiSet(mpGuiSet);
+			pMapViewport->AddGuiSet(mpGuiSet);
+			mpGuiSetHostViewport = pMapViewport;
+		}
 	}
 	////////////////////////////
 	// No map is loaded, create scene.
@@ -1202,11 +1217,13 @@ void cLuxMainMenu::DestroyBackground()
 		mpBgWorld = NULL;
 	}
 	///////////////////////////
-	//No background world is loaded. A loaded map uses the live map viewport.
-	else
+	//Menu shown over a live map: detach from the map viewport. Every quit path
+	//destroys the map before leaving the menu, so this must not depend on a map
+	//still being loaded.
+	if(mpGuiSetHostViewport)
 	{
-		if(gpBase->mpMapHandler->MapIsLoaded())
-			gpBase->mpMapHandler->GetViewport()->RemoveGuiSet(mpGuiSet);
+		mpGuiSetHostViewport->RemoveGuiSet(mpGuiSet);
+		mpGuiSetHostViewport = NULL;
 	}
 }
 

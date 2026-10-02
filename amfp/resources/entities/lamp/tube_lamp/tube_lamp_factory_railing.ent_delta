@@ -1,6 +1,4 @@
 <EntDelta Version="1" Target="entities/lamp/tube_lamp/tube_lamp_factory_railing.ent">
-    <RemoveVar Name="CanBeTurnedOff" />
-    <RemoveVar Name="NeedsTinderbox" />
     <Modify Category="Shapes" ID="19" Name="Shape_6">
         <SetAttr RelativeScale="0.06 1 0.06" Scale="0.06 1 0.06" />
     </Modify>
