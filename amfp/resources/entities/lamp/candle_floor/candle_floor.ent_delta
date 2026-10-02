@@ -1,0 +1,5 @@
+<EntDelta Version="1" Target="entities/lamp/candle_floor/candle_floor.ent">
+    <Modify Category="Entities" ID="9" Name="PointLight_1">
+        <SetAttr Brightness="1" Falloff="1" Re_FlickerOffIntensity="0" Re_Intensity="3" Re_SourceRadius="0.01" WorldPos="0 0.408701 -0.013216" />
+    </Modify>
+</EntDelta>

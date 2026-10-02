@@ -1,6 +1,4 @@
 <EntDelta Version="1" Target="entities/lamp/bonfire/bonfire.ent">
-    <RemoveVar Name="CanBeTurnedOff" />
-    <RemoveVar Name="NeedsTinderbox" />
     <Modify Category="Shapes" ID="4" Name="Shape_2">
         <SetAttr RelativeScale="0.5 0.11 0.5" Scale="0.5 0.11 0.5" />
     </Modify>
@@ -12,12 +10,8 @@
     </Modify>
     <Modify Category="Entities" ID="11" Name="PointLight_1">
         <SetAttr FalloffMap="" WorldPos="0.030591 0.561034 -0.00191402" />
-        <RemoveAttr Name="Brightness" />
-        <RemoveAttr Name="Falloff" />
     </Modify>
     <Modify Category="Entities" ID="14" Name="SpotLight_1">
         <SetAttr FalloffMap="" Rotation="2.85354 -1.5708 2.90969" />
-        <RemoveAttr Name="Brightness" />
-        <RemoveAttr Name="Falloff" />
     </Modify>
 </EntDelta>

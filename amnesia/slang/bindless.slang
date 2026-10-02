@@ -246,6 +246,9 @@ public RWStructuredBuffer<SpotLight> gSpotLights;
 [vk::binding(kBindingWorldAreaLights, kWorldSet)]
 public RWStructuredBuffer<RectLight> gAreaLights;
 
+[vk::binding(kBindingWorldDirectionalLights, kWorldSet)]
+public RWStructuredBuffer<DirectionalLight> gDirectionalLights;
+
 // -----------------------------------------------------------------------------
 // V-buffer. Written by VBufferPomBary.cs (fed by the raster VBufferRaster.3d
 // hit), consumed by the shading passes.
@@ -267,9 +270,8 @@ public RWStructuredBuffer<RectLight> gAreaLights;
 [vk::binding(kBindingPackedHitInfo, 1)]
 public RWTexture2D<uint4> gPackedHitInfo;
 
-// (Per-bounce refraction/reflection V-buffers removed: water refraction now
-// clobbers gPackedHitInfo like glass, and water reflection moved to the raster
-// water pass.)
+// Primary refraction is composed from scene-color copies in the forward
+// glass/water passes. It does not change packed visibility or raster velocity.
 
 // Scene depth (opaque geometry) — depth-aspect SRV of the main depth buffer.
 // Bound per-frame on set 1 by the particle pass for the soft-particle fade.

@@ -1,0 +1,8 @@
+<EntDelta Version="1" Target="entities/lamp/engineroom_lamp/engineroom_lamp.ent">
+    <Modify Category="Entities" ID="3" Name="PointLight_1">
+        <SetAttr FalloffMap="" Re_FlickerOffIntensity="18" Re_Intensity="20" Re_SourceRadius="0.01" />
+    </Modify>
+    <Modify Category="Entities" ID="4" Name="SpotLight_1">
+        <SetAttr FalloffMap="" RendererMask="1" />
+    </Modify>
+</EntDelta>

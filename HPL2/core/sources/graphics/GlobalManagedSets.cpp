@@ -505,7 +505,10 @@ GlobalManagedSets::submitMaterial(cGraphics::FrameContext *cntx, cMaterial *mat,
                                              : 0) |
               (data.m_diffuseIsMask ? kMaterialFlagDiffuseIsMask : 0) |
               (data.m_smoothHalo ? kMaterialFlagSmoothHalo : 0) |
-              (data.m_litDiffuse ? kMaterialFlagLitDiffuse : 0);
+              (data.m_litDiffuse ? kMaterialFlagLitDiffuse : 0) |
+              ((static_cast<uint32_t>(mat->GetBlendMode()) &
+                kMaterialBlendModeMask)
+               << kMaterialBlendModeShift);
           TranslucentMaterial trans = {};
           trans.type = MATERIAL_TYPE_TRANSLUCENT;
           copyShared(trans);
@@ -520,12 +523,8 @@ GlobalManagedSets::submitMaterial(cGraphics::FrameContext *cntx, cMaterial *mat,
           trans.litDiffuseScale = data.m_litDiffuseScale;
           std::memcpy(blob.data, &trans, sizeof(trans));
         } else if constexpr (std::is_same_v<T, MaterialWater>) {
-          // Water is flagged as always refracting + reflecting. Reflection is
-          // real (Water.frag traces it with an inline RayQuery); refraction is
-          // not — no refraction pass runs, so the background under the water
-          // surface is the unrefracted composite. The HasRefraction flag is
-          // kept because the CPU side reads it (e.g. TLAS instance gathering in
-          // cWorld) and it stays correct once a refraction pass lands.
+          // Water always refracts in the raster pass. HasRefraction also
+          // admits it into the TLAS for secondary path-traced transmission.
           gpu.materialConfig |=
               kMaterialFlagIsWater | kMaterialFlagHasRefraction;
           WaterMaterial water = {};

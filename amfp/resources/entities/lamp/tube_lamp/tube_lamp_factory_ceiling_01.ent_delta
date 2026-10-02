@@ -1,6 +1,4 @@
 <EntDelta Version="1" Target="entities/lamp/tube_lamp/tube_lamp_factory_ceiling_01.ent">
-    <RemoveVar Name="CanBeTurnedOff" />
-    <RemoveVar Name="NeedsTinderbox" />
     <Modify Category="Shapes" ID="16" Name="Shape_3">
         <SetAttr RelativeRotation="-3.14159 -1.5708 -3.14159" Rotation="-3.14159 -1.5708 -3.14159" />
     </Modify>

@@ -727,6 +727,7 @@ namespace hpl {
 			binBuff.GetString(&sName);
 			binBuff.GetString(&sMaterial);
 			bool bCastShadows = binBuff.GetBool();
+			bool bTwoSidedShadow = binBuff.GetBool();
 
 			if(gbLogCacheLoad) Log("Mesh %d: '%s' '%s'\n", mesh, sName.c_str(), sMaterial.c_str());
 
@@ -852,6 +853,7 @@ namespace hpl {
 			//Create mesh entity
             cMeshEntity *pMeshEntity = mpCurrentWorld->CreateMeshEntity(sName, pMesh, true);	
 			pMeshEntity->SetRenderFlagBit(eRenderableFlag_ShadowCaster, bCastShadows);
+			pMeshEntity->SetRenderFlagBit(eRenderableFlag_TwoSidedShadow, bTwoSidedShadow);
 		}
 
 
@@ -948,6 +950,7 @@ namespace hpl {
 			binBuff.AddString(pEntity->GetName());
 			binBuff.AddString(pSubMesh->GetMaterialName());
 			binBuff.AddBool(pSubEnt->GetRenderFlagBit(eRenderableFlag_ShadowCaster));
+			binBuff.AddBool(pSubEnt->GetRenderFlagBit(eRenderableFlag_TwoSidedShadow));
 
 			
 			////////////////////////////
@@ -1247,6 +1250,13 @@ namespace hpl {
 			return	apObjectDataA->GetRenderFlagBit(eRenderableFlag_ShadowCaster) <
 					apObjectDataB->GetRenderFlagBit(eRenderableFlag_ShadowCaster);
 		}
+		//Two-sided shadow check
+		if(	apObjectDataA->GetRenderFlagBit(eRenderableFlag_TwoSidedShadow) !=
+			apObjectDataB->GetRenderFlagBit(eRenderableFlag_TwoSidedShadow))
+		{
+			return	apObjectDataA->GetRenderFlagBit(eRenderableFlag_TwoSidedShadow) <
+					apObjectDataB->GetRenderFlagBit(eRenderableFlag_TwoSidedShadow);
+		}
 		//Material check
 		if( apObjectDataA->GetMaterial() != apObjectDataB->GetMaterial())
 		{
@@ -1401,6 +1411,7 @@ namespace hpl {
 				//Check if next object is not part of sequence, if so combine current sequence.
 				if(	pNextObject->GetMaterial() != pMeshObject->GetMaterial() ||
 					pNextObject->GetRenderFlagBit(eRenderableFlag_ShadowCaster) != pMeshObject->GetRenderFlagBit(eRenderableFlag_ShadowCaster) ||
+					pNextObject->GetRenderFlagBit(eRenderableFlag_TwoSidedShadow) != pMeshObject->GetRenderFlagBit(eRenderableFlag_TwoSidedShadow) ||
 					pNextObjectUserData->mbCombine == false)
 				{
 					CombineObjectsAndCreateMeshEntity(vMeshObjects, lFirstInSequence, (int) i);
@@ -1629,6 +1640,7 @@ namespace hpl {
 		
 		//Set up variables
 		pMeshEntity->SetRenderFlagBit(eRenderableFlag_ShadowCaster, pFirstObject->GetRenderFlagBit(eRenderableFlag_ShadowCaster));
+		pMeshEntity->SetRenderFlagBit(eRenderableFlag_TwoSidedShadow, pFirstObject->GetRenderFlagBit(eRenderableFlag_TwoSidedShadow));
 
 		//Add to list
 		mlstStaticMeshEntities.push_back(pMeshEntity);
@@ -1806,6 +1818,7 @@ namespace hpl {
 
 		bool bCollides = GetAttributeBool(apElement, "Collides", true);
 		bool bCastsShadows = GetAttributeBool(apElement, "CastShadows", true);
+		bool bTwoSidedShadow = GetAttributeBool(apElement, "TwoSidedShadow", false);
 
 		int lID = GetAttributeInt(apElement, "ID",-1);
 
@@ -1836,6 +1849,7 @@ namespace hpl {
 														mpResources->GetMeshManager(), 
 														mpResources->GetAnimationManager()) );
 		pMeshEntity->SetRenderFlagBit(eRenderableFlag_ShadowCaster, bCastsShadows);
+		pMeshEntity->SetRenderFlagBit(eRenderableFlag_TwoSidedShadow, bTwoSidedShadow);
 		pMeshEntity->SetUniqueID(lID);
 
 		alstMeshEntities.push_back(pMeshEntity);
@@ -2072,6 +2086,7 @@ namespace hpl {
 		tString sMaterial = GetAttributeString(apElement, "Material");
 		tString sMaterialName = sMaterial;
 		bool bCastsShadows = GetAttributeBool(apElement, "CastShadows", true);
+		bool bTwoSidedShadow = GetAttributeBool(apElement, "TwoSidedShadow", false);
 		bool bCollides = GetAttributeBool(apElement, "Collides", true);
 		int lID = GetAttributeInt(apElement, "ID",-1);
 
@@ -2117,6 +2132,7 @@ namespace hpl {
 												mpResources->GetMeshManager(), 
 												mpResources->GetAnimationManager()) );
 			pMeshEntity->SetRenderFlagBit(eRenderableFlag_ShadowCaster, bCastsShadows);
+			pMeshEntity->SetRenderFlagBit(eRenderableFlag_TwoSidedShadow, bTwoSidedShadow);
 			pMeshEntity->GetSubMeshEntity(0)->GetSubMesh()->SetMaterialName(sMaterialName);
 		}
 

@@ -315,6 +315,11 @@ public:
     RISharedPointer<RITexture> forwardBlendBase[RI_MAX_SWAPCHAIN_IMAGES];
     RISharedPointer<RITextureView> forwardBlendBaseView[RI_MAX_SWAPCHAIN_IMAGES];
 
+    // Reused by glass and water; copied immediately before refractive draws.
+    RISharedPointer<RITexture> refractionSceneCopy[RI_MAX_SWAPCHAIN_IMAGES];
+    RISharedPointer<RITextureView> refractionSceneCopyView[RI_MAX_SWAPCHAIN_IMAGES];
+    bool refractionSceneCopyInitialized[RI_MAX_SWAPCHAIN_IMAGES] = {};
+
     // Lazy full-resolution nearest water view-depth, used only by particles.
 
     RISharedPointer<RITexture> visibilityTexture[RI_MAX_SWAPCHAIN_IMAGES];
@@ -363,6 +368,11 @@ public:
     RISharedPointer<RITextureView> directKeyView[2];
     uint32_t directLightingIndex = 0;
     bool directLightingInit = false;
+    // Per-pixel NRD history confidence from the light grid's change fraction
+    // (LightChange.h), written by DirectLightingPass and read by both NRD
+    // instances in the same frame. Shares directLightingInit.
+    RISharedPointer<RITexture> lightConfidenceTexture;
+    RISharedPointer<RITextureView> lightConfidenceView;
 
     // Path tracer output, consumed by NrdPack in the same frame. NRD owns all
     // denoiser history, so none of these ping-pong any more and none is

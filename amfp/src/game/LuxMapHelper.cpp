@@ -25,6 +25,7 @@
 
 #include "LuxPlayer.h"
 #include "LuxPlayerHelpers.h"
+#include "scene/LightDirectional.h"
 
 //-----------------------------------------------------------------------
 
@@ -579,6 +580,10 @@ float cLuxMapHelper::GetLightLevelAtPos(const cVector3f& avPos, std::vector<iLig
 		case eLightType_Box:
 			bAdd = true;
 			break;
+		case eLightType_Directional:
+			// Reaches everywhere; occlusion is checked below.
+			bAdd = true;
+			break;
 		}
 
 		if(bAdd) lstIntersectingLights.push_back(pLight);
@@ -609,6 +614,19 @@ float cLuxMapHelper::GetLightLevelAtPos(const cVector3f& avPos, std::vector<iLig
 		}
 
 		
+		///////////////////////////
+		//Directional light: lit unless something blocks the way to the sky.
+		//No falloff, so only the colour counts.
+		if(pLight->GetLightType() == eLightType_Directional)
+		{
+			cLightDirectional *pSun = static_cast<cLightDirectional*>(pLight);
+			const cVector3f vToSun = pSun->GetDirection() * -cLightDirectional::GetReach();
+			if(pLight->GetCastShadows() && CheckLineOfSight(avPos + vToSun, avPos, true)==false)
+				continue;
+			fLightLevel += GetMaxRGB(pLight->GetDiffuseColor());
+			continue;
+		}
+
 		///////////////////////////
 		//Box light
 		if(pLight->GetLightType() == eLightType_Box)

@@ -1,0 +1,8 @@
+<EntDelta Version="1" Target="entities/lamp/bonfire/bonfire_spraylock.ent">
+    <Modify Category="Entities" ID="2" Name="PointLight_1">
+        <SetAttr Brightness="1" Falloff="1" Re_FlickerOffIntensity="0" Re_Intensity="1.5" Re_SourceRadius="0" />
+    </Modify>
+    <Modify Category="Entities" ID="4" Name="PointLight_2">
+        <SetAttr Brightness="1" Falloff="1" RendererMask="1" />
+    </Modify>
+</EntDelta>

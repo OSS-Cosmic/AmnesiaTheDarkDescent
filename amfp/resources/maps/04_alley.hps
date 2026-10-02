@@ -1,0 +1,2220 @@
+//***Filename: 04_ALLEY.HPS
+//***Author: Peter Howell
+//***Lines: 1949
+//***Updated: 21/01/2013
+
+										////////////////////////////////
+										//MAP INITIALISATION FUNCTIONS//
+										////////////////////////////////
+						
+void OnStart()
+{
+	SetSwingDoorDisableAutoClose("factory_gate_3", true);
+	SetSwingDoorClosed("factory_gate_3", false, false);
+	SetSwingDoorDisableAutoClose("factory_gate_2", true);
+	
+	//Map Preamble
+	{
+		SetMapDisplayNameEntry("Alley");
+		//SET CHECKPOINT #1//
+		CheckPoint("CP01_Start", "MainStart", "", "", "", false);
+		//CLEAR OLD HINTS//
+		//RemoveAllHints();
+	}
+	
+	//Debugging
+		if(ScriptDebugOn()) 
+		{
+			GiveItemFromFile("lantern", "lantern.ent");		
+			//SetEntityActive("CanisterEmpty_2", true);
+		}
+		
+	// Setup Local Variables
+		{
+			SetLocalVarInt("Mask1MaySpawn", 0);
+			SetLocalVarInt("Mask1Active", 0);
+			SetLocalVarInt("Mask2AActive", 0);
+			SetLocalVarInt("Mask2BActive", 0);
+			SetLocalVarInt("corridorwindareabool", 0);
+			SetLocalVarInt("pigfeetduststeptracker", 0);
+			SetLocalVarInt("PumpFuelLevel", 8);
+			SetLocalVarInt("PumpValveBottomDisabled", 0);
+			SetLocalVarInt("PumpValveTopDisabled", 1);
+			SetLocalVarInt("FuelFittedToTruck", 0);
+		}
+	
+	//AutoRun Event Timers
+		{
+			// AddTimer("ConveyorLoop1", 0.01f, "ConveyorLoop1");
+		}
+		
+	//Setup Initial Entity Callbacks
+		{
+			//COLLISION CALLBACKS//
+			AddEntityCollideCallback("Player", "PigSongTrigger", "PigSongTrigger", true, 1);
+			AddEntityCollideCallback("spectacles_*", "HitchcockCollisionDetector", "DoHitchcockZoom", true, 1);
+			AddEntityCollideCallback("false_teeth_*", "HitchcockCollisionDetector", "DoHitchcockZoom", true, 1);
+			AddEntityCollideCallback("Player", "MusicStopTriggerOffices", "MusicStopTriggerOffices", true, 1);
+			AddEntityCollideCallback("Player", "OfficeParticleTrigger_1", "OfficeParticleTrigger_1", true, 1);
+			AddEntityCollideCallback("Player", "alley_moon_trigger", "AlleyMoonPosition", true, 1);
+			AddEntityCollideCallback("Player", "alley_moon_trigger_1", "AlleyMoonPosition", true, 1);
+			//Moon light follows the moon billboard swap (ray-traced renderer only)
+			SetLightVisible("DirectionalLight_2", false);
+			AddEntityCollideCallback("Player", "CrateInteractionOffTrigger", "CrateInteractionUpdater", false, 1);
+			AddEntityCollideCallback("Player", "CrateInteractionOnTrigger", "CrateInteractionUpdater", false, 1);
+			AddEntityCollideCallback("Player", "AMBAreaWindowWind", "CorridorWindBooleanChecker", false, 0);
+			AddEntityCollideCallback("Player", "ChurchStingerTrigger", "ChurchSoundStinger", true, 1);
+			AddEntityCollideCallback("Player", "OneShotSFXTrigger1", "OneShotSFXEvents", true, 1);
+			AddEntityCollideCallback("Player", "OneShotSFXTrigger2", "OneShotSFXEvents", true, 1);
+			AddEntityCollideCallback("Player", "OneShotSFXTrigger3", "OneShotSFXEvents", true, 1);
+			AddEntityCollideCallback("WalkwayPig", "PigDustTrigger1", "WalkwayPigDustDrops", true, 1);
+			AddEntityCollideCallback("WalkwayPig", "PigDustTrigger2", "WalkwayPigDustDrops", true, 1);
+			AddEntityCollideCallback("WalkwayPig", "PigDustTrigger3", "WalkwayPigDustDrops", true, 1);
+			AddEntityCollideCallback("WalkwayPig", "PigDustTrigger4", "WalkwayPigDustDrops", true, 1);
+			AddEntityCollideCallback("WalkwayPig", "PigDustTrigger5", "WalkwayPigDustDrops", true, 1);
+			AddEntityCollideCallback("WalkwayPig", "PigDustTrigger6", "WalkwayPigDustDrops", true, 1);
+			AddEntityCollideCallback("WalkwayPig", "PigDustTrigger7", "WalkwayPigDustDrops", true, 1);
+			AddEntityCollideCallback("WalkwayPig", "PigKillTrigger", "KillWalkwayPig", true, 1);
+			AddEntityCollideCallback("Player", "PigTwitchTrigger", "PigTwitchEvent", true, 1);
+			AddEntityCollideCallback("Player", "WretchEventTestTrigger", "WretchFactoryEventPart2", true, 1);
+			AddEntityCollideCallback("Player", "StoreLaughTrigger", "StoreLaughEvent", true, 1);
+			AddEntityCollideCallback("Player", "StorePigTrigger", "StorePigSequence", true, 1);
+			AddEntityCollideCallback("StoreRoomPig", "KillStoreRoomPig", "StorePigSequence", true, 1);
+			AddEntityCollideCallback("Player", "Mask2ASpawnTrigger", "Mask2ASpawner", true, 1);
+			AddEntityCollideCallback("CanisterEmpty_*", "CanisterMusicTrigger", "CanisterMusic", true, 1);
+			AddEntityCollideCallback("CanisterEmpty_*", "PumpCollider", "PumpCanisterHandler", false, 0);
+			AddEntityCollideCallback("PumpValve", "PumpValveColliderBottom", "PumpValveHandler", false, 1);
+			AddEntityCollideCallback("PumpValve", "PumpValveColliderTop", "PumpValveHandler", false, 1);
+			AddEntityCollideCallback("PumpValve", "PumpValveTriggerDisableTop", "PumpValveHandler", false, 1);
+			AddEntityCollideCallback("PumpValve", "PumpValveTriggerDisableBottom", "PumpValveHandler", false, 1);
+			AddEntityCollideCallback("CanisterFull_*", "TruckCollider", "TruckCanisterHandler", false, 1);
+			AddEntityCollideCallback("Player", "GraveyardEventTrigger", "GraveyardEvents", true, 1);
+			AddEntityCollideCallback("Player", "FactoryMusicTrigger", "FactoryMusicTrigger", true, 1);
+			AddEntityCollideCallback("Player", "Alley_Exit_Music_Trigger", "ExitMusicTrigger", true, 1);
+			AddEntityCollideCallback("Player", "Child1RunTrigger", "ChildEventHandler", true, 1); 
+			AddEntityCollideCallback("Child1", "Child1KillTrigger", "ChildEventHandler", true, 1);
+			AddEntityCollideCallback("Player", "Child2RunTrigger", "ChildEventHandler", true, 1); 
+			AddEntityCollideCallback("Child2", "Child2KillTrigger", "ChildEventHandler", true, 1);
+			AddEntityCollideCallback("Player", "Child3RunTrigger", "ChildEventHandler", true, 1);
+			AddEntityCollideCallback("Child3", "Child3KillTrigger", "ChildEventHandler", true, 1);
+			AddEntityCollideCallback("Child4", "Child4KillTrigger", "ChildEventHandler", true, 1);
+			AddEntityCollideCallback("Player", "Conveyor_Event_Trigger", "Conveyor_Event", false, 0);
+			AddEntityCollideCallback("Conveyor_Cage_1", "Conveyor_Cage_1_Kill_Trigger", "Conveyor_Cage_1_Kill", false, 1);
+			AddEntityCollideCallback("Conveyor_Cage_1", "Conveyor_Cage_1_Spawn_Trigger", "Conveyor_Cage_1_Spawn2", false, 1);
+			AddEntityCollideCallback("Conveyor_Cage_2", "Conveyor_Cage_2_Kill_Trigger", "Conveyor_Cage_2_Kill", false, 1);
+			AddEntityCollideCallback("Conveyor_Cage_2", "Conveyor_Cage_2_Spawn_Trigger", "Conveyor_Cage_2_Spawn3", false, 1);
+			AddEntityCollideCallback("Conveyor_Cage_3", "Conveyor_Cage_3_Kill_Trigger", "Conveyor_Cage_3_Kill", false, 1);
+			AddEntityCollideCallback("Conveyor_Cage_3", "Conveyor_Cage_3_Spawn_Trigger", "Conveyor_Cage_3_Spawn4", false, 1);
+			AddEntityCollideCallback("Conveyor_Cage_4", "Conveyor_Cage_4_Kill_Trigger", "Conveyor_Cage_4_Kill", false, 1);
+			AddEntityCollideCallback("Conveyor_Cage_4", "Conveyor_Cage_4_Spawn_Trigger", "Conveyor_Cage_4_Spawn5", false, 1);	
+			AddEntityCollideCallback("Conveyor_Cage_2", "Conveyor_Cage_2_Lantern_Trigger", "Conveyor_Cage_2_Lantern", false, 0);
+			AddEntityCollideCallback("Conveyor_Cage_5", "Conveyor_Cage_5_Kill_Trigger", "Conveyor_Cage_5_Kill", false, 1);
+			AddEntityCollideCallback("Conveyor_Cage_5", "Conveyor_Cage_5_Spawn_Trigger", "Conveyor_Cage_5_Spawn6", false, 1);
+			AddEntityCollideCallback("Conveyor_Cage_6", "Conveyor_Cage_6_Kill_Trigger", "Conveyor_Cage_6_Kill", false, 1);
+			AddEntityCollideCallback("Conveyor_Cage_6", "Conveyor_Cage_6_Spawn_Trigger", "Conveyor_Cage_6_Spawn1", false, 1);
+			AddEntityCollideCallback("Player", "EnteredOfficesTrigger", "HintHandler", true, 1);
+			AddEntityCollideCallback("Player", "PumpPlayerTracker", "HintHandler", true, 1);
+			AddEntityCollideCallback("Player", "CarHintTrigger", "HintHandler", true, 1);
+			
+			//LOOKAT CALLBACKS//
+			SetEntityPlayerLookAtCallback("Mask1LookTarget", "Mask1LookTracker", false);
+			
+			//WAREHOUSE SOUNDS
+			AddEntityCollideCallback("Player", "RandWarehouseSound_Start_1", "RandomWarehouseSound", true, 0);
+			AddEntityCollideCallback("Player", "RandWarehouseSound_Start_2", "RandomWarehouseSound", true, 0);
+			AddEntityCollideCallback("Player", "RandWarehouseSound_Start_3", "RandomWarehouseSound", true, 0);
+			
+			//WIND SOUNDS
+			AddEntityCollideCallback("Player", "RandomWindStart_1", "RandomWindSound", true, 1);
+			AddEntityCollideCallback("Player", "RandomWindStart_2", "RandomWindSound", true, 1);
+			
+			//INTERACTION CALLBACKS//
+			SetEntityPlayerInteractCallback("CanisterFull_*", "FullCanisterSounds", false);	
+			SetEntityPlayerInteractCallback("Level_Transition_Door", "Level_Transition_Music", false);
+			SetEntityPlayerInteractCallback("CanisterEmpty_*", "CanisterHint", true);
+			
+			//STATE CHANGE CALLBACKS//
+			SetEntityConnectionStateChangeCallback("TruckBackfireHandleInit", "TruckBackfireEvent");
+			
+			//PHONE//
+			AddEntityCollideCallback("Player", "OfficePhoneTrigger", "OfficePhoneTimer", true, 1);
+			AddEntityCollideCallback("Player", "OfficePhoneRingingStop", "OfficePhoneRingingStop", true, 1);
+		}
+		
+	//Setup Initial Object States
+		{
+			//ATTACHMENTS//
+			AddAttachedPropToProp("TruckBackfire", "TruckBackfireLights", "truck_lights_flicker.ent", 0.0f, -1.8f, -5.0f, 0.0f, 0.0f, 0.0f);
+			//ANIMATION STATES//
+			PlayPropAnimation("fuel_pump_1", "full", 0.0f, true, "");
+			PlayPropAnimation("fuel_pump_2", "empty", 0.0f, true, "");
+			PlayPropAnimation("clock_grandfather_2", "on", 0.0f, true, "");
+			
+			//INTERACTION//
+			SetEntityInteractionDisabled("cellar_wood01_6", true);
+			
+			//Conveyor wretch
+			AddAttachedPropToProp("Conveyor_Cage_2", "Conveyor_Wretch", "wretch_actor", -0.2, -0.65, -0.35, 0, 0, 0);
+		}
+		
+	//Setup Ambience Callbacks
+		{
+			AddEntityCollideCallback("Player", "AMBAnnex", "MapAmbienceAreas", false, 0);
+			AddEntityCollideCallback("Player", "AMBAnnex_1", "MapAmbienceAreas", false, 0);
+			AddEntityCollideCallback("Player", "AMBOffices", "MapAmbienceAreas", false, 0);
+			AddEntityCollideCallback("Player", "AMBAreaAlleyOutside1", "MapAmbienceAreas", false, 0);
+			AddEntityCollideCallback("Player", "AMBAreaAlleyOutside2", "MapAmbienceAreas", false, 0);
+			AddEntityCollideCallback("Player", "AMBAreaAlleyOutside3", "MapAmbienceAreas", false, 0);
+			AddEntityCollideCallback("Player", "AMBAreaLoadingAreaSmall", "MapAmbienceAreas", false, 0);
+			AddEntityCollideCallback("Player", "AMBAreaFactoryLoading", "MapAmbienceAreas", false, 0);
+			AddEntityCollideCallback("Player", "AMBAreaDoorRattle", "MapAmbienceAreas", false, 0);
+			AddEntityCollideCallback("Player", "AMBAreaDoorRattle2", "MapAmbienceAreas", false, 0);
+			AddEntityCollideCallback("factory_window_1", "WindowCollisionArea", "MapAmbienceAreas", false, 0);
+			AddEntityCollideCallback("Player", "AMBAreaLoadingArea_Mach_Pt1", "MapAmbienceAreas", false, 0); 
+			AddEntityCollideCallback("Player", "AMBAreaLoadingArea_Mach_Pt1_2", "MapAmbienceAreas", false, 0); 
+			AddEntityCollideCallback("Player", "AMBAreaLoadingArea_Mach_Mid", "MapAmbienceAreas", false, 0); 
+			AddEntityCollideCallback("Player", "AMBAreaLoadingArea_Mach_Mid_1", "MapAmbienceAreas", false, 0); 
+			AddEntityCollideCallback("Player", "AMBAreaLoadingArea_Machine", "MapAmbienceAreas", false, 0);
+			SetEntityInteractionDisabled("MusicPhono", true);
+			
+			//WIND SAMPLES
+			AddEntityCollideCallback("OfficeDoor_3", "Sound_WindSpot_1", "Sound_WindSpot_1", false, 0);
+			AddEntityCollideCallback("factory_corridor_01_door_2", "Sound_WindSpot_2", "Sound_WindSpot_2", false, 0);
+			AddEntityCollideCallback("factory_gate_2", "BigDoorWindTrigger", "Sound_WindSpot_3", false, 0);
+			AddEntityCollideCallback("factory_window_1", "WindowCollisionArea", "Sound_WindSpot_4", false, 0);
+		}
+		
+	//Setup Music Callbacks
+		{
+			AddEntityCollideCallback("OfficeDoor", "OfficeDoorCollider", "MusicPlayer", true, 1);
+			AddEntityCollideCallback("Player", "PigsAmbient3MusicTrigger", "MusicPlayer", true, 1);
+			AddEntityCollideCallback("CanisterEmpty_1", "CannisterMusicTrigger", "CannisterMusicHandler", true, 0);
+		}
+		
+	//Setup Sound Sting Callbacks
+		{
+		}
+		
+	//Setup Initial VO Callbacks
+		{
+			AddEntityCollideCallback("Player", "vo_alley_child_trigger", "VOPlayer", true, 1);
+			AddEntityCollideCallback("Player", "graveyard_flashback_VO", "VOPlayer", true, 1);
+		}
+		
+		AddTimer("", 0, "PushUpDumb");
+} 
+
+
+void PushUpDumb(string &in asTimer)
+{
+	AddDebugMessage("Pusher!!", false);
+	
+	AddPropForce("dumb_waiter_lift_door_1", 0, 100, 0, "World");
+	
+	AddLocalVarInt("PusherUpper", 1);
+	
+	if(GetLocalVarInt("PusherUpper") < 20) AddTimer("", 0.05, "PushUpDumb");
+}
+
+
+void OnEnter()
+{
+	//DEFAULT SWITCH LANTERN TO ON//
+	{
+		SetLanternFlickerActive(false);
+	}
+	
+	//PRELOAD SOUNDS//
+	{	
+		PreloadSound("afx_pigline_pig_eat_body_wider");
+		PreloadSound("cellar_light_flicker_louder");
+		PreloadSound("afx_spooky_footsteps_above_wooden_nocreak");
+		PreloadSound("afx_gameplay_hightone_10sec");
+		PreloadSound("afx_drawer_open_teeth");
+		PreloadSound("afx_church_wretch_factory_scream_2D");
+		PreloadSound("afx_church_wretch_factory_scream_3D");
+		PreloadSound("afx_church_wretch_factory_door_smash_2D");
+		PreloadSound("afx_church_wretch_factory_door_smash_3D");
+		PreloadSound("afx_alley_pigsweetener");
+		PreloadSound("afx_church_wretch_door_smash_open");
+		PreloadSound("afx_church_wretch_muffled_part1");
+		PreloadSound("afx_factory_event_wretch_door_smash_3D");
+		PreloadSound("afx_factory_event_wretch_door_smash_2D");
+		PreloadSound("afx_factory_event_wretch_vocalisations");
+		PreloadSound("afx_alley_wretch_door_finishscream_3D");
+		PreloadSound("afx_alley_wretch_door_finishscream_2D");
+		PreloadSound("afx_alley_wretch_door_finishscream_2D_outside");
+		PreloadSound("impact_organic_med");
+		PreloadSound("impact_organic_low");
+		PreloadSound("afx_church_alleystinger");
+		PreloadSound("alley_cannister_onto_pump");
+		PreloadSound("alley_fuel_pump_complete");
+		PreloadSound("alley_cannister_slosh");
+		PreloadSound("alley_cannister_into_veh");
+		PreloadSound("afx_church_backfire");
+		PreloadSound("afx_church_engine");
+		PreloadSound("afx_church_engine_crows");
+		PreloadSound("afx_church_engine_nofuel");
+		PreloadSound("amb_church_alley_oneshot_2");
+		PreloadSound("amb_church_alley_oneshot_1");
+		PreloadSound("amb_church_alley_oneshot_3");
+		PreloadSound("afx_spooky_child_laugh_semi_distant");
+		PreloadSound("afx_spooky_courtyard_bush");
+		PreloadSound("afx_spooky_courtyard_pig");
+		PreloadSound("afx_spooky_eerie_wind_drone");
+		PreloadSound("afx_spooky_eerie_wind_drone_louder");
+		PreloadSound("afx_church_pack_pig_howl");
+		PreloadSound("afx_event_spooky_baby_pig");
+		PreloadSound("afx_spooky_mansion_whisper");
+		PreloadSound("afx_ambience_mansion_wind_spot");
+		PreloadSound("amb_church_loadingarea_door_rattle");
+		PreloadSound("amb_loadingarea_machine_lowend_loop");
+		PreloadSound("amb_loadingarea_macine_mid_loop");
+		PreloadSound("amb_loadingarea_machine_slice_low");
+		PreloadSound("afx_alley_church_bell");
+		PreloadSound("afx_flashback_whisper");
+		PreloadSound("afx_events_mansion_wind");
+		PreloadSound("afx_events_cellar_rand_env");
+		PreloadSound("afx_spooky_stereo_whisper");
+		PreloadSound("spooky_childcry_small_area");
+		PreloadSound("afx_spooky_mansion_backarea_abstract");
+		PreloadSound("react_scare");
+		PreloadSound("react_breath");
+		PreloadSound("react_quickscare");
+		PreloadSound("react_cough");
+		PreloadSound("afx_spooky_child_laugh_alley");
+	}
+	
+	//INITIALISE RANDOM SOUND CUE PLAYER//
+	{
+		AddTimer("InitRandomSoundCuePlayer", 1.0f, "RandSoundCues");
+		AddTimer("InitRandomChildCryPlayer", 1.0f, "RandChildCryCues");
+		AddTimer("InitRandomOfficeSoundCuePlayer", 1.0f, "RandOfficeSoundCues");
+	}
+	
+	//INITIALISE LAST PLAYING AMBIENCE//
+	{
+		string sAmbienceToRestart = GetLocalVarString("CurrentAmbientTrack");
+		MapAmbienceAreas("Player", sAmbienceToRestart, 1);
+	}
+	
+	//PRELOAD PARTICLES//
+	{
+		PreloadParticleSystem("ps_dust_impact_vert.ps");
+	}
+	
+	//PARTICLE SYSTEM STATES//
+	{
+		SetParticleSystemActive("TruckBackfire1", false);
+		SetParticleSystemActive("TruckBackfire2", false);
+		SetParticleSystemActive("PigFeetDusta_*", false);
+		SetParticleSystemActive("PigFeetDustb_*", false);
+		SetParticleSystemActive("PigFeetDustc_*", false);
+		SetParticleSystemActive("PigFeetDustd_*", false);
+		SetParticleSystemActive("PigFeetDuste_*", false);
+		SetParticleSystemActive("PigFeetDustf_*", false);
+		SetParticleSystemActive("PigFeetDustg_*", false);
+		SetParticleSystemActive("DoorSlamParticles", false);
+		SetParticleSystemActive("OfficeParticle_*", false);
+		SetParticleSystemActive("OfficeDust_*", false);
+	}
+	
+	//ENTITY STATES//
+	{
+		if (GetLocalVarInt("Mask1Active") == 1)
+		{
+			SetEntityActive("Mask1", true);
+		}
+		if (GetLocalVarInt("Mask2AActive") == 1)
+		{
+			SetEntityActive("Mask2A", true);
+		}
+		if (GetLocalVarInt("Mask2BActive") == 1)
+		{
+			SetEntityActive("Mask2B", true);
+		}
+	}
+	
+	//ENTITY INTERACTION//
+	{
+		SetEntityInteractionDisabled("Mask1", true);
+		SetEntityInteractionDisabled("Mask2A", true);
+		SetEntityInteractionDisabled("Mask2B", true);
+		SetEntityInteractionDisabled("TruckBackfire", true);
+		SetPropStaticPhysics("TruckBackfire", true);
+		SetEntityInteractionDisabled("barrel_1", true);
+		SetEntityInteractionDisabled("barrel_2", true);
+		SetEntityInteractionDisabled("barrel_3", true);
+		SetEntityInteractionDisabled("barrel_4", true);
+		SetEntityInteractionDisabled("barrel_5", true);
+		SetEntityInteractionDisabled("StoreDoorLeft", true);
+		SetEntityInteractionDisabled("StoreDoorRight", true);
+		SetEntityInteractionDisabled("spectacles_9", true);
+		SetEntityInteractionDisabled("false_teeth_9", true);
+	}
+	
+	//DOOR STATES//
+	{
+		SetSwingDoorClosed("factory_facade_shutters_1", false, false);
+		SetSwingDoorDisableAutoClose("factory_facade_shutters_1", true);
+		SetSwingDoorClosed("StoreDoorLeft", false, false);
+		SetSwingDoorDisableAutoClose("StoreDoorLeft", true);
+		SetSwingDoorClosed("StoreDoorRight", false, false);
+		SetSwingDoorDisableAutoClose("StoreDoorRight", true);
+	}
+	
+	//LIGHT STATES//
+	{
+		SetLampLit("TruckBackfireLights", false, false);
+	}
+	
+	//ENEMY SETUP//
+	{
+		SetManPigType("StoreRoomPig", "Freddy");
+		SetEnemyMoveType("StoreRoomPig", "RunBiped");	
+		SetManPigType("StorePigAnimation", "Freddy");	
+		SetEnemyMoveType("StorePigAnimation", "RunBiped");
+		SetEntityActive("StorePigAnimation", true);
+	}
+
+	//CHILD SETUP//
+	{
+		SetManPigType("Child1", "Freddy");
+		SetEnemyMoveType("Child1", "RunBiped");
+		SetEnemyDisableTriggers("Child1", true);
+		SetManPigType("Child2", "Freddy");
+		SetEnemyMoveType("Child2", "RunBiped");
+		SetEnemyDisableTriggers("Child2", true);
+		SetManPigType("Child3", "Freddy");
+		SetEnemyMoveType("Child3", "RunBiped");
+		SetEnemyDisableTriggers("Child3", true);
+		SetManPigType("Child4", "Freddy");
+		SetEnemyMoveType("Child4", "RunBiped");
+		SetEnemyDisableTriggers("Child4", true);
+	}
+
+	//AUTOSAVE//
+	{
+		AutoSave();
+	}
+}
+
+void OnLeave()
+{
+	SetupLoadScreen("LoadingText", "Church_", 3, "game_loading_church.jpg");
+}
+										//////////////////////////
+										//MAP-SPECIFIC FUNCTIONS//
+										//////////////////////////
+										
+//PHONE TIMER//
+void OfficePhoneTimer (string &in asParent, string &in asChild, int alState)
+{
+	float fPhoneRing = RandFloat(1.0f,2.5f);
+	AddTimer("OfficePhone_Timer", 1.0f+fPhoneRing, "OfficePhone_Timer");
+	AddDebugMessage("Phone Timer Hit", false);
+}
+
+void OfficePhone_Timer (string &in asTimer)
+{
+	AddDebugMessage("Ring Ring", false);
+	StartPhoneRinging("phone_box_1");
+	
+	SetLampLit("phone_box_light_1", true, true);
+	
+	SetEntityPlayerInteractCallback("phone_box_1", "InteractPhoneBox", true);
+}
+
+void OfficePhoneRingingStop (string &in asParent, string &in asChild, int alState)
+{
+	AddDebugMessage("Phone Stopped Ringing", false);
+	StopPhoneRinging("phone_box_1");
+	SetLampLit("phone_box_light_1", false, true);
+	SetEntityPlayerInteractCallback("phone_box_1", "", false);
+}
+
+void InteractPhoneBox (string &in asEntity)
+{
+	RemoveTimer("phonetimeout");
+	
+	AddTimer("PhoneCallTimer", 14.75, "PhoneCallOver");
+	StopSound("phone_box_1_AnimEvent", 0.1f);
+	
+	// Handle spawning of mask 1
+	if (GetLocalVarInt("Mask1MaySpawn") == 1)
+	{
+		SetEntityActive("Mask1", true);
+		SetLocalVarInt("Mask1Active", 1);
+	}
+}
+
+void PhoneCallOver (string &in asTimer)
+{
+	SetLampLit("phone_box_light_1", false, true);
+}
+//END PHONE TIMER//
+
+//MASK 1 LOOK TRACKER//
+void Mask1LookTracker (string&in asEntity, int alState)
+{
+	if (alState == 1)
+	{
+		SetLocalVarInt("Mask1MaySpawn", 1);
+		return;
+	}
+	else if (alState == -1)
+	{
+		SetLocalVarInt("Mask1MaySpawn", 0);
+		return;
+	}
+}
+//END LOOK TRACKER//
+
+//MASK 2A SPAWNER//
+void Mask2ASpawner (string &in asParent, string &in asChild, int alState)
+{
+	SetEntityActive("Mask2A", true);
+	SetLocalVarInt("Mask2AActive", 1);
+}
+//END MASK 2A SPAWNER//
+
+//----------------------
+//CONVEYOR BELT//
+//----------------------
+
+//-------------------------------------
+
+void Conveyor_Event (string &in asParent, string &in asChild, int alState) //TUrns belt on/off
+{
+	if (alState == 1)
+	{
+		AddDebugMessage("COnveyor_EventStart", false);
+		
+		AddTimer("ConveyorLoop1", 0.01f, "ConveyorLoop1");
+		
+		SetEntityActive("Conveyor_Cage_4_Lantern_Trigger", true);
+		SetLightVisible("PointLight_160", true);
+		SetLampLit("cellar_gaslamp01_short_1", true, false);
+		SetLampLit("cellar_gaslamp01_F_long_25", true, false);
+		SetLampLit("cellar_gaslamp01_F_long_2", true, false);
+		SetLampLit("sewer_wall_lamp_2", true, true);
+		SetLampLit("sewer_wall_lamp_3", true, true);
+		SetLampLit("sewer_wall_lamp_4", true, true);
+		SetLampLit("sewer_lights_2", true, true);
+		SetLampLit("sewer_lights_4", true, true);
+		SetLampLit("sewer_lights_5", true, true);
+	}
+	else if (alState == -1) 
+	{
+		AddDebugMessage("End conveyors", false);
+		SetEntityActive("Conveyor_Cage_4_Lantern_Trigger", false);
+		SetLanternFlickerActive(false);
+		
+		RemoveTimer("StrobeLightsOn");
+		RemoveTimer("StrobeLightsOff");
+		RemoveTimer("StrobeHandler");
+		
+		for(int i=1; i<=6; ++i)
+		{
+			RemoveTimer("ConveyorLoop"+i);
+			SetEntityActive("Conveyor_Cage_"+i, false);
+		}
+	
+		RemoveAttachedPropFromProp("Conveyor_Cage_2", "Conveyor_Wretch");
+		SetMoveObjectState("Conveyor_Cage_*", 0);
+	}
+}
+
+//-------------------------------------
+
+void ConveyorLoop1 (string &in asTimer)
+{	
+	SetEntityActive("Conveyor_Cage_1", true);
+	ResetProp("Conveyor_Cage_1");
+	SetMoveObjectState("Conveyor_Cage_1", 1);
+	AddDebugMessage("Crate1", false);
+}
+
+//-------------------------------------
+
+void Conveyor_Cage_1_Kill (string &in asParent, string &in asChild, int alState)
+{
+	AddDebugMessage("COnv_Cage_1_Kill", false);
+	SetEntityActive("Conveyor_Cage_1", false);
+}
+
+void Conveyor_Cage_1_Spawn2 (string &in asParent, string &in asChild, int alState)
+{
+	AddDebugMessage("COnv_Cage_1_Spawn2", false);
+	
+	AddLocalVarInt("PigCages", 1);
+	
+	if(GetLocalVarInt("PigCages") == 1)
+		AddTimer("ConveyorLoop2", 0.01f, "ConveyorLoop2");
+	else
+		AddTimer("ConveyorLoop3", 0.01f, "ConveyorLoop3");
+
+	AddDebugMessage("Spawn Crate 2!", false);
+}
+
+//---------------------------------
+
+void ConveyorLoop2 (string &in asTimer)
+{	
+	SetEntityActive("Conveyor_Cage_2", true);
+	ResetProp("Conveyor_Cage_2");
+	ResetProp("Conveyor_Wretch");
+	SetMoveObjectState("Conveyor_Cage_2", 1);
+
+	PlayMusic("afx_alley_pigsighting.ogg", false, 0.4, 4, 10, false);
+	PlaySoundAtEntity("CrateEating", "afx_pigline_pig_eat_body_wider.snt", "Conveyor_Cage_2", 2.0f, true);
+	PlayPropAnimation("Conveyor_Wretch", "NestSob", 0.0f, true, "");
+	
+	AddDebugMessage("Crate2 PIGGY", false);
+}
+
+void Conveyor_Cage_2_Kill (string &in asParent, string &in asChild, int alState)
+{
+	AddDebugMessage("COnv_Cage_2_Kill", false);
+	SetEntityActive("Conveyor_Cage_2", false);
+	StopSound("CrateEating", 3.0f);
+}
+
+void StrobeTimer (string &in asTimer)
+{
+	if (asTimer == "StrobeLightsOn") 
+	{
+		SetLanternFlickerActive(false);
+		PlaySoundAtEntity("cellar_gaslamp01_short_1_flicker", "cellar_light_flicker_louder.snt", "cellar_gaslamp01_short_1", 1.0f, false);
+		SetLightVisible("PointLight_160", true);
+		SetLampLit("cellar_gaslamp01_short_1", true, false);
+		SetLampLit("cellar_gaslamp01_F_long_25", true, false);
+		SetLampLit("cellar_gaslamp01_F_long_2", true, false);
+		SetLampLit("sewer_wall_lamp_2", true, true);
+		SetLampLit("sewer_wall_lamp_3", true, true);
+		SetLampLit("sewer_wall_lamp_4", true, true);
+		SetLampLit("sewer_lights_2", true, true);
+		SetLampLit("sewer_lights_4", true, true);
+		SetLampLit("sewer_lights_5", true, true);
+		AddTimer("StrobeLightsOff", RandFloat(0.03f, 0.2f), "StrobeTimer"); //Strobe - amount of time lights are on for
+	}
+		
+	if (asTimer == "StrobeLightsOff")
+	{
+		SetLightVisible("PointLight_160", false);
+		SetLampLit("cellar_gaslamp01_short_1", false, false);
+		SetLampLit("cellar_gaslamp01_F_long_25", false, false);
+		SetLampLit("cellar_gaslamp01_F_long_2", false, false);
+		SetLampLit("sewer_wall_lamp_2", false, false);
+		SetLampLit("sewer_wall_lamp_3", false, false);
+		SetLampLit("sewer_wall_lamp_4", false, false);
+		SetLampLit("sewer_lights_2", false, false);
+		SetLampLit("sewer_lights_4", false, false);
+		SetLampLit("sewer_lights_5", false, false);
+		SetLanternFlickerActive(true);
+		AddTimer("StrobeLightsOn", RandFloat(0.3f, 0.9f), "StrobeTimer"); //Strobe - amount of time lights are off for
+	}
+}
+
+void Conveyor_Cage_2_Lantern (string &in asParent, string &in asChild, int alState) //LanternLight Flicker
+{
+	if (alState == 1)
+	{
+		AddTimer("StrobeLightsOff", RandFloat(0.01f, 0.35f), "StrobeTimer");
+		AddDebugMessage("COnveyor_Lightflicker", false);
+		return;
+	}
+	else if (alState == -1) 
+	{
+		AddDebugMessage("End conveyor_lightflicker", false);
+		RemoveTimer("StrobeLightsOn");
+		RemoveTimer("StrobeLightsOff");
+		RemoveTimer("StrobeHandler");
+		RemoveTimer("ConveyorLoop*");
+		SetLightVisible("PointLight_160", true);
+		SetLanternFlickerActive(false);
+		SetLampLit("cellar_gaslamp01_short_1", true, true);
+		SetLampLit("cellar_gaslamp01_F_long_2", true, true);
+		SetLampLit("sewer_wall_lamp_2", true, true);
+		SetLampLit("sewer_wall_lamp_3", true, true);
+		SetLampLit("sewer_wall_lamp_4", true, true);
+		SetLampLit("sewer_lights_2", true, true);
+		SetLampLit("sewer_lights_4", true, true);
+		SetLampLit("sewer_lights_5", true, true);
+		SetEntityActive(asChild, false);
+		return;
+	}
+}
+
+void Conveyor_Cage_2_Spawn3 (string &in asParent, string &in asChild, int alState)
+{
+	AddDebugMessage("COnv_Cage_2_Spawn3", false);
+	AddTimer("ConveyorLoop3", 0.01f, "ConveyorLoop3");
+	
+	AddDebugMessage("Spawn Crate 3!", false);
+}
+
+//---------------------------------
+
+void ConveyorLoop3 (string &in asTimer)
+{	
+	SetEntityActive("Conveyor_Cage_3", true);
+	ResetProp("Conveyor_Cage_3");
+	SetMoveObjectState("Conveyor_Cage_3", 1);
+	AddDebugMessage("Crate3", false);
+}
+
+void Conveyor_Cage_3_Kill (string &in asParent, string &in asChild, int alState)
+{
+	AddDebugMessage("COnv_Cage_3_Kill", false);
+	SetEntityActive("Conveyor_Cage_3", false);
+}
+
+void Conveyor_Cage_3_Spawn4 (string &in asParent, string &in asChild, int alState)
+{
+	AddDebugMessage("COnv_Cage_3_Spawn4", false);
+	AddTimer("ConveyorLoop4", 0.01f, "ConveyorLoop4");
+	
+	AddDebugMessage("Spawn Crate 4!", false);
+}
+
+//---------------------------------
+
+void ConveyorLoop4 (string &in asTimer)
+{	
+	SetEntityActive("Conveyor_Cage_4", true);
+	ResetProp("Conveyor_Cage_4");
+	SetMoveObjectState("Conveyor_Cage_4", 1);
+	AddDebugMessage("Crate4", false);
+}
+
+void Conveyor_Cage_4_Kill (string &in asParent, string &in asChild, int alState)
+{
+	AddDebugMessage("COnv_Cage_4_Kill", false);
+	SetEntityActive("Conveyor_Cage_4", false);
+}
+
+
+void Conveyor_Cage_4_Spawn5 (string &in asParent, string &in asChild, int alState)
+{
+	AddDebugMessage("COnv_Cage_4_Spawn5", false);
+	AddTimer("ConveyorLoop5", 0.01f, "ConveyorLoop5");
+	
+	AddDebugMessage("Spawn Crate 5!", false);
+}
+
+//---------------------------------
+
+void ConveyorLoop5 (string &in asTimer)
+{	
+	SetEntityActive("Conveyor_Cage_5", true);
+	ResetProp("Conveyor_Cage_5");
+	SetMoveObjectState("Conveyor_Cage_5", 1);
+	AddDebugMessage("Crate5", false);
+}
+
+void Conveyor_Cage_5_Kill (string &in asParent, string &in asChild, int alState)
+{
+	AddDebugMessage("COnv_Cage_5_Kill", false);
+	SetEntityActive("Conveyor_Cage_5", false);
+}
+
+void Conveyor_Cage_5_Spawn6 (string &in asParent, string &in asChild, int alState)
+{
+	AddDebugMessage("COnv_Cage_5_Spawn6", false);
+	AddTimer("ConveyorLoop6", 0.01f, "ConveyorLoop6");
+	
+	AddDebugMessage("Spawn Crate 6!", false);
+}
+
+//---------------------------------
+
+void ConveyorLoop6 (string &in asTimer)
+{	
+	SetEntityActive("Conveyor_Cage_6", true);
+	ResetProp("Conveyor_Cage_6");
+	SetMoveObjectState("Conveyor_Cage_6", 1);
+	AddDebugMessage("Crate6", false);
+}
+
+void Conveyor_Cage_6_Kill (string &in asParent, string &in asChild, int alState)
+{
+	AddDebugMessage("COnv_Cage_6_Kill", false);
+	SetEntityActive("Conveyor_Cage_6", false);
+}
+
+void Conveyor_Cage_6_Spawn1 (string &in asParent, string &in asChild, int alState)
+{
+	AddDebugMessage("COnv_Cage_6_Spawn1", false);
+	AddTimer("ConveyorLoop1", 0.01f, "ConveyorLoop1");
+	
+	AddDebugMessage("Spawn Crate 1!", false);
+}
+
+//---------------------------------
+
+//----------------------
+//END CONVEYOR BELT//
+//----------------------
+
+//OFFICE PARTICLE PLAYER//
+void OfficeParticleTrigger_1 (string &in asParent, string &in asChild, int alState)
+{
+	AddDebugMessage("Office Particle 1 Triggered", false);
+	SetParticleSystemActive("OfficeDust_1", true);
+}
+//END OFFICE PARTICLE PLAYER//
+
+//PIG SONG//
+void PigSongTrigger (string &in asParent, string &in asChild, int alState)
+{
+	//float fPigRecord = RandFloat(0.1f,0.3f);
+	
+	AddTimer("PigSongTimer", 0, "PigSongTimer");
+	AddEntityCollideCallback("Player", "OverheadSFXTrigger", "OverheadSFXOffice", true, 1);
+	AddDebugMessage("Pig Song Timer Active and Overhead SFX Trigger Added", false);
+}
+
+void PigSongTimer (string &in asTimer)
+{
+	//PlaySoundAtEntity("PigsSong", "amb_cellar_office_pigs_song.snt", "SongSource", 0.0f, false);
+	PlaySoundAtEntity("PigsSong_2D", "afx_alley_mors_song_2D.snt", "SongSource", 0.0f, true);
+	PlaySoundAtEntity("PigsSong", "afx_alley_mors_song_3D.snt", "SongSource", 0.0f, true);
+	AddDebugMessage("Pig Song Activated", false);
+}
+//END PIG SONG//
+
+//AMBIENT FACTORY MUSIC//
+void FactoryMusicTrigger (string &in asParent, string &in asChild, int alState)
+{
+	AddDebugMessage("Music Triggered", false);
+	PlayMusic("music_church_factory_event.ogg", false, 0.7f, 5.0f, 3, false);
+	//AddHint("Alley2", "");
+}
+//END AMBIENT FACTORY MUSIC//
+
+//ALLEY OUTSIDE FIRST TIME MUSIC//
+void ExitMusicTrigger (string &in asParent, string &in asChild, int alState)
+{
+	AddDebugMessage("Music Triggered", false);
+	PlayMusic("Alley_going_outside_132.ogg", false, 0.7f, 5.0f, 3, false);
+}
+//END AMBIENT FACTORY MUSIC//
+
+//ALLEY OUTSIDE FIRST TIME MUSIC//
+void CannisterMusicHandler (string &in asParent, string &in asChild, int alState)
+{
+	AddDebugMessage("Music Triggered", false);
+	PlayMusic("Alley_tension_music _140.ogg", true, 0.8f, 1.0f, 3, false);
+	SetEntityActive("OneShotSFXTrigger3", true);
+}
+//END AMBIENT FACTORY MUSIC//
+
+//OVERHEAD OFFICE SFX//
+void OverheadSFXOffice (string &in asParent, string &in asChild, int alState)
+{
+		float fOverheadSFX = RandFloat(2.5f,3.0f);
+	
+	AddTimer("OverheadSFXTimer", 1.5f+fOverheadSFX, "OverheadSFXTimer");
+	AddDebugMessage("Overhead SFX Trigger Activated", false);
+}
+
+void OverheadSFXTimer (string &in asTimer)
+{
+	PlaySoundAtEntity("OverheadSFX", "afx_spooky_footsteps_above_wooden_nocreak.snt", "OfficeFootstepSoundSource", 0.0f, false);
+	SetParticleSystemActive("OfficeParticle_1", true);
+	AddDebugMessage("Overhead SFX sound triggered", false);
+	return;
+}
+//END OVERHEAD OFFICE SFX//	
+	
+//HITCHCOCK ZOOM//
+void DoHitchcockZoom(string &in asParent, string &in asChild, int alState) //Hitchcock zoom effect
+{
+	AddDebugMessage("Ohhhh here it goes!", false);
+	PlaySoundAtEntity("", "afx_gameplay_hightone_10sec.snt", "Player", 1.0f, false);
+	RemoveEntityCollideCallback("spectacles_*", "HitchcockCollisionDetector");
+	RemoveEntityCollideCallback("false_teeth_*", "HitchcockCollisionDetector");
+	PlaySoundAtEntity("HitchcockZoomSound", "afx_drawer_open_teeth.snt", "Player", 0.0f, false);
+	StartPlayerLookAt("HitchcockLookTarget", 20.0f, 20.0f,"");
+	SetPlayerActive(false);
+	StopPlayerLookAt();
+	FadePlayerFOVMulTo(0.6f, 1.0f);
+	MovePlayerHeadPos (0.0f, 1.5f, -1.0f, 0.5f, 0.4f);
+	AddTimer("hitchcocktimer", 3.0f, "Hitchcocktimer");
+	FadeSepiaColorTo(1.0f, 0.5f);
+}
+
+void Hitchcocktimer (string &in asTimer)
+{
+	AddDebugMessage("Ouch ma teef!", false);
+	FadePlayerFOVMulTo(1.0f, 2.0f);
+	MovePlayerHeadPos(0.0f, 0.0f, 0.0f, 2.0f, 0.5f);
+	SetPlayerActive(true);
+	MandusReactionPlayer("Breath", 0.25f);
+	FadeSepiaColorTo(0.0f, 0.5f);
+	return;
+}
+//END HITCHCOCK ZOOM//
+
+//MUSIC STOP OFFICES//
+void MusicStopTriggerOffices (string &in asParent, string &in asChild, int alState)
+{
+	StopMusic(5.0f, 2);
+	StopMusic(5.0f, 1);
+	StopMusic(5.0f, 0);
+	StopMusic(5.0f, 3);
+}
+//END MUSIC STOP OFFICES//
+			
+//CRATE INTERACTION UPDATE//
+void CrateInteractionUpdater (string &in asParent, string &in asChild, int alState)
+{
+	if (asChild == "CrateInteractionOffTrigger")
+	{
+		SetPropStaticPhysics ("BlockingCrate", true);
+		SetEntityInteractionDisabled("BlockingCrate", true);
+		SetLightVisible("SpotLight_31", true);
+		return;
+	}
+	else if (asChild == "CrateInteractionOnTrigger")
+	{
+		SetPropStaticPhysics ("BlockingCrate", false);
+		SetEntityInteractionDisabled("BlockingCrate", false);
+		SetLightVisible("SpotLight_31", false);
+		return;
+	}
+}
+//END CRATE INTERACTION UPDATE//
+			
+//WALKWAY PIG EVENT//
+void WalkwayPigEventInit ()
+{
+	//PlaySoundAtEntity("", "", "WalkwayPig", 0.0f, false);
+	PlaySoundAtEntity("", "afx_church_wretch_factory_scream_2D", "WalkwayPig", 0.0f, false);
+	MandusReactionPlayer("Quick", 1.5f);
+	MandusReactionPlayer("Scared", 3.7f);
+	PlaySoundAtEntity("", "afx_church_wretch_factory_scream_3D", "WalkwayPig", 0.0f, false);
+	PlaySoundAtEntity("", "afx_church_wretch_factory_door_smash_2D", "DoorSmashSoundArea", 0.0f, false);
+	PlaySoundAtEntity("", "afx_church_wretch_factory_door_smash_3D", "DoorSmashSoundArea", 0.0f, false);
+	PlaySoundAtEntity("PigSweet", "afx_alley_pigsweetener.snt", "PigDustTrigger4", 3.0f, false);
+	SetEnemyDisableTriggers("WalkwayPig", true);
+	AddTimer("PigBangDoorTimer", 16.0f, "WretchFactoryEventPart2");
+	AddTimer("PigBangDoorTimer2", 16.0f, "WretchFactoryEventPart2_2");
+	AddTimer("FactoryMusic", 1.2f, "FactoryMusic");
+	SetEntityActive("WalkwayPig", true);
+	AddEnemyPatrolNode("WalkwayPig", "PathNodeArea_24", 1.5f, "", false);
+	
+	StopMusic(0.2f, 2);	
+	StopMusic(0.2f, 3);	
+}
+
+void FactoryMusic (string &in asTimer)
+{
+	AddDebugMessage("Function: 'FactoryMusic' - Triggered Successfully", false);
+	PlayMusic("music_church_factory_pig.ogg", false, 0.7f, 0.7f, 4, false);
+	FadeImageTrailTo(0.5f, 0.2f);
+	StartScreenShake(0.05f, 1.5f, 0.1f, 0.1f);
+	FadeSepiaColorTo(0.5f, 0.2f);
+	AddTimer ("EndVisEffect", 1.2f, "RestoreToNormal");
+}
+
+void WalkwayPigDustDrops (string &in asParent, string &in asChild, int alState)
+{
+	switch (GetLocalVarInt("pigfeetduststeptracker"))
+	{
+		case 0:
+		SetParticleSystemActive("PigFeetDusta_*", true);
+		SetLocalVarInt("pigfeetduststeptracker", 1);
+		break;
+		
+		case 1:
+		SetParticleSystemActive("PigFeetDustb_*", true);
+		SetLocalVarInt("pigfeetduststeptracker", 2);
+		break;
+		
+		case 2:
+		SetParticleSystemActive("PigFeetDustc_*", true);
+		SetLocalVarInt("pigfeetduststeptracker", 3);
+		break;
+		
+		case 3:
+		SetParticleSystemActive("PigFeetDustd_*", true);
+		SetLocalVarInt("pigfeetduststeptracker", 4);
+		break;
+		
+		case 4:
+		SetParticleSystemActive("PigFeetDuste_*", true);
+		SetLocalVarInt("pigfeetduststeptracker", 5);
+		break;
+		
+		case 5:
+		SetParticleSystemActive("PigFeetDustf_*", true);
+		SetLocalVarInt("pigfeetduststeptracker", 6);
+		break;
+		
+		case 6:
+		SetParticleSystemActive("PigFeetDustg_*", true);
+		SetLocalVarInt("pigfeetduststeptracker", 7);
+		break;
+		
+		default:
+		AddDebugMessage("Footstep Dust Particles Variable Out of Range!", false);
+		break;
+	}
+}
+
+void KillWalkwayPig (string &in asParent, string &in asChild, int alState)
+{
+	SetEntityActive("WalkwayPig", false);
+	PlaySoundAtEntity("DoorSmashOpen", "afx_church_wretch_door_smash_open.snt", "PigKillTrigger", 0.0f, false);
+	PlaySoundAtEntity("WretchMuffled_Part1", "afx_church_wretch_muffled_part1.snt", "PigKillTrigger", 0.0f, false);
+	StopSound("PigSweet", 1.0f);
+	
+	MandusReactionPlayer("Scared", 0.2f);
+}
+//END WALKWAY PIG EVENT//
+
+//WRETCH FACTORY EVENT PART 2//
+void WretchFactoryEventPart2 (string &in asTimer)
+{
+	PlayMusic("wretch_attack.ogg", true, 1.0f, 1.0f, 4, false);
+
+	PlaySoundAtEntity("DoorSmash3D", "afx_factory_event_wretch_door_smash_3D", "Wretch_Door_Event", 0.0f, false);
+	PlaySoundAtEntity("DoorSmash2D", "afx_factory_event_wretch_door_smash_2D", "Wretch_Door_Event", 0.0f, false);
+	AddPropForce("Wretch_Door_Event", -10000.0f, 0.0f, 0.0f, "world");
+	CreateParticleSystemAtEntity("", "ps_dust_impact_vert.ps", "PigDoorSource", false);
+
+	//LAMP LIGHT TEST- REPLACE WITH FLICKER//
+	/*SetLampLit("cellar_gaslamp01_F_long_4", false, false);
+	SetLampLit("cellar_gaslamp01_F_long_1", false, false);
+	SetLampLit("cellar_gaslamp01_F_long_5", false, false);
+	SetLampLit("cellar_gaslamp01_F_long_21", false, false);
+	SetLampLit("cellar_gaslamp01_F_long_22", false, false);
+	AddTimer("LampLight", 0.15f, "LampLight");*/
+
+	float fHitDoor = RandFloat(1.0f,1.5f);
+	AddTimer("WretchFactoryEventPart2_Timer", 1.0f+fHitDoor, "WretchFactoryEventPart2_Timer");
+	
+	AddEntityCollideCallback("Player", "KillWretchEvent_1", "KillWretchEvent", true, 1);
+	AddEntityCollideCallback("Player", "KillWretchEvent_2", "KillWretchEvent", true, 1);
+	
+	AddTimer("WretchFactoryEventTimeOut", 17.0f, "WretchFactoryEventTimeOut");
+}
+
+ void WretchFactoryEventPart2_2 (string &in asTimer)
+{
+	MandusReactionPlayer("Quick", 0.5f);
+}
+
+void WretchFactoryEventPart2_Timer (string &in asTimer)
+{
+	PlaySoundAtEntity("DoorSmash3D", "afx_factory_event_wretch_door_smash_3D", "Wretch_Door_Event", 0.0f, false);
+	PlaySoundAtEntity("DoorSmash2D", "afx_factory_event_wretch_door_smash_2D", "Wretch_Door_Event", 0.0f, false);
+	PlaySoundAtEntity("WretchVO", "afx_factory_event_wretch_vocalisations", "Wretch_Door_Event", 0.0f, false);
+	AddPropForce("Wretch_Door_Event", -10000.0f, 0.0f, 0.0f, "world");
+	CreateParticleSystemAtEntity("", "ps_dust_impact_vert.ps", "PigDoorSource_"+RandInt(1, 4), false);
+
+	//LAMP LIGHT TEST- REPLACE WITH FLICKER//
+	/*SetLampFlickerActive("cellar_gaslamp01_F_long_4", true);
+	SetLampFlickerActive("cellar_gaslamp01_F_long_1", true);
+	SetLampFlickerActive("cellar_gaslamp01_F_long_5", true);
+	SetLampFlickerActive("cellar_gaslamp01_F_long_21", true);
+	SetLampFlickerActive("cellar_gaslamp01_F_long_22", true);
+	AddTimer("LampLight", 0.25f, "LampLight");*/
+
+	float fHitDoor = RandFloat(1.0f,1.5f);
+	float fWretchVO = RandFloat(2.0f,3.0f);
+	AddTimer("WretchFactoryEventPart2_Timer", 1.0f+fHitDoor, "WretchFactoryEventPart2_Timer");
+	AddTimer("WretchFactoryEventPart2_Timer_WretchVO", 0.0f+fWretchVO, "WretchFactoryEventPart2_Timer_WretchVO");
+	
+	
+	
+}
+
+void WretchFactoryEventPart2_Timer_WretchVO (string &in asTimer)
+{
+	PlaySoundAtEntity("WretchVO", "afx_factory_event_wretch_vocalisations", "Wretch_Door_Event", 0.0f, false);
+}
+
+void LampLight (string &in asTimer)
+{
+	//LAMP LIGHT TEST- REPLACE WITH FLICKER//
+	SetLampFlickerActive("cellar_gaslamp01_F_long_4", false);
+	SetLampFlickerActive("cellar_gaslamp01_F_long_1", false);
+	SetLampFlickerActive("cellar_gaslamp01_F_long_5", false);
+	SetLampFlickerActive("cellar_gaslamp01_F_long_21", false);
+	SetLampFlickerActive("cellar_gaslamp01_F_long_22", false);
+}
+void WretchFactoryEventTimeOut (string &in asTimer)
+{
+	RemoveTimer("WretchFactoryEventPart2_Timer");
+	RemoveTimer("WretchFactoryEventPart2_Timer_WretchVO");
+	
+	//PlaySoundAtEntity("Wretch3D", "afx_alley_wretch_door_finishscream_3D", "Wretch_Door_Event", 0.0f, false);
+	PlaySoundAtEntity("Wretch2D", "afx_alley_wretch_door_finishscream_2D", "Wretch_Door_Event", 0.0f, false);
+	
+	RemoveEntityCollideCallback("Player", "KillWretchEvent_1");
+	RemoveEntityCollideCallback("Player", "KillWretchEvent_2");	
+	
+	StopMusic(5.0f, 4);
+	
+	AddTimer("Alley5", 1.f, "TimerDelayedHint");
+}
+
+ 
+
+void KillWretchEvent (string &in asParent, string &in asChild, int alState)
+{
+	if (asChild == "KillWretchEvent_1" || asChild == "KillWretchEvent_2")
+	{
+		AddDebugMessage("Wretch Event Part 2 Killed", false);
+		RemoveEntityCollideCallback("Player", "KillWretchEvent_1");
+		RemoveEntityCollideCallback("Player", "KillWretchEvent_2");	
+		
+		//PlaySoundAtEntity("Wretch3D", "afx_alley_wretch_door_finishscream_3D", "Wretch_Door_Event", 0.0f, false);
+		PlaySoundAtEntity("Wretch2D", "afx_alley_wretch_door_finishscream_2D_outside", "Wretch_Door_Event", 0.0f, false);
+		AddTimer("Alley5", 3.f, "TimerDelayedHint");
+		
+		MandusReactionPlayer("Breath", 4.0f);
+		
+		RemoveTimer("WretchFactoryEventTimeOut");
+		RemoveTimer("WretchFactoryEventPart2_Timer");
+		RemoveTimer("WretchFactoryEventPart2_Timer_WretchVO");
+		
+		StopMusic(5.0f, 4);
+		MandusReactionPlayer("Breath", 0.0f);
+	
+	}
+}
+//END WRETCH FACTORY EVENT PART 2//
+
+//PIG TWITCH//
+void PigTwitchEvent (string &in asParent, string &in asChild, int alState)
+{
+	AddPropForce("TwitchyPig", 300.0f, 1000.0f, 950.0f, "world");
+	PlaySoundAtEntity("TwitchyPig", "impact_organic_med", "TwitchyPig", 0.1f, false);
+	AddTimer("", 0.15, "TimerPigTSound");
+	AddDebugMessage("Twitchy Pig Triggered", false);
+}
+
+void TimerPigTSound(string &in asTimer)
+{
+	PlaySoundAtEntity("TwitchyPig", "impact_organic_low", "TwitchyPig", 0.0f, false);
+}
+//END PIG TWITCH//
+
+//DRAW MOON IN OPTIMAL POSITION//
+void AlleyMoonPosition (string &in asParent, string &in asChild, int alState)
+{
+
+	if (asChild == "alley_moon_trigger")
+	{
+		SetEntityActive("moon_1", false);
+		return;
+	}
+	
+	else if (asChild == "alley_moon_trigger_1")
+	{
+		SetEntityActive("moon_2", false);
+		SetLightVisible("DirectionalLight_1", false);
+		SetLightVisible("DirectionalLight_2", true);
+		return;
+	}
+}
+//END MOON DRAWING//
+
+//SWITCH BOOLEAN VARIABLE FOR CORRIDOR WIND SOUND//
+void CorridorWindBooleanChecker (string &in asParent, string &in asChild, int alState)
+{
+	if (alState == 1)
+	{
+		SetLocalVarInt("corridorwindareabool", 1);
+		return;
+	}
+	else if (alState == -1)
+	{
+		SetLocalVarInt("corridorwindareabool", 0);
+		return;
+	}
+}
+//END BOOLEAN CHECKER//
+
+//CHURCH SOUND STINGER//
+void ChurchSoundStinger (string &in asParent, string &in asChild, int alState)
+{
+	StopMusic(1.0f, 2);
+	StopMusic(1.0f, 1);
+	StopMusic(1.0f, 0);
+	StopMusic(1.0f, 3);
+	PlaySoundAtEntity("churchstinger", "afx_church_alleystinger.snt", "Player", 0.0f, false);
+	//SET CHECKPOINT #2//
+	CheckPoint("CP02_MainAlley", "CheckpointStart_1", "", "", "", false);
+	AddTimer("ChurchStingerToVOBuffer", 12.0f, "TimerEndCalls");
+}
+//END CHURCH SOUND STINGER//
+
+//CANISTER MUSIC PLAYER//
+void CanisterMusic (string &in asParent, string &in asChild, int alState)
+{
+	PlayMusic("music_alley_walkingback.ogg", false, 0.4f, 0.0f, 1, false);
+}
+//END CANISTER MUSIC PLAYER//
+
+//CANISTER HINT//
+void CanisterHint (string &in asEntity)
+{
+	AddHint("Alley4", "");
+	SetEntityPlayerInteractCallback("CanisterEmpty_*", "", false);
+	PlayMusic("music_mans_office_secret_door_unlock.ogg", false, 0.8, 2, 10, false);
+	SetSwingDoorLocked("factory_corridor_01_door_2", true, false);
+}
+//END CANISTER HINT//
+
+//---------------------------
+//PUMP CANISTER HANDLER//
+//---------------------------
+
+//--------------------------------------------
+
+void PumpCanisterHandler (string &in asParent, string &in asChild, int alState)
+{
+	if (asChild == "PumpCollider" && alState == 1 && GetPropIsInteractedWith(asParent) == true)
+	{
+		AddDebugMessage("Canister Fitted to Pump", false);
+		RemoveEntityCollideCallback("CanisterEmpty_*", "PumpCollider");
+		SetEntityActive(asParent, false);
+		SetEntityActive("CanisterFull_1", true);
+		SetEntityInteractionDisabled("CanisterFull_1", true);
+		SetPropStaticPhysics("CanisterFull_1", true);
+		SetWheelStuckState("PumpValve", 0, false);
+		PlaySoundAtEntity("", "alley_cannister_onto_pump.snt", "PumpCollider", 0.0f, false);
+		StopMusic(5.0f, 3);
+		return;
+	}
+}
+
+//--------------------------------------------
+
+void UpdateFuelCanisterState ()
+{
+	if (GetLocalVarInt("PumpFuelLevel") == 0)
+	{
+		SetEntityInteractionDisabled("CanisterFull_1", false);
+		SetPropStaticPhysics("CanisterFull_1", false);
+		
+		SetWheelStuckState("PumpValve", 1, false);
+		PlaySoundAtEntity("", "alley_fuel_pump_complete.snt", "PumpCollider", 0.0f, false);
+		PlayMusic("music_bath_spin_sting_24.ogg", false, 0.7, 0.2, 10, false);
+	}
+}
+
+//--------------------------------------------
+
+//---------------------------
+//END PUMP CANISTER HANDLER//
+//---------------------------
+
+//---------------------------
+//PUMP VALVE HANDLER//
+//---------------------------
+
+//--------------------------------------------
+
+void PumpValveHandler (string &in asParent, string &in asChild, int alState)
+{
+	AddDebugMessage("Valve "+asParent+" vs "+asChild+": "+alState, false);
+
+	if (asChild == "PumpValveTriggerDisableTop")
+	{
+		SetLocalVarInt("PumpValveTopDisabled", 1);
+		SetLocalVarInt("PumpValveBottomDisabled", 0);
+		return;
+	}
+	else if (asChild == "PumpValveTriggerDisableBottom")
+	{
+		SetLocalVarInt("PumpValveBottomDisabled", 1);
+		SetLocalVarInt("PumpValveTopDisabled", 0);
+		return;
+	}
+	else if (asChild == "PumpValveColliderBottom" && GetLocalVarInt("PumpValveBottomDisabled") == 0)
+	{
+		if (GetLocalVarInt("PumpFuelLevel") == 8)
+		{
+			SetLocalVarInt("PumpFuelLevel", 7);
+			PlayPropAnimation("fuel_pump_1", "fulltoseven", 0.0f, false, "");
+			return;
+		}
+		else if (GetLocalVarInt("PumpFuelLevel") == 6)
+		{
+			SetLocalVarInt("PumpFuelLevel", 5);
+			PlayPropAnimation("fuel_pump_1", "sixtofive", 0.0f, false, "");
+			return;
+		}
+		else if (GetLocalVarInt("PumpFuelLevel") == 4)
+		{
+			SetLocalVarInt("PumpFuelLevel", 3);
+			PlayPropAnimation("fuel_pump_1", "fourtothree", 0.0f, false, "");
+			return;
+		}
+		else if (GetLocalVarInt("PumpFuelLevel") == 2)
+		{
+			SetLocalVarInt("PumpFuelLevel", 1);
+			PlayPropAnimation("fuel_pump_1", "twotoone", 0.0f, false, "");
+			return;
+		}
+	}
+	
+	else if (asChild == "PumpValveColliderTop" && GetLocalVarInt("PumpValveTopDisabled") == 0)
+	{
+		if (GetLocalVarInt("PumpFuelLevel") == 7)
+		{
+			SetLocalVarInt("PumpFuelLevel", 6);
+			PlayPropAnimation("fuel_pump_1", "seventosix", 0.0f, false, "");
+			return;
+		}
+		else if (GetLocalVarInt("PumpFuelLevel") == 5)
+		{
+			SetLocalVarInt("PumpFuelLevel", 4);
+			WalkwayPigEventInit();
+			PlayPropAnimation("fuel_pump_1", "fivetofour", 0.0f, false, "");
+			return;
+		}
+		else if (GetLocalVarInt("PumpFuelLevel") == 3)
+		{
+			SetLocalVarInt("PumpFuelLevel", 2);
+			PlayPropAnimation("fuel_pump_1", "threetotwo", 0.0f, false, "");
+			return;
+		}
+		else if (GetLocalVarInt("PumpFuelLevel") == 1)
+		{
+			SetLocalVarInt("PumpFuelLevel", 0);
+			PlayPropAnimation("fuel_pump_1", "ontoempty", 0.0f, false, "");
+			SetEntityActive("Mask2A", false);
+			SetEntityActive("Mask2B", true);
+			SetLocalVarInt("Mask2AActive", 0);
+			SetLocalVarInt("Mask2BActive", 1);
+			UpdateFuelCanisterState();
+			return;
+		}
+	}
+}
+//--------------------------------------------
+
+//--------------------------
+//END PUMP VALVE HANDLER//
+//--------------------------
+
+//FULL CANISTER SOUNDS//
+void FullCanisterSounds (string &in asEntity)
+{
+	AddDebugMessage("CanisterSoundSource = "+asEntity, false);
+	SetLocalVarString("CanisterSoundSource", asEntity);
+	AddTimer("FullCanisterSoundPlayer", 1.0f, "FullCanisterSoundPlayer");
+}
+
+void FullCanisterSoundPlayer (string &in asTimer)
+{
+	if (GetPlayerSpeed() > 0.0f)
+	{
+		AddDebugMessage("Slosh Sound", false);
+		PlaySoundAtEntity("", "alley_cannister_slosh.snt", GetLocalVarString("CanisterSoundSource"), 0.0f, false);
+	}
+	if (GetPropIsInteractedWith(GetLocalVarString("CanisterSoundSource")) == true)
+	{
+		AddDebugMessage("New Timer Initialised", false);
+		AddTimer(asTimer, RandFloat(1.4f, 2.0f), "FullCanisterSoundPlayer");
+	}
+	else
+	{
+		AddDebugMessage("No Interaction Detected, Timer Loop Stopped", false);
+	}
+}
+//END FULL CANISTER SOUNDS//
+
+//TRUCK CANISTER HANDLER//
+void TruckCanisterHandler (string &in asParent, string &in asChild, int alState)
+{
+	if (asChild == "TruckCollider" && alState == 1 && GetPropIsInteractedWith(asParent) == true)
+	{
+		AddDebugMessage("Canister Fitted to Truck", false);
+		RemoveEntityCollideCallback("CanisterEmpty_*", "PumpCollider");
+		AddAttachedPropToProp("TruckBackfire", "TruckBackfireCanister", "fuel_canister_full.ent", -0.65f, -0.6f, -2.75f, 0.0f, 180.0f, 0.0f);
+		SetLocalVarInt("FuelFittedToTruck", 1);
+		SetWheelInteractionDisablesStuck("TruckBackfireHandleInit", true);
+		SetEntityActive(asParent, false);
+		PlaySoundAtEntity("", "alley_cannister_into_veh.snt", "TruckCollider", 0.0f, false);
+		return;
+	}
+}
+//END TRUCK CANISTER HANDLER//
+
+//TRUCK BACKFIRE EVENT//
+void TruckBackfireEvent (string &in asEntity, int alState)
+{
+	if (alState == 1 && GetLocalVarInt("FuelFittedToTruck") == 1)
+	{
+		SetEntityActive("block_box_59", false);
+		SetEntityActive("block_box_60", false);
+		SetEntityActive("Mask2B", false);
+		SetLocalVarInt("Mask2BActive", 0);
+		SetPropStaticPhysics("TruckBackfire", false);
+		SetLampLit("TruckBackfireLights", true, false);
+		AddTimer("TruckLightTimer1", 1.7f, "BackfireTimers");
+		//AddTimer("TruckLightTimer2", 10.0f, "BackfireTimers"); 
+		//AddTimer("TruckLightTimer3", 18.5f, "BackfireTimers");
+		SetEntityActive("TruckBackfireHandleInit", false);
+		AddAttachedPropToProp("TruckBackfire", "TruckBackfireHandle", "truck_crankshafthandle.ent", 0.0f, -1.8f, -5.0f, 0.0f, 0.0f, 0.0f);
+		AddPropForce("TruckBackfire", 0.0f, 0.0f, 3000.0f, "local");
+		PlaySoundAtEntity("Backfire", "afx_church_backfire.snt", "TruckEngineSource", 0.0f, false);
+		PlaySoundAtEntity("Engine", "afx_church_engine.snt", "TruckEngineSource", 0.0f, false);
+		PlaySoundAtEntity("Crows", "afx_church_engine_crows.snt", "TruckCrowSource", 0.0f, false);
+		SetParticleSystemActive("TruckBackfire1", true);
+		SetParticleSystemActive("TruckBackfire2", true);
+	}
+	else if (alState == 1 && GetLocalVarInt("FuelFittedToTruck") == 0)
+	{
+		PlaySoundAtEntity("Backfire", "afx_church_engine_nofuel.snt", "TruckEngineSource", 0.0f, false);
+		SetWheelStuckState(asEntity, -1, false);
+		SetWheelInteractionDisablesStuck(asEntity, true);
+	}
+		
+}
+
+void BackfireTimers (string &in asTimer)
+{
+	if (asTimer == "TruckLightTimer1")
+	{
+		SetLampFlickerActive("TruckBackfireLights", false);
+		SetLampLit("TruckBackfireLights", false, false);
+		SetLampLit("TruckBackfireLights", true, false);
+		SetPropStaticPhysics("TruckBackfire", true);
+		return;
+	}
+	else if (asTimer == "TruckLightTimer2")
+	{
+		FadeLampTo("TruckBackfireLights", 0, 0, 0, 0, -1, 8.0);
+		return;
+	}
+	else if (asTimer == "TimerLightTimer3")
+	{
+		SetLampLit("TruckBackfireLights", false, false);
+		return;
+	}
+}
+//END BACKFIRE EVENT//
+
+//ONE SHOT SFX TRIGGERS//
+void OneShotSFXEvents (string &in asParent, string &in asChild, int alState)
+{
+	if (asChild == "OneShotSFXTrigger1")
+	{
+		PlaySoundAtEntity("OneShotRun", "amb_church_alley_oneshot_2.snt", "OneShotRunSource", 0.0f, false);
+		return;
+	}
+	else if (asChild == "OneShotSFXTrigger2")
+	{
+		PlaySoundAtEntity("OneShotDog", "amb_church_alley_oneshot_1.snt", "OneShotDogSource", 0.0f, false);
+		return;
+	}
+	else if (asChild == "OneShotSFXTrigger3")
+	{
+		AddDebugMessage("Play oneshotsfxtrigger3", false);
+		PlaySoundAtEntity("OneShotWhistle", "amb_church_alley_oneshot_3.snt", "OneShotWhistleSource", 0.0f, false);
+		return;
+	}
+}
+//END ONE SHOT SFX TRIGGERS//
+
+//STORE LAUGH EVENT//
+void StoreLaughEvent (string &in asParent, string &in asChild, int alState)
+{
+	PlaySoundAtEntity("", "afx_spooky_child_laugh_semi_distant.snt", "StorePigTrigger", 0.0f, false);
+}
+//END STORE LAUGH EVENT//
+
+
+
+//GRAVEYARD EVENTS//
+void GraveyardEvents (string &in asParent, string &in asChild, int alState)
+{
+	AddDebugMessage("Graveyard Triggers Added", false);
+	AddEntityCollideCallback("Player", "PigGraveTrigger", "PigGraveEvent", true, 1);
+	AddEntityCollideCallback("Player", "CornerGraveTrigger", "CornerGraveEvent", true, 1);
+	AddEntityCollideCallback("Player", "GraveStepsTrigger", "GraveStepsEvent", true, 1);
+	AddEntityCollideCallback("Player", "BackGraveTrigger", "BackGraveEvent", true, 1);
+	AddEntityCollideCallback("Player", "WhisperGraveTrigger", "WhisperGraveEvent", true, 1);
+}
+
+void PigGraveEvent (string &in asParent, string &in asChild, int alState)
+{
+	AddDebugMessage("Pig Grave Timer Started", false);
+	float fPigGrave = RandFloat(2.0f,2.5f);
+	AddTimer("PigGraveEvent_PostTimer", 1.0f+fPigGrave, "PigGraveEvent_PostTimer");
+}
+
+void PigGraveEvent_PostTimer (string &in asTimer)
+{
+	PlaySoundAtEntity("BushShake", "afx_spooky_courtyard_bush.snt", "BushSoundSource", 0.0f, true);
+	AddTimer("PigGraveEvent_PostTimer2", 0.5f, "PigGraveEvent_PostTimer2");
+	AddDebugMessage("Pig Grave Event", false);
+}
+
+void PigGraveEvent_PostTimer2 (string &in asTimer)
+{
+	PlaySoundAtEntity("Piggy", "afx_spooky_courtyard_pig.snt", "PigGraveSoundSource", 0.0f, true);
+}
+
+void CornerGraveEvent (string &in asParent, string &in asChild, int alState)
+{
+	AddDebugMessage("Corner Grave Timer Started", false);
+	float fCornerGrave = RandFloat(1.0f,1.5f);
+	AddTimer("CornerGraveEvent_PostTimer", 0.5f+fCornerGrave, "CornerGraveEvent_PostTimer");
+}
+
+void CornerGraveEvent_PostTimer (string &in asTimer)
+{
+	AddDebugMessage("Corner Grave Timer Over", false);
+	PlaySoundAtEntity("Child", "afx_spooky_child_laugh_semi_distant", "ChildLaughSource", 0.0f, true);
+	PlaySoundAtEntity("EerieDrone", "afx_spooky_eerie_wind_drone", "Player", 0.0f, true);
+}
+
+void GraveStepsEvent (string &in asParent, string &in asChild, int alState)
+{
+	AddDebugMessage("Steps Event", false);
+	PlaySoundAtEntity("EerieDrone", "afx_spooky_eerie_wind_drone_louder", "Player", 0.0f, true);
+	PlaySoundAtEntity("Howl", "afx_church_pack_pig_howl", "Player", 0.0f, true);
+}
+
+void BackGraveEvent (string &in asParent, string &in asChild, int alState)
+{
+	AddDebugMessage("Back Grave Timer Started", false);
+	float fBackGrave = RandFloat(1.0f,1.5f);
+	AddTimer("BackGrave_PostTimer", 1.0f+fBackGrave, "BackGrave_PostTimer");
+}
+
+void BackGrave_PostTimer (string &in asTimer)
+{
+	AddDebugMessage("Back Grave Timer Over", false);
+	PlaySoundAtEntity("Crying", "afx_event_spooky_baby_pig", "BackGraveSoundSource", 0.0f, true);
+	//PlaySoundAtEntity("EerieDrone", "afx_spooky_eerie_wind_drone", "Player", 0.0f, true);
+}
+
+void WhisperGraveEvent (string &in asParent, string &in asChild, int alState)
+{
+	AddDebugMessage("Whisper Grave Timer Started", false);
+	float fWhisperGrave = RandFloat(2.0f,2.5f);
+	AddTimer("WhisperGrave_PostTimer", 1.0f+fWhisperGrave, "WhisperGrave_PostTimer");
+}
+
+void WhisperGrave_PostTimer (string &in asTimer)
+{
+	AddDebugMessage("Whisper Grave Timer Over", false);
+	PlaySoundAtEntity("Whisper", "afx_spooky_mansion_whisper.snt", "Player", 0.0f, true);
+}
+//END GRAVEYARD EVENTS//
+
+//RESTORE TO NORMAL//
+void RestoreToNormal (string &in asTimer)
+{
+//RETURN TO NORMAL VISION
+	if (asTimer == "ReturnToNormalVision")
+	{
+		FadeRadialBlurTo(0.0f, 4.0f);
+		FadeImageTrailTo(0.0f, 4.0f);
+		return;
+	}
+
+//RETURN TO NORMAL ALL//
+	else if (asTimer == "ReturnToNormal")
+	{
+		FadeImageTrailTo(0.0f, 3.0f);
+		SetPlayerLookSpeedMul(1.0f);
+		SetPlayerMoveSpeedMul(1.0f);
+		StopPlayerLookAt();
+		return;
+	}
+	
+//END VISUAL EFFECT FOR SCREAM//
+	else if (asTimer == "EndVisEffect")
+	{
+		FadeImageTrailTo(0.0f, 0.5f);
+		FadeSepiaColorTo(0.0f, 0.5f);
+		return;
+	}
+}
+//END RESTORE TO NORMAL//
+
+//WIND SAMPLE PLAYER//
+void Sound_WindSpot_1 (string &in asParent, string &in asChild, int alState)
+{
+	if (alState == 1)
+	{
+		AddDebugMessage("Wind Sample 1 on", true);
+		PlaySoundAtEntity("WindSample1", "afx_ambience_mansion_wind_spot.snt", "Sound_WindSpot_1", 1.0f, false);
+		return;
+	}
+	else if (alState == -1) 
+	{
+		AddDebugMessage("Wind Stop", false);
+		StopSound("WindSample1", 1.0f);
+		return;
+	}
+}
+
+void Sound_WindSpot_2 (string &in asParent, string &in asChild, int alState)
+{
+	if (alState == 1)
+	{
+		AddDebugMessage("Wind Sample 2 on", true);
+		PlaySoundAtEntity("WindSample2", "afx_ambience_mansion_wind_spot.snt", "Sound_WindSpot_2", 1.0f, false);
+		return;
+	}
+	else if (alState == -1) 
+	{
+		AddDebugMessage("Wind Stop", false);
+		StopSound("WindSample2", 1.0f);
+		return;
+	}
+}
+
+void Sound_WindSpot_3 (string &in asParent, string &in asChild, int alState)
+{
+	if (alState == 1)
+	{
+		AddDebugMessage("Wind Sample 3 on", true);
+		PlaySoundAtEntity("WindSample3", "afx_ambience_mansion_wind_spot.snt", "BigDoorWindSource", 1.0f, false);
+		return;
+	}
+	else if (alState == -1) 
+	{
+		AddDebugMessage("Wind Stop", false);
+		StopSound("WindSample3", 1.0f);
+		return;
+	}
+}
+
+void Sound_WindSpot_4 (string &in asParent, string &in asChild, int alState)
+{
+	if (alState == 1)
+	{
+		AddDebugMessage("Wind Sample 4 on", true);
+		PlaySoundAtEntity("WindSample4", "afx_ambience_mansion_wind_spot.snt", "WindowCollisionArea", 1.0f, false);
+		return;
+	}
+	else if (alState == -1) 
+	{
+		AddDebugMessage("Wind Stop", false);
+		StopSound("WindSample4", 1.0f);
+		return;
+	}
+}
+//END WIND SAMPLES PLAYER//
+
+//RANDOM WIND//
+void RandomWindSound (string &in asParent, string &in asChild, int alState)
+{
+	if (asChild == "RandomWindStart_1"|| asChild == "RandomWindStart_2")
+	{	
+	
+	//START WIND
+	AddTimer("InitRandomWindSoundCuePlayer", 3.0f, "RandWindSoundCues");
+	
+	//AREAS
+	RemoveEntityCollideCallback("Player", "RandomWindStart_1");
+	RemoveEntityCollideCallback("Player", "RandomWindStart_2");
+	AddEntityCollideCallback("Player", "RandomWindStop_2", "RandomWindSound", true, 1);
+	AddEntityCollideCallback("Player", "RandomWindStop_1", "RandomWindSound", true, 1);
+	
+	StopSound("CrateEating", 3.0f); //Stop eating sound, as heard through wall.
+	
+	AddDebugMessage("Wind Sounds START!", true);
+	return;
+	}
+	
+	else if (asChild == "RandomWindStop_1"|| asChild == "RandomWindStop_2")
+	{
+	//REMOVE OUTSIDE SOUND
+	RemoveTimer("Player");
+	RemoveTimer("RandWindSoundCues");
+	AddEntityCollideCallback("Player", "ReturnMusicTrigger", "MusicPlayer", true, 1);
+		
+	//AREAS
+	RemoveEntityCollideCallback("Player", "RandomWindStop_2");
+	RemoveEntityCollideCallback("Player", "RandomWindStop_1");
+	AddEntityCollideCallback("Player", "RandomWindStart_1", "RandomWindSound", true, 1);
+	AddEntityCollideCallback("Player", "RandomWindStart_2", "RandomWindSound", true, 1);
+			
+	AddDebugMessage("Wind Sounds STOP!", true);
+	return;
+	}										
+}
+//END RANDOM WIND//
+
+//RANDOM WAREHOUSE SOUNDS//
+void RandomWarehouseSound (string &in asParent, string &in asChild, int alState)
+{
+	if (asChild == "RandWarehouseSound_Start_1"|| asChild == "RandWarehouseSound_Start_2"|| asChild == "RandWarehouseSound_Start_3")
+	{	
+	
+	//ADD WAREHOUSE TIMER
+	AddTimer("InitRandomWarehouseSoundCuePlayer", 3.0f, "RandWarehouseSoundCues");
+	AddTimer("InitRandomWarehouseEerieSoundCuePlayer", 6.0f, "RandWarehouseEerieSoundCues");
+	
+	//AREAS
+	RemoveEntityCollideCallback("Player", "RandWarehouseSound_Start_1");
+	RemoveEntityCollideCallback("Player", "RandWarehouseSound_Start_2");
+	RemoveEntityCollideCallback("Player", "RandWarehouseSound_Start_3");
+	AddEntityCollideCallback("Player", "RandWarehouseSound_Stop_3", "RandomWarehouseSound", true, 1);
+	AddEntityCollideCallback("Player", "RandWarehouseSound_Stop_2", "RandomWarehouseSound", true, 1);
+	AddEntityCollideCallback("Player", "RandWarehouseSound_Stop_1", "RandomWarehouseSound", true, 1);
+	
+	AddDebugMessage("Warehouse Sounds START!", true);
+	return;
+	}
+	
+	else if (asChild == "RandWarehouseSound_Stop_3"|| asChild == "RandWarehouseSound_Stop_2"|| asChild == "RandWarehouseSound_Stop_1")
+	{
+	//REMOVE WAREHOUSE SOUND
+	RemoveTimer("Player");
+	RemoveTimer("RandWarehouseSoundCues");
+	RemoveTimer("RandWarehouseEerieSoundCues");
+		
+	//AREAS
+	RemoveEntityCollideCallback("Player", "RandWarehouseSound_Stop_3");
+	RemoveEntityCollideCallback("Player", "RandWarehouseSound_Stop_2");
+	RemoveEntityCollideCallback("Player", "RandWarehouseSound_Stop_1");
+	AddEntityCollideCallback("Player", "RandWarehouseSound_Start_1", "RandomWarehouseSound", true, 1);
+	AddEntityCollideCallback("Player", "RandWarehouseSound_Start_2", "RandomWarehouseSound", true, 1);
+	AddEntityCollideCallback("Player", "RandWarehouseSound_Start_3", "RandomWarehouseSound", true, 1);	
+			
+	AddDebugMessage("Warehouse Sounds STOP!", true);
+	return;
+	}										
+}
+//
+
+//LEVEL TRANSITION MUSIC//
+void Level_Transition_Music (string &in asEntity)
+{
+	PlayMusic("music_mans_bedroom2.ogg", false, 1.0f, 2.0f, 2, false);
+	AddDebugMessage("music triggered", false);
+}
+
+										//////////////////////////////
+										//NON MAP-SPECIFIC FUNCTIONS//
+										//////////////////////////////
+
+//VO HANDLER//  //VO SYSTEM USES OVERLOADED FUNCTION CALLS, ALL CONTAINED WITHIN THIS BLOCK//
+void VOHandler (string &in asParent, string &in asChild, int alState) //COLLISION CALLBACK VO HANDLER//
+{
+
+}
+
+void VOHandler (int Index)
+{
+}
+//END VO HANDLER//
+										
+//AMBIENT SOUNDTRACK PLAYER//
+void MapAmbienceAreas (string &in asParent, string &in asChild, int alState)
+
+{		
+		if (asChild == "AMBAnnex")
+		{
+			if (alState == 1)
+			{
+				PlaySoundAtEntity("annex", "amb_factory_office_tight.snt", "Player", 1.0f, true);
+				SetLocalVarString("CurrentAmbientTrack", asChild);
+				return;
+			}
+			else if (alState == -1) 
+			{
+				StopSound("annex", 1.0f);
+				return;
+			}
+		}
+//BREAK//
+		if (asChild == "AMBAnnex_1")
+		{
+			if (alState == 1)
+			{
+				PlaySoundAtEntity("annex_1", "amb_factory_office_tight.snt", "Player", 1.0f, true);
+				SetLocalVarString("CurrentAmbientTrack", asChild);
+				return;
+			}
+			else if (alState == -1) 
+			{
+				StopSound("annex_1", 1.0f);
+				return;
+			}
+		}
+//BREAK//
+		if (asChild == "AMBOffices")
+		{
+			if (alState == 1)
+			{
+				PlaySoundAtEntity("AMBOffices", "amb_factory_office_tight.snt", "Player", 1.0f, true);
+				SetLocalVarString("CurrentAmbientTrack", asChild);
+				return;
+			}
+			else if (alState == -1) 
+			{
+				StopSound("AMBOffices", 1.0f);
+				return;
+			}
+		}
+//BREAK//
+		else if (asChild == "AMBAreaAlleyOutside1")
+		{
+			if (alState == 1)
+			{
+				PlaySoundAtEntity("alley1", "amb_church_alley_loop.snt", "Player", 1.0f, true);
+				SetLocalVarString("CurrentAmbientTrack", asChild);
+				return;
+			}
+			else if (alState == -1) 
+			{
+				StopSound("alley1", 1.0f);
+				return;
+			}
+		}
+//BREAK//
+		else if (asChild == "AMBAreaAlleyOutside2")
+		{
+			if (alState == 1)
+			{
+				PlaySoundAtEntity("alley2", "amb_church_alley_loop.snt", "Player", 1.0f, true);
+				SetLocalVarString("CurrentAmbientTrack", asChild);
+				return;
+			}
+			else if (alState == -1) 
+			{
+				StopSound("alley2", 1.0f);
+				return;
+			}
+		}
+//BREAK//	
+		else if (asChild == "AMBAreaAlleyOutside3")
+		{
+			if (alState == 1)
+			{
+				PlaySoundAtEntity("alley3", "amb_church_alley_loop.snt", "Player", 1.0f, true);
+				SetLocalVarString("CurrentAmbientTrack", asChild);
+				return;
+			}
+			else if (alState == -1) 
+			{
+				StopSound("alley3", 1.0f);
+				return;
+			}
+		}
+//BREAK//	
+		else if (asChild == "AMBAreaLoadingAreaSmall")
+		{
+			if (alState == 1)
+			{
+				PlaySoundAtEntity("alleyloading", "amb_factory_office_tight.snt", "Player", 1.0f, true);
+				SetLocalVarString("CurrentAmbientTrack", asChild);
+				return;
+			}
+			else if (alState == -1) 
+			{
+				StopSound("alleyloading", 1.0f);
+				return;
+			}
+		}
+//BREAK//
+		else if (asChild == "AMBAreaFactoryLoading")
+		{
+			if (alState == 1)
+			{
+				PlaySoundAtEntity("loadingarea", "amb_church_alley_loadingarea.snt", "Player", 1.0f, true);
+				SetLocalVarString("CurrentAmbientTrack", asChild);
+				return;
+			}
+			else if (alState == -1) 
+			{
+				StopSound("loadingarea", 1.0f);
+				return;
+			}
+		}
+//BREAK//		
+		else if (asChild == "AMBAreaDoorRattle")
+		{
+			if (alState == 1)
+			{
+				PlaySoundAtEntity("doorrattle", "amb_church_loadingarea_door_rattle.snt", "AMBDoorRattle_Source", 1.0f, true);
+				SetLocalVarString("CurrentAmbientTrack", asChild);
+				return;
+			}
+			else if (alState == -1) 
+			{
+				StopSound("doorrattle", 1.0f);
+				return;
+			}
+		}
+//BREAK//
+		else if (asChild == "AMBAreaDoorRattle2")
+		{
+			if (alState == 1)
+			{
+				PlaySoundAtEntity("doorrattle2", "amb_church_loadingarea_door_rattle.snt", "AMBDoorRattle_Source", 1.0f, true);
+				SetLocalVarString("CurrentAmbientTrack", asChild);
+				return;
+			}
+			else if (alState == -1) 
+			{
+				StopSound("doorrattle2", 1.0f);
+				return;
+			}
+		}
+
+	
+		
+//SEPARATE BLOCK FOR LOADING AREA MACHINE AMBIENCE//
+			
+		else if (asChild == "AMBAreaLoadingArea_Mach_Pt1")
+		{
+			if (alState == 1)
+			{
+				PlaySoundAtEntity("AmbLoadingArea_Mach_Pt1", "amb_loadingarea_machine_lowend_loop.snt", "Player", 1.0f, true);
+				SetLocalVarString("CurrentAmbientTrack", asChild);
+				return;
+			}
+			else if (alState == -1) 
+			{
+				StopSound("AmbLoadingArea_Mach_Pt1", 1);
+				return;
+			}
+		}
+//BREAK//		
+		else if (asChild == "AMBAreaLoadingArea_Mach_Pt1_2")
+		{
+			if (alState == 1)
+			{
+				PlaySoundAtEntity("AmbLoadingArea_Mach_Pt1_2", "amb_loadingarea_machine_lowend_loop.snt", "Player", 1.0f, true);
+				SetLocalVarString("CurrentAmbientTrack", asChild);
+				return;
+			}
+			else if (alState == -1) 
+			{
+				StopSound("AmbLoadingArea_Mach_Pt1_2", 1);
+				return;
+			}
+		}
+//BREAK//			
+		else if (asChild == "AMBAreaLoadingArea_Mach_Mid")
+		{
+			if (alState == 1)
+			{
+				PlaySoundAtEntity("AmbLoadingArea_Mach_Mid_1", "amb_loadingarea_macine_mid_loop.snt", "Player", 1.0f, true);
+				PlaySoundAtEntity("AmbLoadingArea_Mach_Mid_2", "amb_loadingarea_machine_slice_low.snt", "Player", 1.0f, true);
+				SetLocalVarString("CurrentAmbientTrack", asChild);
+				return;
+			}
+			else if (alState == -1) 
+			{
+				StopSound("AmbLoadingArea_Mach_Mid_1", 1);
+				StopSound("AmbLoadingArea_Mach_Mid_2", 1);
+				return;
+			}
+		}
+//BREAK//			
+		else if (asChild == "AMBAreaLoadingArea_Mach_Mid_1")
+		{
+			if (alState == 1)
+			{
+				PlaySoundAtEntity("AmbLoadingArea_Mach_Mid_3", "amb_loadingarea_macine_mid_loop.snt", "Player", 1.0f, true);
+				PlaySoundAtEntity("AmbLoadingArea_Mach_Mid_4", "amb_loadingarea_machine_slice_low.snt", "Player", 1.0f, true);
+				SetLocalVarString("CurrentAmbientTrack", asChild);
+				return;
+			}
+			else if (alState == -1) 
+			{
+				StopSound("AmbLoadingArea_Mach_Mid_3", 1);
+				StopSound("AmbLoadingArea_Mach_Mid_4", 1);
+				return;
+			}
+		}
+}
+//END AMBIENT SOUNDTRACK PLAYER//
+
+//TRIGGERED VO PLAYER//
+void TimerChurchBellClue(string &in asTimer)
+{
+	PlaySoundAtEntity("bell", "afx_alley_church_bell.snt", "BellSource", 0.0f, false);
+	
+}
+void VOPlayer (string &in asParent, string &in asChild, int alState)
+{
+	if (asChild == "vo_alley_child_trigger")
+	{
+		AddTimer("", 9.321, "TimerChurchBellClue");
+		AddEffectVoice("vo_alley_trigger_child_01", "", "Voice", "vo_alley_trigger_child_01", false, "", 0.0f, 0.0f);
+		PlaySoundAtEntity("", "afx_gameplay_hightone_10sec.snt", "Player", 1.0f, false);
+		PlaySoundAtEntity("", "afx_flashback_whisper.snt", "Player", 1.0f, false);	
+		FadeImageTrailTo(2.0f, 2.5f);
+		SetPlayerMoveSpeedMul(0.35f);
+		SetPlayerLookSpeedMul(0.35f);
+		AddTimer("ReturnToNormal", 5.5f, "RestoreToNormal");
+		//StartPlayerLookAt("ChurchLookAt", 0.25f, 0.5f, "");
+		return;
+	}
+	else if (asChild == "graveyard_flashback_VO")
+	{
+		AddEffectVoice("vo_alley_trigger_child_02_flashback.ogg", "", "Voice", "vo_alley_trigger_child_02_flashback", false, "", 0.0f, 0.0f);
+		AddTimer("graveyard_flashback_line2", 2.5f, "VOPlayerTimedLines");
+		PlaySoundAtEntity("", "afx_gameplay_hightone_10sec.snt", "Player", 1.0f, false);
+		PlaySoundAtEntity("", "afx_flashback_whisper.snt", "Player", 1.0f, false);	
+		FadeImageTrailTo(2.0f, 2.5f);
+		SetPlayerMoveSpeedMul(0.35f);
+		SetPlayerLookSpeedMul(0.35f);
+		AddTimer("ReturnToNormal", 8.5f, "RestoreToNormal");
+		return;
+	}
+}
+
+void VOPlayerTimedLines (string &in asTimer)
+{
+	if (asTimer == "graveyard_flashback_line2")
+	{
+		AddEffectVoice("vo_alley_trigger_mandus_01_flashback.ogg", "", "Voice", "vo_alley_trigger_mandus_01_flashback", false, "", 0.0f, 0.0f);
+		AddDebugMessage("Line 2 Triggered!", false);
+		return;
+	}
+}
+//END VO PLAYER//
+
+//RANDOMISED SOUND CUE PLAYER//
+void RandSoundCues(string &in asTimer)
+{
+	string[] sCueSources = {"RandSound_1", "RandSound_2", "RandSound_3", "RandSound_4", "RandSound_5", "RandSound_6", };
+	asTimer = sCueSources[RandInt (0, 5)];
+	PlaySoundAtEntity(asTimer, "afx_spooky_eerie_wind_drone.snt", asTimer, 0, false);
+	AddDebugMessage("Random Sound Cue Function Selected EERIE FACTORY Sound Source: "+asTimer, false);
+	AddTimer(asTimer, RandFloat(10.0f, 15.0f), "RandSoundCues");
+}
+
+void RandWindSoundCues(string &in asTimer)
+{
+	string[] sCueSources = {"Player"};
+	asTimer = sCueSources[0];
+	PlaySoundAtEntity(asTimer, "afx_events_mansion_wind.snt", asTimer, 0, false);
+	AddDebugMessage("Random Sound Cue Function Selected Wind Sound Source: "+asTimer, false);
+	AddTimer(asTimer, RandFloat(10.0f, 15.0f), "RandWindSoundCues");
+}
+
+void RandWarehouseSoundCues(string &in asTimer)
+{
+	string[] sCueSources = {"Player"};
+	asTimer = sCueSources[0];
+	PlaySoundAtEntity(asTimer, "afx_events_cellar_rand_env.snt", asTimer, 0, false);
+	AddDebugMessage("Random Sound Cue Function Selected Environmental Sound Source: "+asTimer, false);
+	AddTimer(asTimer, RandFloat(8.0f, 14.0f), "RandWarehouseSoundCues");
+}
+
+void RandWarehouseEerieSoundCues(string &in asTimer)
+{	
+	string[] sCueSources = {"Player"};
+	asTimer = sCueSources[0];
+	PlaySoundAtEntity(asTimer, "afx_spooky_stereo_whisper.snt", asTimer, 0, false);
+	AddDebugMessage("Random Sound Cue Function Selected Eerie Sound Source: "+asTimer, false);
+	AddTimer(asTimer, RandFloat(20.0f, 30.0f), "RandWarehouseEerieSoundCues");
+}
+
+void RandChildCryCues(string &in asTimer)
+{
+	PlaySoundAtEntity("Crying", "spooky_childcry_small_area.snt", "ChildCrySource", 0, false);
+	AddTimer(asTimer, RandFloat(10.0f, 15.0f), "RandChildCryCues");
+	AddDebugMessage("ChildCryPlaying", false);
+}
+
+void RandOfficeSoundCues(string &in asTimer)
+{
+	string[] sCueSources = {"RandOfficeSoundArea_1", "RandOfficeSoundArea_2", "RandOfficeSoundArea_3", "RandOfficeSoundArea_4", "RandOfficeSoundArea_5", "RandOfficeSoundArea_6", "RandOfficeSoundArea_7", "RandOfficeSoundArea_8"};
+	asTimer = sCueSources[RandInt (0, 7)];
+	PlaySoundAtEntity(asTimer, "afx_spooky_mansion_backarea_abstract.snt", asTimer, 0, false);
+	AddDebugMessage("Random Sound Cue Function Selected EERIE OFFICE Sound Source: "+asTimer, false);
+	AddTimer(asTimer, RandFloat(8.0f, 13.0f), "RandOfficeSoundCues");
+}
+//END RANDOMISED SOUND CUE PLAYER//	
+
+//MANDUS REACTION SOUND PLAYER//
+void MandusReactionPlayer (string asReactType, float afWaitTime)
+{
+	SetLocalVarString("CurrentReactType", asReactType);
+	AddTimer("MandusReactionInternalTimer", afWaitTime, "MandusReactionPlayerTimerEnd");
+}
+
+void MandusReactionPlayerTimerEnd (string &in asTimer)
+{
+	if (GetLocalVarString("CurrentReactType") == "Scared")
+	{
+		AddDebugMessage("SCARED REACTION", false);
+		PlaySoundAtEntity("", "react_scare.snt", "Player", 0.0f, false);
+		return;
+	}
+	else if (GetLocalVarString("CurrentReactType") == "Breath")
+	{
+		AddDebugMessage("BREATH REACTION", false);
+		PlaySoundAtEntity("", "react_breath.snt", "Player", 0.0f, false);
+		return;
+	}
+	else if (GetLocalVarString("CurrentReactType") == "Quick")
+	{
+		AddDebugMessage("QUICK SCARE REACTION", false);
+		PlaySoundAtEntity("", "react_quickscare.snt", "Player", 0.0f, false);
+		return;
+	}
+	else if (GetLocalVarString("CurrentReactType") == "Cough")
+	{
+		AddDebugMessage("COUGH REACTION", false);
+		PlaySoundAtEntity("", "react_cough.snt", "Player", 0.0f, false);
+		return;
+	}
+}
+//END MANDUS REACTION SOUND PLAYER//
+
+//MUSIC PLAYER//
+void MusicPlayer (string &in asParent, string &in asChild, int alState)
+{
+	if (asChild == "OfficeDoorCollider")
+	{
+		PlayMusic("music_church_going_outside.ogg", false, 1.0f, 0.0f, 2, false);
+		return;
+	}
+	else if (asChild == "PigsAmbient3MusicTrigger")
+	{
+		PlayMusic("music_church_pig_ambient_3.ogg", false, 1.0f, 0.0f, 0, false);
+		return;
+	}
+	else if (asChild == "ReturnMusicTrigger")
+	{
+		AddDebugMessage("Music alley walking back Triggered", false);
+		PlayMusic("music_alley_walkingback.ogg", false, 1.0f, 0.0f, 0, false);
+		return;
+	}
+	
+}
+//END MUSIC PLAYER//
+
+//MAP CHILD EVENT HANDLER//
+void ChildEventHandler (string &in asParent, string &in asChild, int alState)
+{
+	if (asChild == "Child1RunTrigger")
+	{
+		SetEntityActive("Child1", true);
+		AddEnemyPatrolNode("Child1", "PathNodeArea_11", 0.0f, "", false);
+		AddEnemyPatrolNode("Child1", "PathNodeArea_12", 0.0f, "", false);
+		AddEnemyPatrolNode("Child1", "PathNodeArea_13", 0.0f, "", false);
+		AddEnemyPatrolNode("Child1", "PathNodeArea_21", 0.0f, "", false);
+		return;
+	}
+	
+	else if (asChild == "Child1KillTrigger")
+	{
+		ClearEnemyPatrolNodes("Child1");
+		SetEntityActive("Child1", false);
+		return;
+	}	
+	else if (asChild == "Child2RunTrigger")
+	{
+		SetEntityActive("Child2", true);
+		AddEnemyPatrolNode("Child2", "PathNodeArea_22", 0.0f, "", false);
+		AddEnemyPatrolNode("Child2", "PathNodeArea_23", 0.0f, "", false);
+		return;
+	}
+	else if (asChild == "Child2KillTrigger")
+	{
+		ClearEnemyPatrolNodes("Child2");
+		SetEntityActive("Child2", false);
+		return;
+	}	
+	else if (asChild == "Child3RunTrigger")
+	{
+		SetEntityActive("Child3", true);
+		SetEntityActive("Child4", true);
+		PlaySoundAtEntity("laugh", "afx_spooky_child_laugh_alley.snt", "Child3", 0, false);
+		AddTimer("", 6, "TimerSecondLaugh");
+		AddEnemyPatrolNode("Child3", "PathNodeArea_50", 0.0f, "", false);
+		AddEnemyPatrolNode("Child4", "PathNodeArea_50", 0.0f, "", false);
+		AddEnemyPatrolNode("Child3", "PathNodeArea_53", 0.0f, "", false);
+		AddEnemyPatrolNode("Child4", "PathNodeArea_53", 0.0f, "", false);
+		AddEnemyPatrolNode("Child3", "PathNodeArea_42", 0.0f, "", false);
+		AddEnemyPatrolNode("Child4", "PathNodeArea_42", 0.0f, "", false);
+		AddEnemyPatrolNode("Child3", "PathNodeArea_39", 0.0f, "", false);
+		AddEnemyPatrolNode("Child4", "PathNodeArea_39", 0.0f, "", false);
+		AddEnemyPatrolNode("Child3", "PathNodeArea_36", 0.0f, "", false);
+		AddEnemyPatrolNode("Child4", "PathNodeArea_36", 0.0f, "", false);
+		AddEnemyPatrolNode("Child3", "PathNodeArea_34", 0.0f, "", false);
+		AddEnemyPatrolNode("Child4", "PathNodeArea_34", 0.0f, "", false);
+		AddEnemyPatrolNode("Child3", "PathNodeArea_48", 0.0f, "", false);
+		AddEnemyPatrolNode("Child4", "PathNodeArea_48", 0.0f, "", false);
+		AddEnemyPatrolNode("Child3", "PathNodeArea_46", 0.0f, "", false);
+		AddEnemyPatrolNode("Child4", "PathNodeArea_46", 0.0f, "", false);
+		AddEnemyPatrolNode("Child3", "PathNodeArea_18", 0.0f, "", false);
+		AddEnemyPatrolNode("Child4", "PathNodeArea_18", 0.0f, "", false);
+		
+		return;
+	}
+	
+	else if (asChild == "Child3KillTrigger")
+	{
+		ClearEnemyPatrolNodes("Child3");
+		SetEntityActive("Child3", false);
+		return;
+	}	
+	
+	else if (asChild == "Child4KillTrigger")
+	{
+		ClearEnemyPatrolNodes("Child4");
+		SetEntityActive("Child4", false);
+		return;
+	}	
+	
+}	
+
+void TimerSecondLaugh(string &in asTimer)
+{
+	PlaySoundAtEntity("laugh2", "afx_spooky_child_laugh_alley.snt", "Child3", 1, false);
+}
+//END MAP CHILD EVENT HANDLER//
+
+
+//PIG ENCOUNTER 1//
+
+void TempPigEnc()
+{
+	//Pathnodes: PathNodeArea_31, 
+}
+
+//END PIG ENCOUNTER 1//
+
+// HINT HANDLER//
+void HintHandler (string &in asParent, string &in asChild, int alState)
+{
+	if (asChild == "EnteredOfficesTrigger")
+	{
+		AddHint("Alley1", "");
+		return;
+	}
+	else if (asChild == "PumpPlayerTracker")
+	{
+		AddHint("Alley2", "");
+		return;
+	}
+	else if (asChild == "CarHintTrigger")
+	{
+		AddHint("Alley3", "");
+		return;
+	}
+}
+//END HINT HANDLER//
+
+//DELAYED HINT//
+void TimerDelayedHint(string &in asEntity)
+{
+	AddHint(asEntity, "");
+}
+//END DELAYED HINT//

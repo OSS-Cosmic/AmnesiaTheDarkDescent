@@ -1,8 +1,6 @@
 <EntDelta Version="1" Target="entities/lamp/chandelier_nice/chandelier_nice_static.ent">
     <Modify Category="Entities" ID="29" Name="PointLight_1">
         <SetAttr CastShadows="true" FalloffMap="" FlickerOffRadius="3.43" Radius="3.5" Re_FlickerOffIntensity="1.2" Re_Intensity="1.3" Re_Radius="22" Re_SourceRadius="0.05" ShadowResolution="Low" WorldPos="-0.609689 -2.3079 0.000122" />
-        <RemoveAttr Name="Brightness" />
-        <RemoveAttr Name="Falloff" />
     </Modify>
     <Modify Category="Entities" ID="36" Name="Billboard_2">
         <SetAttr ConnectLight="PointLight_2" />

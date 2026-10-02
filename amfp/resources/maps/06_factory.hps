@@ -1,0 +1,3392 @@
+//***Filename: 06_FACTORY.HPS
+//***Author: Peter Howell
+//***Lines: 2460
+//***Updated: 04/02/2013
+
+										////////////////////////////////
+										//MAP INITIALISATION FUNCTIONS//
+										////////////////////////////////
+
+//DEFINE COAL ARRAYS//
+array <string> sFurnace2Contents;
+array <string> sFurnace3Contents;
+array <string> sFurnace6Contents;
+array <string> sCoalToIgniteOnLoad;
+//LOAD COAL ARRAYS BEFORE LEVEL LOAD//
+array<string> LoadStringArray(string &in arrayName)
+{
+    array<string> newArray;
+
+	int lStoredArraySize = GetGlobalVarInt("arr_" + arrayName + "length");
+
+	for ( int i = 0; i < lStoredArraySize; i++ )
+	{
+	    newArray.insertLast( GetGlobalVarString( "arr_" + arrayName + "_elem_" + i ) );
+	}
+
+	return newArray;
+}
+//END LOAD COAL ARRAYS//
+
+//SAVE COAL ARRAYS TO GLOBAL VAR FOR STORAGE DURING SAVE/RELOAD//
+void SaveStringArray( string &in arrayName, array<string> &in arrayInstance )
+{
+    int lStoredArraySize = GetGlobalVarInt( "arr_" + arrayName + "length" );
+
+	SetGlobalVarInt( "arr_" + arrayName + "length", arrayInstance.length() );
+
+	for ( int i = 0; i < arrayInstance.length(); i++ )
+	{
+	    SetGlobalVarString( "arr_" + arrayName + "_elem_" + i, arrayInstance[ i ] );
+	}
+}
+//END SAVE ARRAYS//									
+
+void OnStart()
+ 
+{
+	//Map Preamble
+	{
+		SetMapDisplayNameEntry("Factory");
+		//SET CHECKPOINT #1//
+		CheckPoint("CP01_Start", "MainStart", "", "", "", false);
+		//CLEAR OLD HINTS//
+		//RemoveAllHints();
+	}
+	//END LEVEL TRANSITION MUSIC
+	{
+		StopMusic(5.0f, 8);
+	}
+	
+	// Setup Local Variables
+		{
+			//ALL-MAP VARIABLES//
+			SetLocalVarString("CurrentAmbientTrack", "");
+			
+			//SINGLE-MAP VARIABLES//
+			SetLocalVarString("MonsterGenerator1CurrentTimerName", "VoidString");
+			SetLocalVarString("MonsterGenerator2CurrentTimerName", "VoidString");
+			SetLocalVarString("MonsterGenerator3CurrentTimerName", "VoidString");
+			SetLocalVarInt("MonsterGenerator1On", 0);
+			SetLocalVarInt("MonsterGenerator2On", 0);
+			SetLocalVarInt("MonsterGenerator3On", 0);
+			SetLocalVarInt("PistonsActivated", 0);
+			SetLocalVarInt("FailSafeOK", 0);
+			SetLocalVarInt("AdaptedAmbience", 0);
+			SetLocalVarInt("SoundCutOff1", 0);
+			SetLocalVarInt("Furnace2Prepped", 0);
+			SetLocalVarInt("Furnace3Prepped", 0);
+			SetLocalVarInt("Furnace6Prepped", 0);
+			SetLocalVarInt("Furnace2Lit", 0);
+			SetLocalVarInt("Furnace3Lit", 0);
+			SetLocalVarInt("Furnace6Lit", 0);
+			SetLocalVarInt("FurnaceLitTotal", 0);
+			SetLocalVarInt("TotalCoalInMap", 0);
+			SetLocalVarInt("NextCoalNumber", 10);
+			SetLocalVarInt("PlayerTracking1", 0);
+			SetLocalVarInt("PlayerTracking2", 0);
+			SetLocalVarInt("PistonsOn", 0);
+			SetLocalVarInt("FirstLoad", 1);
+			SetLocalVarInt("Mask1Active", 1);
+			SetLocalVarInt("Mask2Active", 0);
+			SetLocalVarInt("Mask2MaySpawn", 0);
+			SetLocalVarInt("Mask3Active", 0);
+
+			SetLocalVarFloat("fogOutsideR", 0.015);
+			SetLocalVarFloat("fogOutsideG", 0.037);
+			SetLocalVarFloat("fogOutsideB", 0.073);
+			SetLocalVarFloat("fogOutsideStart", -20);//-25);
+			SetLocalVarFloat("fogOutsideEnd", 400);
+			SetLocalVarFloat("fogOutsideExp", 0.3);//0.2);
+			SetLocalVarInt("FogInsideMask", 0);
+			SetLocalVarInt("FogSkyInside", 0);
+		}
+		
+	//AutoRun Event Timers
+		{	
+		}
+		
+	//Setup Initial Entity Callbacks
+		{
+			//LEVEL CHANGE CALLBACKS
+			for(int i=0;i<=7;i++)
+				AddEntityCollideCallback("Player", "AreaBeginInside_"+i, "CollideBeginInside", false, 0);
+			AddEntityCollideCallback("Player", "AreaCollideOcclusion_0", "CollideSwitchOccluder", false, 0);
+			AddEntityCollideCallback("Player", "AreaCollideOcclusion_1", "CollideSwitchOccluder", false, 0);
+			AddEntityCollideCallback("Player", "AreaCollideOcclusion_2", "CollideSwitchOccluder", false, 0);
+			AddEntityCollideCallback("Player", "AreaCollideOcclusion_3", "CollideSwitchOccluder", false, 0);
+			AddEntityCollideCallback("Player", "AreaCollideOcclusion_4", "CollideSwitchOccluder", false, 0);
+			AddEntityCollideCallback("Player", "AreaCollideOcclusion_5", "CollideSwitchOccluder", false, 0);
+
+
+			//COLLISION CALLBACKS//
+			AddEntityCollideCallback("Player", "wind_yard_trigger", "YardWindEvent", true, 1);
+			AddEntityCollideCallback("Player", "barrel_roll_trigger", "BarrelHandler", true, 1);
+			AddEntityCollideCallback("Player", "PistonTestTrigger", "PistonTest", true, 1);
+			AddEntityCollideCallback("Player", "TruckDrivebyTrigger", "TruckDriveby", true, 0);
+			AddEntityCollideCallback("Player", "MonsterGeneratorSwapTriggerUp", "MonsterGeneratorSwapHandler", false, 1);
+			AddEntityCollideCallback("Player", "MonsterGeneratorSwapTriggerDown", "MonsterGeneratorSwapHandler", false, 1);
+			AddEntityCollideCallback("Player", "PistonQuakeTrigger", "PistonQuake", true, 0);
+			AddEntityCollideCallback("Player", "PistonResetTrigger1", "PistonReset", false, 0);
+			AddEntityCollideCallback("Player", "PistonResetTrigger2", "PistonReset", false, 0);
+			AddEntityCollideCallback("Player", "PistonResetTrigger3", "PistonReset", true, 1);
+			AddEntityCollideCallback("Player", "Gate2DropTrigger", "Gate2Drop", true, 1);
+			AddEntityCollideCallback("Player", "PlayerTrackingArea1", "CoalSpawnPlayerTracking", false, 0);
+			AddEntityCollideCallback("Player", "PlayerTrackingArea2", "CoalSpawnPlayerTracking", false, 0);
+			AddEntityCollideCallback("Player", "Mask1DespawnTrigger", "Mask1Despawner", true, 1);
+			AddEntityCollideCallback("Player", "Mask2Tracker", "Mask2Tracker", false, 0);
+			AddEntityCollideCallback("Player", "AreaPig1Start", "EnterPig1Start", true, 1);
+			AddEntityCollideCallback("Player", "AreaPig1TimerStart", "StartPig1Timer", true, 1);
+			AddEntityCollideCallback("Player", "AreaStartOfBottom", "EnterStartOfBottom", true, 1);
+			AddEntityCollideCallback("Player", "FactoryHintTrigger", "HintHandler", true, 1);
+			AddEntityCollideCallback("Player", "FurnacesHintTrigger", "HintHandler", true, 1);
+			AddEntityCollideCallback("Player", "AreaGateXDown", "AreaCloseGateX", true, 1);
+			AddEntityCollideCallback("Player", "AreaCloseDoor_1", "CloseDoorAuto01", false, 1);
+			AddEntityCollideCallback("Player", "AreaCloseDoor_2", "CloseDoorAuto02", false, 1);
+			
+			
+			//COAL PIECE CALLBACKS//			
+			for (int i = 1; GetEntityExists("CoalPiece_" + i); i++)
+			{
+				string sCoalPiece = "CoalPiece_" + i;
+				AddEntityCollideCallback(sCoalPiece, "Furnace2CoalCollider", "CoalCollisionHandler", false, 0);
+				AddEntityCollideCallback(sCoalPiece, "Furnace3CoalCollider", "CoalCollisionHandler", false, 0);
+				AddEntityCollideCallback(sCoalPiece, "Furnace6CoalCollider", "CoalCollisionHandler", false, 0);
+				AddEntityCollideCallback(sCoalPiece, "CoalTrackingArea", "MapCoalTracking", false, 0);
+			}
+			
+			//ENV SOUNDS PISTON ROOM
+			AddEntityCollideCallback("Player", "EnvSoundsStart_1", "RandomEnvSound", true, 1);
+			AddEntityCollideCallback("Player", "EnvSoundsStart_2", "RandomEnvSound", true, 1);
+			AddEntityCollideCallback("Player", "EnvSoundsStart_3", "RandomEnvSound", true, 1);
+			
+			//FURNACE DOORS//
+			AddEntityCollideCallback("Furnace2Door", "Furnace2DoorCollider", "FurnaceDoorEventHandler", false, 1);
+			AddEntityCollideCallback("Furnace3Door", "Furnace3DoorCollider", "FurnaceDoorEventHandler", false, 1);
+			AddEntityCollideCallback("Furnace6Door", "Furnace6DoorCollider", "FurnaceDoorEventHandler", false, 1);
+			
+			//LOOKAT CALLBACKS//
+			SetEntityPlayerLookAtCallback("PistonResetFailSafeLookTarget", "PistonResetFailSafeUpdater", false);
+			
+			//INTERACTION CALLBACKS//
+			SetEntityPlayerInteractCallback("tunnels_door_6", "DoorScratchEvent", true);
+			SetEntityPlayerInteractCallback("LaughDoor", "ChildSoundTunnelsDoor", true);
+			
+			//STATE CHANGE CALLBACKS//
+			SetEntityConnectionStateChangeCallback("Furnace2Switch", "FurnaceSwitchHandler");
+			SetEntityConnectionStateChangeCallback("Furnace3Switch", "FurnaceSwitchHandler");
+			SetEntityConnectionStateChangeCallback("Furnace6Switch", "FurnaceSwitchHandler");
+			SetEntityConnectionStateChangeCallback("Lever1", "PistonLeverHandler");
+			SetEntityConnectionStateChangeCallback("Lever2", "PistonLeverHandler");
+			SetEntityConnectionStateChangeCallback("Lever3", "PistonLeverHandler");
+			
+			SetMoveObjectState("Gatex", 0.5f);
+			
+			//DOWNSTAIRS CHILD
+			AddEntityCollideCallback("child_1", "ChildBottomAreaKillTrigger", "ChildEventHandler", true, 1);
+			AddEntityCollideCallback("child_2", "ChildBottomAreaKillTrigger", "ChildEventHandler", true, 1);
+			AddEntityCollideCallback("Player", "ChildSpawnTrigger", "ChildEventHandler", true, 1);
+			AddEntityCollideCallback("Player", "ChildRunTrigger", "ChildEventHandler", true, 1);
+			SetEntityActive("child_1", false);
+			SetEntityActive("child_2", false);
+			
+			
+			AddEntityCollideCallback("Player", "AreaPigSayYeYe", "ColllidePigToggle", false, 0);
+		}
+		
+	//Setup Initial Object States
+		{	
+			//ANIMATION STATES//
+			PlayPropAnimation("factory_pistons_1", "off", 0.0f, true, "");
+			PlayPropAnimation("truck_driveby", "off", 0.0f, true, "");
+			PlayPropAnimation("clock_grandfather_3", "on", 0.0f, true, "");
+			PlayPropAnimation("fuel_pump_1", "empty", 0.0f, true, "");
+			PlayPropAnimation("Phonautograph1", "Stop", 0.0f, true, "");	
+			
+			//MOVE OBJECT STATES//
+			SetMoveObjectState("Gate1", 1);
+			
+			//INTERACTION//
+			SetEntityInteractionDisabled("castle_1", true);
+		}
+		
+	//Setup Ambience Callbacks
+		{
+			AddEntityCollideCallback("Player", "AMBPistonRoom", "MapAmbienceAreas", false, 0);	//Piston Room
+			AddEntityCollideCallback("Player", "AMBPistonUnder", "MapAmbienceAreas", false, 0);	//Piston Room
+			AddEntityCollideCallback("Player", "AMBOutside", "MapAmbienceAreas", false, 0);//OUTSIDE
+			AddEntityCollideCallback("Player", "AMBShed", "MapAmbienceAreas", false, 0);//START SHED - OUTSIDE
+			AddEntityCollideCallback("Player", "AMBStart", "MapAmbienceAreas", false, 0);//START
+			//START SHED DOOR WIND SAMPLE
+			AddEntityCollideCallback("SecretExitDoor", "SecretDoorWindSampleCollider", "SecretDoorWindSample", false, 0);
+			//FACTORY ENTRANCE DOOR WIND SAMPLE
+			AddEntityCollideCallback("FactoryFrontDoor", "FactoryFrontDoorWindCollider", "FrontDoorWindSample", false, 0);
+			//RANDOM FX TRIGGERS
+			AddEntityCollideCallback("Player", "FactorySoundStart", "FactorySoundStart", true, 1);//PISTON ROUND SOUND FX
+		}
+	
+		//Setup Initial VO Callbacks
+		{
+			AddEntityCollideCallback("Player", "vo_yard_flashback_trigger", "VOPlayer", true, 1);
+			AddEntityCollideCallback("Player", "PhoneTrigger", "FactoryPhone", true, 1);
+		}
+
+	//Setup Creak Callbacks
+		{
+			AddEntityCollideCallback("Player", "MetalCreak_1", "MetalCreakSounds", true, 0);
+			AddEntityCollideCallback("Player", "MetalCreak_2", "MetalCreakSounds", true, 0);
+			AddEntityCollideCallback("Player", "MetalCreak_3", "MetalCreakSounds", true, 0);
+			AddEntityCollideCallback("Player", "MetalCreak_4", "MetalCreakSounds", true, 0);
+			AddEntityCollideCallback("Player", "MetalCreak_5", "MetalCreakSounds", true, 0);
+			AddEntityCollideCallback("Player", "MetalCreak_6", "MetalCreakSounds", true, 0);
+			//WIND CALLBACKS
+			AddEntityCollideCallback("Player", "StartWindDynamic_1", "RandomWindSound", true, 1);
+			AddEntityCollideCallback("Player", "StartWindDynamic_2", "RandomWindSound", true, 1);
+		}
+		
+	//Setup Music Callbacks
+		{
+			AddEntityCollideCallback("Player", "yard_music_trigger", "MusicPlayer", true, 0);
+			AddEntityCollideCallback("Player", "entry_music_trigger", "MusicPlayer", true, 0);
+			AddEntityCollideCallback("Player", "middle_floor_music_trigger", "MusicPlayer", true, 0);
+			AddEntityCollideCallback("Player", "belowpistons_music_trigger", "MusicPlayer", true, 0);
+		}
+	
+	//Setup Phonoautograph Callbacks
+	{
+		SetEntityConnectionStateChangeCallback("Phonautograph1", "PhonautographHandler"); 			//Arguments Required: ("Name of the Phonoautograph entity", "Name of the function to call on interaction" < this will always be the same)
+	}	
+	
+	//Setup Level Transition Trigger
+	{
+		AddEntityCollideCallback("Player", "TempLevelTransitionTrigger", "LevelTransitionHandler", true, 0);
+	}
+	
+	//Debugging
+		if(ScriptDebugOn()) 
+		{
+			GiveItemFromFile("lantern", "lantern.ent");
+			
+			//Turn off the occlusion planes
+			SetEntityActive("AreaCollideOcclusion_*", false);
+			
+			//Make all furnances turned on.
+			//SetLocalVarInt("FurnaceLitTotal", 3);
+			//FurnaceSwitchTimedEvents("");
+			
+			//Make the map dark and turn on pistons
+			//SetLocalVarInt("PistonsOn",3);
+			//PistonLeverHandler("",1);
+			
+			SetMoveObjectState("Gate3", 0.75f);
+		}
+}	
+
+void OnEnter()
+{
+	//DEFAULT SWITCH LANTERN TO ON//
+	{
+		SetLanternFlickerActive(false);
+	}
+	
+		
+	//PRELOAD SOUNDS//
+	{
+		PlaySoundAtEntity("Clock", "amb_mansion_grandfather_clock.snt", "OfficeClockSource", 0.0f, true);
+		PreloadSound("amb_mansion_grandfather_clock");
+		PreloadSound("amb_church_pens_steam_loop_quieter");
+		PreloadSound("amb_factory_machine_fire_3D");
+		PreloadSound("amb_factory_machine_fire_2D");
+		PreloadSound("amb_factory_machine_fire_3Dsmallarea");
+		PreloadSound("amb_factory_loco_3Dsmallarea");
+		PreloadSound("amb_factory_loco_3D");
+		PreloadSound("amb_factory_loco_2D");
+		PreloadSound("amb_factory_loco_2D_2D");
+		PreloadSound("amb_mansion_ceiling_fan_wider");
+		PreloadSound("amb_tesla02_wind_entrance_loop");
+		PreloadSound("afx_ambience_mansion_wind_spot");
+		PreloadSound("afx_factory_quake_base");
+		PreloadSound("afx_factory_quake_shake");
+		PreloadSound("afx_factory_quake_creaks");
+		PreloadSound("afx_factory_quake_piston");
+		PreloadSound("event_factory_fireburst_2D");
+		PreloadSound("event_factory_fireburst_3D");
+		PreloadSound("afx_mansion_switchboard_switch");
+		PreloadSound("afx_tunnels_gate_lock_explode");
+		PreloadSound("afx_tesla01_lightsout");
+		PreloadSound("afx_cellar_spark_loop");
+		PreloadSound("factory_piston_horn");
+		PreloadSound("factory_piston_2D");
+		PreloadSound("factory_piston_piston_pers_3D_on");
+		PreloadSound("factory_piston_piston_pers_3D");
+		PreloadSound("factory_piston_piston_pers_3D_on_2");
+		PreloadSound("factory_piston_piston_pers_3D_2");
+		PreloadSound("factory_piston_piston_pers_3D_3");
+		PreloadSound("afx_event_factory_gate_close");
+		PreloadSound("afx_sewer_pipetremor_01");
+		PreloadSound("roll_metal");
+		PreloadSound("loco_iron_door_open");
+		PreloadSound("impact_metal_high");
+		PreloadSound("loco_iron_door_close_2D");
+		PreloadSound("afx_event_factory_pigstory_07");
+		PreloadSound("afx_event_factory_pigstory_02");
+		PreloadSound("afx_event_factory_pigstory_03");
+		PreloadSound("afx_event_factory_pigstory_01");
+		PreloadSound("afx_event_factory_pigstory_04");
+		PreloadSound("afx_spooky_metaldrag");
+		PreloadSound("afx_event_factory_metal_strain");
+		PreloadSound("afx_spooky_bugfly");
+		PreloadSound("factory_event_truckby_source1");
+		PreloadSound("factory_event_truckby_source2");
+		PreloadSound("factory_event_truckby_backfire");
+		PreloadSound("factory_event_truckby_source_2D");
+		PreloadSound("factory_event_truckby_rattle");
+		PreloadSound("afx_spooky_mansion_backarea_abstract_04");
+		PreloadSound("spooky_childcry_quiet");
+		PreloadSound("event_factory_crows");
+		PreloadSound("spooky_wind_whirl");
+		PreloadSound("afx_spooky_pig_scream_01");
+		PreloadSound("afx_spooky_eerie_monster");
+		PreloadSound("afx_spooky_child_laugh_semi_distant");
+		PreloadSound("afx_spooky_hifrequencymoan_2D");
+		PreloadSound("afx_spooky_monster_noises_tight_2D");
+		PreloadSound("00_intro_falling");
+		PreloadSound("joint_dumb_waiter_door_move_endoflevel");
+		PreloadSound("joint_dumb_waiter_door_close");
+		PreloadSound("afx_gameplay_hightone_10sec");
+		PreloadSound("afx_flashback_whisper");
+		PreloadSound("factory_piston_wheel2_pers_3D");
+		PreloadSound("factory_piston_wheel2_pers_3D_2");
+		PreloadSound("factory_piston_wheel2_pers_3D_3");
+		PreloadSound("factory_piston_2D_quieter");
+		PreloadSound("afx_spooky_factory_pistonroom");
+		PreloadSound("afx_spooky_env_metal");
+		PreloadSound("afx_events_mansion_wind");
+		PreloadSound("afx_spooky_hifrequencymoan");
+		PreloadSound("react_scare");
+		PreloadSound("react_breath");
+		PreloadSound("react_quickscare");
+		PreloadSound("react_cough");
+		PreloadSound("tesla_pig_light_flicker");
+		PreloadSound("afx_event_factory_gate_close");
+		PreloadSound("afx_cellar_smallmachine_spark");
+		PreloadSound("wretch_tunnels_amb_alert");
+		PreloadSound("loco_iron_door_close");
+		PreloadSound("player_crouch1");
+		PreloadSound("metal_engroom_sneak_4");
+		PreloadSound("player_crouch3");
+		PreloadSound("metal_engroom_sneak_2");
+		PreloadSound("tesla_pig_light_flicker");
+	}
+	
+	//SOUND OPTIMSATIONS
+	{
+	//COURTYARD
+	AddEntityCollideCallback("Player", "soundopt_courtyard_start_1", "soundopt", true, 1);
+	AddEntityCollideCallback("Player", "soundopt_courtyard_start_2", "soundopt", true, 1);
+	//PISTON ROOM ENV
+	AddEntityCollideCallback("Player", "soundopt_pistonenv_start_1", "soundopt", true, 1);
+	AddEntityCollideCallback("Player", "soundopt_pistonenv_start_2", "soundopt", true, 1);
+	AddEntityCollideCallback("Player", "soundopt_pistonenv_start_3", "soundopt", true, 1);
+	//QUIETER PISTON SOUND
+	AddEntityCollideCallback("Player", "soundopt_pistonquieter_start", "soundopt", true, 1);
+	
+	//PRELOADS
+	//PISTON TREMOR
+	AddEntityCollideCallback("Player", "soundopt_pistontremor_preload", "soundopt", true, 1);
+	}
+	//END SOUND OPTIMSATIONS
+	
+	//INITIALISE LAST PLAYING AMBIENCE//
+	{
+		string sAmbienceToRestart = GetLocalVarString("CurrentAmbientTrack");
+		MapAmbienceAreas("Player", sAmbienceToRestart, 1);
+	}
+	
+	//LIGHT STATES//
+	{
+		//FURNACE COAL LIGHTS//
+		if (GetLocalVarInt("Furnace2Lit") == 0)
+		{
+			SetLampFlickerActive("Furnace2Lamp", false);
+			SetLampLit("Furnace2Lamp", false, false);
+		}
+		else
+		{
+			SetLampFlickerActive("Furnace2Lamp", true);
+			SetLampLit("Furnace2Lamp", true, false);
+		}
+		if (GetLocalVarInt("Furnace3Lit") == 0)
+		{
+			SetLampFlickerActive("Furnace3Lamp", false);
+			SetLampLit("Furnace3Lamp", false, false);
+		}
+		else
+		{
+			SetLampFlickerActive("Furnace3Lamp", true);
+			SetLampLit("Furnace3Lamp", true, false);
+		}
+		if (GetLocalVarInt("Furnace6Lit") == 0)
+		{
+			SetLampFlickerActive("Furnace6Lamp", false);
+			SetLampLit("Furnace6Lamp", false, false);
+		}
+		else
+		{
+			SetLampFlickerActive("Furnace6Lamp", true);
+			SetLampLit("Furnace6Lamp", true, false);
+		}
+		//FURNACE SWITCH LIGHTS//
+		if (GetLocalVarInt("Furnace2Prepped") == 1)
+		{
+			SetLightVisible("Furnace2SwitchLight", true);
+			SetLightFlickerActive("Furnace2SwitchLight", false);
+		}
+		else
+		{
+			SetLightVisible("Furnace2SwitchLight", false);
+			SetLightFlickerActive("Furnace2SwitchLight", false);
+		}
+		if (GetLocalVarInt("Furnace3Prepped") == 1)
+		{
+			SetLightVisible("Furnace3SwitchLight", true);
+			SetLightFlickerActive("Furnace3SwitchLight", false);
+		}
+		else
+		{
+			SetLightVisible("Furnace3SwitchLight", false);
+			SetLightFlickerActive("Furnace3SwitchLight", false);
+		}
+		if (GetLocalVarInt("Furnace6Prepped") == 1)
+		{
+			SetLightVisible("Furnace6SwitchLight", true);
+			SetLightFlickerActive("Furnace6SwitchLight", false);
+		}
+		else
+		{
+			SetLightVisible("Furnace6SwitchLight", false);
+			SetLightFlickerActive("Furnace6SwitchLight", false);
+		}
+	}
+
+	//SOUND CUES//
+	{
+		//START AREA & OFFICE SOUNDS//
+		if (GetLocalVarInt("SoundCutOff1") == 0)
+		{
+			PlaySoundAtEntity("Steam", "amb_church_pens_steam_loop_quieter.snt", "PensSteamSource", 0.0f, true);
+		}
+	
+		//FIRE SOUNDS
+		PlaySoundAtEntity("FactoryFire3D_1", "amb_factory_machine_fire_3D.snt", "FireSoundSource_1", 0.0f, true);							
+		PlaySoundAtEntity("FactoryFire2D_1", "amb_factory_machine_fire_2D.snt", "FireSoundSource_1", 0.0f, true);
+		if (GetLocalVarInt("Furnace2Lit") == 1)
+		{
+			PlaySoundAtEntity("FactoryFire3D_2", "amb_factory_machine_fire_3D.snt", "FireSoundSource_2", 0.0f, true);
+			PlaySoundAtEntity("FactoryFire2D_2", "amb_factory_machine_fire_2D.snt", "FireSoundSource_2", 0.0f, true);
+		}
+		PlaySoundAtEntity("FactoryFire3D_3", "amb_factory_machine_fire_3Dsmallarea.snt", "FireSoundSource_3", 0.0f, true);
+		if (GetLocalVarInt("Furnace6Lit") == 1)
+		{
+			PlaySoundAtEntity("FactoryFire3D_4", "amb_factory_machine_fire_3D.snt", "FireSoundSource_4", 0.0f, true);
+			PlaySoundAtEntity("FactoryFire2D_4", "amb_factory_machine_fire_2D.snt", "FireSoundSource_4", 0.0f, true);
+		}
+		PlaySoundAtEntity("FactoryFire3D_5", "amb_factory_machine_fire_3D.snt", "FireSoundSource_5", 0.0f, true);
+		PlaySoundAtEntity("FactoryFire2D_5", "amb_factory_machine_fire_2D.snt", "FireSoundSource_5", 0.0f, true);
+		if (GetLocalVarInt("Furnace3Lit") == 1)
+		{
+			PlaySoundAtEntity("FactoryFire3D_6", "amb_factory_machine_fire_3Dsmallarea.snt", "FireSoundSource_6", 0.0f, true);
+		}
+		//PlaySoundAtEntity("FactoryFire3D_7", "amb_factory_machine_fire_3D.snt", "FireSoundSource_7", 0.0f, true);
+		//PlaySoundAtEntity("FactoryFire2D_7", "amb_factory_machine_fire_2D.snt", "FireSoundSource_7", 0.0f, true);
+		//PlaySoundAtEntity("FactoryFire3D_8", "amb_factory_machine_fire_3D.snt", "FireSoundSource_8", 0.0f, true);
+		//PlaySoundAtEntity("FactoryFire2D_8", "amb_factory_machine_fire_2D.snt", "FireSoundSource_8", 0.0f, true);
+		
+		//LOCO SOUNDS
+		if (GetLocalVarInt("AdaptedAmbience") == 0)
+		{
+			PlaySoundAtEntity("LocoSound_1", "amb_factory_loco_3Dsmallarea.snt", "LocoSoundSource_1", 0.0f, true);
+			PlaySoundAtEntity("LocoSound3D_2", "amb_factory_loco_3D.snt", "LocoSoundSource_2", 0.0f, true);
+			PlaySoundAtEntity("LocoSound2D_2", "amb_factory_loco_2D.snt", "LocoSoundSource_2", 0.0f, true);
+			PlaySoundAtEntity("LocoSound3D_3", "amb_factory_loco_3D.snt", "LocoSoundSource_3", 0.0f, true);
+			PlaySoundAtEntity("LocoSound2D_3", "amb_factory_loco_2D_2D.snt", "LocoSoundSource_3", 0.0f, true);
+			PlaySoundAtEntity("LocoSound3D_4", "amb_factory_loco_3D.snt", "LocoSoundSource_4", 0.0f, true);
+			PlaySoundAtEntity("LocoSound3D_5", "amb_factory_loco_3D.snt", "LocoSoundSource_5", 0.0f, true);
+			PlaySoundAtEntity("LocoSound2D_5", "amb_factory_loco_2D.snt", "LocoSoundSource_5", 0.0f, true);
+			PlaySoundAtEntity("LocoSound3D_6", "amb_factory_loco_3Dsmallarea.snt", "LocoSoundSource_6", 0.0f, true);
+			PlaySoundAtEntity("LocoSound2D_6", "amb_factory_loco_2D.snt", "LocoSoundSource_6", 0.0f, true);
+			PlaySoundAtEntity("LocoSound3D_7", "amb_factory_loco_3D.snt", "LocoSoundSource_7", 0.0f, true);
+			PlaySoundAtEntity("LocoSound2D_7", "amb_factory_loco_2D.snt", "LocoSoundSource_7", 0.0f, true);
+			PlaySoundAtEntity("LocoSound3D_8", "amb_factory_loco_3D.snt", "LocoSoundSource_8", 0.0f, true);
+			PlaySoundAtEntity("LocoSound2D_8", "amb_factory_loco_2D.snt", "LocoSoundSource_8", 0.0f, true);
+		}
+		
+		//OFFICE SOUNDS
+		PlaySoundAtEntity("FanSound_1", "amb_mansion_ceiling_fan_wider.snt", "FanSource_1", 0.0f, true);
+		PlaySoundAtEntity("FanSound_1", "amb_mansion_ceiling_fan_wider.snt", "FanSource_2", 0.0f, true);
+		PlaySoundAtEntity("FanSound_1", "amb_mansion_ceiling_fan_wider.snt", "FanSource_3", 0.0f, true);
+		PlaySoundAtEntity("FanSound_1", "amb_mansion_ceiling_fan_wider.snt", "FanSource_4", 0.0f, true);
+	}
+
+	
+	//ANIMATION STATES//
+	{
+		if (GetLocalVarInt("FurnaceLitTotal") != 3)
+		{
+			PlayPropAnimation("LeverGauge1", "off", 0.0f, true, "");
+			PlayPropAnimation("LeverGauge2", "off", 0.0f, true, "");
+			PlayPropAnimation("LeverGauge3", "off", 0.0f, true, "");
+		}
+		else
+		{
+			PlayPropAnimation("LeverGauge1", "on", 0.0f, true, "");
+			PlayPropAnimation("LeverGauge2", "on", 0.0f, true, "");
+			PlayPropAnimation("LeverGauge3", "on", 0.0f, true, "");
+		}
+	}
+	
+	//COAL EFFECT INITIALISER//
+	{
+		if (GetLocalVarInt("FirstLoad") == 1)
+		{
+			SetLocalVarInt("TotalCoalInMap", 13); //FIXES INITIAL LOAD BUG
+		}
+		for (int lCoalExists = GetLocalVarInt("TotalCoalInMap"); lCoalExists > 0; lCoalExists--) //INITIALISE TO EFFECTS OFF
+		{
+			SetPropEffectActive("CoalPiece_"+lCoalExists, false, false);
+			AddDebugMessage("Setting EFFECT INACTIVE for CoalPiece_"+lCoalExists, false);
+		}
+	
+		sFurnace2Contents = LoadStringArray("Furnace2");
+		sFurnace3Contents = LoadStringArray("Furnace3");
+		sFurnace6Contents = LoadStringArray("Furnace6");
+		sCoalToIgniteOnLoad = LoadStringArray("IgniteCoal");
+		int lArraySize = sCoalToIgniteOnLoad.length();						//GRAB ARRAY SIZE
+		//DEBUG LOOP//					
+		AddDebugMessage("COALTOIGNITE ArraySize = "+lArraySize, false);					
+		for (int larrayID = (lArraySize - 1); larrayID >= 0; larrayID--) 	
+		{
+			string sDebugString = sCoalToIgniteOnLoad[larrayID];
+			AddDebugMessage("COALTOIGNITE DebugString"+larrayID+" = "+sDebugString, false);
+		}
+		//DEBUG LOOP//
+		
+		for (int larrayID = (lArraySize - 1); larrayID >= 0; larrayID--)	//NOW IGNITE ALL COAL PIECES IN A PLAYER LIT FURNACE
+		{
+			string sCurrentCoalPiece = sCoalToIgniteOnLoad[larrayID];
+			CoalEffectUpdater(sCurrentCoalPiece, true, true);
+			AddDebugMessage("Setting EFFECT ACTIVE for "+sCurrentCoalPiece, false);
+		}
+		if (GetLocalVarInt("FirstLoad") == 1)
+		{
+			SetLocalVarInt("FirstLoad", 0);
+			SetLocalVarInt("TotalCoalInMap", 0);
+		}
+		SetPropEffectActive("CoalPiece_Perm*", true, true);					//NOW IGNITE ALL PERMANENT COAL PIECES
+	}
+	
+	//ENTITY STATES//
+	{
+		if (GetLocalVarInt("Mask1Active") == 0)
+		{
+			SetEntityActive("Mask1", false);
+		}
+		if (GetLocalVarInt("Mask2Active") == 1)
+		{
+			SetEntityActive("Mask2", true);
+			SetEntityActive("Mask2Nail", true);
+			SetPropStaticPhysics("Mask2", true);
+			SetPropStaticPhysics("Mask2Nail", true);
+		}
+		if (GetLocalVarInt("Mask3Active") == 0)
+		{
+			SetEntityActive("Mask3", false);
+		}
+		else if (GetLocalVarInt("Mask3Active") == 1)
+		{
+			SetEntityActive("Mask3", true);
+		}
+	}
+	
+	//ENTITY INTERACTION// 
+	{
+		SetEntityInteractionDisabled("barrel_roll_1", true);
+		SetEntityInteractionDisabled("barrel_roll_2", true);
+		SetEntityInteractionDisabled("barrel_roll_3", true);
+		SetEntityInteractionDisabled("barrel_roll_4", true);
+		SetEntityInteractionDisabled("barrel_roll_5", true);
+		SetEntityInteractionDisabled("barrel_roll_6", true);
+		SetEntityInteractionDisabled("barrel_roll_7", true);
+		if (GetLocalVarInt("Furnace2Prepped") == 1)
+		{
+			SetButtonCanBeSwitchedOn("Furnace2Switch", true);
+		}
+		else
+		{
+			SetButtonCanBeSwitchedOn("Furnace2Switch", false);
+		}
+		if (GetLocalVarInt("Furnace3Prepped") == 1)
+		{
+			SetButtonCanBeSwitchedOn("Furnace3Switch", true);
+		}
+		else
+		{
+			SetButtonCanBeSwitchedOn("Furnace3Switch", false);
+		}
+		if (GetLocalVarInt("Furnace6Prepped") == 1)
+		{
+			SetButtonCanBeSwitchedOn("Furnace6Switch", true);
+		}
+		else
+		{
+			SetButtonCanBeSwitchedOn("Furnace6Switch", false);
+		}
+		SetEntityInteractionDisabled("Mask1", true);
+		SetEntityInteractionDisabled("Mask2", true);
+		SetEntityInteractionDisabled("Mask3", true);
+	}
+	
+	//ENEMY STATES//
+	{
+		SetManPigType("Wretch1", "Freddy");
+		SetEnemyMoveType("Wretch1", "RunBiped");
+		SetManPigType("Wretch2", "Freddy");
+		SetEnemyMoveType("Wretch2", "RunBiped");
+		SetManPigType("Wretch3", "Freddy");
+		SetEnemyMoveType("Wretch3", "RunBiped");
+		SetManPigType("Wretch4", "Freddy");
+		SetEnemyMoveType("Wretch4", "RunBiped");
+		SetManPigType("Wretch5", "Freddy");
+		SetEnemyMoveType("Wretch5", "RunBiped");
+	}
+	
+	//AUTOSAVE//
+	{
+		AutoSave();
+	}
+}	
+	//END ENEMY STATES//
+
+void OnLeave()
+{
+	SetupLoadScreen("LoadingText", "Tunnels_", 3, "game_loading_tunnels.jpg");
+}
+
+										//////////////////////////
+										//MAP-SPECIFIC FUNCTIONS//
+										//////////////////////////
+
+void CloseDoorAuto01(string &in asParent, string &in asChild, int alState)
+{
+	SetSwingDoorClosed("engineroom_office_door_1", true, false);
+}
+void CloseDoorAuto02(string &in asParent, string &in asChild, int alState)
+{
+	SetSwingDoorClosed("engineroom_office_door_2", true, false);
+}
+
+//-----------------------------------------------------------
+
+/////////////////////////
+// FOG SWITCHER
+////////////////////////
+
+//------------------------------------------------------------
+
+// The AreaBeginInside_0..7 boxes are nested, and each one only steps the fog
+// one level up on entry and one level down on exit. That relies on the exits
+// arriving innermost-first, but the boxes share their x faces, so several
+// callbacks can fire in one frame in registration order (0..7) and leave the
+// courtyard with the innermost fog. Track which boxes the player is in and
+// derive the fog from the deepest one, so the result is order independent.
+void CollideBeginInside(string &in asParent, string &in asChild, int alState)
+{
+	int lArea = -1;
+	for(int i=0;i<=7;i++)
+		if(asChild == "AreaBeginInside_"+i) lArea = i;
+	if(lArea < 0) return;
+
+	int lMask = GetLocalVarInt("FogInsideMask");
+	if(alState == 1) lMask |= (1 << lArea);
+	else lMask &= ~(1 << lArea);
+	SetLocalVarInt("FogInsideMask", lMask);
+
+	int lLevel = -1;
+	for(int i=0;i<=7;i++)
+		if((lMask & (1 << i)) != 0) lLevel = i;
+
+	//Ordered step: keep the authored transition values
+	if((alState == 1 && lLevel == lArea) || (alState == -1 && lLevel == lArea-1))
+		FogSwitcherStep(lArea, alState);
+	//Out of order: snap to the fog of the deepest box still occupied
+	else if(lLevel < 0)
+		FogSwitcherStep(0, -1);
+	else
+		FogSwitcherStep(lLevel, 1);
+
+	SetFogSkyInside(lLevel >= 0);
+}
+
+void SetFogSkyInside(bool abInside)
+{
+	int lInside = abInside ? 1 : 0;
+	if(GetLocalVarInt("FogSkyInside") == lInside) return;
+	SetLocalVarInt("FogSkyInside", lInside);
+
+	if(abInside)
+	{
+		float fR = GetLocalVarFloat("fogOutsideR");
+		float fG = GetLocalVarFloat("fogOutsideG");
+		float fB = GetLocalVarFloat("fogOutsideB");
+		SetSkyBoxColor(fR*0.4, fG*0.3, fB*0.1,1);
+		SetSkyBoxTexture("");
+	}
+	else
+	{
+		SetSkyBoxColor(1, 1, 1, 1);
+		SetSkyBoxTexture("de_skybox.dds");
+	}
+}
+
+void FogSwitcherStep(int alArea, int alState)
+{
+	string asChild = "AreaBeginInside_"+alArea;
+	float fR = GetLocalVarFloat("fogOutsideR");
+	float fG = GetLocalVarFloat("fogOutsideG");
+	float fB = GetLocalVarFloat("fogOutsideB");
+	float fStart = GetLocalVarFloat("fogOutsideStart");
+	float fEnd = GetLocalVarFloat("fogOutsideEnd");
+	float fExp = GetLocalVarFloat("fogOutsideExp");
+	
+	if(asChild == "AreaBeginInside_0")
+	{
+		//Going inside
+		if(alState == 1)
+		{
+			SetFogColor(fR*1.05, fG*0.95, fB*0.8, 1);
+			SetFogProperties(fStart*0.9, fEnd*0.8, fExp*1.1, true);
+		}
+		
+		//Outside
+		else if(alState == -1)
+		{
+			SetFogColor(fR, fG, fB, 1);
+			SetFogProperties(fStart, fEnd, fExp, false);
+		}
+	}
+	if(asChild == "AreaBeginInside_1")
+	{
+		//Going inside
+		if(alState == 1)
+		{
+			SetFogColor(fR*1.1, fG*0.9, fB*0.7, 1);
+			SetFogProperties(fStart*0.8, fEnd*0.6, fExp*1.2, true);
+		}
+		
+		//Outside
+		else if(alState == -1)
+		{
+			SetFogColor(fR*1.05, fG*0.95, fB*0.8, 1);
+			SetFogProperties(fStart*0.9, fEnd*0.8, fExp*1.1, true);
+		}		
+	}
+	if(asChild == "AreaBeginInside_2")
+	{
+		//Going inside
+		if(alState == 1)
+		{
+			SetFogColor(fR*1.15, fG*0.85, fB*0.65, 1);
+			SetFogProperties(fStart*0.7, fEnd*0.4, fExp*1.4, true);
+		}
+		
+		//Outside
+		else if(alState == -1)
+		{
+			SetFogColor(fR*1.1, fG*0.9, fB*0.7, 1);
+			SetFogProperties(fStart*0.8, fEnd*0.6, fExp*1.2, true);
+		}			
+	}
+	if(asChild == "AreaBeginInside_3")
+	{
+		//Going inside
+		if(alState == 1)
+		{
+			SetFogColor(fR*1.2, fG*0.75, fB*0.5, 1);
+			SetFogProperties(fStart*0.6, fEnd*0.25, fExp*1.7, true);
+		}
+		
+		//Outside
+		else if(alState == -1)
+		{
+			SetFogColor(fR*1.15, fG*0.85, fB*0.65, 1);
+			SetFogProperties(fStart*0.7, fEnd*0.4, fExp*1.4, true);
+		}			
+	}
+	if(asChild == "AreaBeginInside_4")
+	{
+		//Going inside
+		if(alState == 1)
+		{
+			SetFogColor(fR*1.25, fG*0.65, fB*0.4, 1);
+			SetFogProperties(fStart*0.5, fEnd*0.2, fExp*2.1, true);
+		}
+		
+		//Outside
+		else if(alState == -1)
+		{
+			SetFogColor(fR*1.2, fG*0.75, fB*0.5, 1);
+			SetFogProperties(fStart*0.6, fEnd*0.25, fExp*1.7, true);
+		}			
+	}
+	if(asChild == "AreaBeginInside_5")
+	{
+		//Going inside
+		if(alState == 1)
+		{
+			SetFogColor(fR*1.3, fG*0.55, fB*0.29, 1);
+			SetFogProperties(fStart*0.4, fEnd*0.15, fExp*2.8, true);
+		}
+		
+		//Outside
+		else if(alState == -1)
+		{
+			SetFogColor(fR*1.25, fG*0.65, fB*0.4, 1);
+			SetFogProperties(fStart*0.5, fEnd*0.15, fExp*2.1, true);
+		}			
+	}
+	if(asChild == "AreaBeginInside_6")
+	{
+		//Going inside
+		if(alState == 1)
+		{
+			SetFogColor(fR*1.35, fG*0.45, fB*0.18, 1);
+			SetFogProperties(fStart*0.3, fEnd*0.1, fExp*3.4, true);
+		}
+		
+		//Outside
+		else if(alState == -1)
+		{
+			SetFogColor(fR*1.3, fG*0.55, fB*0.29, 1);
+			SetFogProperties(fStart*0.4, fEnd*0.1, fExp*2.8, true);
+		}			
+	}
+	if(asChild == "AreaBeginInside_7")
+	{
+		//Going inside
+		if(alState == 1)
+		{
+			SetFogColor(fR*1.4, fG*0.35, fB*0.097, 1);
+			SetFogProperties(fStart*0.2, fEnd*0.07, fExp*4, true);
+		}
+		
+		//Outside
+		else if(alState == -1)
+		{
+			SetFogColor(fR*1.35, fG*0.45, fB*0.18, 1);
+			SetFogProperties(fStart*0.3, fEnd*0.07, fExp*3.8, true);
+		}			
+	}
+}
+
+//------------------------------------------------------------
+
+/////////////////////////
+// MANUAL OCCLUSION
+////////////////////////
+
+//------------------------------------------------------------
+
+void CollideSwitchOccluder(string &in asParent, string &in asChild, int alState)
+{
+	if(alState == -1)
+		SetPropActiveAndFade(asChild+"_occlusion", false, 2);
+		
+	else if(alState == 1)
+		SetPropActiveAndFade(asChild+"_occlusion", true, 2);
+	
+	/**if(asChild == "AreaCollideOcclusion_0" && alState == -1)
+		SetPropActiveAndFade("occlusion_0", false, 2);
+	else if(asChild == "AreaCollideOcclusion_0" && alState == 1)
+		SetPropActiveAndFade("occlusion_0", true, 2);
+		
+	else if(asChild == "AreaCollideOcclusion_1" && alState == -1)
+		SetPropActiveAndFade("occlusion_1", false, 2);
+	else if(asChild == "AreaCollideOcclusion_1" && alState == 1)
+		SetPropActiveAndFade("occlusion_1", true, 2);**/
+	
+	
+		
+}
+
+//------------------------------------------------------------
+
+//MASK HANDLERS//
+void Mask1Despawner (string &in asParent, string &in asChild, int alState)
+{
+	SetEntityActive("Mask1", false);
+	SetLocalVarInt("Mask1Active", 0);
+}
+
+void Mask2Tracker (string &in asParent, string &in asChild, int alState)
+{
+	if (alState == 1)
+	{
+		SetLocalVarInt("Mask2MaySpawn", 1);
+		return;
+	}
+	else if (alState == -1)
+	{
+		SetLocalVarInt("Mask2MaySpawn", 0);
+		return;
+	}
+}
+
+void Mask2Despawner (string &in asParent, string &in asChild, int alState)
+{
+	SetEntityActive("Mask2", false);
+	SetEntityActive("Mask2Nail", false);
+	SetLocalVarInt("Mask2Active", 0);
+}
+//END MASK HANDLERS//
+
+//ENV SOUNDS//
+void RandomEnvSound (string &in asParent, string &in asChild, int alState)
+{
+	if (asChild == "EnvSoundsStart_1"|| asChild == "EnvSoundsStart_2"|| asChild == "EnvSoundsStart_3")
+	{	
+	
+		//START ENV
+		AddTimer("InitRandomEnvSoundCuePlayer", 10.0f, "RandEnvSoundCues");
+		
+		//AREAS
+		RemoveEntityCollideCallback("Player", "EnvSoundsStart_1");
+		RemoveEntityCollideCallback("Player", "EnvSoundsStart_2");
+		RemoveEntityCollideCallback("Player", "EnvSoundsStart_3");
+		AddEntityCollideCallback("Player", "EnvSoundsStop_1", "RandomEnvSound", true, 1);
+		AddEntityCollideCallback("Player", "EnvSoundsStop_2", "RandomEnvSound", true, 1);
+		AddEntityCollideCallback("Player", "EnvSoundsStop_3", "RandomEnvSound", true, 1);
+		
+		AddDebugMessage("ENV SOUNDS START!", true);
+	return;
+	}
+	
+	else if (asChild == "EnvSoundsStop_1"|| asChild == "EnvSoundsStop_2"|| asChild == "EnvSoundsStop_3")
+	{
+		//REMOVE OUTSIDE SOUND
+		RemoveTimer("Player");
+		RemoveTimer("RandEnvSoundCues");
+		RemoveTimer("InitRandomEnvSoundCuePlayer");
+			
+		//AREAS
+		RemoveEntityCollideCallback("Player", "EnvSoundsStop_1");
+		RemoveEntityCollideCallback("Player", "EnvSoundsStop_2");
+		RemoveEntityCollideCallback("Player", "EnvSoundsStop_3");
+		AddEntityCollideCallback("Player", "EnvSoundsStart_1", "RandomEnvSound", true, 1);
+		AddEntityCollideCallback("Player", "EnvSoundsStart_1", "RandomEnvSound", true, 1);
+		AddEntityCollideCallback("Player", "EnvSoundsStart_1", "RandomEnvSound", true, 1);
+
+				
+		AddDebugMessage("ENV SOUNDS STOP!", true);
+		return;
+	}										
+}
+//END ENV SOUNDS//
+
+
+//SECRET WIND DOOR//
+void SecretDoorWindSample (string &in asParent, string &in asChild, int alState)
+{
+	if (alState == 1)
+	{
+		AddDebugMessage("Wind Start", false);
+		PlaySoundAtEntity("WindDoor", "amb_tesla02_wind_entrance_loop.snt", "WindSource", 1.0f, true);
+		return;
+	}
+	else if (alState == -1) 
+	{
+		AddDebugMessage("Wind Stop", false);
+		StopSound("WindDoor", 1.0f);
+		return;
+	}
+}
+//END SECRET WIND DOOR//
+
+//FACTORY WIND DOOR//
+void FrontDoorWindSample (string &in asParent, string &in asChild, int alState)
+{
+	if (alState == 1)
+	{
+		AddDebugMessage("Wind Start", false);
+		PlaySoundAtEntity("WindDoorFactory", "afx_ambience_mansion_wind_spot.snt", "FactoryFrontDoor", 1.0f, false);
+		return;
+	}
+	else if (alState == -1) 
+	{
+		AddDebugMessage("Wind Stop", false);
+		StopSound("WindDoorFactory", 1.0f);
+		return;
+	}
+}
+//END FACTORY WIND DOOR//
+										
+//PISTON QUAKE//
+void PistonQuake (string &in asParent, string &in asChild, int alState)
+{
+	StopMusic(1.5f, 0);
+	SetLocalVarInt("MonsterGenerator1On", 1);
+	AddTimer("VoidTimer", 1.5f, "RandPigFloor1SoundCues");
+	SetLocalVarInt("MonsterGenerator2On", 1);
+	AddTimer("VoidTimer", 1.5f, "RandPigFloor2SoundCues");
+	PlaySoundAtEntity("", "afx_factory_quake_base", "Player", 0.0f, false);
+	PlaySoundAtEntity("", "afx_factory_quake_shake", "Player", 0.0f, false);
+	PlaySoundAtEntity("", "afx_factory_quake_creaks", "Player", 0.0f, false);
+	PlaySoundAtEntity("", "afx_factory_quake_piston", "factory_pistons_2_wheel1_source", 0.0f, false);
+	AddTimer("QuakeBuffer", 0.599f, "QuakeBuffer");
+	AddTimer ("PistonQuakePistonMovement", 1.4f, "PistonQuakePistonMovement");
+	AddTimer("QuakeEnd", 2.5f, "QuakeEnd");
+	SetLocalVarInt("SoundCutOff1", 1);
+	AddDebugMessage("Quake Triggered", true);
+}
+
+void PistonQuakePistonMovement (string &in asTimer)
+{
+	PlayPropAnimation("factory_pistons_1", "quake", 0.0f, false, "");
+	PlayPropAnimation("factory_pistons_2", "quake", 0.0f, false, "");
+	PlayPropAnimation("factory_pistons_3", "quake", 0.0f, false, "");
+	AddEntityCollideCallback("Player", "PistonResetTrigger", "PistonReset", true, 0);
+}
+
+void QuakeBuffer (string &in asTimer)
+{
+	StartScreenShake (0.15f, 1.5f, 0.5f, 0.968f);
+	SetPlayerMoveSpeedMul(0.5f);
+	SetPlayerRunSpeedMul(0.0f);
+	SetMoveObjectState("Gate1", 0);
+	MandusReactionPlayer("Quick", 0.5f);
+}
+
+void QuakeEnd (string &in asTimer)
+{
+	SetPlayerMoveSpeedMul(1.0f);
+	SetPlayerRunSpeedMul(1.0f);
+	MandusReactionPlayer("Breath", 1.0f);
+	CheckPoint("CP02_FactoryEntrance", "CheckpointStart_1", "", "", "", false);
+}
+//END PISTON QUAKE	
+
+//PISTON RESET HANDLER//
+void PistonReset (string &in asParent, string &in asChild, int alState)
+{
+	if (GetLocalVarInt("FailSafeOK") == 1 || asChild == "PistonResetTrigger3")
+	{
+		PlayPropAnimation("factory_pistons_1", "off", 0.0f, false, "");
+		PlayPropAnimation("factory_pistons_2", "off", 0.0f, false, "");
+		PlayPropAnimation("factory_pistons_3", "off", 0.0f, false, "");
+		RemoveEntityCollideCallback("Player", "PistonResetTrigger1");
+		RemoveEntityCollideCallback("Player", "PistonResetTrigger2");
+		RemoveEntityCollideCallback("Player", "PistonResetTrigger3");
+		AddDebugMessage("Piston Reset", true);
+	}
+}
+
+void PistonResetFailSafeUpdater (string &in asEntity, int alState)
+{
+	if (alState == 1)
+	{
+		SetLocalVarInt("FailSafeOK", 0);
+		AddDebugMessage("FailSafeOK = 0", false);
+		return;
+	}
+	else if (alState == -1)
+	{
+		SetLocalVarInt("FailSafeOK", 1);
+		AddDebugMessage("FailSafeOK = 1", false);
+		return;
+	}
+}
+//END PISTON RESET HANDLER//
+
+//COAL COLLISION HANDLER//
+void CoalCollisionHandler (string &in asParent, string &in asChild, int alState)
+{	
+	//GRAB ENTITY INFO//
+	string sCoalName = StringSub(asParent, 0, 9);
+	string sFurnaceName = StringSub(asChild, 0, 8);
+	string sFurnaceNumber = StringSub(asChild, 7, 1);
+	int lFurnaceNumber = StringToInt(sFurnaceNumber);
+	AddDebugMessage("CoalName = "+sCoalName, false);
+	AddDebugMessage("FurnaceName = "+sFurnaceName, false);
+	AddDebugMessage("FurnaceNumberString = "+sFurnaceNumber, false);
+	AddDebugMessage("FurnaceNumber = "+lFurnaceNumber, false);
+	
+	//ADJUST COAL NUMBER IN FURNACE//
+	if (alState == 1)
+	{
+		AddLocalVarInt(sFurnaceName+"Value", 1);
+		int lDebugValue = GetLocalVarInt(sFurnaceName+"Value");
+		AddDebugMessage(sFurnaceName+"Value = "+lDebugValue, false);
+	}
+	else if (alState == -1)
+	{
+		AddLocalVarInt(sFurnaceName+"Value", -1);
+		int lDebugValue = GetLocalVarInt(sFurnaceName+"Value");
+		AddDebugMessage(sFurnaceName+"Value = "+lDebugValue, false);
+	}
+	if (GetLocalVarInt(sFurnaceName+"Value") >= 2)
+	{
+		SetLocalVarInt(sFurnaceName+"OK", 1);
+		AddDebugMessage(sFurnaceName+"OK = 1", false);
+	}
+	else
+	{
+		SetLocalVarInt(sFurnaceName+"OK", 0);
+		AddDebugMessage(sFurnaceName+"OK = 0", false);
+	}
+	//UPDATE FURNACE CONTENT ARRAYS//
+	switch(lFurnaceNumber)
+	{	
+		case 2:
+			
+			if (alState == 1)
+			{
+				sFurnace2Contents.insertLast(asParent); 							//IF COAL IS INSERTED, ADD THE ENTITY NAME TO THE ARRAY
+				int lArraySize = sFurnace2Contents.length(); 						//GRAB ARRAY SIZE
+				AddDebugMessage("ArraySize = "+lArraySize, false);					//PRINT ARRAY SIZE TO DEBUG INFO
+				for (int larrayID = (lArraySize - 1); larrayID >= 0; larrayID--) 						//PRINT ALL ARRAY ELEMENTS TO DEBUG INFO
+				{
+					string sDebugString = sFurnace2Contents[larrayID];
+					AddDebugMessage("sDebugString"+larrayID+" = "+sDebugString, false);
+				}
+			}
+			else if (alState == -1)
+			{
+				string sArrayPosToRemove = sFurnace2Contents.find(asParent); 		//IF COAL IS REMOVED, SEARCH THE ARRAY FOR THAT ENTITY NAME
+				int lArrayPosToRemove = StringToInt(sArrayPosToRemove); 			//CONVERT OUR STRING ARRAY ELEMENT TO AN INT FOR REMOVAL BY ID
+				AddDebugMessage("lArrayPosToRemove = "+lArrayPosToRemove, false);
+				sFurnace2Contents.removeAt(lArrayPosToRemove); 						//REMOVE THE ARRAY ELEMENT CONTAINING THE REMOVED COAL ENTITY BY ID
+			}
+			SaveStringArray("Furnace2", sFurnace2Contents);
+			break;
+			
+		case 3:
+			
+			if (alState == 1)
+			{
+				sFurnace3Contents.insertLast(asParent); 							
+				int lArraySize = sFurnace3Contents.length(); 						
+				AddDebugMessage("ArraySize = "+lArraySize, false);					
+				for (int larrayID = (lArraySize - 1); larrayID >= 0; larrayID--) 	
+				{
+					string sDebugString = sFurnace3Contents[larrayID];
+					AddDebugMessage("sDebugString"+larrayID+" = "+sDebugString, false);
+				}
+			}
+			else if (alState == -1)
+			{
+				string sArrayPosToRemove = sFurnace3Contents.find(asParent); 		
+				int lArrayPosToRemove = StringToInt(sArrayPosToRemove); 			
+				AddDebugMessage("lArrayPosToRemove = "+lArrayPosToRemove, false);
+				sFurnace3Contents.removeAt(lArrayPosToRemove); 						
+			}
+			SaveStringArray("Furnace3", sFurnace3Contents);
+			break;
+		
+		case 6:
+			
+			if (alState == 1)
+			{
+				sFurnace6Contents.insertLast(asParent); 							
+				int lArraySize = sFurnace6Contents.length(); 						
+				AddDebugMessage("ArraySize = "+lArraySize, false);					
+				for (int larrayID = (lArraySize - 1); larrayID >= 0; larrayID--) 	
+				{
+					string sDebugString = sFurnace6Contents[larrayID];
+					AddDebugMessage("sDebugString"+larrayID+" = "+sDebugString, false);
+				}
+			}
+			else if (alState == -1)
+			{
+				string sArrayPosToRemove = sFurnace6Contents.find(asParent); 		
+				int lArrayPosToRemove = StringToInt(sArrayPosToRemove); 			
+				AddDebugMessage("lArrayPosToRemove = "+lArrayPosToRemove, false);
+				sFurnace6Contents.removeAt(lArrayPosToRemove); 						
+			}
+			SaveStringArray("Furnace6", sFurnace6Contents);
+			break;
+		
+		default:
+			AddDebugMessage("lFurnaceNumber Out of Range!", false);
+	}
+}
+//END COAL COLLISION HANDLER//
+
+//FURNACE DOOR EVENT HANDLER//
+void FurnaceDoorEventHandler (string &in asParent, string &in asChild, int alState)
+{
+	if (alState == 1)
+	{
+		AddDebugMessage("CALLED! STATE = 1", false);
+		if (asParent == "Furnace2Door")
+		{
+			if (GetLocalVarInt("Furnace2OK") == 1)
+			{
+				SetSwingDoorLocked("Furnace2Door", true, false);
+				SetSwingDoorClosed("Furnace2Door", true, false);
+				SetLightFlickerActive("Furnace2SwitchLight", true);
+				SetLightVisible("Furnace2SwitchLight", true);
+				SetLocalVarInt("Furnace2Prepped", 1);
+				SetButtonCanBeSwitchedOn("Furnace2Switch", true);
+				PlayGuiSound("loco_iron_door_close.snt", 0.5f);
+			}
+		}
+		else if (asParent == "Furnace3Door")
+		{
+			if (GetLocalVarInt("Furnace3OK") == 1)
+			{
+				SetSwingDoorLocked("Furnace3Door", true, false);
+				SetSwingDoorClosed("Furnace3Door", true, false);
+				SetLightFlickerActive("Furnace3SwitchLight", true);
+				SetLightVisible("Furnace3SwitchLight", true);
+				SetLocalVarInt("Furnace3Prepped", 1);
+				SetButtonCanBeSwitchedOn("Furnace3Switch", true);
+				PlayGuiSound("loco_iron_door_close.snt", 0.5f);
+			}
+		}
+		else if (asParent == "Furnace6Door")
+		{
+			if (GetLocalVarInt("Furnace6OK") == 1)
+			{
+				SetSwingDoorLocked("Furnace6Door", true, false);
+				SetSwingDoorClosed("Furnace6Door", true, false);
+				SetLightFlickerActive("Furnace6SwitchLight", true);
+				SetLightVisible("Furnace6SwitchLight", true);
+				SetLocalVarInt("Furnace6Prepped", 1);
+				SetButtonCanBeSwitchedOn("Furnace6Switch", true);
+				PlayGuiSound("loco_iron_door_close.snt", 0.5f);
+			}
+		}
+	}
+}
+//END FURNACE DOOR EVENT HANDLER//
+
+//FURNACE SWITCH HANDLER//
+void FurnaceSwitchHandler (string &in asEntity, int alState)
+{
+	if (alState == 1)
+	{
+		if (asEntity == "Furnace2Switch")
+		{
+			SetLightVisible("Furnace2SwitchLight", false);
+			SetLightFlickerActive("Furnace2SwitchLight", false);
+			SetLocalVarInt("Furnace2Prepped", 0);
+			PlaySoundAtEntity("", "event_factory_fireburst_2D.snt", "Furnace2DoorCollider", 0.0f, false);
+			PlaySoundAtEntity("", "event_factory_fireburst_3D.snt", "Furnace2DoorCollider", 0.0f, false);
+			AddTimer("Furnace2SoundBuffer", 0.3f, "FurnaceSwitchTimedEvents");
+			PlaySoundAtEntity("", "afx_mansion_switchboard_switch", "Player", 0.0f, false);
+			return;
+		}
+		else if (asEntity == "Furnace3Switch")
+		{
+			SetLightVisible("Furnace3SwitchLight", false);
+			SetLightFlickerActive("Furnace3SwitchLight", false);
+			SetLocalVarInt("Furnace3Prepped", 0);
+			PlaySoundAtEntity("", "event_factory_fireburst_3D.snt", "Furnace3DoorCollider", 0.0f, false);
+			PlaySoundAtEntity("", "event_factory_fireburst_2D.snt", "Furnace3DoorCollider", 0.0f, false);
+			PlaySoundAtEntity("", "afx_mansion_switchboard_switch", "Player", 0.0f, false);
+			AddTimer("Furnace3SoundBuffer", 0.3f, "FurnaceSwitchTimedEvents");
+			AddEntityCollideCallback("Player", "WretchEventCoalStartTrigger", "WretchEventCoalStartTrigger", true, 0);
+			AddTimer("Furnace3WretchSound", 2.0f, "Furnace3WretchSound");
+			return;
+		}
+		else if (asEntity == "Furnace6Switch")
+		{
+			SetLightVisible("Furnace6SwitchLight", false);
+			SetLightFlickerActive("Furnace6SwitchLight", false);
+			PlaySoundAtEntity("", "afx_mansion_switchboard_switch", "Player", 0.0f, false);
+			SetLocalVarInt("Furnace6Prepped", 0);
+			PlaySoundAtEntity("", "event_factory_fireburst_3D.snt", "Furnace6DoorCollider", 0.0f, false);
+			PlaySoundAtEntity("", "event_factory_fireburst_2D.snt", "Furnace6DoorCollider", 0.0f, false);
+			AddTimer("Furnace6SoundBuffer", 0.3f, "FurnaceSwitchTimedEvents");
+			return;
+		}
+	}
+}
+//END FURNACE SWITCH HANDLER//
+
+//FURNACE SWITCH TIMED EVENTS//
+void FurnaceSwitchTimedEvents (string &in asTimer)
+{
+	if (asTimer == "Furnace2SoundBuffer")
+	{
+		//IGNITE FURNACE CONTENTS//
+		int lArraySize = sFurnace2Contents.length(); 							//GRAB ARRAY SIZE
+		for (int larrayID = (lArraySize - 1); larrayID >= 0; larrayID--)
+		{
+			string sCurrentCoalPiece = sFurnace2Contents[larrayID];
+			CoalEffectUpdater(sCurrentCoalPiece, true, true);
+		}
+		//ADD COAL CONTENTS OF FURNACE TO "COALTOIGNITE" ARRAY//
+		if (GetLocalVarInt("Furnace2Lit") == 0)
+		{
+			for (int larrayID = (lArraySize - 1); larrayID >= 0; larrayID--)	//ADD EACH ELEMENT OF FURNACE ARRAY TO "COALTOIGNITE" ARRAY
+			{
+				string sCurrentCoalPiece = sFurnace2Contents[larrayID];
+				sCoalToIgniteOnLoad.insertLast(sCurrentCoalPiece);
+			}
+			SaveStringArray("IgniteCoal", sCoalToIgniteOnLoad);
+			//DEBUG LOOP//
+			lArraySize = sCoalToIgniteOnLoad.length(); 						
+			AddDebugMessage("COALTOIGNITE ArraySize = "+lArraySize, false);					
+			for (int larrayID = (lArraySize - 1); larrayID >= 0; larrayID--) 	
+			{
+				string sDebugString = sCoalToIgniteOnLoad[larrayID];
+				AddDebugMessage("COALTOIGNITE DebugString"+larrayID+" = "+sDebugString, false);
+			}
+			//DEBUG LOOP//
+		}
+		SetLampFlickerActive("Furnace2Lamp", true);
+		SetLampLit("Furnace2Lamp", true, false);
+		PlaySoundAtEntity("FactoryFire3D_2", "amb_factory_machine_fire_3D.snt", "FireSoundSource_2", 0.0f, true);
+		PlaySoundAtEntity("FactoryFire2D_2", "amb_factory_machine_fire_2D.snt", "FireSoundSource_2", 0.0f, true);
+		SetParticleSystemActive("Furnace2Fire*", true);
+		SetLampLit("red_light_2", false, false);
+		SetLampLit("green_light_2", true, false);
+		SetButtonCanBeSwitchedOn("Furnace2Switch", false);
+		SetLocalVarInt("Furnace2Prepped", 0);
+		AddLocalVarInt("FurnaceLitTotal", 1);
+		SetLocalVarInt("Furnace2Lit", 1);	
+	}
+	else if (asTimer == "Furnace3SoundBuffer")
+	{
+		//IGNITE FURNACE CONTENTS//
+		int lArraySize = sFurnace3Contents.length(); 							//GRAB ARRAY SIZE
+		for (int larrayID = (lArraySize - 1); larrayID >= 0; larrayID--)
+		{
+			string sCurrentCoalPiece = sFurnace3Contents[larrayID];
+			CoalEffectUpdater(sCurrentCoalPiece, true, true);
+		}
+		//ADD COAL CONTENTS OF FURNACE TO "COALTOIGNITE" ARRAY//
+		if (GetLocalVarInt("Furnace3Lit") == 0)
+		{					
+			for (int larrayID = (lArraySize - 1); larrayID >= 0; larrayID--)	//ADD EACH ELEMENT OF FURNACE ARRAY TO "COALTOIGNITE" ARRAY
+			{
+				string sCurrentCoalPiece = sFurnace3Contents[larrayID];
+				sCoalToIgniteOnLoad.insertLast(sCurrentCoalPiece);
+			}
+			SaveStringArray("IgniteCoal", sCoalToIgniteOnLoad);
+			//DEBUG LOOP//
+			lArraySize = sCoalToIgniteOnLoad.length(); 						
+			AddDebugMessage("COALTOIGNITE ArraySize = "+lArraySize, false);					
+			for (int larrayID = (lArraySize - 1); larrayID >= 0; larrayID--) 	
+			{
+				string sDebugString = sCoalToIgniteOnLoad[larrayID];
+				AddDebugMessage("COALTOIGNITE DebugString"+larrayID+" = "+sDebugString, false);
+			}
+			//DEBUG LOOP//
+		}
+		SetLampFlickerActive("Furnace3Lamp", true);
+		SetLampLit("Furnace3Lamp", true, false);
+		PlaySoundAtEntity("FactoryFire3D_6", "amb_factory_machine_fire_3Dsmallarea.snt", "FireSoundSource_6", 0.0f, true);
+		SetParticleSystemActive("Furnace3Fire*", true);
+		SetLampLit("red_light_3", false, false);
+		SetLampLit("green_light_3", true, false);
+		SetButtonCanBeSwitchedOn("Furnace3Switch", false);
+		SetLocalVarInt("Furnace3Prepped", 0);
+		SetLocalVarInt("Furnace3Lit", 1);	
+		AddLocalVarInt("FurnaceLitTotal", 1);	
+	}
+	else if (asTimer == "Furnace6SoundBuffer")
+	{
+		//IGNITE FURNACE CONTENTS//
+		int lArraySize = sFurnace6Contents.length(); 							//GRAB ARRAY SIZE
+		for (int larrayID = (lArraySize - 1); larrayID >= 0; larrayID--)
+		{
+			string sCurrentCoalPiece = sFurnace6Contents[larrayID];
+			CoalEffectUpdater(sCurrentCoalPiece, true, true);
+		}
+		//ADD COAL CONTENTS OF FURNACE TO "COALTOIGNITE" ARRAY//
+		if (GetLocalVarInt("Furnace6Lit") == 0)
+		{						
+			for (int larrayID = (lArraySize - 1); larrayID >= 0; larrayID--)	//ADD EACH ELEMENT OF FURNACE ARRAY TO "COALTOIGNITE" ARRAY
+			{
+				string sCurrentCoalPiece = sFurnace6Contents[larrayID];
+				sCoalToIgniteOnLoad.insertLast(sCurrentCoalPiece);
+			}
+			SaveStringArray("IgniteCoal", sCoalToIgniteOnLoad);
+			//DEBUG LOOP//
+			lArraySize = sCoalToIgniteOnLoad.length(); 						
+			AddDebugMessage("COALTOIGNITE ArraySize = "+lArraySize, false);					
+			for (int larrayID = (lArraySize - 1); larrayID >= 0; larrayID--) 	
+			{
+				string sDebugString = sCoalToIgniteOnLoad[larrayID];
+				AddDebugMessage("COALTOIGNITE DebugString"+larrayID+" = "+sDebugString, false);
+			}
+			//DEBUG LOOP//
+		}
+		SetLampFlickerActive("Furnace6Lamp", true);
+		SetLampLit("Furnace6Lamp", true, false);
+		PlaySoundAtEntity("FactoryFire3D_4", "amb_factory_machine_fire_3D.snt", "FireSoundSource_4", 0.0f, true);
+		PlaySoundAtEntity("FactoryFire2D_4", "amb_factory_machine_fire_2D.snt", "FireSoundSource_4", 0.0f, true);
+		SetParticleSystemActive("Furnace6Fire*", true);
+		SetLampLit("red_light_6", false, false);
+		SetLampLit("green_light_6", true, false);
+		SetButtonCanBeSwitchedOn("Furnace6Switch", false);
+		SetLocalVarInt("Furnace6Prepped", 0);
+		SetLocalVarInt("Furnace6Lit", 1);	
+		AddLocalVarInt("FurnaceLitTotal", 1);
+		SetEntityActive("Mask3", true);
+		SetLocalVarInt("Mask3Active", 1);
+	}
+	if (GetLocalVarInt("FurnaceLitTotal") == 3)
+	{
+		AddDebugMessage("ALL FURNACES LIT, PISTON LEVERS ACTIVE", false);
+		AddHint("Factory3", "");
+		
+		if(asTimer !="")
+			PlayMusic("Factory_tension_loop_160.ogg", false, 0.8f, 2.0f, 6, false);
+		
+		SetLeverInteractionDisablesStuck("Lever1", true);
+		SetLeverInteractionDisablesStuck("Lever2", true);
+		SetLeverInteractionDisablesStuck("Lever3", true);
+		PlayPropAnimation("LeverGauge1", "on", 0.0f, true, "");
+		PlayPropAnimation("LeverGauge2", "on", 0.0f, true, "");
+		PlayPropAnimation("LeverGauge3", "on", 0.0f, true, "");
+	}
+}
+//END FURNACE SWITCH TIMED EVENTS//
+
+//COAL EFFECT UPDATER//
+void CoalEffectUpdater(string asCoalPiece, bool EffectState, bool SoundState)
+{
+	SetPropEffectActive(asCoalPiece, EffectState, SoundState);
+}
+//END COAL EFFECT UPDATER//
+
+//PLAYER TRACKING FOR COAL SPAWNS//
+void CoalSpawnPlayerTracking (string &in asParent, string &in asChild, int alState)
+{
+	if (asChild == "PlayerTrackingArea1")
+	{
+		if (alState == 1)
+		{
+			SetLocalVarInt("PlayerTracking1", 1);
+			AddDebugMessage("PlayerTracking1 = 1", false);
+			return;
+		}
+		else if (alState == -1)
+		{
+			SetLocalVarInt("PlayerTracking1", 0);
+			AddDebugMessage("PlayerTracking1 = 0", false);
+			return;
+		}
+	}
+	else if (asChild == "PlayerTrackingArea2")
+	{
+		if (alState == 1)
+		{
+			SetLocalVarInt("PlayerTracking2", 1);
+			AddDebugMessage("PlayerTracking2 = 1", false);
+			return;
+		}
+		else if (alState == -1)
+		{
+			SetLocalVarInt("PlayerTracking2", 0);
+			AddDebugMessage("PlayerTracking2 = 0", false);
+			return;
+		}
+	}
+}
+//END PLAYER TRACKING//
+
+//COAL SPAWN HANDLER//
+void MapCoalTracking (string &in asParent, string &in asChild, int alState)
+{
+	if (alState == -1)
+	{
+		AddLocalVarInt("TotalCoalInMap", -1);
+		AddDebugMessage("TOTALCOALINMAP REDUCED BY 1", false);
+		int DEBUG = GetLocalVarInt("TotalCoalInMap");
+		AddDebugMessage("DEBUG = "+DEBUG, false);
+	}
+	else if (alState == 1)
+	{
+		AddLocalVarInt("TotalCoalInMap", 1);
+		AddDebugMessage("TOTALCOALINMAP INCREASED BY 1", false);
+	}
+	if (GetLocalVarInt("TotalCoalInMap") < 3)
+	{
+		AddDebugMessage("Total Coal In Map IS LESS THAN 3", false);
+		if(GetLocalVarInt("PlayerTracking1") == 1)
+		{
+			int lCurrentCoalNumber = GetLocalVarInt("NextCoalNumber");
+			CreateEntityAtArea("CoalPiece_"+lCurrentCoalNumber, "coal.ent", "CoalSpawnArea2", true, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f);
+			SetPropEffectActive("CoalPiece_"+lCurrentCoalNumber, false, false);
+			AddEntityCollideCallback("CoalPiece_"+lCurrentCoalNumber, "Furnace2CoalCollider", "CoalCollisionHandler", false, 0);
+			AddEntityCollideCallback("CoalPiece_"+lCurrentCoalNumber, "Furnace3CoalCollider", "CoalCollisionHandler", false, 0);
+			AddEntityCollideCallback("CoalPiece_"+lCurrentCoalNumber, "Furnace6CoalCollider", "CoalCollisionHandler", false, 0);
+			AddEntityCollideCallback("CoalPiece_"+lCurrentCoalNumber, "CoalTrackingArea", "MapCoalTracking", false, 0);
+			AddLocalVarInt("NextCoalNumber", 1);
+			lCurrentCoalNumber = GetLocalVarInt("NextCoalNumber");
+			CreateEntityAtArea("CoalPiece_"+lCurrentCoalNumber, "coal.ent", "CoalSpawnArea2", true, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f);
+			SetPropEffectActive("CoalPiece_"+lCurrentCoalNumber, false, false);
+			AddEntityCollideCallback("CoalPiece_"+lCurrentCoalNumber, "Furnace2CoalCollider", "CoalCollisionHandler", false, 0);
+			AddEntityCollideCallback("CoalPiece_"+lCurrentCoalNumber, "Furnace3CoalCollider", "CoalCollisionHandler", false, 0);
+			AddEntityCollideCallback("CoalPiece_"+lCurrentCoalNumber, "Furnace6CoalCollider", "CoalCollisionHandler", false, 0);
+			AddEntityCollideCallback("CoalPiece_"+lCurrentCoalNumber, "CoalTrackingArea", "MapCoalTracking", false, 0);
+			AddLocalVarInt("NextCoalNumber", 1);
+			AddDebugMessage("COAL SPAWNED AT AREA 1", false);
+		}
+		else if (GetLocalVarInt("PlayerTracking2") == 1)
+		{
+			int lCurrentCoalNumber = GetLocalVarInt("NextCoalNumber");
+			CreateEntityAtArea("CoalPiece_"+lCurrentCoalNumber, "coal.ent", "CoalSpawnArea1", true, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f);
+			SetPropEffectActive("CoalPiece_"+lCurrentCoalNumber, false, false);
+			AddEntityCollideCallback("CoalPiece_"+lCurrentCoalNumber, "Furnace2CoalCollider", "CoalCollisionHandler", false, 0);
+			AddEntityCollideCallback("CoalPiece_"+lCurrentCoalNumber, "Furnace3CoalCollider", "CoalCollisionHandler", false, 0);
+			AddEntityCollideCallback("CoalPiece_"+lCurrentCoalNumber, "Furnace6CoalCollider", "CoalCollisionHandler", false, 0);
+			AddEntityCollideCallback("CoalPiece_"+lCurrentCoalNumber, "CoalTrackingArea", "MapCoalTracking", false, 0);
+			AddLocalVarInt("NextCoalNumber", 1);
+			lCurrentCoalNumber = GetLocalVarInt("NextCoalNumber");
+			CreateEntityAtArea("CoalPiece_"+lCurrentCoalNumber, "coal.ent", "CoalSpawnArea2", true, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f);
+			SetPropEffectActive("CoalPiece_"+lCurrentCoalNumber, false, false);
+			AddEntityCollideCallback("CoalPiece_"+lCurrentCoalNumber, "Furnace2CoalCollider", "CoalCollisionHandler", false, 0);
+			AddEntityCollideCallback("CoalPiece_"+lCurrentCoalNumber, "Furnace3CoalCollider", "CoalCollisionHandler", false, 0);
+			AddEntityCollideCallback("CoalPiece_"+lCurrentCoalNumber, "Furnace6CoalCollider", "CoalCollisionHandler", false, 0);
+			AddEntityCollideCallback("CoalPiece_"+lCurrentCoalNumber, "CoalTrackingArea", "MapCoalTracking", false, 0);
+			AddLocalVarInt("NextCoalNumber", 1);
+			AddDebugMessage("COAL SPAWNED AT AREA 2", false);			
+		}
+	}
+}
+//END COAL SPAWN HANDLER//
+
+//PISTON LEVER HANDLER//
+void PistonLeverHandler (string &in asEntity, int alState)
+{
+	if (alState == 1)
+	{
+		if (asEntity == "Lever1")
+		{
+			SetLeverInteractionDisablesStuck("Lever1", false);
+			SetLeverStuckState("Lever1", 1, false);
+			PlayPropAnimation("factory_pistons_1", "offtoon", 0.0f, false, "");
+			AddTimer("Piston1AnimationPadding", 3.3f, "PistonAnimationPadding"); //CHANGE TIMER VALUE HERE TO MATCH LENGTH OF OFFTOON ANIMATION
+			AddTimer("Piston1_PistonOfftoOnSound", 0.01f, "Piston1_PistonOfftoOnSound");
+			AddLocalVarInt("PistonsOn", 1);
+			AddTimer("PistonSoundPreload", 1.0f, "PistonSoundPreload");
+			//SOUND OPT GATES
+			//SetEntityActive("GateSoundOpt_Off", false);
+			//SetEntityActive("GateSoundOpt_Off", true);
+		}
+		else if (asEntity == "Lever2")
+		{
+			SetLeverInteractionDisablesStuck("Lever2", false);
+			SetLeverStuckState("Lever2", 1, false);	
+			PlayPropAnimation("factory_pistons_2", "offtoon", 0.0f, false, "");
+			AddTimer("Piston2AnimationPadding", 3.3f, "PistonAnimationPadding");
+			AddTimer("Piston2_PistonOfftoOnSound", 0.0f, "Piston2_PistonOfftoOnSound");			
+			AddLocalVarInt("PistonsOn", 1);
+			AddTimer("PistonSoundPreload", 1.0f, "PistonSoundPreload");
+		}
+		else if (asEntity == "Lever3")
+		{
+			SetLeverInteractionDisablesStuck("Lever3", false);
+			SetLeverStuckState("Lever3", 1, false);		
+			PlayPropAnimation("factory_pistons_3", "offtoon", 0.0f, false, "");
+			AddTimer("Piston3AnimationPadding", 3.3f, "PistonAnimationPadding");
+			AddTimer("Piston3_PistonOfftoOnSound", 0.0f, "Piston3_PistonOfftoOnSound");
+			AddLocalVarInt("PistonsOn", 1);
+			AddTimer("PistonSoundPreload", 1.0f, "PistonSoundPreload");
+		}
+		if (GetLocalVarInt("PistonsOn") == 3)
+		{
+			SetEntityActive("FurnacesHintTrigger", false);
+			AddEntityCollideCallback("Player", "soundopt_pistonwheel_start", "soundopt", true, 1);
+			AddEntityCollideCallback("Player", "PigStoryPistonTrigger", "PigStoryPistonTrigger", true, 0);
+			SetEntityActive("Mask3", false);
+			SetLocalVarInt("Mask3Active", 0);
+			SetMoveObjectState("Gate2", 0.5f);
+			SetMoveObjectState("Gate3", 0.75f);
+			PlayPropAnimation("electric_cabin_animated_3", "on", 0, true, "");
+			PlayPropAnimation("electric_cabin_animated_4", "on", 0, true, "");
+			PlayPropAnimation("gauge01_1", "on", 0, true, "");
+			PlayPropAnimation("gauge01_2", "on", 0, true, "");
+			AddTimer("PistonStartSoundOptimisations", 1.0f, "PistonStartSoundOptimisations");
+			SetLampLit("cellar_gaslamp01_F_short_1", false, false);
+			SetLampLit("cellar_gaslamp01_F_short_2", false, false);
+			SetLampLit("cellar_gaslamp01_F_short_3", false, false);
+			SetLampLit("cellar_gaslamp01_F_short_4", false, false);
+			SetLampLit("cellar_gaslamp01_F_short_5", false, false);
+			SetLampLit("cellar_gaslamp01_F_short_6", false, false);
+			SetLampLit("cellar_gaslamp01_F_short_7", false, false);
+			SetLampLit("cellar_gaslamp01_F_short_8", false, false);
+			SetLampLit("tube_lamp_factory_railing_1", false, false);
+			SetLampLit("tube_lamp_factory_railing_2", false, false);
+			SetLampLit("tube_lamp_factory_railing_3", false, false);
+			SetLampLit("tube_lamp_factory_railing_4", false, false);
+			SetLampLit("tube_lamp_factory_railing_5", false, false);
+			SetLampLit("tube_lamp_factory_railing_6", false, false);
+			SetLampLit("tube_lamp_factory_railing_7", false, false);
+			SetLampLit("tube_lamp_factory_railing_8", false, false);
+			SetLampLit("tube_lamp_factory_railing_9", false, false);
+			SetLampLit("tube_lamp_factory_railing_10", false, false);
+			SetLampLit("tube_lamp_factory_railing_11", false, false);
+			SetLampLit("tube_lamp_factory_railing_12", false, false);
+			SetLampLit("tube_lamp_factory_railing_13", false, false);
+			SetLampLit("tube_lamp_factory_railing_14", false, false);
+			SetLampLit("tube_lamp_factory_railing_15", false, false);
+			SetLampLit("tube_lamp_factory_railing_16", false, false);
+			SetLampLit("tube_lamp_factory_railing_21", false, false);
+			SetLampLit("tube_lamp_factory_railing_23", false, false);
+			SetLampLit("tube_lamp_factory_railing_27", false, false);
+			SetLampLit("tube_lamp_factory_railing_29", false, false);
+			SetLampLit("tube_lamp_factory_railing_32", false, false);
+			SetLampLit("tube_lamp_factory_railing_33", false, false);
+			SetLampLit("tube_lamp_factory_railing_34", false, false);
+			SetLampLit("tube_lamp_factory_railing_35", false, false);
+			SetLampLit("tube_lamp_factory_railing_38", false, false);
+			SetLampLit("tube_lamp_factory_railing_41", false, false);
+			SetLampLit("tube_lamp_factory_railing_42", false, false);
+			SetLampLit("tube_lamp_factory_railing_43", false, false);
+			SetLampLit("tube_lamp_factory_railing_44", false, false);
+			SetLampLit("tube_lamp_factory_railing_45", false, false);
+			SetLampLit("tube_lamp_factory_railing_46", false, false);
+			SetLampLit("tube_lamp_factory_railing_47", false, false);
+			SetLampLit("tube_lamp_factory_railing_48", false, false);
+			SetLampLit("tube_lamp_factory_railing_49", false, false);
+			SetLampLit("tube_lamp_factory_railing_50", false, false);
+			SetLampLit("tube_lamp_factory_railing_51", false, false);
+			SetLampLit("tube_lamp_factory_railing_52", false, false);
+			SetLampLit("tube_lamp_factory_railing_53", false, false);
+			SetLampLit("tube_lamp_factory_railing_54", false, false);
+			SetLampLit("tube_lamp_factory_railing_55", false, false);
+			SetLampLit("tube_lamp_factory_railing_56", false, false);
+			SetLampLit("tube_lamp_factory_railing_59", false, false);
+			SetLampLit("tube_lamp_factory_railing_61", false, false);
+			SetLampLit("tube_lamp_factory_railing_63", false, false);
+			SetLampLit("tube_lamp_factory_railing_64", false, false);
+			SetLampLit("tube_lamp_factory_railing_67", false, false);
+			SetLampLit("tube_lamp_factory_railing_71", false, false);
+			if(asEntity != "")
+			{
+				PlaySoundAtEntity("LightsOut", "afx_tunnels_gate_lock_explode", "Player", 0.0f, false);
+				PlaySoundAtEntity("LightsOut2", "afx_tesla01_lightsout.snt", "Player", 0.0f, false);
+				PlayMusic("music_engine_room_discover_2.ogg", false, 0.7f, 2.0f, 6, false);
+				SetParticleSystemActive("BrokenGateSparks*", true);
+				PlaySoundAtEntity("GateSparkLoop", "afx_cellar_spark_loop.snt", "Gate2SparkSource", 0.0f, true);
+			}
+			
+			//Enemy encounters
+			AddEntityCollideCallback("Player", "AreaPig2Start", "EnterPig2Start", true, 1);
+		}
+	}
+}
+//END PISTON LEVER HANDLER//
+
+//PISTON ANIMATION PADDING CALLS//
+void PistonAnimationPadding (string &in asTimer)
+{
+	if (asTimer == "Piston1AnimationPadding")
+	{
+		PlayPropAnimation("factory_pistons_1", "on", 0.0f, true, "");
+		return;
+	}
+	else if (asTimer == "Piston2AnimationPadding")
+	{
+		PlayPropAnimation("factory_pistons_2", "on", 0.0f, true, "");
+		return;
+	}
+	else if (asTimer == "Piston3AnimationPadding")
+	{
+		PlayPropAnimation("factory_pistons_3", "on", 0.0f, true, "");
+		return;
+	}
+}
+//END PISTON ANIMATION PADDING CALLS//
+
+//PISTON ANIMATION AND SOUND INITIALISATION//
+//PISTON 1 SOUNDSET - TRIGGER TIMER Piston1_PistonOfftoOnSound with a time of 0.0f alongside the OfftoOn Anim//
+void Piston1_PistonOfftoOnSound (string &in asTimer)
+{	
+	//HORN
+	PlaySoundAtEntity("PistonHorn", "factory_piston_horn.snt", "Player", 0.0f, false);
+	//REVERB
+	PlaySoundAtEntity("Piston2D", "factory_piston_2D.snt", "Player", 4.0f, false);	
+	//PISTON SOUND
+	PlaySoundAtEntity("Piston1Piston_OFFTOON", "factory_piston_piston_pers_3D_on.snt", "factory_pistons_1_piston_source", 0.0f, false);
+	AddTimer("Piston1_PistonSoundSet", 3.3f, "Piston1_PistonSoundSet");
+}
+
+void Piston1_PistonSoundSet (string &in asTimer)
+{	
+	//PISTON SOUND
+	PlaySoundAtEntity("Piston1Piston", "factory_piston_piston_pers_3D.snt", "factory_pistons_1_piston_source", 0.0f, true);
+}
+//END PISTON 1 SOUNDSET//
+
+//PISTON 2 SOUNDSET - TRIGGER TIMER Piston2_PistonOfftoOnSound with a time of 0.0f alongside the OfftoOn Anim//
+void Piston2_PistonOfftoOnSound (string &in asTimer)
+{	
+	//HORN
+	PlaySoundAtEntity("PistonHorn", "factory_piston_horn.snt", "Player", 0.0f, false);	
+	//PISTON SOUND
+	PlaySoundAtEntity("Piston1Piston_OFFTOON", "factory_piston_piston_pers_3D_on_2.snt", "factory_pistons_2_piston_source", 0.0f, false);
+	AddTimer("Piston2_PistonSoundSet", 3.3f, "Piston2_PistonSoundSet");
+}
+
+void Piston2_PistonSoundSet (string &in asTimer)
+{	
+	//PISTON SOUND
+	PlaySoundAtEntity("Piston2Piston", "factory_piston_piston_pers_3D_2.snt", "factory_pistons_2_piston_source", 0.0f, true);
+}
+//END PISTON 2 SOUNDSET//
+
+//PISTON 3 SOUNDSET - TRIGGER TIMER Piston3_PistonOfftoOnSound with a time of 0.0f alongside the OfftoOn Anim//
+void Piston3_PistonOfftoOnSound (string &in asTimer)
+{	
+	//HORN
+	PlaySoundAtEntity("PistonHorn", "factory_piston_horn.snt", "Player", 0.0f, false);
+	//PISTON SOUND
+	PlaySoundAtEntity("Piston1Piston_OFFTOON", "factory_piston_piston_pers_3D_on.snt", "factory_pistons_3_piston_source", 0.0f, false);
+	AddTimer("Piston3_PistonSoundSet", 3.3f, "Piston3_PistonSoundSet");
+}
+
+void Piston3_PistonSoundSet (string &in asTimer)
+{		
+	//PISTON SOUND
+	PlaySoundAtEntity("Piston3Piston", "factory_piston_piston_pers_3D_3.snt", "factory_pistons_3_piston_source", 0.0f, true);
+}
+//END PISTON 3 SOUNDSET//
+//END PISTON ANIMATION AND SOUND INITIALISATION//
+
+//MAP SOUND CHANNEL MANAGER//
+
+//GATE 2 DROP//
+void Gate2Drop (string &in asParent, string &in asChild, int alState)
+{
+	SetLampLit("bonfire_factory_tank_large_6", false, false);
+	SetLampLit("Furnace2Lamp", false, false);
+	SetLampLit("bonfire_factory_tank_large_8", false, false);
+	SetLampLit("Furnace3Lamp", false, false);
+	SetLampLit("bonfire_factory_tank_large_4", false, false);
+	SetLampLit("Furnace6Lamp", false, false);
+	SetSwingDoorClosed("engineroom_office_door_2", true, false);
+	
+	SetMoveObjectState("Gate2", 0.0f);
+	SetParticleSystemActive("BrokenGateSparks*", false);
+	AddTimer("Gate2DropTimer", 0.7f, "Gate2DropTimedParticles");
+	StopSound("GateSparkLoop", 0.1f);
+	PlaySoundAtEntity("Drag", "afx_event_factory_gate_close", "Gate2", 0.0f, false);
+	RemoveTimer("MonsterGenerator1CurrentTimerName");
+	RemoveTimer("MonsterGenerator2CurrentTimerName");
+	SetLocalVarInt("MonsterGenerator1On", 0);
+	SetLocalVarInt("MonsterGenerator2On", 0);
+	SetLocalVarInt("MonsterGenerator3On", 1);
+	AddTimer("VoidTimer", 1.5f, "RandPigFloor3SoundCues");
+	CheckPoint("CP03_BottomFloor", "CheckpointStart_2", "DeathHandler", "", "", true);
+}
+
+void Gate2DropTimedParticles (string &in asTimer)
+{
+	SetParticleSystemActive("BrokenGateDust*", true);
+}
+//END GATE 2 DROP//									
+
+void AreaCloseGateX(string &in asParent, string &in asChild, int alState)
+{
+	StartScreenShake(0.02, 1, 1, 1);
+	PlaySoundAtEntity("Rumble", "afx_sewer_pipetremor_01.snt", "Player", 0, false);
+
+	AddTimer("gate_move", 1.2, "TimerStopRumb");
+	AddTimer("gate_down", 1.9, "TimerStopRumb");
+	AddTimer("stop", 2.5, "TimerStopRumb");
+}
+
+void TimerStopRumb(string &in asTimer)
+{
+	if(asTimer == "gate_move")
+	{
+		PlaySoundAtEntity("roll", "roll_metal.snt", "Gatex", 0.2, false);
+		PlaySoundAtEntity("scrape", "loco_iron_door_open.snt", "Gatex", 0.2, false);
+		SetMoveObjectState("Gatex", 0.0f);
+		return;
+	}
+	if(asTimer == "gate_down")
+	{
+		StopSound("roll", 0.1f);
+		StopSound("scrape", 0.1f);
+		PlaySoundAtEntity("down", "impact_metal_high.snt", "Gatex", 0, false);
+		PlaySoundAtEntity("down2", "loco_iron_door_close_2D.snt", "Gatex", 0.8, false);
+		return;
+	}
+	
+	StopSound("Rumble", 3);
+}
+//AMBIENCE REMOVAL// //REMOVE OUT OF RANGE AMBIENCE TO MAKE SOUND CHANNELS AVAILABLE FOR PIG//
+void AdaptedAmbience() 
+{
+	//START SHED DOOR WIND SAMPLE//
+	RemoveEntityCollideCallback("SecretExitDoor", "SecretDoorWindSampleCollider");
+	//FACTORY ENTRANCE DOOR WIND SAMPLE//
+	RemoveEntityCollideCallback("FactoryFrontDoor", "FactoryFrontDoorWindCollider");
+	//RANDOM FX TRIGGERS//
+	RemoveEntityCollideCallback("Player", "FactorySoundStart");
+}	
+//END AMBIENCE REMOVAL//							
+//END MAP SOUND CHANNEL MANAGER//									
+				
+//PHONE HANDLERS//
+void FactoryPhone (string &in asParent, string &in asChild, int alState)
+{
+	AddTimer("FactoryPhoneRinging", RandFloat(1.8f, 3.2f), "FactoryPhoneTimerCall");
+	RemoveTimer("FactoryTruckTimerPhone");
+}
+
+void FactoryTruckTimerPhone (string &in asTimer)
+{
+	AddTimer("FactoryPhoneRinging", RandFloat(1.8f, 3.2f), "FactoryPhoneTimerCall");
+	RemoveEntityCollideCallback("Player", "PhoneTrigger");
+}
+
+void FactoryPhoneTimerCall (string &in asTimer)
+{
+	RemoveTimer("FactoryTruckTimerPhone");
+	RemoveEntityCollideCallback("Player", "PhoneTrigger");
+	AddDebugMessage("Phone Ringing - Timer Begin", false);
+	StartPhoneRinging("phone_box_2");
+	SetLampLit("phone_box_3", true, true);
+	AddTimer ("PhoneTimeout", 30.0f,  "PhoneTimeout");
+	AddEntityCollideCallback("Player", "Sound_PigAttack_Trigger", "PigAttackSound", true, 0);
+	SetEntityPlayerInteractCallback("phone_box_2", "InteractPhoneBox", true);
+}
+
+void PhoneTimeout (string &in asTimer)
+{
+	AddDebugMessage("Phone Stopped Ringing", false);
+	StopPhoneRinging("phone_box_2");
+	SetLampLit("phone_box_3", false, true);
+	AddEntityCollideCallback("Player", "Sound_PigAttack_Trigger", "PigAttackSound", true, 0);
+	SetEntityPlayerInteractCallback("phone_box_2", "", false);
+}
+
+void InteractPhoneBox (string &in asEntity)
+{
+	RemoveTimer("PhoneTimeout");
+	
+	AddTimer("PhoneCallTimer", 18.75, "PhoneCallOver");
+	StopSound("phone_box_2_AnimEvent", 0.1f);
+	
+	// Handle mask2 spawn
+	if (GetLocalVarInt("Mask2MaySpawn") == 1)
+	{
+		SetEntityActive("Mask2", true);
+		SetEntityActive("Mask2Nail", true);
+		SetLocalVarInt("Mask2Active", 1);
+		SetPropStaticPhysics("Mask2", true);
+		SetPropStaticPhysics("Mask2Nail", true);
+		AddEntityCollideCallback("Player", "Mask2DespawnTrigger", "Mask2Despawner", true, 1);
+	}
+}
+
+void PhoneCallOver (string &in asTimer)
+{
+	SetLampLit("phone_box_3", false, true);
+}
+//END PHONE RINGING//	
+
+//PIG ATTACK SFX//
+void PigAttackSound (string &in asParent, string &in asChild, int alState)
+{
+	AddDebugMessage("Pig Attack Timer Start", false);
+	float fAttack = RandFloat(1.0f,3.5f);
+	AddTimer("PigAttackSoundTimer", 0.1f+fAttack, "PigAttackSoundTimer");
+}
+
+void PigAttackSoundTimer (string &in asTimer)
+{
+	MandusReactionPlayer("Breath", 2.5f);
+	MandusReactionPlayer("Breath", 7.3f);
+	AddDebugMessage("Pig You So Nasty", false);
+	PlaySoundAtEntity("Attack", "afx_event_factory_pigstory_07", "Player", 0.0f, false);
+	AddTimer("PostPigAttackMusicTimer", 13.0f, "PostPigAttackMusicTimer");
+}
+
+void PostPigAttackMusicTimer (string &in asTimer)
+{
+	AddDebugMessage("Pig Attack Music Sting", false);
+	AddEntityCollideCallback("Player", "Wretch1TriggerSound", "Wretch1TriggerSound", true, 0);
+	PlayMusic("music_factory_pigattack_post.ogg", false, 0.85f, 1.0f, 8, false);
+}
+//END PIG ATTACK SFX//
+
+//WRETCH FURTHER EVENTS//
+void Wretch1TriggerSound (string &in asParent, string &in asChild, int alState)
+{
+	MandusReactionPlayer("Breath", 3.5f);
+	MandusReactionPlayer("Breath", 9.85f);
+	AddDebugMessage("Pig You So Nasty", false);
+	PlaySoundAtEntity("Attack", "afx_event_factory_pigstory_02", "Player", 0.0f, false);
+}
+
+void Furnace3WretchSound (string &in asTimer)
+{
+	AddDebugMessage("PigStory 3", false);
+	PlaySoundAtEntity("Attack", "afx_event_factory_pigstory_03", "Player", 0.0f, false);
+}
+
+void WretchEventCoalStartTrigger (string &in asParent, string &in asChild, int alState)
+{
+	AddDebugMessage("Wretch Trigger Added", false);
+	AddEntityCollideCallback("Player", "WretchEventCoalTrigger", "WretchEventCoalTrigger", true, 0);
+}
+
+void WretchEventCoalTrigger (string &in asParent, string &in asChild, int alState)
+{
+	AddDebugMessage("Nearly there", false);
+	AddEntityCollideCallback("Player", "WretchEventCoalSound", "WretchEventCoalSound", true, 0);
+}
+
+void WretchEventCoalSound (string &in asParent, string &in asChild, int alState)
+{
+	MandusReactionPlayer("Breath", 2.1f);
+	MandusReactionPlayer("Breath", 11.0f);
+	AddDebugMessage("Pig You So Nasty", false);
+	PlaySoundAtEntity("Attack", "afx_event_factory_pigstory_01", "Player", 0.0f, false);
+}
+
+void PigStoryPistonTrigger (string &in asParent, string &in asChild, int alState)
+{
+	MandusReactionPlayer("Breath", 5.0f);
+	AddDebugMessage("Pig story 4", false);
+	PlaySoundAtEntity("Attack", "afx_event_factory_pigstory_04", "Player", 0.0f, false);
+}
+	
+								
+//OFFICE SCARES//
+void ScareAreasPlaced (string &in asTimer)
+{	
+	AddDebugMessage("Scare Areas Added", false);
+	AddEntityCollideCallback("Player", "OfficeScareTrigger_1", "OfficeScare3", true, 0);
+	SetEntityPlayerInteractCallback("engineroom_office_door_3", "OfficeScare1", true);
+	SetEntityPlayerInteractCallback("work_desk_9", "OfficeScare2", true);
+}
+
+void OfficeScare1 (string &in asEntity)
+{
+	AddDebugMessage("Scare Timer Started", false);
+	float fMetal = RandFloat(3.0f,5.5f);
+	AddTimer("MetalDragTimer", 0.5f+fMetal, "MetalDragTimer");
+}
+
+void MetalDragTimer (string &in asTimer)
+{
+	AddDebugMessage("Metal Drag", false);
+	PlaySoundAtEntity("Drag", "afx_spooky_metaldrag", "RandOfficeSoundSouce_4", 0.0f, false);
+}
+
+void OfficeScare2 (string &in asEntity)
+{
+	AddDebugMessage("Child Laugh Started", false);
+	float fChild = RandFloat(2.0f,2.5f);
+	AddTimer("ChildLaughTimer", 0.5f+fChild, "ChildLaughTimer");
+}
+
+void ChildLaughTimer (string &in asTimer)
+{	
+	AddDebugMessage("Child Laugh", false);
+	PlaySoundAtEntity("Laugh", "afx_spooky_child_laugh_semi_distant", "TruckSoundSource_3", 0.0f, false);
+}
+
+void OfficeScare3 (string &in asParent, string &in asChild, int alState)
+{
+	AddEntityCollideCallback("Player", "OfficeScareTrigger_2", "OfficeScare4", true, 0);
+	AddDebugMessage("Office Scare 3 Timer Hit", false);
+	float fScare3 = RandFloat(3.0f,5.5f);
+	AddTimer("ScreamTimer", 0.5f+fScare3, "ScreamTimer");
+}
+
+void ScreamTimer (string &in asTimer)
+{
+	AddEntityCollideCallback("Player", "BreathTrigger", "BreathTrigger", true, 0);
+	AddTimer("BreathTriggerRemoval", 2.0f, "BreathTriggerRemoval");
+	AddDebugMessage("Scream Triggered", false);
+}
+
+void BreathTrigger (string &in asParent, string &in asChild, int alState)
+{
+	MandusReactionPlayer("Breath", 3.5f);
+}
+
+void BreathTriggerRemoval (string &in asTimer)
+{
+	RemoveEntityCollideCallback("Player", "BreathTrigger");
+	AddDebugMessage("Breath Trigger Removed", false);
+}
+
+void OfficeScare4 (string &in asParent, string &in asChild, int alState)
+{ 
+	AddDebugMessage("wineglass flying", false);
+	AddPropForce("wine02_26", 0.0f, 0.0f, 40.0f, "world");
+}
+
+//END OFFICE SCARES//
+
+//METAL CREAK SOUNDS										
+void MetalCreakSounds (string &in asParent, string &in asChild, int alState)
+{
+	PlaySoundAtEntity("MetalStrain", "afx_event_factory_metal_strain.snt", "Player", 0.0f, false);
+	RemoveEntityCollideCallback("Player", "MetalCreak_1");
+	RemoveEntityCollideCallback("Player", "MetalCreak_2");
+	RemoveEntityCollideCallback("Player", "MetalCreak_3");
+	RemoveEntityCollideCallback("Player", "MetalCreak_4");
+	RemoveEntityCollideCallback("Player", "MetalCreak_5");
+	RemoveEntityCollideCallback("Player", "MetalCreak_6");
+	AddTimer("MetalCreakAreaRespawn", 3.0f, "MetalCreakAreaRespawn");
+	AddDebugMessage("Metal Strain Triggered and Creak Areas Removed", false);
+}
+
+void MetalCreakAreaRespawn (string &in asTimer)
+{
+	AddEntityCollideCallback("Player", "MetalCreak_1", "MetalCreakSounds", true, 0);
+	AddEntityCollideCallback("Player", "MetalCreak_2", "MetalCreakSounds", true, 0);
+	AddEntityCollideCallback("Player", "MetalCreak_3", "MetalCreakSounds", true, 0);
+	AddEntityCollideCallback("Player", "MetalCreak_4", "MetalCreakSounds", true, 0);
+	AddEntityCollideCallback("Player", "MetalCreak_5", "MetalCreakSounds", true, 0);
+	AddEntityCollideCallback("Player", "MetalCreak_6", "MetalCreakSounds", true, 0);
+	AddDebugMessage("Creak Areas Restored", true);
+}
+//END METAL CREAK SOUNDS//
+
+//TRUCK DRIVE BY EVENT//
+void TruckDriveby (string &in asParent, string &in asChild, int alState)
+{
+	PlaySoundAtEntity("Bugfly", "afx_spooky_bugfly.snt", "Player", 0.0f, false);
+	AddDebugMessage("Truck Timer Triggered & Scare Area Timer Triggered", false);
+	AddTimer("TruckDrivebyTimer", 5.0f, "TruckDrivebyTimer");
+	AddTimer("ScareAreasPlaced", 3.0f, "ScareAreasPlaced");
+	AddTimer("FactoryTruckTimerPhone", 18.0f, "FactoryTruckTimerPhone");
+}
+
+void TruckDrivebyTimer (string &in asTimer)
+{
+	AddDebugMessage("Truck Triggered", false);
+	PlayPropAnimation("truck_driveby", "drive", 0.0f, false, "");
+	PlaySoundAtEntity("Truckby2", "factory_event_truckby_source1.snt", "TruckSoundSource_2", 0.0f, false);
+	PlaySoundAtEntity("Truckby3", "factory_event_truckby_source2.snt", "TruckSoundSource_3", 0.0f, false);
+	PlaySoundAtEntity("TruckFire", "factory_event_truckby_backfire.snt", "TruckSoundSource_2D", 0.0f, false);
+	PlaySoundAtEntity("Truckby2D", "factory_event_truckby_source_2D.snt", "TruckSoundSource_2D", 0.0f, false);
+	PlaySoundAtEntity("TruckbyRattle", "factory_event_truckby_rattle.snt", "TruckSoundSource_2D", 0.0f, false);
+	AddTimer("TruckScreenShake", 6.5f, "TruckScreenShake");
+	AddTimer("TruckScreenShakeDisappear", 6.8f, "TruckScreenShakeDisappear");
+}
+
+void TruckScreenShake (string &in asTimer)
+{
+	AddEntityCollideCallback("Player", "TruckScreenShakeTrigger", "TruckScreenShakeTrigger", true, 0);
+	AddDebugMessage("Truck Shake Area Added", false);
+}
+
+void TruckScreenShakeTrigger (string &in asParent, string &in asChild, int alState)
+{
+	StartScreenShake(0.006f, 6.0f, 1.5f, 1.5f);
+	AddDebugMessage("Truck Shake Triggered", false);
+}
+
+void TruckScreenShakeDisappear (string &in asTimer)
+{
+	RemoveEntityCollideCallback("Player", "TruckScreenShakeTrigger");
+}
+//END TRUCK DRIVE BY//
+
+//DOOR SCRATCH EVENT//
+void DoorScratchEvent (string &in asEntity)
+{
+	AddDebugMessage("Scratch Timer Started", false);
+	float fScratch = RandFloat(1.0f,2.5f);
+	AddTimer("ScratchDoorTimer", 0.5f+fScratch, "ScratchDoorTimer");
+}
+
+void ScratchDoorTimer (string &in asTimer)
+{
+	AddDebugMessage("Scratch Started and Crying Timer Begin", false);
+	float fScratch = RandFloat(1.0f,2.5f);
+	PlaySoundAtEntity("Scratch", "afx_spooky_mansion_backarea_abstract_04", "tunnels_door_5", 0.0f, false);
+	AddTimer("CryingDoorTimer", 0.5f+fScratch, "CryingDoorTimer");
+}
+
+void CryingDoorTimer (string &in asTimer)
+{
+	AddDebugMessage("Crying Started", false);
+	PlaySoundAtEntity("Scratch", "spooky_childcry_quiet", "tunnels_door_4", 0.0f, false);
+}
+
+//RESTORE TO NORMAL//
+void RestoreToNormal (string &in asTimer)
+{
+//RETURN TO NORMAL VISION
+	if (asTimer == "ReturnToNormalVision")
+	{
+		FadeRadialBlurTo(0.0f, 4.0f);
+		FadeImageTrailTo(0.0f, 4.0f);
+		return;
+	}
+
+//RETURN TO NORMAL ALL//
+	else if (asTimer == "ReturnToNormal")
+	{
+		FadeImageTrailTo(0.0f, 3.0f);
+		SetPlayerLookSpeedMul(1.0f);
+		SetPlayerMoveSpeedMul(1.0f);
+		StopPlayerLookAt();
+		return;
+	}
+	
+//END VISUAL EFFECT FOR SCREAM//
+	else if (asTimer == "EndVisEffect")
+	{
+		FadeImageTrailTo(0.0f, 0.5f);
+		FadeSepiaColorTo(0.0f, 0.5f);
+		return;
+	}
+}
+//END RESTORE TO NORMAL//
+
+//BARREL ROLL HANDLER//
+void BarrelHandler (string &in asParent, string &in asChild, int alState)
+{
+	if (asChild == "barrel_roll_trigger")
+	{
+		SetEntityActive("barrel_blocker", false);
+		SetEntityActive("barrel_blocker_1", false);
+		AddPropForce("barrel_roll_2", 8500.0f, 0.0f, 0.0f, "world");
+		AddPropForce("barrel_roll_1", 9500.0f, 0.0f, 0.0f, "world");
+		AddPropForce("barrel_roll_3", -8500.0f, 0.0f, 0.0f, "world");
+		AddPropForce("barrel_roll_4", -9500.0f, 0.0f, 0.0f, "world");
+		PlaySoundAtEntity("barrel_sound_source", "", "Player", 1.0f, false);
+		AddTimer("BarrelCrowTimer", 0.5f, "BarrelCrows");
+		return;
+	}
+}
+
+void BarrelCrows (string &in asTimer)
+{
+	PlaySoundAtEntity("", "event_factory_crows.snt", "CrowSource", 0.0f, false);
+}
+
+//END BARREL ROLL HANDLER
+
+//YARD WIND EVENT//
+void YardWindEvent (string &in asParent, string &in asChild, int alState)
+{
+	SetParticleSystemActive("YardWindParticles", true);
+	PlaySoundAtEntity("", "spooky_wind_whirl.snt", "Player", 0.0f, false);
+}
+//END YARD WIND EVENT//
+
+//RANDOM WIND//
+void RandomWindSound (string &in asParent, string &in asChild, int alState)
+{
+	if (asChild == "StartWindDynamic_1"|| asChild == "StartWindDynamic_2")
+	{	
+		//START WIND
+		AddTimer("InitRandomWindSoundCuePlayer", 3.0f, "RandWindSoundCues");
+		
+		//AREAS
+		RemoveEntityCollideCallback("Player", "StartWindDynamic_1");
+		RemoveEntityCollideCallback("Player", "StartWindDynamic_2");
+		AddEntityCollideCallback("Player", "StopWindDynamic_2", "RandomWindSound", true, 1);
+		AddEntityCollideCallback("Player", "StopWindDynamic_1", "RandomWindSound", true, 1);
+		
+		AddDebugMessage("Wind Sounds START!", true);
+		return;
+	}
+	
+	else if (asChild == "StopWindDynamic_1"|| asChild == "StopWindDynamic_2")
+	{
+		//REMOVE OUTSIDE SOUND
+		RemoveTimer("Player");
+		RemoveTimer("RandWindSoundCues");
+			
+		//AREAS
+		RemoveEntityCollideCallback("Player", "StopWindDynamic_2");
+		RemoveEntityCollideCallback("Player", "StopWindDynamic_1");
+		AddEntityCollideCallback("Player", "StartWindDynamic_1", "RandomWindSound", true, 1);
+		AddEntityCollideCallback("Player", "StartWindDynamic_2", "RandomWindSound", true, 1);
+				
+		AddDebugMessage("Wind Sounds STOP!", true);
+		return;
+	}										
+}
+//END RANDOM WIND//
+
+//MAP CHILD EVENT HANDLER//
+void ChildEventHandler (string &in asParent, string &in asChild, int alState)
+{
+	if (asChild == "ChildSpawnTrigger")
+	{
+		AddDebugMessage("Child Spawn", false);
+		SetEntityActive("child_1", true);
+		SetEntityActive("child_2", true);
+		SetEnemyMoveType("child_1", "Idle");
+		SetEnemyMoveType("child_2", "Idle");
+		return;
+	}
+	
+	else if (asChild == "ChildRunTrigger")
+	{
+		AddDebugMessage("Run Forrest Run", false);
+		SetEnemyMoveType("child_1", "RunBiped");
+		SetEnemyMoveType("child_2", "RunBiped");
+		AddEnemyPatrolNode("child_1", "ChildBottomAreaNode_1", 0.0f, "", false);
+		AddEnemyPatrolNode("child_1", "ChildBottomAreaNode_2", 0.0f, "", false);
+		AddEnemyPatrolNode("child_1", "ChildBottomAreaNode_3", 0.0f, "", false);
+		AddEnemyPatrolNode("child_1", "ChildBottomAreaNode_4", 0.0f, "", false);
+		AddEnemyPatrolNode("child_1", "ChildBottomAreaNode_5", 0.0f, "", false);
+		AddTimer("ChildKillSound", 4.0f, "ChildKillSound");
+		AddTimer("LazyBonesSound", 35.0f, "LazyBonesSound");
+	}
+	
+
+	else if (asChild == "ChildBottomAreaKillTrigger")
+	{
+		AddDebugMessage("Child Killed", false);
+		ClearEnemyPatrolNodes("child_1");
+		ClearEnemyPatrolNodes("child_2");
+		SetEntityActive("child_1", false);
+		SetEntityActive("child_2", false);
+		return;
+	}	
+}
+	void ChildKillSound (string &in asTimer)
+	{
+		AddDebugMessage("ChildKillSound", false);
+		PlaySoundAtEntity("ChildKillSound", "afx_spooky_pig_scream_01.snt", "ChildKillSound", 0.0f, false);
+		MandusReactionPlayer("Breath", 1.0f);
+		MandusReactionPlayer("Breath", 7.0f);
+	}
+	
+	void LazyBonesSound (string &in asTimer)
+	{
+		AddDebugMessage("Come On Slowcoach", false);
+		PlaySoundAtEntity("ChildKillSound", "afx_spooky_eerie_monster.snt", "ChildLaughSound", 0.0f, false);
+		AddTimer("LazyBonesSound", 85.0f, "LazyBonesSound");
+	}
+	
+	void ChildSoundTunnelsDoor (string &in asEntity)
+	{
+		SetEntityPlayerInteractCallback("tunnels_door_1", "ChildSoundTunnelsDoor", false);
+		AddDebugMessage("Child Laugh Door Timer Active", false);
+		AddTimer("ChildLaughDoorSound", 1.0f, "ChildLaughDoorSound");
+	}
+	
+	void ChildLaughDoorSound (string &in asTimer)
+	{
+		AddDebugMessage("HaHa", false);
+		PlaySoundAtEntity("ChildLaughSound", "afx_spooky_child_laugh_semi_distant.snt", "ChildLaughSound", 0.0f, false);
+	}
+//END MAP CHILD EVENT HANDLER//
+
+//DEATH HANDLER//
+void DeathHandler (string &in asName, int alCount)
+{
+	if (alCount == 0)
+	{
+		AddDebugMessage("Player Has Died. Death Count is "+alCount+".", false);
+		SetPlayerCrouching(true);
+		SetPlayerActive(false);
+		AddTimer("Death1Timer1", 2.0f, "DeathTimer1Sequence");
+		AddTimer("Death1Timer2", 5.0f, "DeathTimer1Sequence");
+		AddTimer("Death1Timer3", 6.0f, "DeathTimer1Sequence");
+		AddTimer("Death1Timer4", 8.0f, "DeathTimer1Sequence");
+		AddTimer("Death1Timer5", 9.0f, "DeathTimer1Sequence");
+		AddTimer("Death1Timer6", 13.5f, "DeathTimer1Sequence");
+		return;
+	}
+	else if (alCount >= 1)
+	{
+		AddDebugMessage("Player Has Died. Death Count is "+alCount+".", false);
+		AddTimer("Death2Timer1", 2.0f, "DeathTimer2Sequence");
+		AddTimer("Death2Timer2", 5.0f, "DeathTimer2Sequence");
+		AddTimer("Death2Timer3", 6.0f, "DeathTimer2Sequence");
+		AddTimer("Death2Timer4", 8.0f, "DeathTimer2Sequence");
+		AddTimer("Death2Timer5", 9.0f, "DeathTimer2Sequence");
+		AddTimer("Death2Timer6", 13.5f, "DeathTimer2Sequence");
+		return;
+	}
+	else
+	{
+		ReleasePlayerFromLimbo();
+		return;
+	}
+}
+
+void DeathTimer1Sequence (string &in asTimer)
+{
+	if (asTimer == "Death1Timer1")
+	{
+		PlaySoundAtEntity("", "afx_spooky_hifrequencymoan_2D.snt", "Player", 0.0f, false);
+		return;
+	}
+	else if (asTimer == "Death1Timer2" || asTimer == "Death1Timer3" || asTimer == "Death1Timer4")
+	{
+		PlaySoundAtEntity("", "afx_spooky_monster_noises_tight_2D.snt", "Player", 0.0f, false);
+	}
+	else if (asTimer == "Death1Timer5")
+	{
+		PlaySoundAtEntity("", "00_intro_falling.snt", "Player", 0.0f, false);
+		return;
+	}
+	else if (asTimer == "Death1Timer6")
+	{
+		ReleasePlayerFromLimbo();
+		SetPlayerActive(true);
+		CheckPoint("CP04_UnderPiston", "CheckpointStart_3", "DeathHandler", "", "", true);
+		return;
+	}
+}
+
+void DeathTimer2Sequence (string &in asTimer)
+{
+	if (asTimer == "Death12Timer1")
+	{
+		PlaySoundAtEntity("", "afx_spooky_hifrequencymoan_2D.snt", "Player", 0.0f, false);
+		return;
+	}
+	else if (asTimer == "Death2Timer2" || asTimer == "Death2Timer3" || asTimer == "Death2Timer4")
+	{
+		PlaySoundAtEntity("", "afx_spooky_monster_noises_tight_2D.snt", "Player", 0.0f, false);
+	}
+	else if (asTimer == "Death2Timer5")
+	{
+		PlaySoundAtEntity("", "00_intro_falling.snt", "Player", 0.0f, false);
+		return;
+	}
+	else if (asTimer == "Death2Timer6")
+	{
+		ReleasePlayerFromLimbo();
+		SetPlayerActive(true);
+		return;
+	}
+}
+
+//LEVEL TRANSITION HANDLER//
+void LevelTransitionHandler (string &in asParent, string &in asChild, int alState)
+{
+	StopSound("Piston1Wheel2", 3); StopSound("Piston2Wheel2", 3); StopSound("Piston2Wheel2", 3);
+	StopSound("AMBPistonUnder", 3); StopSound("Piston2DQuieter", 3); StopSound("Piston2D", 3);
+	     
+	FadeOut(0.8);
+	
+	SetPlayerMoveSpeedMul(0.8);
+	SetPlayerLookSpeedMul(0.8);
+	
+	PlayGuiSound("player_crouch1.ogg", 1);
+	AddTimer("end_1", 0.2, "TimerEndSeq");
+	AddTimer("end_2", 0.7, "TimerEndSeq");
+	AddTimer("end_3", 0.8, "TimerEndSeq");
+	AddTimer("end_4", 1.6, "TimerEndSeq");
+	
+	AddTimer("LevelTransitionBuffer", 3.0f, "LevelLoader");
+	
+	PlayMusic("music_factory_leveltransition.ogg", true, 1.0f, 1.0f, 8, true);
+}
+
+void TimerEndSeq(string &in asTimer)
+{
+	if(asTimer == "end_1")
+	{
+		PlayGuiSound("metal_engroom_sneak_4.ogg", 0.9f);
+		SetPlayerMoveSpeedMul(0.6);
+		SetPlayerLookSpeedMul(0.6);
+	}
+	if(asTimer == "end_2")
+	{
+		PlayGuiSound("player_crouch3", 0.8f);
+		SetPlayerMoveSpeedMul(0.4);
+		SetPlayerLookSpeedMul(0.4);
+	}
+	if(asTimer == "end_3")
+	{
+		PlayGuiSound("metal_engroom_sneak_2.ogg", 0.7f);
+		SetPlayerActive(false);
+		PlaySoundAtEntity("move_sound", "joint_dumb_waiter_door_move_endoflevel.snt", "dumb_waiter_lift_door_1", 0.5, false);
+	}
+	if(asTimer == "end_4")
+	{
+		StopSound("move_sound", 0.2);
+		PlaySoundAtEntity("", "joint_dumb_waiter_door_close.snt", "dumb_waiter_lift_door_1", 0.4, false);
+	}
+}
+void LevelLoader (string &in asTimer)
+{
+	ChangeMap("07_tunnels.map", "InitStart", "", "");
+}
+//END LEVEL TRANSITION HANDLER//
+
+										//////////////////////////////
+										//NON MAP-SPECIFIC FUNCTIONS//
+										//////////////////////////////
+
+//AMBIENT SOUNDTRACK PLAYER//
+void MapAmbienceAreas (string &in asParent, string &in asChild, int alState) //Callback function for all ambience areas in map
+{
+	if (asChild == "AMBStart")
+	{
+		if (alState == 1)
+		{
+			PlaySoundAtEntity("AMBStart", "amb_church_pens.snt", "Player", 1.0f, true);
+			SetLocalVarString("CurrentAmbientTrack", asChild);
+			return;
+		}
+		else if (alState == -1) 
+		{
+			StopSound("AMBStart", 1.0f);
+			return;
+		}
+	}
+//BREAK//
+	if (asChild == "AMBShed")
+	{
+		if (alState == 1)
+		{
+			PlaySoundAtEntity("AMBShed", "amb_church_alley_loadingarea_small.snt", "Player", 1.0f, true);
+			SetLocalVarString("CurrentAmbientTrack", asChild);
+			return;
+		}
+		else if (alState == -1) 
+		{
+			StopSound("AMBShed", 1.0f);
+			return;
+		}
+	}
+//BREAK//
+	if (asChild == "AMBPistonRoom")
+	{
+		if (alState == 1)
+		{
+			PlaySoundAtEntity("AMBPistonRoom", "amb_factory_piston_room_drone.snt", "Player", 1.0f, true);
+			SetLocalVarString("CurrentAmbientTrack", asChild);
+			return;
+		}
+		else if (alState == -1) 
+		{
+			StopSound("AMBPistonRoom", 1.0f);
+			return;
+		}
+	}
+//BREAK//
+	if (asChild == "AMBPistonUnder")
+	{
+		if (alState == 1)
+		{
+			PlaySoundAtEntity("AMBPistonUnder", "amb_factory_piston_room_under_drone.snt", "Player", 1.0f, true);
+			SetLocalVarString("CurrentAmbientTrack", asChild);
+			return;
+		}
+		else if (alState == -1) 
+		{
+			StopSound("AMBPistonUnder", 1.0f);
+			return;
+		}
+	}
+//BREAK//
+	if (asChild == "AMBOutside")
+	{
+		if (alState == 1)
+		{
+			PlaySoundAtEntity("AMBOutside", "amb_mansion_mansion_drone_courtyard.snt", "Player", 1.0f, true);
+			SetLocalVarString("CurrentAmbientTrack", asChild);
+			return;
+		}
+		else if (alState == -1) 
+		{
+			StopSound("AMBOutside", 1.0f);
+			return;
+		}
+	}
+//BREAK//
+}
+//END AMBIENT SOUNDTRACK PLAYER//
+
+//TRIGGERED VO PLAYER//
+void VOPlayer (string &in asParent, string &in asChild, int alState)
+{
+	if (asChild == "vo_yard_flashback_trigger")
+	{
+		AddEffectVoice2("vo_factory_mandus_flashback_01", "", "Voice", "vo_factory_mandus_flashback_01_01", 0.0f, "vo_factory_mandus_flashback_01_02", 6.3f, false, "", 0.0f, 0.0f);
+		PlaySoundAtEntity("", "afx_gameplay_hightone_10sec.snt", "Player", 1.0f, false);
+		PlaySoundAtEntity("", "afx_flashback_whisper.snt", "Player", 1.0f, false);	
+		FadeImageTrailTo(2.0f, 2.5f);
+		SetPlayerMoveSpeedMul(0.35f);
+		SetPlayerLookSpeedMul(0.35f);
+		AddTimer("ReturnToNormal", 9.5f, "RestoreToNormal");
+		return;
+	}
+}
+//END TRIGGERED VO PLAYER
+
+//SOUND OPTIMISATIONS//
+void soundopt (string &in asParent, string &in asChild, int alState)
+{
+//COURTYARD OPTIMSATION
+	if (asChild == "soundopt_courtyard_start_2"|| asChild == "soundopt_courtyard_start_1")
+	{
+	//REMOVE START TRIGGERS
+	RemoveEntityCollideCallback("Player", "soundopt_courtyard_start_2");
+	RemoveEntityCollideCallback("Player", "soundopt_courtyard_start_1");
+	
+	//ADD STOP TRIGGERS
+	AddEntityCollideCallback("Player", "soundopt_courtyard_stop_1", "soundopt", true, 1);
+	AddEntityCollideCallback("Player", "soundopt_courtyard_stop_2", "soundopt", true, 1);
+	
+	//START SOUND TIMER
+	AddTimer("InitRandomCourtyardSoundCuePlayer", 5.0f, "RandCourtyardSoundCues");
+	
+	//DEBUG MESSAGE
+	AddDebugMessage("Start Courtyard Sounds", true);
+	}
+//BREAK
+	if (asChild == "soundopt_courtyard_stop_1"|| asChild == "soundopt_courtyard_stop_2")
+	{
+	//REMOVE STOP TRIGGERS
+	RemoveEntityCollideCallback("Player", "soundopt_courtyard_stop_1");
+	RemoveEntityCollideCallback("Player", "soundopt_courtyard_stop_2");
+	
+	//ADD START TRIGGERS
+	AddEntityCollideCallback("Player", "soundopt_courtyard_start_1", "soundopt", true, 1);
+	AddEntityCollideCallback("Player", "soundopt_courtyard_start_2", "soundopt", true, 1);
+	
+	//REMOVE SOUNDS
+	RemoveTimer("CourtyardSource_1");
+	RemoveTimer("CourtyardSource_2");
+	RemoveTimer("CourtyardSource_3");
+	RemoveTimer("CourtyardSource_4");
+	RemoveTimer("CourtyardSource_5");
+	RemoveTimer("InitRandomCourtyardSoundCuePlayer");
+	RemoveTimer("RandCourtyardSoundCues");
+	
+	//DEBUG MESSAGE
+	AddDebugMessage("Stop Courtyard Sounds", true);
+	}
+//BREAK
+//PISTON ROOM
+	if (asChild == "soundopt_pistonenv_start_1"|| asChild == "soundopt_pistonenv_start_2"|| asChild == "soundopt_pistonenv_start_3")
+	{
+	//REMOVE START TRIGGERS
+	RemoveEntityCollideCallback("Player", "soundopt_pistonenv_start_1");
+	RemoveEntityCollideCallback("Player", "soundopt_pistonenv_start_2");
+	RemoveEntityCollideCallback("Player", "soundopt_pistonenv_start_3");
+	
+	//ADD STOP TRIGGERS
+	AddEntityCollideCallback("Player", "soundopt_pistonenv_stop_1", "soundopt", true, 1);
+	AddEntityCollideCallback("Player", "soundopt_pistonenv_stop_2", "soundopt", true, 1);
+	AddEntityCollideCallback("Player", "soundopt_pistonenv_stop_3", "soundopt", true, 1);
+	
+	//START SOUND TIMER
+	AddTimer("InitRandomPistonSoundCuePlayer", 4.0f, "RandPistonSoundCues");
+	
+	//DEBUG MESSAGE
+	AddDebugMessage("Start Piston Room Env Sounds", true);
+	}
+//BREAK
+	if (asChild == "soundopt_pistonenv_stop_1"|| asChild == "soundopt_pistonenv_stop_2"|| asChild == "soundopt_pistonenv_stop_3")
+	{
+	//REMOVE STOP TRIGGERS
+	RemoveEntityCollideCallback("Player", "soundopt_pistonenv_stop_1");
+	RemoveEntityCollideCallback("Player", "soundopt_pistonenv_stop_2");
+	RemoveEntityCollideCallback("Player", "soundopt_pistonenv_stop_3");
+	
+	//ADD START TRIGGERS
+	AddEntityCollideCallback("Player", "soundopt_pistonenv_start_1", "soundopt", true, 1);
+	AddEntityCollideCallback("Player", "soundopt_pistonenv_start_2", "soundopt", true, 1);
+	AddEntityCollideCallback("Player", "soundopt_pistonenv_start_3", "soundopt", true, 1);
+	
+	//REMOVE SOUNDS
+	RemoveTimer("Player");
+	RemoveTimer("InitRandomPistonSoundCuePlayer");
+	RemoveTimer("RandPistonSoundCues");
+	
+	//DEBUG MESSAGE
+	AddDebugMessage("Stop Piston Room Env Sounds", true);
+	}
+//BREAK
+//PISTON BOTTOM WHEELS
+	if (asChild == "soundopt_pistonwheel_start")
+	{
+	//REMOVE START TRIGGERS
+	RemoveEntityCollideCallback("Player", "soundopt_pistonwheel_start");
+	
+	//ADD STOP TRIGGERS
+	AddEntityCollideCallback("Player", "soundopt_pistonwheel_stop", "soundopt", true, 1);
+	
+	//START PISTON WHEEL SOUNDS
+	PlaySoundAtEntity("Piston1Wheel2", "factory_piston_wheel2_pers_3D.snt", "factory_pistons_1_wheel2_source", 0.0f, true);
+	PlaySoundAtEntity("Piston2Wheel2", "factory_piston_wheel2_pers_3D_2.snt", "factory_pistons_2_wheel2_source", 0.0f, true);
+	PlaySoundAtEntity("Piston3Wheel2", "factory_piston_wheel2_pers_3D_3.snt", "factory_pistons_3_wheel2_source", 0.0f, true);
+	
+	//DEBUG MESSAGE
+	AddDebugMessage("Start Piston Room Wheel Sounds", true);
+	}
+//BREAK
+	if (asChild == "soundopt_pistonwheel_stop")
+	{
+	//REMOVE STOP TRIGGERS
+	RemoveEntityCollideCallback("Player", "soundopt_pistonwheel_stop");
+	
+	//ADD START TRIGGERS
+	AddEntityCollideCallback("Player", "soundopt_pistonwheel_start", "soundopt", true, 1);
+	
+	//REMOVE SOUNDS
+	StopSound("Piston1Wheel2", 1.0f);
+	StopSound("Piston2Wheel2", 1.0f);
+	StopSound("Piston3Wheel2", 1.0f);
+	
+	//DEBUG MESSAGE
+	AddDebugMessage("Stop Piston Room Wheel Sounds", true);
+	}
+//BREAK
+//PISTON SOFTER SOUND
+	if (asChild == "soundopt_pistonquieter_start")
+	{
+	//REMOVE START TRIGGERS
+	RemoveEntityCollideCallback("Player", "soundopt_pistonquieter_start");
+	
+	//ADD STOP TRIGGERS
+	AddEntityCollideCallback("Player", "soundopt_pistonquieter_stop", "soundopt", true, 1);
+	
+	//STOP PISTON LOUD SOUND
+	StopSound("Piston2D", 2.0f);
+	//STOP PISTON QUIETER SOUND
+	PlaySoundAtEntity("Piston2DQuieter", "factory_piston_2D_quieter.snt", "Player", 1.0f, true);
+	
+	//STOP PISTON SOUNDS
+	StopSound("Piston1Piston", 4.0f);
+	StopSound("Piston2Piston", 4.0f);
+	StopSound("Piston3Piston", 4.0f);
+	
+	//DEBUG MESSAGE
+	AddDebugMessage("Start Piston Quieter Sound", true);
+	}
+//BREAK
+	if (asChild == "soundopt_pistonquieter_stop")
+	{
+	//REMOVE STOP TRIGGERS
+	RemoveEntityCollideCallback("Player", "soundopt_pistonquieter_stop");
+	
+	//ADD START TRIGGERS
+	AddEntityCollideCallback("Player", "soundopt_pistonquieter_start", "soundopt", true, 1);
+	
+	//STOP PISTON QUIETER SOUND
+	StopSound("Piston2DQuieter", 5.0f);
+	//START PISTON LOUD SOUND
+	PlaySoundAtEntity("Piston2D", "factory_piston_2D.snt", "Player", 5.0f, true);
+	
+	//START PISTON SOUNDS
+	PlaySoundAtEntity("Piston1Piston", "factory_piston_piston_pers_3D.snt", "factory_pistons_1_piston_source", 4.0f, true);
+	PlaySoundAtEntity("Piston2Piston", "factory_piston_piston_pers_3D_2.snt", "factory_pistons_2_piston_source", 4.0f, true);
+	PlaySoundAtEntity("Piston3Piston", "factory_piston_piston_pers_3D_3.snt", "factory_pistons_3_piston_source", 4.0f, true);
+	
+	//DEBUG MESSAGE
+	AddDebugMessage("Start Piston Louder Sound", true);
+	}
+//BREAK
+
+//SOUND PRELOADS
+//TREMOR 1
+	if (asChild == "soundopt_pistontremor_preload")
+	{	
+	//DEBUG MESSAGE
+	//AddDebugMessage("PISTON TREMOR PRELOADED", true);
+	}
+}
+
+//PISTON OPTIMSATIONS
+void PistonStartSoundOptimisations (string &in asTimer)
+{
+	//LOCO SOUNDS//
+	StopSound("LocoSound_1", 0.0f);
+	StopSound("LocoSound3D_2", 0.0f);
+	StopSound("LocoSound2D_2", 0.0f);
+	StopSound("LocoSound3D_3", 0.0f);
+	StopSound("LocoSound2D_3", 0.0f);
+	StopSound("LocoSound3D_4", 0.0f);
+	StopSound("LocoSound3D_5", 0.0f);
+	StopSound("LocoSound2D_5", 0.0f);
+	StopSound("LocoSound3D_6", 0.0f);
+	StopSound("LocoSound2D_6", 0.0f);
+	StopSound("LocoSound3D_7", 0.0f);
+	StopSound("LocoSound2D_7", 0.0f);
+	StopSound("LocoSound3D_8", 0.0f);
+	StopSound("LocoSound2D_8", 0.0f);
+	//RAND SOUND TIMERS//
+	RemoveTimer("RandOfficeSoundSource_1");
+	RemoveTimer("RandOfficeSoundSource_2");
+	RemoveTimer("RandOfficeSoundSource_3");
+	RemoveTimer("RandOfficeSoundSource_4");
+	RemoveTimer("RandOfficeSoundSource_5");
+	//PISTON ENV
+	RemoveEntityCollideCallback("Player", "soundopt_pistonenv_stop_1");
+	RemoveEntityCollideCallback("Player", "soundopt_pistonenv_stop_2");
+	RemoveEntityCollideCallback("Player", "soundopt_pistonenv_stop_3");
+	RemoveEntityCollideCallback("Player", "soundopt_pistonenv_start_1");
+	RemoveEntityCollideCallback("Player", "soundopt_pistonenv_start_2");
+	RemoveEntityCollideCallback("Player", "soundopt_pistonenv_start_3");
+	RemoveTimer("Player");
+	RemoveTimer("InitRandomPistonSoundCuePlayer");
+	RemoveTimer("RandPistonSoundCues");
+	StopSound("Steam", 1.0f);
+	StopSound("Clock", 1.0f);
+	
+	//DEBUG MESSAGE
+	AddDebugMessage("Sound Optimisation Triggered", true);
+}
+//END SOUND OPTIMSATIONS
+
+//RANDOMISED SOUND CUE PLAYER//
+void RandPistonSoundCues(string &in asTimer)
+{
+	string sCueSource = "Player";
+	asTimer = sCueSource;
+	PlaySoundAtEntity(asTimer, "afx_spooky_factory_pistonroom.snt", asTimer, 0, false);
+	AddDebugMessage("Random Sound Cue Function Selected Piston Room Sound: "+asTimer, false);
+	AddTimer(asTimer, RandFloat(20.0f, 30.0f), "RandPistonSoundCues");
+}
+
+void RandEnvSoundCues(string &in asTimer)
+{
+	string[] sCueSources = {"Player"};
+	asTimer = sCueSources[0];
+	PlaySoundAtEntity(asTimer, "afx_spooky_env_metal.snt", asTimer, 0, false);
+	AddDebugMessage("Random Sound Cue Function Selected Env Sound Source: "+asTimer, false);
+	AddTimer(asTimer, RandFloat(20.0f, 30.0f), "RandEnvSoundCues");
+}
+
+void RandWindSoundCues(string &in asTimer)
+{
+	string[] sCueSources = {"Player"};
+	asTimer = sCueSources[0];
+	PlaySoundAtEntity(asTimer, "afx_events_mansion_wind.snt", asTimer, 0, false);
+	AddDebugMessage("Random Sound Cue Function Selected Wind Sound Source: "+asTimer, false);
+	AddTimer(asTimer, RandFloat(10.0f, 15.0f), "RandWindSoundCues");
+}
+
+void RandCourtyardSoundCues(string &in asTimer)
+{
+	string[] sCueSources = {"CourtyardSource_1", "CourtyardSource_2", "CourtyardSource_3", 
+							"CourtyardSource_4", "CourtyardSource_5"};
+	asTimer = sCueSources[RandInt (0, 4)];
+	PlaySoundAtEntity(asTimer, "afx_spooky_hifrequencymoan.snt", asTimer, 0, false);
+	AddDebugMessage("Random Sound Cue Function Selected Office Sound Source: "+asTimer, false);
+	if (GetLocalVarInt("AdaptedAmbience") == 0)
+	{
+		AddTimer(asTimer, RandFloat(5.0f, 15.0f), "RandCourtyardSoundCues");
+	}
+}
+//END RANDOM SOUND CUE PLAYER//
+
+//MANDUS REACTION SOUND PLAYER//
+void MandusReactionPlayer (string asReactType, float afWaitTime)
+{
+	SetLocalVarString("CurrentReactType", asReactType);
+	AddTimer("MandusReactionInternalTimer", afWaitTime, "MandusReactionPlayerTimerEnd");
+}
+
+void MandusReactionPlayerTimerEnd (string &in asTimer)
+{
+	if (GetLocalVarString("CurrentReactType") == "Scared")
+	{
+		AddDebugMessage("SCARED REACTION", false);
+		PlaySoundAtEntity("React_Scared", "react_scare.snt", "Player", 0.0f, false);
+		return;
+	}
+	else if (GetLocalVarString("CurrentReactType") == "Breath")
+	{
+		AddDebugMessage("BREATH REACTION", false);
+		PlaySoundAtEntity("React_Breath", "react_breath.snt", "Player", 0.0f, false);
+		return;
+	}
+	else if (GetLocalVarString("CurrentReactType") == "Quick")
+	{
+		AddDebugMessage("QUICK SCARE REACTION", false);
+		PlaySoundAtEntity("React_Quick", "react_quickscare.snt", "Player", 0.0f, false);
+		return;
+	}
+	else if (GetLocalVarString("CurrentReactType") == "Cough")
+	{
+		AddDebugMessage("COUGH REACTION", false);
+		PlaySoundAtEntity("", "react_cough.snt", "Player", 0.0f, false);
+		return;
+	}
+}
+//END MANDUS REACTION SOUND PLAYER//
+
+//PHONAUTOGRAPH HANDLER//
+void PhonautographHandler (string &in asEntity, int alState)																//This function must be present for all maps containing Phonautograph entities.
+{
+	if (alState == 1)																										//DO NOT EDIT
+	{																														///////////////////////////START OF IF CASE FOR DUPLICATING TO OTHER PHONAUTOGRAPH INSTANCES////////////////////////////////////
+		if (asEntity == "Phonautograph1")																					
+		{
+			SetEntityInteractionDisabled(asEntity, true);																	//DO NOT EDIT
+			PlayPropAnimation("Phonautograph1", "Play", 1.0f, true, "");													//Starts Animation. The name of the Phonautograph entity will need changing for other instances.
+			AddEffectVoice6("vo_factory_phono_01.ogg", "", "Voice", "vo_factory_phono_mandus_01", 0.0f, "vo_factory_phono_mandus_01_02", 8.0f, "vo_factory_phono_prof_01", 19.0f, "vo_factory_phono_prof_01_02", 27.2f, "vo_factory_phono_mandus_02", 33.5f, "vo_factory_phono_mandus_02_01", 45.25f, false, "", 0.0f, 0.0f);	//Plays voice. The .ogg file being called, and the entry name from the .lang file will need changing for other instances.
+			AddTimer("Phono1Timer", 53.5f, "PhonautographDeactivateHandler");	
+		}																													
+	}																														//////////////////////////END OF IF CASE FOR DUPLICATING TO OTHER PHONAUTOGRAPH INSTANCES///////////////	
+}
+
+void PhonautographDeactivateHandler (string &in asTimer)																	//This function must be present for all maps containing Phonautograph entities.
+{																															///////////////////////////START OF IF CASE FOR DUPLICATING TO OTHER PHONAUTOGRAPH INSTANCES////////////
+	if (asTimer == "Phono1Timer")																							//This if statement must be updated for each different phonautograph instance.
+	{
+		PlayPropAnimation("Phonautograph1", "Stop", 1.0f, true, "");														//Stops Animation. The name of the Phonautograph entity will need changing for other instances.
+	}
+}	
+//END PHONAUTOGRAPH HANDLER//
+
+//MUSIC PLAYER//
+void MusicPlayer (string &in asParent, string &in asChild, int alState)
+{
+	if (asChild == "yard_music_trigger")
+	{
+		PlayMusic("music_tesla_1_factory.ogg", false, 0.8f, 2.0f, 0, false);
+		return;
+	}
+	else if (asChild == "entry_music_trigger")
+	{
+		PlayMusic("music_cellar_children_walkway.ogg", false, 1.0f, 2.0f, 0, false);
+		return;
+	}
+	else if (asChild == "middle_floor_music_trigger")
+	{
+		PlayMusic("music_bilge_ambience_01.ogg", false, 0.5f, 20.0f, 6, true);
+		AddDebugMessage("music playing", false);
+		return;
+	}
+	else if (asChild == "belowpistons_music_trigger")
+	{
+		PlayMusic("music_sewer_ambient_02.ogg", false, 0.7f, 2.0f, 6, false);
+		RemoveTimer("MonsterGenerator3CurrentTimerName");
+		SetLocalVarInt("MonsterGenerator3On", 0);
+		return;
+	}
+}	
+
+//END MUSIC PLAYER//
+
+// HINT HANDLER//
+void HintHandler (string &in asParent, string &in asChild, int alState)
+{
+	if (asChild == "FactoryHintTrigger")
+	{
+		AddHint("Factory1", "");
+		return;
+	}
+	else if (asChild == "FurnacesHintTrigger")
+	{
+		AddHint("Factory2", "");
+	}
+}
+//END HINT HANDLER//
+
+//----------------------------
+//ENCOUNTER HELPERS//
+//----------------------------
+
+//-------------------------------------------
+
+void LanternFlicker(float afTime)
+{
+	SetLanternFlickerActive(true);
+	
+	AddTimer("LanternFlickerOff", afTime, "TimerLanternFlickerOff");
+}
+
+void TimerLanternFlickerOff(string &in asTimer)
+{
+	SetLanternFlickerActive(false);
+}
+
+//-------------------------------------------
+
+void StartLampFlicker(string &in asLamp)
+{
+	AddTimer(asLamp, RandFloat(0.0f, 0.3f), "TimerLampFlickerOff");
+}
+
+void StopLampFlicker(string &in asLamp)
+{
+	RemoveTimer(asLamp);
+	SetLampLit(asLamp, true, false);
+}
+
+void StartLampFlickerBurst(string &in asLamp, float afTime)
+{
+	StartLampFlicker(asLamp);
+	AddTimer(asLamp, afTime, "TimerLampFlickerStop");
+}
+
+void TimerLampFlickerOff(string &in asLamp)
+{
+	SetLampLit(asLamp, false, false);
+	AddTimer(asLamp, RandFloat(0.1f, 0.2f), "TimerLampFlickerOn");
+}
+
+void TimerLampFlickerOn(string &in asLamp)
+{
+	SetLampLit(asLamp, true, false);
+	AddTimer(asLamp, RandFloat(0.05f, 0.15f), "TimerLampFlickerOff");
+	
+	PlaySoundAtEntity(asLamp+"_flick", "tesla_pig_light_flicker.snt", asLamp, 0, false);
+	//*InsertSoundHere*: Sound that fits with the lamps in this level, make sure there is a pretty good distance to the sound
+}
+
+void TimerLampFlickerStop(string &in asLamp)
+{
+	StopLampFlicker(asLamp);
+}
+
+//-------------------------------------------
+
+//----------------------------
+//END ENCOUNTER HELPERS//
+//----------------------------
+
+
+//----------------------
+//PIG ENCOUNTER 1//
+//----------------------
+
+//------------------------------------
+
+void EnterPig1Start(string &in asParent, string &in asChild, int alState)
+{
+	SetEntityActive("wretch_1", true);
+	
+	LanternFlicker(6);
+	
+	AddEntityCollideCallback("Player", "AreaPig1RunAway", "EnterPig1RunAway", true, 1);
+	AddEntityCollideCallback("wretch_1", "AreaPig1RunCheckPoint_1", "EnterPig1RunCheckPoint_1", true, 1);
+	AddEntityCollideCallback("wretch_1", "AreaPig1RunCheckPoint_2", "EnterPig1RunCheckPoint_2", true, 1);
+	AddEntityCollideCallback("wretch_1", "AreaPig1RunCheckPoint_3", "EnterPig1RunCheckPoint_3", true, 1);
+	AddEntityCollideCallback("Player", "AreaPig1FakeFlicker", "EnterPig1FakeFlicker", true, 1);
+	
+}
+
+//------------------------------------
+
+void StartPig1Timer(string &in asParent, string &in asChild, int alState)
+{
+	AddTimer("Pig1RunAwayTimer", 7.5f, "TimerPig1RunAway");
+}
+
+//------------------------------------
+
+void TimerPig1RunAway(string &in asTimer)
+{
+	EnterPig1RunAway("", "", 1);
+	RemoveEntityCollideCallback("Player", "AreaPig1RunAway");
+}
+
+//------------------------------------
+
+void EnterPig1RunAway(string &in asParent, string &in asChild, int alState)
+{
+	AddDebugMessage("Pig run run!", false);
+
+	RemoveTimer("Pig1RunAwayTimer");
+	ClearEnemyPatrolNodes("wretch_1");
+	AddEnemyPatrolNode("wretch_1", "PathNodeArea_8", 0, "", false);
+	
+	StartLampFlicker("tube_lamp_factory_railing_3");
+	StartLampFlicker("tube_lamp_factory_railing_43");
+}
+
+void EnterPig1RunCheckPoint_1(string &in asParent, string &in asChild, int alState)
+{
+	StartLampFlicker("tube_lamp_factory_railing_33");
+	
+	StopLampFlicker("tube_lamp_factory_railing_3");
+	StopLampFlicker("tube_lamp_factory_railing_43");
+}
+
+void EnterPig1RunCheckPoint_2(string &in asParent, string &in asChild, int alState)
+{
+	LanternFlicker(2);
+
+	StartLampFlicker("tube_lamp_factory_railing_5");
+	StopLampFlicker("tube_lamp_factory_railing_33");
+}
+
+void EnterPig1RunCheckPoint_3(string &in asParent, string &in asChild, int alState)
+{
+	SetEntityActive("wretch_1", false);
+	
+	StartLampFlicker("tube_lamp_factory_railing_32");
+	StopLampFlicker("tube_lamp_factory_railing_5");
+		
+	AddTimer("Pig1LanterStopFlicker", 3, "TimerPig1LanterStopFlicker");
+}
+
+void TimerPig1LanterStopFlicker(string &in asTimer)
+{
+	StopLampFlicker("tube_lamp_factory_railing_32");
+}
+
+//------------------------------------
+
+void EnterPig1FakeFlicker(string &in asParent, string &in asChild, int alState)
+{
+	LanternFlicker(3);
+	
+	StartLampFlicker("tube_lamp_factory_railing_32");
+	StartLampFlicker("tube_lamp_factory_railing_46");
+	
+	AddTimer("Pig1FakeFlickerStop", 4, "TimerPig1FakeFlickerStop");
+	
+	//*InsertSoundHere*: Fake vauge pig noises from uphead
+}
+
+void TimerPig1FakeFlickerStop(string &in asTimer)
+{
+	StopLampFlicker("tube_lamp_factory_railing_32");
+	StopLampFlicker("tube_lamp_factory_railing_46");
+}
+
+//------------------------------------
+
+//----------------------
+//END PIG ENCOUNTER 1//
+//----------------------
+
+//----------------------
+//PIG ENCOUNTER 2//
+//----------------------
+
+//------------------------------------
+
+void EnterPig2Start(string &in asParent, string &in asChild, int alState)
+{
+	SetPlayerMoveSpeedMul(0.7);
+	SetPlayerRunSpeedMul(0.7);
+	
+	LanternFlicker(3);
+	
+	SetEntityActive("wretch_2", true);
+	AddEnemyPatrolNode("wretch_2", "PathNodeArea_66", 0, "", false);
+	
+	AddEntityCollideCallback("wretch_2", "AreaPig2Disappear", "EnterPig2Disappear", true, 1);
+	AddEntityCollideCallback("Player", "AreaPig2FakeFlicker", "EnterPig2FakeFlicker", true, 1);
+}
+
+void EnterPig2Disappear(string &in asParent, string &in asChild, int alState)
+{
+	SetPlayerMoveSpeedMul(1);
+	SetPlayerRunSpeedMul(1);
+	
+	StartScreenShake(0.3, 0.1, 0, 0);
+	PlayGuiSound("tesla_pig_light_flicker", 0.7);
+	
+	SetEntityActive("wretch_2", false);
+}
+
+void EnterPig2FakeFlicker(string &in asParent, string &in asChild, int alState)
+{
+	LanternFlicker(5);
+}
+
+//------------------------------------
+
+//----------------------
+//END PIG ENCOUNTER 2//
+//----------------------
+
+//----------------------
+// BOTTOM ENCOUNTERS START//
+//----------------------
+
+//------------------------------------
+
+void EnterStartOfBottom(string &in asParent, string &in asChild, int alState)
+{
+	//*InsertSoundHere*: Machine rumble + gate crashes down.
+	
+	SetMoveObjectStateExt("Gate3", 0, 7, 20, 0.05, false);
+	StartScreenShake(0.02f, 0.4f, 0.6f, 0.4f);
+	PlaySoundAtEntity("Drag", "afx_event_factory_gate_close", "Gate3", 0.5f, false);
+	PlaySoundAtEntity("Blonk", "afx_cellar_smallmachine_spark.snt", "Gate3", 0.0f, false);
+	
+	AddEntityCollideCallback("Player", "AreaPig3Start", "EnterPig3Start", true, 1);
+	AddEntityCollideCallback("Player", "AreaPig4Start", "EnterPig4Start", true, 1);
+	AddEntityCollideCallback("Player", "AreaPig5Start", "EnterPig5Start", true, 1);
+	AddEntityCollideCallback("Player", "AreaPig6Start", "EnterPig6Start", true, 1);	
+	
+	AddEntityCollideCallback("Player", "AreaFakeEnc1", "EnterFakeEnc1", true, 1);
+	AddEntityCollideCallback("Player", "AreaFakeEnc2", "EnterFakeEnc2", true, 1);
+	
+	AddEntityCollideCallback("Player", "AreaFakeEnc3", "EnterFakeEnc3", true, 1);
+	
+	AddEntityCollideCallback("Player", "AreaAwayFromPigs", "AwayFromPigs", true, 1);
+
+SetEntityActive("tube_lamp_factory_railing_47", false); SetEntityActive("tube_lamp_factory_railing_48", false); SetEntityActive("tube_lamp_factory_railing_16", false);
+SetEntityActive("tube_lamp_factory_railing_49", false); SetEntityActive("tube_lamp_factory_railing_9", false); SetEntityActive("cellar_gaslamp01_F_short_8", false);
+SetEntityActive("cellar_gaslamp01_F_short_5", false); SetEntityActive("cellar_gaslamp01_F_short_6", false); SetEntityActive("fan_ceiling_short_2", false);
+SetEntityActive("fan_ceiling_short_1", false); SetEntityActive("cellar_gaslamp01_F_short_2", false); SetEntityActive("cellar_gaslamp01_F_short_1", false);
+SetEntityActive("cellar_gaslamp01_F_short_3", false); SetEntityActive("tube_lamp_factory_railing_12", false); SetEntityActive("tube_lamp_factory_railing_15", false);
+SetEntityActive("Lever3", false); SetEntityActive("Lever2", false); SetEntityActive("Lever1", false);
+SetEntityActive("cellar_gaslamp01_F_short_4", false); SetEntityActive("tube_lamp_factory_railing_10", false); SetEntityActive("tube_lamp_factory_railing_51", false);
+SetEntityActive("tube_lamp_factory_railing_52", false); SetEntityActive("tube_lamp_factory_railing_11", false); SetEntityActive("tube_lamp_factory_railing_50", false);
+SetEntityActive("tube_lamp_factory_railing_13", false); SetEntityActive("CoalPiece_*", false); SetEntityActive("engineroom_office_door_1", false);
+SetEntityActive("engineroom_office_door_2", false); SetEntityActive("engineroom_balcony_office_window_*", false);
+
+	CheckPoint("BottomCheckPoint", "CheckpointBottom", "CheckpointBottom", "", "", false);
+}
+
+//----------------------------------
+
+void AwayFromPigs(string &in asParent, string &in asChild, int alState)
+{
+	AddDebugMessage("Away from pigs", false);
+	SetEntityActive("wretch_*", false);
+	PlaySoundAtEntity("aarrw", "wretch_tunnels_amb_alert.snt", "AreaPigSayYeYe", 2, false);
+	
+	AddHint("Factory4", "");
+}
+
+//----------------------------------
+
+void ColllidePigToggle(string &in asParent, string &in asChild, int alState)
+{
+	if(alState == 1)
+	{
+		SetEnemyDisableTriggers("wretch_*", true);
+		PlayEnemyAnimation("wretch_*", "ThreatLoopQuadruped", false, 1);
+		AddTimer("goingplaces", 5, "TimerGoingToSkurup");
+		
+	}
+	else
+	{
+		RemoveTimer("goingplaces");
+		SetEnemyDisableTriggers("wretch_*", false);
+	}
+}
+
+void TimerGoingToSkurup(string &in asTimer)
+{
+	AddEnemyPatrolNode("wretch_*", "PathNodeArea_13", 5, "", false);
+}
+
+//----------------------------------
+
+void CheckpointBottom(string &in asName, int alCount)
+{
+	//////////////////////////////////
+	// Make sure all callbacks are removed
+	RemoveEntityCollideCallback("Player", "AreaPig3Start");
+	RemoveEntityCollideCallback("Player", "AreaPig4Start");
+	RemoveEntityCollideCallback("Player", "AreaPig5Start");
+	RemoveEntityCollideCallback("Player", "AreaPig6Start");	
+	RemoveEntityCollideCallback("Player", "AreaFakeEnc1");
+	RemoveEntityCollideCallback("Player", "AreaFakeEnc2");
+	
+	//////////////////////////////////
+	// Add these again at random.
+	RemoveEntityCollideCallback("Player", "AreaPig3Start");
+	RemoveEntityCollideCallback("Player", "AreaPig4Start");
+	RemoveEntityCollideCallback("Player", "AreaPig5Start");
+	RemoveEntityCollideCallback("Player", "AreaPig6Start");	
+	RemoveEntityCollideCallback("Player", "AreaFakeEnc1");
+	RemoveEntityCollideCallback("Player", "AreaFakeEnc2");
+	
+	//////////////////////////////////
+	// Setup player
+	SetPlayerCrouching(true);
+	
+
+	//////////////////////////////////
+	// Add these again at random.
+	if(alCount<=2)
+	{
+		SetLocalVarInt("PigActive", 0);
+	
+		if(RandInt(1,2)==1) AddEntityCollideCallback("Player", "AreaPig4Start", "EnterPig4Start", true, 1);
+		if(RandInt(1,2)==1) AddEntityCollideCallback("Player", "AreaPig5Start", "EnterPig5Start", true, 1);
+		if(RandInt(1,2)==1) AddEntityCollideCallback("Player", "AreaPig6Start", "EnterPig6Start", true, 1);	
+	
+		if(RandInt(1,2)==1) AddEntityCollideCallback("Player", "AreaFakeEnc1", "EnterFakeEnc1", true, 1);
+		if(RandInt(1,2)==1) AddEntityCollideCallback("Player", "AreaFakeEnc2", "EnterFakeEnc2", true, 1);
+		
+		//Throw in a stalking one for extra tension, (this one runs off if spotting player)
+		SetEntityActive("wretch_7", true);
+	}
+	//////////////////////////////////
+	// Only add the fake ones
+	{
+		AddEntityCollideCallback("Player", "AreaFakeEnc1", "EnterFakeEnc1", true, 1);
+		AddEntityCollideCallback("Player", "AreaFakeEnc2", "EnterFakeEnc2", true, 1);
+	}
+}
+
+//----------------------------------
+
+void BottomPigDisabled(string &in asEntity, string &in asType)
+{
+	SetLocalVarInt("PigActive", 0);
+}
+
+//----------------------------------
+
+//----------------------
+// END BOTTOM ENCOUNTERS START//
+//----------------------
+
+//----------------------
+//PIG ENCOUNTER 3//
+//----------------------
+
+//----------------------------------
+
+void EnterPig3Start(string &in asParent, string &in asChild, int alState)
+{
+	if(GetLocalVarInt("PigActive")==1) return;
+	SetLocalVarInt("PigActive", 1);
+
+	LanternFlicker(3);
+	
+	AddTimer("Pig3Appear", 0.2, "TimerPig3Appear");
+	
+	StartLampFlickerBurst("tube_lamp_factory_railing_22",3);
+}
+
+void TimerPig3Appear(string &in asTimer)
+{
+	SetEntityActive("wretch_3", true);
+	
+	AddEnemyPatrolNode("wretch_3", "PathNodeArea_315", 3, "", false);
+	AddEnemyPatrolNode("wretch_3", "PathNodeArea_103", 0, "", false);
+}
+
+//----------------------------------
+
+//----------------------
+//END PIG ENCOUNTER 3//
+//----------------------
+
+
+//----------------------
+//PIG ENCOUNTER 4//
+//----------------------
+
+//----------------------
+
+void EnterPig4Start(string &in asParent, string &in asChild, int alState)
+{
+	if(GetLocalVarInt("PigActive")==1) return;
+	SetLocalVarInt("PigActive", 1);
+
+	LanternFlicker(5);
+	
+	SetEntityActive("wretch_4", true);
+	
+	AddEnemyPatrolNode("wretch_4", "PathNodeArea_144", 3, "", false);
+	AddEnemyPatrolNode("wretch_4", "PathNodeArea_21", 3, "", false);
+	AddEnemyPatrolNode("wretch_4", "PathNodeArea_191", 5, "", false);
+	AddEnemyPatrolNode("wretch_4", "PathNodeArea_142", 3, "", false);
+	AddEnemyPatrolNode("wretch_4", "PathNodeArea_19", 2, "", false);
+}
+
+
+//----------------------
+
+//----------------------
+//END PIG ENCOUNTER 4//
+//----------------------
+
+//----------------------
+//PIG ENCOUNTER 5//
+//----------------------
+
+//----------------------
+
+void EnterPig5Start(string &in asParent, string &in asChild, int alState)
+{
+	if(GetLocalVarInt("PigActive")==1) return;
+	SetLocalVarInt("PigActive", 1);
+	
+	LanternFlicker(3);
+	
+	SetEntityActive("wretch_5", true);
+	
+	AddEnemyPatrolNode("wretch_5", "PathNodeArea_110", 0, "", false);
+	AddEnemyPatrolNode("wretch_5", "PathNodeArea_131", 0, "", false);
+	AddEnemyPatrolNode("wretch_5", "PathNodeArea_303", 0, "", false);
+}
+
+//----------------------
+
+//----------------------
+// END PIG ENCOUNTER 5//
+//----------------------
+
+
+//----------------------
+// PIG ENCOUNTER 6//
+//----------------------
+
+void EnterPig6Start(string &in asParent, string &in asChild, int alState)
+{
+	//if(GetLocalVarInt("PigActive")==1) return;
+	//SetLocalVarInt("PigActive", 1);
+	
+	SetEntityActive("wretch_6", true);
+	
+	//StartLampFlickerBurst("tube_lamp_factory_railing_66", 4);
+
+	AddEnemyPatrolNode("wretch_6", "PathNodeArea_253", 0, "", false);
+	AddEnemyPatrolNode("wretch_6", "PathNodeArea_273", 0, "", false);
+}
+
+//----------------------
+// END PIG ENCOUNTER 6//
+//----------------------
+
+
+//----------------------
+// FAKE ENCOUNTERS //
+//----------------------
+
+void EnterFakeEnc1(string &in asParent, string &in asChild, int alState)
+{
+	StartLampFlickerBurst("tube_lamp_factory_railing_24", 5);
+	StartLampFlickerBurst("tube_lamp_factory_railing_40", 3.5f);
+	LanternFlicker(3);
+	
+	AddTimer("FakeEnc1LightOut", 5.5f, "FakeEnc1LightOut");
+}
+
+void FakeEnc1LightOut(string &in asTimer)
+{
+	SetLampLit("tube_lamp_factory_railing_24", false, true);
+}
+
+void EnterFakeEnc2(string &in asParent, string &in asChild, int alState)
+{
+	StartLampFlickerBurst("tube_lamp_factory_railing_39", 4);
+	LanternFlicker(3);
+	
+	AddTimer("FakeEnc2LightOut", 4.5f, "FakeEnc2LightOut");
+}
+
+void FakeEnc2LightOut(string &in asTimer)
+{
+	SetLampLit("tube_lamp_factory_railing_39", false, true);
+}
+
+void EnterFakeEnc3(string &in asParent, string &in asChild, int alState)
+{
+	StartLampFlickerBurst("tube_lamp_factory_railing_72", 4);
+}
+
+//----------------------
+// END FAKE ENCOUNTERS //
+//----------------------

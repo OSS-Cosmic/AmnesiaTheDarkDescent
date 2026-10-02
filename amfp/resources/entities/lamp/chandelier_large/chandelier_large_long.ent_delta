@@ -1,6 +1,4 @@
 <EntDelta Version="1" Target="entities/lamp/chandelier_large/chandelier_large_long.ent">
-    <RemoveVar Name="CanBeTurnedOff" />
-    <RemoveVar Name="NeedsTinderbox" />
     <Modify Category="Entities" ID="48" Name="Billboard_2">
         <SetAttr ConnectLight="PointLight_2" />
     </Modify>
@@ -48,8 +46,6 @@
     </Modify>
     <Modify Category="Entities" ID="63" Name="PointLight_1">
         <SetAttr DiffuseColor="0.25 0.15 0.05 0.35" FalloffMap="" FlickerActive="true" FlickerFade="true" FlickerOffColor="0.22 0.13 0.04 0.3" FlickerOffFadeMaxLength="2" FlickerOffFadeMinLength="0.1" FlickerOffRadius="4.9" FlickerOnFadeMaxLength="2" FlickerOnFadeMinLength="0.1" FlickerOnMaxLength="0" Radius="5" Re_FlickerOffIntensity="0.9" Re_Intensity="1" Re_Radius="22" Re_SourceRadius="0.05" ShadowResolution="Low" WorldPos="2.45491 -9.04834 -0.00524521" />
-        <RemoveAttr Name="Brightness" />
-        <RemoveAttr Name="Falloff" />
     </Modify>
     <Add Category="Entities">
         <PointLight Name="PointLight_2" WorldPos="1.73196 -9.04834 -1.74373" Rotation="0 -0 -6.06793e-14" Scale="1 1 1" Tag="" Active="true" CastShadows="false" ShadowResolution="Low" ShadowsAffectStatic="true" ShadowsAffectDynamic="true" Radius="5" Re_Intensity="1" Re_Radius="22" Re_SourceRadius="0.05" FalloffMap="" Gobo="" GoboAnimMode="None" GoboAnimFrameTime="0" DiffuseColor="0.25 0.15 0.05 0.35" FlickerActive="true" FlickerOnMinLength="0" FlickerOnMaxLength="0" FlickerOnPS="" FlickerOnSound="" FlickerOffMinLength="0" FlickerOffMaxLength="0" FlickerOffPS="" FlickerOffSound="" FlickerOffColor="0.22 0.13 0.04 0.3" FlickerOffRadius="4.9" Re_FlickerOffIntensity="0.9" FlickerFade="true" FlickerOnFadeMinLength="0.1" FlickerOnFadeMaxLength="2" FlickerOffFadeMinLength="0.1" FlickerOffFadeMaxLength="2" />

@@ -1,155 +1,3121 @@
 <MapDelta Version="1" Target="maps/15_tesla_02.map">
+    <Modify Category="StaticObjects" ID="396" Name="tesla_modules_core_floor_14">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="398" Name="tesla_modules_core_wall_inner_26">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="399" Name="tesla_modules_core_wall_inner_27">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="402" Name="tesla_modules_core_floor_15">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="404" Name="tesla_modules_core_wall_inner_28">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="405" Name="tesla_modules_core_wall_inner_29">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="408" Name="tesla_modules_core_floor_16">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="410" Name="tesla_modules_core_wall_inner_30">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="411" Name="tesla_modules_core_wall_inner_31">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="414" Name="tesla_modules_core_floor_17">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="416" Name="tesla_modules_core_wall_inner_32">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="417" Name="tesla_modules_core_wall_inner_33">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="421" Name="tesla_modules1_wall_simple_43">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="423" Name="tesla_modules1_wall_simple_44">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="424" Name="tesla_modules1_ceiling_34">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="425" Name="tesla_modules1_ceiling_35">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="426" Name="tesla_modules1_ceiling_36">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="427" Name="tesla_modules1_ceiling_37">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="428" Name="tesla_modules1_ceiling_38">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="429" Name="tesla_modules1_wall_simple_45">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="430" Name="tesla_modules1_ceiling_39">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="445" Name="tesla_modules1_ceiling_42">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="448" Name="tesla_modules1_ceiling_44">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="452" Name="tesla_modules1_ceiling_45">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="453" Name="tesla_modules1_wall_simple_13">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="478" Name="tesla_modules1_ceiling_56">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="480" Name="tesla_modules1_wall_simple_65">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="481" Name="tesla_modules1_wall_simple_66">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="482" Name="tesla_modules1_ceiling_57">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="484" Name="tesla_modules1_wall_simple_67">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="485" Name="tesla_modules1_wall_simple_68">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="486" Name="tesla_modules1_wall_simple_69">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="487" Name="tesla_modules1_ceiling_58">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="488" Name="tesla_modules1_ceiling_59">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="489" Name="tesla_modules1_ceiling_60">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="490" Name="tesla_modules1_wall_simple_70">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="495" Name="tesla_modules1_wall_simple_74">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="498" Name="tesla_modules1_ceiling_61">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="500" Name="tesla_modules1_ceiling_62">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="502" Name="tesla_modules1_ceiling_63">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="535" Name="tesla_modules1_wall_simple_81">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="629" Name="tesla_structure_pillar_bg_4">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="632" Name="tesla_structure_pillar_bg_6">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="1012" Name="tesla_modules1_ceiling_103">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="1013" Name="tesla_modules1_ceiling_104">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="1021" Name="tesla_modules1_wall_pipes_8">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="1022" Name="tesla_modules1_wall_pipes_6">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="1024" Name="tesla_modules1_doorframe_4">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="1026" Name="tesla_modules1_wall_pipes_7">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="1028" Name="tesla_modules1_wall_pipes_5">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="1282" Name="tesla_props_pipes_01_xl_4">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="1283" Name="tesla_props_pipes_01_corner_3">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="1289" Name="tesla_props_pipes_01_xl_5">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="1290" Name="tesla_props_pipes_01_corner_5">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="1630" Name="tesla_modules1_ceiling_83">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="1641" Name="tesla_modules1_ceiling_97">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="1657" Name="tesla_modules1_ceiling_101">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="1659" Name="tesla_modules1_cornerjunction_11">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="1664" Name="tesla_modules1_wall_simple_147">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="1815" Name="tesla_structure_catwalk_02_lower_19">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="1903" Name="tesla_structure_catwalk_02_lower_23">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="1906" Name="tesla_structure_catwalk_ladder_3">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="2229" Name="tesla_props_pipes_01_xl_33">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="2230" Name="tesla_props_pipes_01_xl_34">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="2278" Name="tesla_props_pipes_01_xl_46">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="2281" Name="tesla_props_pipes_01_corner_13">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="2283" Name="tesla_props_pipes_01_corner_14">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="2289" Name="tesla_props_pipes_01_sturn_18">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="2290" Name="tesla_props_pipes_01_lg_9">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="2291" Name="tesla_props_pipes_01_sturn_19">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="2292" Name="tesla_props_pipes_01_lg_10">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="2297" Name="tesla_props_pipes_01_lg_11">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="2298" Name="tesla_props_pipes_01_lg_12">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="2347" Name="tesla_structure_catwalk_02_cap_1">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="2420" Name="tesla_props_pipes_01_sturn_20">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="2421" Name="tesla_props_pipes_01_sturn_21">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="2422" Name="tesla_props_pipes_01_corner_18">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="2423" Name="tesla_props_pipes_01_corner_19">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="2424" Name="tesla_props_pipes_01_corner_20">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="2425" Name="tesla_props_pipes_01_corner_21">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="2426" Name="tesla_props_pipes_01_xl_47">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="2427" Name="tesla_props_pipes_01_xl_48">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="2428" Name="tesla_props_pipes_01_xl_49">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="2429" Name="tesla_props_pipes_01_xl_50">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="2431" Name="tesla_props_pipes_01_xl_52">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="2433" Name="tesla_props_pipes_01_xl_54">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="2434" Name="tesla_props_pipes_01_xl_55">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="2435" Name="tesla_props_pipes_01_xl_56">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="3175" Name="tesla_props_pipes_01_xl_67">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="3176" Name="tesla_props_pipes_01_sturn_26">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="3177" Name="tesla_props_pipes_01_corner_25">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="3178" Name="tesla_props_pipes_01_xl_68">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="3179" Name="tesla_props_pipes_01_sturn_27">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="3180" Name="tesla_props_pipes_01_xl_69">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="3181" Name="tesla_props_pipes_01_corner_26">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="3182" Name="tesla_props_pipes_01_xl_70">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="3183" Name="tesla_props_pipes_01_xl_71">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="3184" Name="tesla_props_pipes_01_xl_72">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="3220" Name="tesla_props_pipes_01_xl_75">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="3221" Name="tesla_props_pipes_01_sturn_28">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="3222" Name="tesla_props_pipes_01_corner_27">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="3223" Name="tesla_props_pipes_01_xl_76">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="3224" Name="tesla_props_pipes_01_sturn_29">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="3225" Name="tesla_props_pipes_01_xl_77">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="3226" Name="tesla_props_pipes_01_corner_28">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="3227" Name="tesla_props_pipes_01_xl_78">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="3228" Name="tesla_props_pipes_01_xl_79">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="3229" Name="tesla_props_pipes_01_xl_80">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="3235" Name="tesla_props_pipes_01_xl_83">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="3236" Name="tesla_props_pipes_01_sturn_30">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="3237" Name="tesla_props_pipes_01_corner_29">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="3238" Name="tesla_props_pipes_01_xl_84">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="3239" Name="tesla_props_pipes_01_sturn_31">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="3240" Name="tesla_props_pipes_01_xl_85">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="3241" Name="tesla_props_pipes_01_corner_30">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="3242" Name="tesla_props_pipes_01_xl_86">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="3243" Name="tesla_props_pipes_01_xl_87">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="3244" Name="tesla_props_pipes_01_xl_88">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="3303" Name="tesla_modules1_doorframe_6">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="3309" Name="floortiles_tesla_modules_floortiles_simple_3">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="3310" Name="tesla_modules1_wall_pipes_10">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="3311" Name="tesla_modules1_ceiling_105">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="3409" Name="floortiles_tesla_modules_floortiles_simple_24">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="3410" Name="floortiles_tesla_modules_floortiles_simple_25">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="3451" Name="tesla_modules1_wall_simple_158">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="3452" Name="tesla_modules1_wall_simple_159">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="3453" Name="tesla_modules1_wall_simple_160">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="3454" Name="tesla_modules1_wall_simple_161">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="3455" Name="tesla_modules1_wall_simple_162">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="3456" Name="tesla_modules1_wall_simple_163">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="3499" Name="tesla_modules1_wall_simple_152">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="3507" Name="tesla_modules1_wall_simple_170">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="3508" Name="tesla_modules1_wall_simple_171">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="3520" Name="tesla_modules1_wall_simple_172">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="3521" Name="tesla_modules1_wall_simple_173">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="3523" Name="tesla_modules1_wall_simple_174">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="3527" Name="tesla_modules1_wall_simple_176">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="3562" Name="dressing_tesla_dressing_coolant_2">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="3577" Name="tesla_modules1_floor_special_1">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="3578" Name="tesla_modules1_floor_special_2">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="3579" Name="tesla_modules1_floor_special_3">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="3580" Name="tesla_modules1_floor_special_4">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="3581" Name="floortiles_tesla_modules_floortiles_straight_6">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="3582" Name="tesla_modules1_floor_special_5">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="3601" Name="floortiles_tesla_modules_floortiles_straight_7">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="3604" Name="floortiles_tesla_modules_floortiles_straight_17">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="3605" Name="floortiles_tesla_modules_floortiles_straight_18">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="3606" Name="floortiles_tesla_modules_floortiles_straight_19">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="3608" Name="tesla_modules1_ceiling_square_3">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="3609" Name="tesla_modules1_wall_simple_181">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="3613" Name="tesla_modules1_floor_special_6">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="3614" Name="tesla_modules1_floor_special_7">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="3618" Name="floortiles_tesla_modules_floortiles_straight_23">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="3620" Name="floortiles_tesla_modules_floortiles_straight_25">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="3621" Name="floortiles_tesla_modules_floortiles_straight_26">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="3661" Name="tesla_modules1_wall_simple_182">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="3665" Name="tesla_modules1_wall_arch_3">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="3674" Name="tesla_modules1_wall_arch_6">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="3679" Name="tesla_ents_door_gate_01_open_5">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="3680" Name="tesla_modules1_wall_simple_175">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="3681" Name="tesla_modules1_wall_simple_183">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="3682" Name="tesla_modules1_floor_special_8">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="3683" Name="floortiles_tesla_modules_floortiles_straight_27">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="3684" Name="tesla_modules1_ceiling_99">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="3686" Name="tesla_modules1_ceiling_square_5">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="3687" Name="tesla_modules1_ceiling_square_6">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="3688" Name="tesla_modules1_ceiling_square_7">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="3689" Name="tesla_modules1_ceiling_square_8">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="3691" Name="tesla_modules1_wall_simple_185">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="3692" Name="tesla_modules1_wall_simple_186">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="3693" Name="tesla_modules1_wall_simple_187">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="3694" Name="tesla_modules1_wall_simple_188">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="3732" Name="tesla_modules1_wall_simple_190">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="3749" Name="tesla_modules1_ceiling_square_14">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="3765" Name="tesla_modules1_ceiling_square_17">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="3771" Name="tesla_modules1_ceiling_square_18">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="3772" Name="tesla_modules1_wall_simple_196">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="3792" Name="tesla_modules1_wall_simple_199">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="3798" Name="tesla_modules1_wall_simple_200">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="3810" Name="tesla_modules1_wall_arch_7">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="3843" Name="tesla_modules1_floor_special_9">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="3851" Name="tesla_modules1_wall_simple_78">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="3858" Name="tesla_props_giant_fuse_3">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="3866" Name="tesla_modules1_wall_simple_84">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="3888" Name="tesla_modules1_ceiling_65">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="3889" Name="tesla_modules1_ceiling_66">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="3894" Name="tesla_modules1_wall_simple_202">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="3895" Name="tesla_modules1_wall_simple_203">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="3896" Name="tesla_modules1_wall_simple_204">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="3897" Name="tesla_modules1_wall_simple_205">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="3898" Name="tesla_modules1_wall_simple_206">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="3903" Name="tesla_modules1_wall_simple_210">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="4001" Name="tesla_modules1_wall_simple_211">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="4043" Name="structure_engineroom_beam_short_13">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="4050" Name="structure_engineroom_beam_short_16">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="4053" Name="tesla_modules1_wall_simple_52">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="4057" Name="structure_engineroom_beam_short_18">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="4059" Name="structure_engineroom_beam_support_8m_13">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="4061" Name="structure_engineroom_beam_short_19">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="4095" Name="tesla_modules1_wall_simple_153">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="4096" Name="floortiles_tesla_modules_floortiles_straight_20">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="4097" Name="floortiles_tesla_modules_floortiles_straight_28">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="4218" Name="tesla_modules_core_wall_inner_34">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="4219" Name="machinery_engineroom_largepipe_ring_closed_1">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="4244" Name="tesla_modules_core_wall_inner_35">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="4246" Name="machinery_engineroom_largepipe_ring_closed_2">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="4248" Name="tesla_modules_core_wall_inner_36">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="4250" Name="machinery_engineroom_largepipe_ring_closed_3">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="4252" Name="tesla_modules_core_wall_inner_37">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="4254" Name="machinery_engineroom_largepipe_ring_closed_4">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="4272" Name="machinery_engineroom_largepipe_ring_closed_5">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="4274" Name="machinery_engineroom_largepipe_ring_closed_6">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="4294" Name="tesla_modules_core_floor_19">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="4295" Name="tesla_modules_core_floor_20">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="4296" Name="tesla_modules_core_floor_21">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="4297" Name="tesla_modules_core_floor_25">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="4301" Name="tesla_modules_core_wall_inner_38">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="4302" Name="tesla_modules_core_wall_inner_39">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="4303" Name="tesla_modules_core_wall_inner_40">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="4304" Name="tesla_modules_core_wall_inner_41">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="4305" Name="tesla_modules_core_wall_inner_42">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="4306" Name="tesla_modules_core_wall_inner_43">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="4307" Name="tesla_modules_core_floor_18">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="4308" Name="tesla_modules_core_wall_inner_44">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="4309" Name="tesla_modules_core_wall_inner_45">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="4310" Name="tesla_modules_core_floor_22">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="4311" Name="tesla_modules_core_floor_23">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="4312" Name="tesla_modules_core_floor_24">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="4314" Name="tesla_modules_core_wall_inner_46">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="4315" Name="tesla_modules_core_wall_inner_47">
+        <SetAttr Rotation="3.14159 1.5708 3.14159" TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="4316" Name="tesla_modules_core_wall_inner_48">
+        <SetAttr Rotation="3.14159 1.5708 3.14159" TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="4317" Name="tesla_modules_core_wall_inner_49">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="4318" Name="tesla_modules_core_wall_inner_50">
+        <SetAttr Rotation="-2.53518e-06 -1.5708 -2.53518e-06" TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="4319" Name="tesla_modules_core_wall_inner_51">
+        <SetAttr Rotation="-2.53518e-06 -1.5708 -2.53518e-06" TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="4320" Name="tesla_modules_core_floor_26">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="4321" Name="tesla_modules_core_wall_inner_52">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="4322" Name="tesla_modules_core_wall_inner_53">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="4323" Name="tesla_modules_core_floor_27">
+        <SetAttr Rotation="3.14159 -1.5708 3.14159" TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="4324" Name="tesla_modules_core_floor_28">
+        <SetAttr Rotation="-2.53518e-06 1.5708 -2.53518e-06" TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="4325" Name="tesla_modules_core_floor_29">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="4329" Name="tesla_modules_core_door_closed_1">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="4330" Name="tesla_modules_core_door_closed_2">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="4331" Name="tesla_modules_core_door_closed_3">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="4333" Name="tesla_modules_core_door_closed_5">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="4334" Name="tesla_modules_core_door_closed_6">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="4335" Name="tesla_modules_core_door_closed_7">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="4336" Name="tesla_modules_core_door_closed_8">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="4337" Name="tesla_modules_core_door_closed_9">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="4338" Name="tesla_modules_core_door_closed_10">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="4339" Name="tesla_modules_core_door_closed_11">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="4340" Name="tesla_modules_core_door_closed_12">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="4341" Name="tesla_modules_core_wall_inner_54">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="4342" Name="tesla_modules_core_wall_inner_55">
+        <SetAttr Rotation="3.14159 1.5708 3.14159" TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="4343" Name="tesla_modules_core_wall_inner_56">
+        <SetAttr Rotation="3.14159 1.5708 3.14159" TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="4344" Name="tesla_modules_core_wall_inner_57">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="4345" Name="tesla_modules_core_wall_inner_58">
+        <SetAttr Rotation="-2.53518e-06 -1.5708 -2.53518e-06" TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="4346" Name="tesla_modules_core_wall_inner_59">
+        <SetAttr Rotation="-2.53518e-06 -1.5708 -2.53518e-06" TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="4348" Name="tesla_modules_core_wall_inner_60">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="4349" Name="tesla_modules_core_wall_inner_61">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="4351" Name="tesla_modules_core_floor_32">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="4354" Name="tesla_modules_core_door_closed_13">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="4355" Name="tesla_modules_core_door_closed_14">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="4356" Name="tesla_modules_core_door_closed_15">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="4357" Name="tesla_modules_core_door_closed_16">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="4363" Name="machinery_engineroom_largepipe_ring_closed_7">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="4369" Name="machinery_engineroom_largepipe_ring_closed_8">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="4371" Name="machinery_engineroom_largepipe_ring_closed_9">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="4376" Name="machinery_engineroom_largepipe_ring_closed_10">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="4378" Name="machinery_engineroom_largepipe_ring_closed_11">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="4379" Name="machinery_engineroom_largepipe_ring_closed_12">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="4380" Name="machinery_engineroom_largepipe_ring_closed_13">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="4387" Name="machinery_engineroom_largepipe_ring_closed_14">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="4388" Name="machinery_engineroom_largepipe_ring_closed_15">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="4389" Name="machinery_engineroom_largepipe_ring_closed_16">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="4390" Name="machinery_engineroom_largepipe_ring_closed_17">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="4556" Name="tesla_modules_core_platform_floor_5">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="4557" Name="tesla_modules_core_platform_floor_6">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="4558" Name="tesla_modules_core_platform_floor_7">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="4559" Name="tesla_modules_core_platform_floor_8">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="4560" Name="tesla_modules_core_platform_floor_9">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="4561" Name="tesla_modules_core_platform_floor_10">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="4562" Name="tesla_modules_core_platform_floor_11">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="4565" Name="tesla_modules_core_floor_30">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="4566" Name="tesla_modules_core_floor_31">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="4567" Name="tesla_modules_core_floor_37">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="4568" Name="tesla_modules_core_floor_38">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="4575" Name="tesla_modules_core_floor_39">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="4576" Name="tesla_modules_core_floor_40">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="4577" Name="tesla_modules_core_floor_41">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="4578" Name="tesla_modules_core_floor_42">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="4580" Name="tesla_modules_core_floor_43">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="4581" Name="tesla_modules_core_floor_44">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="4582" Name="tesla_modules_core_floor_45">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="4583" Name="tesla_modules_core_floor_46">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="4584" Name="tesla_modules_core_floor_47">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="4585" Name="tesla_modules_core_floor_48">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="4586" Name="tesla_modules_core_floor_49">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="4587" Name="tesla_modules_core_floor_50">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="4589" Name="tesla_modules_core_floor_33">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="4590" Name="tesla_modules_core_floor_34">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="4592" Name="tesla_modules_core_floor_35">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="4708" Name="tesla_modules1_wall_simple_91">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="4709" Name="dressing_tesla_dressing_coolant_6">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="4711" Name="tesla_modules1_wall_simple_92">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="4714" Name="tesla_modules1_wall_simple_216">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="4723" Name="tesla_modules1_wall_simple_179">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="4729" Name="tesla_modules_core_buttress_outer_1">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="4730" Name="tesla_modules_core_buttress_outer_2">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="4731" Name="tesla_modules_core_buttress_outer_3">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="4732" Name="tesla_modules1_wall_simple_71">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="4733" Name="tesla_modules1_floor_special_10">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="4735" Name="dressing_tesla_dressing_coolant_8">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="4737" Name="tesla_modules1_wall_simple_75">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="4746" Name="tesla_modules_core_buttress_outer_4">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="4747" Name="tesla_modules_core_buttress_outer_5">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="4748" Name="tesla_modules_core_buttress_outer_6">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="4750" Name="tesla_modules1_floor_special_11">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="4751" Name="tesla_modules_core_buttress_outer_7">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="4753" Name="tesla_modules_core_buttress_outer_8">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="4754" Name="tesla_modules_core_buttress_outer_9">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="4759" Name="tesla_modules_core_buttress_outer_11">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="4763" Name="tesla_modules_core_buttress_outer_15">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="4764" Name="tesla_modules_core_buttress_outer_16">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="4765" Name="tesla_modules_core_buttress_outer_17">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="4766" Name="tesla_modules_core_buttress_outer_18">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="4767" Name="tesla_modules_core_buttress_outer_19">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="4769" Name="tesla_modules_core_buttress_outer_21">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="4770" Name="tesla_modules_core_buttress_outer_10">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="4777" Name="tesla_modules_core_buttress_outer_22">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="4778" Name="tesla_modules_core_buttress_outer_23">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="4780" Name="dressing_tesla_dressing_generic_frame_15">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="4781" Name="dressing_tesla_dressing_generic_frame_16">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="4782" Name="tesla_modules_core_buttress_outer_24">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="4788" Name="structure_engineroom_walls_6">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="4790" Name="structure_engineroom_walls_7">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="4791" Name="dressing_tesla_dressing_generic_frame_33">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="4792" Name="dressing_tesla_dressing_generic_frame_34">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="4794" Name="dressing_tesla_dressing_generic_frame_31">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="4795" Name="dressing_tesla_dressing_generic_frame_35">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="4797" Name="tesla_modules1_wall_simple_217">
+        <SetAttr Rotation="-3.12158 1.5708 -3.12158" TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="4799" Name="structure_engineroom_walls_9">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="4800" Name="dressing_tesla_dressing_generic_frame_17">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="4801" Name="dressing_tesla_dressing_generic_frame_18">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="4802" Name="tesla_modules_core_buttress_outer_27">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="4803" Name="tesla_modules_core_buttress_outer_28">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="4805" Name="dressing_tesla_dressing_generic_frame_19">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="4806" Name="dressing_tesla_dressing_generic_frame_20">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="4807" Name="structure_engineroom_walls_10">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="4810" Name="dressing_tesla_dressing_generic_frame_36">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="4811" Name="dressing_tesla_dressing_generic_frame_37">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="4812" Name="structure_engineroom_walls_11">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="4837" Name="floortiles_tesla_modules_floortiles_simple_28">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="4848" Name="tesla_modules_core_buttress_outer_33">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="4849" Name="tesla_modules_core_buttress_outer_34">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="4857" Name="structure_engineroom_beam_short_26">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="4859" Name="structure_engineroom_beam_short_27">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="4860" Name="structure_engineroom_beam_support_8m_14">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="4861" Name="structure_engineroom_beam_support_8m_15">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="4862" Name="structure_engineroom_beam_support_8m_16">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="4863" Name="structure_engineroom_beam_support_8m_17">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="4868" Name="structure_engineroom_beam_short_28">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="4869" Name="structure_engineroom_beam_short_29">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="4870" Name="structure_engineroom_beam_short_30">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="4871" Name="structure_engineroom_beam_short_31">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="4872" Name="structure_engineroom_beam_short_32">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="4876" Name="dressing_tesla_dressing_coolant_3">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="4877" Name="dressing_tesla_dressing_coolant_4">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="4878" Name="dressing_tesla_dressing_coolant_7">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="4887" Name="dressing_tesla_dressing_coolant_11">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="4888" Name="tesla_modules1_wall_simple_151">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="4908" Name="tesla_modules1_ceiling_67">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="4929" Name="structure_engineroom_walls_17">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="4930" Name="dressing_tesla_dressing_generic_frame_48">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="4931" Name="dressing_tesla_dressing_generic_frame_49">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="4932" Name="structure_engineroom_beam_short_14">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="4933" Name="structure_engineroom_beam_short_20">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="4934" Name="structure_engineroom_beam_short_21">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="4935" Name="structure_engineroom_beam_short_22">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="4983" Name="dressing_tesla_dressing_coolant_12">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="4989" Name="tesla_modules1_wall_simple_221">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="5009" Name="floortiles_tesla_modules_floortiles_straight_8">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="5045" Name="tesla_props_giant_fuse_19">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="5050" Name="tesla_modules_core_buttress_outer_41">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="5051" Name="tesla_modules_core_buttress_outer_42">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="5052" Name="tesla_modules_core_buttress_outer_43">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="5059" Name="tesla_modules_core_wall_outer_door_1">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="5060" Name="tesla_modules_core_wall_outer_door_2">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="5061" Name="tesla_modules_core_wall_outer_door_3">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="5062" Name="tesla_modules_core_wall_outer_door_4">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="5063" Name="tesla_modules_core_wall_outer_door_5">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="5064" Name="tesla_modules_core_wall_outer_door_6">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="5065" Name="tesla_modules_core_wall_outer_door_7">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="5066" Name="tesla_modules_core_wall_outer_door_8">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="5067" Name="tesla_props_pipes_01_xl_7">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="5068" Name="tesla_props_pipes_01_corner_7">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="5070" Name="tesla_props_pipes_01_xl_8">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="5071" Name="tesla_props_pipes_01_corner_8">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="5073" Name="tesla_props_pipes_01_xl_9">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="5074" Name="tesla_props_pipes_01_corner_9">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="5111" Name="tesla_props_pipes_01_xl_6">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="5112" Name="tesla_props_pipes_01_corner_4">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="5176" Name="tesla_modules_core_wall_start_door_1">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="5177" Name="tesla_modules_core_wall_start_door_2">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="5178" Name="tesla_modules_core_wall_start_door_3">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="5180" Name="tesla_modules_core_wall_start_door_4">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="5182" Name="tesla_modules_core_wall_start_door_6">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="5183" Name="tesla_modules_core_wall_start_door_7">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="5184" Name="tesla_modules_core_wall_start_door_8">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="5185" Name="tesla_modules_core_wall_start_door_9">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="5187" Name="tesla_modules_core_wall_start_door_11">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="5188" Name="tesla_modules_core_wall_start_door_12">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="5189" Name="tesla_modules_core_wall_start_door_5">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="5191" Name="tesla_modules1_wall_pipes_9">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="5192" Name="floortiles_tesla_modules_floortiles_simple_4">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="5193" Name="floortiles_tesla_modules_floortiles_simple_5">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="5194" Name="tesla_modules1_doorframe_8">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="5197" Name="tesla_modules1_ceiling_square_4">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="5198" Name="tesla_modules1_ceiling_square_9">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="5209" Name="structure_engineroom_beam_buttress_2">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="5227" Name="tesla_structure_catwalk_02_lower_24">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="5228" Name="tesla_structure_catwalk_02_lower_25">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="5229" Name="structure_engineroom_beam_buttress_3">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="5230" Name="tesla_structure_catwalk_02_lower_20">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="5235" Name="tesla_props_pipes_02_cap_1">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="5237" Name="tesla_props_pipes_02_med_1">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="5238" Name="tesla_props_pipes_02_med_2">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="5239" Name="tesla_props_pipes_02_cap_2">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="5240" Name="tesla_props_pipes_02_med_3">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="5241" Name="tesla_props_pipes_02_med_4">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="5242" Name="tesla_props_pipes_02_med_5">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="5243" Name="tesla_props_pipes_02_med_6">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="5244" Name="tesla_props_pipes_02_med_7">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="5245" Name="tesla_props_pipes_02_med_8">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="5246" Name="tesla_props_pipes_02_med_9">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="5247" Name="tesla_props_pipes_02_med_10">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="5248" Name="tesla_props_pipes_02_med_11">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="5249" Name="tesla_props_pipes_02_med_12">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="5253" Name="tesla_props_pipes_02_cap_3">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="5254" Name="tesla_props_pipes_02_cap_4">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="5255" Name="tesla_props_pipes_02_cap_5">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="5256" Name="tesla_props_pipes_02_cap_6">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="5257" Name="tesla_props_pipes_02_cap_7">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="5258" Name="tesla_props_pipes_02_cap_8">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="5259" Name="tesla_structure_catwalk_ladder_4">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="5260" Name="tesla_structure_catwalk_ladder_5">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="5261" Name="tesla_structure_catwalk_02_wires_1">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="5262" Name="tesla_structure_catwalk_02_wires_2">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="5263" Name="tesla_structure_catwalk_02_wires_3">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="5264" Name="tesla_structure_catwalk_02_wires_4">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="5265" Name="tesla_structure_catwalk_02_wires_5">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="5267" Name="tesla_structure_catwalk_02_wires_6">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="5268" Name="tesla_structure_catwalk_02_wires_7">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="5269" Name="tesla_structure_catwalk_02_wires_8">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="5270" Name="tesla_structure_catwalk_02_wires_9">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="5271" Name="tesla_structure_catwalk_02_wires_10">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="5272" Name="tesla_structure_catwalk_02_wires_11">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="5273" Name="tesla_structure_catwalk_02_wires_12">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="5274" Name="tesla_structure_catwalk_02_wires_13">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="5275" Name="tesla_structure_catwalk_02_wires_14">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="5276" Name="tesla_structure_catwalk_02_wires_15">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="5277" Name="tesla_structure_catwalk_02_wires_16">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="5278" Name="tesla_structure_catwalk_02_wires_17">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="5279" Name="tesla_structure_catwalk_02_wires_18">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="5280" Name="tesla_structure_catwalk_02_wires_19">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="5281" Name="tesla_structure_catwalk_02_wires_20">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="5282" Name="tesla_structure_catwalk_02_wires_21">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="5283" Name="tesla_structure_catwalk_02_wires_22">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="5284" Name="tesla_structure_catwalk_02_wires_23">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="5285" Name="tesla_structure_catwalk_02_wires_24">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="5286" Name="tesla_structure_catwalk_02_wires_25">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="5287" Name="tesla_structure_catwalk_02_wires_26">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="5288" Name="tesla_structure_catwalk_02_wires_27">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="5289" Name="tesla_structure_catwalk_02_wires_28">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="5290" Name="tesla_structure_catwalk_02_wires_29">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="5291" Name="tesla_props_pipes_01_xl_51">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="5292" Name="tesla_props_pipes_01_xl_53">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="5293" Name="tesla_props_pipes_01_xl_57">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="5296" Name="tesla_props_pipes_02_med_13">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="5297" Name="tesla_props_pipes_02_med_14">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="5298" Name="tesla_props_pipes_02_med_15">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="5299" Name="tesla_props_pipes_02_med_16">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="5306" Name="tesla_modules_core_ext_sphere_1">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="5316" Name="structure_engineroom_beam_45degree_cut_4">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="5318" Name="structure_engineroom_beam_45degree_cut_5">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="5325" Name="dressing_tesla_dressing_metaldetails_3">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="5332" Name="structure_engineroom_beam_45degree_cut_9">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="5333" Name="structure_engineroom_beam_45degree_cut_10">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="5334" Name="structure_engineroom_beam_45degree_cut_11">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="5335" Name="structure_engineroom_beam_45degree_cut_12">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="5336" Name="structure_engineroom_beam_45degree_cut_13">
+        <SetAttr Rotation="0.0051426 -1.5708 -0.0051426" TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="5337" Name="structure_engineroom_beam_45degree_cut_14">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="5338" Name="structure_engineroom_beam_45degree_cut_15">
+        <SetAttr Rotation="3.13639 1.5708 3.13639" TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="5339" Name="structure_engineroom_beam_45degree_cut_16">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="5341" Name="tesla_structure_catwalk_ladder_7">
+        <SetAttr Rotation="3.13639 1.5708 3.13639" TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="5343" Name="dressing_tesla_dressing_metaldetails_4">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="5344" Name="dressing_tesla_dressing_metaldetails_5">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="5346" Name="structure_engineroom_beam_short_23">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="5347" Name="structure_engineroom_beam_short_24">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="5351" Name="tesla_structure_catwalk_ladder_10">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="5352" Name="tesla_modules_core_wall_outer_door_9">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="5353" Name="tesla_modules_core_wall_outer_door_10">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="5354" Name="tesla_modules_core_wall_start_door_10">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="5355" Name="tesla_modules_core_wall_start_door_13">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="5358" Name="tesla_structure_catwalk_caps_1">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="5359" Name="tesla_structure_catwalk_caps_2">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="5360" Name="structure_engineroom_beam_short_25">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="5362" Name="tesla_props_pipes_02_cap_9">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="5363" Name="tesla_props_pipes_02_cap_10">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="5364" Name="tesla_props_pipes_02_cap_11">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="5365" Name="tesla_props_pipes_02_cap_12">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="5515" Name="tesla_modules1_wall_pipes_11">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="5543" Name="tesla_props_pipes_01_xl_58">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="5544" Name="tesla_props_pipes_01_xl_59">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="5546" Name="structure_engineroom_beam_buttress_4">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="5547" Name="structure_engineroom_beam_buttress_5">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="5549" Name="tesla_props_pipes_01_xl_60">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="5550" Name="tesla_props_pipes_01_xl_61">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="5551" Name="structure_engineroom_beam_buttress_6">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="5552" Name="structure_engineroom_beam_buttress_7">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="5559" Name="tesla_props_pipes_01_xl_64">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="5560" Name="tesla_props_pipes_01_xl_65">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="5561" Name="structure_engineroom_beam_buttress_10">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="5562" Name="structure_engineroom_beam_buttress_11">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="5564" Name="tesla_props_pipes_01_xl_66">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="5565" Name="tesla_props_pipes_01_xl_81">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="5566" Name="structure_engineroom_beam_buttress_12">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="5567" Name="structure_engineroom_beam_buttress_13">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="5569" Name="tesla_props_pipes_01_xl_82">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="5570" Name="tesla_props_pipes_01_xl_89">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="5571" Name="structure_engineroom_beam_buttress_14">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="5572" Name="structure_engineroom_beam_buttress_15">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="5574" Name="tesla_props_pipes_01_xl_90">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="5575" Name="tesla_props_pipes_01_xl_91">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="5576" Name="structure_engineroom_beam_buttress_16">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="5577" Name="structure_engineroom_beam_buttress_17">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="5773" Name="tesla_modules1_wall_simple_85">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="5774" Name="tesla_modules1_wall_simple_192">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="5776" Name="tesla_modules1_ceiling_square_19">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="5777" Name="tesla_modules1_wall_simple_189">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="5778" Name="tesla_modules1_wall_simple_193">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="5782" Name="tesla_modules1_wall_simple_218">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="5783" Name="tesla_modules_core_buttress_outer_12">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="5784" Name="tesla_modules_core_buttress_outer_13">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="5785" Name="tesla_modules_core_buttress_outer_14">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="5786" Name="tesla_modules1_wall_simple_198">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="5787" Name="floortiles_tesla_modules_floortiles_straight_24">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="5788" Name="tesla_modules1_wall_simple_154">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="5789" Name="tesla_modules1_wall_simple_177">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="5791" Name="tesla_props_giant_fuse_14">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="5792" Name="tesla_props_giant_fuse_16">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="5793" Name="tesla_props_giant_fuse_17">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="5794" Name="tesla_props_giant_fuse_18">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="5795" Name="tesla_props_giant_fuse_20">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="5797" Name="tesla_modules1_wall_arch_8">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="5798" Name="tesla_modules1_wall_arch_9">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="5799" Name="tesla_props_giant_fuse_21">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="5800" Name="tesla_props_giant_fuse_22">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="5801" Name="tesla_modules1_wall_arch_10">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="5803" Name="tesla_modules1_wall_simple_212">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="5804" Name="tesla_modules1_wall_simple_213">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="5805" Name="tesla_modules1_wall_simple_214">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="5806" Name="tesla_modules1_wall_simple_215">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="5807" Name="tesla_modules1_wall_simple_219">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="5808" Name="tesla_modules1_wall_simple_220">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="5809" Name="tesla_modules1_wall_simple_222">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="5810" Name="tesla_modules1_wall_simple_223">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="5811" Name="tesla_modules1_wall_simple_224">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="5812" Name="tesla_modules1_ceiling_square_10">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="5813" Name="tesla_modules1_ceiling_square_11">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="5814" Name="tesla_modules1_ceiling_square_12">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="5820" Name="tesla_ents_door_gate_01_open_3">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="5838" Name="tesla_modules1_ceiling_64">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="5839" Name="tesla_modules1_ceiling_68">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="5845" Name="structure_engineroom_walls_18">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="5924" Name="tesla_props_pipes_01_xl_92">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="5925" Name="tesla_props_pipes_01_xl_93">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="5926" Name="tesla_props_pipes_01_xl_94">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="5943" Name="floortiles_tesla_modules_floortiles_simple_26">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="5944" Name="tesla_modules_core_buttress_outer_35">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="5948" Name="tesla_modules1_ceiling_square_13">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="5949" Name="tesla_modules1_wall_arch_11">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="5950" Name="structure_engineroom_beam_short_33">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="5951" Name="structure_engineroom_beam_short_34">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="5952" Name="structure_engineroom_beam_short_35">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="5953" Name="tesla_modules1_wall_arch_4">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="5954" Name="floortiles_tesla_modules_floortiles_simple_27">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="5958" Name="floortiles_tesla_modules_floortiles_simple_29">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="5959" Name="floortiles_tesla_modules_floortiles_simple_30">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="5960" Name="tesla_modules1_wall_simple_226">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="5961" Name="tesla_modules1_wall_simple_82">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="5962" Name="tesla_modules1_ceiling_46">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="5963" Name="tesla_props_giant_fuse_23">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="5964" Name="tesla_props_giant_fuse_24">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="5965" Name="tesla_props_giant_fuse_25">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="5966" Name="tesla_modules1_wall_arch_12">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="5967" Name="tesla_modules1_wall_arch_13">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="5968" Name="tesla_modules1_wall_arch_14">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="5969" Name="tesla_props_giant_fuse_26">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="5970" Name="tesla_props_giant_fuse_27">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="5971" Name="tesla_modules1_wall_arch_15">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="5978" Name="tesla_props_giant_fuse_28">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="5979" Name="tesla_props_giant_fuse_29">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="5980" Name="tesla_props_giant_fuse_30">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="5981" Name="tesla_props_giant_fuse_31">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="5982" Name="tesla_props_giant_fuse_32">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="5983" Name="tesla_modules1_wall_simple_191">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="5984" Name="tesla_props_giant_fuse_33">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="5985" Name="tesla_props_giant_fuse_34">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="5986" Name="tesla_modules1_wall_simple_194">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="5987" Name="tesla_modules1_wall_simple_197">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="5988" Name="tesla_modules1_wall_simple_201">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="5989" Name="tesla_modules1_wall_simple_207">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="5990" Name="tesla_modules1_wall_simple_208">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="5991" Name="tesla_modules1_wall_simple_209">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="5992" Name="tesla_modules1_wall_simple_227">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="5993" Name="tesla_props_giant_fuse_35">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="5994" Name="tesla_props_giant_fuse_36">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="5995" Name="tesla_modules1_wall_simple_228">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="5998" Name="tesla_modules1_wall_pipes_12">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="6000" Name="tesla_modules1_wall_arch_16">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="6001" Name="tesla_modules1_wall_simple_46">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="6003" Name="tesla_modules1_ceiling_square_15">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="6009" Name="tesla_modules1_ceiling_115">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="6017" Name="floortiles_tesla_modules_floortiles_simple_23">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="6018" Name="tesla_modules1_ceiling_121">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="6019" Name="tesla_modules1_wall_low_38">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="6020" Name="tesla_modules1_ceiling_122">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="6021" Name="tesla_modules1_ceiling_141">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="6022" Name="tesla_modules1_ceiling_123">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="6023" Name="tesla_modules1_ceiling_142">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="6024" Name="tesla_modules1_wall_low_46">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="6025" Name="floortiles_tesla_modules_floortiles_simple_31">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="6026" Name="tesla_modules1_wall_low_50">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="6027" Name="floortiles_tesla_modules_floortiles_simple_33">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="6028" Name="floortiles_tesla_modules_floortiles_simple_32">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="6029" Name="tesla_modules1_wall_low_47">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="6030" Name="tesla_modules1_wall_low_49">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="6031" Name="floortiles_tesla_modules_floortiles_simple_38">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="6032" Name="floortiles_tesla_modules_floortiles_simple_34">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="6033" Name="tesla_modules1_wall_low_48">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="6034" Name="tesla_modules1_wall_low_39">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="6035" Name="tesla_modules1_ceiling_169">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="6036" Name="tesla_modules1_ceiling_170">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="6037" Name="tesla_modules1_doorframe_24">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="6038" Name="tesla_modules1_wall_arch_glass_9">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="6039" Name="tesla_modules1_wall_arch_glass_7">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="6040" Name="tesla_modules1_ceiling_168">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="6041" Name="tesla_modules1_ceiling_171">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="6042" Name="tesla_modules1_wall_arch_glass_16">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="6043" Name="tesla_modules1_doorframe_19">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="6044" Name="floortiles_tesla_modules_floortiles_simple_58">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="6045" Name="floortiles_tesla_modules_floortiles_simple_57">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="6046" Name="tesla_modules1_ceiling_square_431">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="6047" Name="floortiles_tesla_modules_floortiles_simple_59">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="6048" Name="tesla_modules1_ceiling_167">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="6049" Name="floortiles_tesla_modules_floortiles_simple_39">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="6050" Name="tesla_modules1_wall_low_45">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="6051" Name="tesla_modules1_doorframe_18">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="6052" Name="floortiles_tesla_modules_floortiles_simple_44">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="6053" Name="tesla_modules1_wall_low_40">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="6054" Name="tesla_modules1_wall_arch_glass_18">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="6055" Name="tesla_modules1_wall_arch_1">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="6056" Name="tesla_modules1_doorframe_20">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="6057" Name="tesla_modules1_ceiling_207">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="6058" Name="tesla_modules1_ceiling_206">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="6059" Name="tesla_modules1_ceiling_square_430">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="6060" Name="tesla_modules1_wall_low_44">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="6061" Name="tesla_modules1_doorframe_21">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="6062" Name="tesla_modules1_wall_arch_glass_26">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="6063" Name="floortiles_tesla_modules_floortiles_simple_49">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="6064" Name="tesla_modules1_ceiling_square_429">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="6065" Name="tesla_modules1_ceiling_205">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="6066" Name="floortiles_tesla_modules_floortiles_simple_41">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="6067" Name="tesla_modules1_ceiling_198">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="6068" Name="floortiles_tesla_modules_floortiles_simple_48">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="6069" Name="tesla_modules1_wall_low_43">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="6070" Name="floortiles_tesla_modules_floortiles_simple_40">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="6071" Name="tesla_modules1_wall_low_41">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="6072" Name="floortiles_tesla_modules_floortiles_simple_54">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="6073" Name="structure_engineroom_beam_straight_121">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="6074" Name="tesla_modules1_wall_low_73">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="6075" Name="tesla_modules1_ceiling_209">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="6076" Name="tesla_modules1_wall_arch_glass_24">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="6077" Name="tesla_modules1_wall_low_42">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="6078" Name="tesla_modules1_wall_low_76">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="6079" Name="floortiles_tesla_modules_floortiles_simple_50">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="6080" Name="tesla_modules1_metal_4x6m_144">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="6081" Name="tesla_modules1_ceiling_208">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="6082" Name="tesla_modules1_wall_low_72">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="6083" Name="floortiles_tesla_modules_floortiles_simple_60">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="6084" Name="tesla_modules1_ceiling_199">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="6085" Name="tesla_modules1_wall_low_51">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="6086" Name="tesla_modules1_wall_arch_glass_33">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="6087" Name="floortiles_tesla_modules_floortiles_simple_53">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="6088" Name="tesla_modules1_wall_low_58">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="6089" Name="tesla_modules1_wall_low_75">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="6090" Name="floortiles_tesla_modules_floortiles_simple_52">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="6091" Name="tesla_modules1_ceiling_202">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="6092" Name="tesla_modules1_wall_low_74">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="6093" Name="floortiles_tesla_modules_floortiles_simple_51">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="6094" Name="tesla_modules1_ceiling_203">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="6095" Name="tesla_modules1_wall_low_85">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="6096" Name="floortiles_tesla_modules_floortiles_simple_55">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="6097" Name="tesla_modules1_ceiling_204">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="6098" Name="tesla_props_pipes_02_med_85">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="6099" Name="tesla_props_pipes_02_med_81">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="6100" Name="tesla_props_pipes_02_med_58">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="6101" Name="tesla_props_pipes_02_med_82">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="6102" Name="tesla_modules1_wall_low_52">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="6103" Name="tesla_props_pipes_02_cap_180">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="6104" Name="tesla_modules1_ceiling_200">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="6105" Name="tesla_props_pipes_02_corner_13">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="6106" Name="tesla_props_pipes_02_cap_179">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="6107" Name="tesla_props_pipes_02_med_91">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="6108" Name="dressing_tesla_dressing_pipe_clusters_41">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="6109" Name="tesla_props_pipes_02_corner_38">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="6110" Name="tesla_props_pipes_02_med_93">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="6111" Name="tesla_props_pipes_02_cap_90">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="6112" Name="tesla_props_pipes_02_med_84">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="6113" Name="tesla_props_pipes_02_med_80">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="6114" Name="tesla_props_pipes_02_med_46">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="6115" Name="tesla_props_pipes_02_med_45">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="6116" Name="dressing_tesla_dressing_pipe_clusters_38">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="6117" Name="dressing_tesla_dressing_pipe_clusters_01_corner_2">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="6118" Name="tesla_modules1_wall_arch_glass_29">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="6119" Name="tesla_props_pipes_02_corner_36">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="6120" Name="dressing_tesla_dressing_pipe_clusters_36">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="6121" Name="tesla_modules1_doorframe_12">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="6122" Name="tesla_modules1_wall_low_54">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="6123" Name="tesla_modules1_wall_low_59">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="6124" Name="tesla_props_pipes_02_med_94">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="6125" Name="dressing_tesla_dressing_pipe_clusters_40">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="6126" Name="tesla_modules1_doorframe_3">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="6127" Name="tesla_modules1_doorframe_2">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="6128" Name="tesla_props_pipes_02_corner_37">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="6129" Name="tesla_props_pipes_02_cap_91">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="6130" Name="tesla_props_pipes_02_med_92">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="6131" Name="tesla_modules1_wall_low_53">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="6133" Name="tesla_modules1_wall_pipes_3">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="6134" Name="tesla_modules1_ceiling_106">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="6135" Name="tesla_modules1_wall_pipes_2">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="6136" Name="tesla_modules1_doorframe_5">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="6137" Name="tesla_modules1_ceiling_108">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="6138" Name="dressing_tesla_dressing_pipe_clusters_42">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="6139" Name="tesla_modules1_ceiling_107">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="6140" Name="tesla_props_pipes_02_cap_82">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="6141" Name="tesla_props_pipes_02_cap_81">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="6142" Name="tesla_props_pipes_02_cap_80">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="6143" Name="tesla_props_pipes_02_cap_79">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="6144" Name="tesla_modules1_wall_pipes_17">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="6145" Name="tesla_props_pipes_02_cap_92">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="6146" Name="tesla_props_pipes_02_cap_93">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="6147" Name="tesla_modules1_ceiling_111">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="6148" Name="dressing_tesla_dressing_pipe_clusters_43">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="6149" Name="floortiles_tesla_modules_floortiles_simple_15">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="6150" Name="tesla_modules1_wall_arch_glass_31">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="6152" Name="floortiles_tesla_modules_floortiles_simple_16">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="6153" Name="tesla_modules1_wall_pipes_4">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="6154" Name="tesla_modules1_doorframe_13">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="6155" Name="floortiles_tesla_modules_floortiles_simple_17">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="6156" Name="tesla_modules1_wall_pipes_14">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="6157" Name="tesla_modules1_doorframe_22">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="6158" Name="tesla_modules1_wall_pipes_18">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="6160" Name="floortiles_tesla_modules_floortiles_simple_45">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="6161" Name="tesla_modules1_doorframe_23">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="6165" Name="tesla_modules1_ceiling_109">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="6166" Name="tesla_props_pipes_02_med_79">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="6167" Name="tesla_props_pipes_02_med_32">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="6168" Name="tesla_props_pipes_02_med_39">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="6169" Name="tesla_props_pipes_02_med_41">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="6170" Name="floortiles_tesla_modules_floortiles_simple_56">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="6171" Name="tesla_props_pipes_02_med_95">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="6172" Name="tesla_props_pipes_02_med_43">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="6173" Name="tesla_props_pipes_02_med_42">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="6174" Name="tesla_modules1_ceiling_201">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="6175" Name="tesla_props_pipes_02_cap_95">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="6176" Name="tesla_props_pipes_02_cap_94">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="6178" Name="tesla_modules1_ceiling_210">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="6180" Name="tesla_modules1_ceiling_112">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="6181" Name="tesla_modules1_wall_pipes_56">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="6182" Name="tesla_modules1_wall_pipes_58">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="6183" Name="tesla_modules1_doorframe_9">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="6184" Name="floortiles_tesla_modules_floortiles_simple_18">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="6186" Name="tesla_modules1_wall_pipes_15">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="6187" Name="tesla_props_pipes_02_med_97">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="6188" Name="tesla_props_pipes_02_med_98">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="6190" Name="tesla_props_pipes_01_sturn_13">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="6191" Name="tesla_props_pipes_01_sturn_12">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="6193" Name="tesla_modules1_wall_pipes_16">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="6318" Name="tesla_modules1_doorframe_7">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="6322" Name="tesla_modules1_ceiling_110">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="6324" Name="floortiles_tesla_modules_floortiles_simple_19">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="6325" Name="floortiles_tesla_modules_floortiles_simple_20">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="6327" Name="floortiles_tesla_modules_floortiles_simple_21">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="6328" Name="dressing_tesla_dressing_pipe_clusters_37">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="6329" Name="tesla_modules1_ceiling_113">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="6330" Name="dressing_tesla_dressing_pipe_clusters_44">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="6331" Name="dressing_tesla_dressing_pipe_clusters_45">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="6332" Name="tesla_modules1_wall_pipes_19">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="6333" Name="dressing_tesla_dressing_pipe_clusters_46">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="6334" Name="tesla_modules1_wall_pipes_20">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="6336" Name="tesla_modules1_wall_pipes_21">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="6344" Name="tesla_modules1_wall_arch_glass_32">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="6348" Name="machinery_engineroom_largepipe_ring_closed_18">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="6349" Name="machinery_engineroom_largepipe_ring_closed_19">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="6399" Name="floortiles_tesla_modules_floortiles_simple_35">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="6400" Name="floortiles_tesla_modules_floortiles_simple_36">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="6408" Name="tesla_modules1_wall_low_55">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="6409" Name="tesla_modules1_wall_low_56">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="6410" Name="tesla_modules1_wall_low_57">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="6432" Name="tesla_modules1_wall_low_70">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="6433" Name="tesla_modules1_ceiling_124">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="6434" Name="tesla_modules1_ceiling_125">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="6435" Name="tesla_modules1_ceiling_126">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="6449" Name="structure_engineroom_beam_short_36">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="6450" Name="structure_engineroom_beam_short_37">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="6452" Name="structure_engineroom_beam_short_38">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="6453" Name="structure_engineroom_beam_support_8m_18">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="6454" Name="structure_engineroom_beam_support_8m_19">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="6456" Name="floortiles_tesla_modules_floortiles_simple_37">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="6457" Name="tesla_modules1_wall_low_60">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="6458" Name="tesla_modules1_wall_low_61">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="6459" Name="tesla_modules1_ceiling_127">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="6460" Name="tesla_modules1_wall_low_62">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="6461" Name="structure_engineroom_beam_short_39">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="6476" Name="floortiles_tesla_modules_floortiles_simple_22">
+        <SetAttr Rotation="-2.28313 -1.5708 2.28313" TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="6477" Name="tesla_modules1_wall_pipes_22">
+        <SetAttr Rotation="3.00055 -1.5708 -3.00055" TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="6478" Name="tesla_modules1_wall_pipes_23">
+        <SetAttr Rotation="-2.53518e-06 1.5708 -2.53518e-06" TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="6479" Name="tesla_modules1_ceiling_114">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="6481" Name="floortiles_tesla_modules_floortiles_simple_42">
+        <SetAttr Rotation="0.858463 -1.5708 -0.858463" TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="6482" Name="tesla_modules1_wall_pipes_24">
+        <SetAttr Rotation="-0.141043 -1.5708 0.141043" TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="6483" Name="tesla_modules1_wall_pipes_25">
+        <SetAttr Rotation="3.14159 1.5708 3.14159" TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="6484" Name="tesla_modules1_ceiling_116">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="6486" Name="floortiles_tesla_modules_floortiles_simple_43">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="6487" Name="tesla_modules1_wall_pipes_26">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="6488" Name="tesla_modules1_wall_pipes_27">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="6489" Name="tesla_modules1_ceiling_117">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="6491" Name="floortiles_tesla_modules_floortiles_simple_46">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="6492" Name="tesla_modules1_wall_pipes_28">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="6493" Name="tesla_modules1_wall_pipes_29">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="6494" Name="tesla_modules1_ceiling_118">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="6496" Name="floortiles_tesla_modules_floortiles_simple_47">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="6497" Name="tesla_modules1_wall_pipes_30">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="6499" Name="tesla_modules1_ceiling_119">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="6501" Name="floortiles_tesla_modules_floortiles_simple_61">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="6502" Name="tesla_modules1_wall_pipes_32">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="6504" Name="tesla_modules1_ceiling_120">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="6506" Name="tesla_modules1_doorframe_10">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="6524" Name="tesla_props_pipes_02_med_99">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="6525" Name="tesla_props_pipes_02_med_100">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="6527" Name="tesla_props_pipes_02_med_101">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="6528" Name="tesla_props_pipes_02_med_102">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="6530" Name="floortiles_tesla_modules_floortiles_simple_62">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="6531" Name="tesla_modules1_wall_pipes_34">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="6532" Name="tesla_modules1_wall_pipes_35">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="6533" Name="tesla_modules1_ceiling_128">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="6537" Name="dressing_tesla_dressing_pipe_clusters_39">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="6538" Name="dressing_tesla_dressing_pipe_clusters_47">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="6539" Name="dressing_tesla_dressing_pipe_clusters_48">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="6569" Name="catwalk_factory_support_dirty_1">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="6570" Name="catwalk_factory_support_dirty_2">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="6571" Name="catwalk_factory_support_dirty_3">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="6572" Name="catwalk_factory_support_dirty_4">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="6585" Name="floortiles_tesla_modules_floortiles_simple_63">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="Primitives" ID="5510" Name="Plane">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="Primitives" ID="5511" Name="Plane_1">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="Primitives" ID="5512" Name="Plane_2">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="Primitives" ID="5513" Name="Plane_3">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="Primitives" ID="5514" Name="Plane_4">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="Primitives" ID="6573" Name="Plane">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Modify Category="Primitives" ID="6574" Name="Plane_5">
+        <SetAttr TwoSidedShadow="false" />
+    </Modify>
+    <Remove Category="Entities" ID="5433" Name="ghost_1" />
+    <Remove Category="Entities" ID="5434" Name="ghost_2" />
+    <Remove Category="Entities" ID="5856" Name="tesla_1" />
+    <Remove Category="Entities" ID="5887" Name="tesla_2" />
+    <Remove Category="Entities" ID="5892" Name="tesla_3" />
+    <Remove Category="Entities" ID="5915" Name="tesla_4" />
+    <Remove Category="Entities" ID="5927" Name="tesla_5" />
+    <Remove Category="Entities" ID="6247" Name="FinalTesla" />
+    <Remove Category="Entities" ID="6584" Name="FinalTesla_Hunter" />
+    <Modify Category="Entities" ID="674" Name="Tesla_Light_Box_Global">
+        <SetAttr FalloffMap="" />
+    </Modify>
+    <Modify Category="Entities" ID="837" Name="PointLight_9">
+        <SetAttr FalloffMap="" />
+    </Modify>
+    <Modify Category="Entities" ID="841" Name="PointLight_112">
+        <SetAttr FalloffMap="" />
+    </Modify>
     <Modify Category="Entities" ID="2127" Name="PointLight_188">
-        <SetAttr RendererMask="1" />
+        <SetAttr FalloffMap="" RendererMask="1" />
     </Modify>
     <Modify Category="Entities" ID="2799" Name="PointLight_289">
-        <SetAttr RendererMask="1" />
+        <SetAttr FalloffMap="" RendererMask="1" />
     </Modify>
     <Modify Category="Entities" ID="2818" Name="PointLight_207">
-        <SetAttr RendererMask="1" />
+        <SetAttr FalloffMap="" RendererMask="1" />
     </Modify>
     <Modify Category="Entities" ID="3293" Name="PointLight_260">
-        <SetAttr RendererMask="1" />
+        <SetAttr FalloffMap="" RendererMask="1" />
     </Modify>
     <Modify Category="Entities" ID="4073" Name="PointLight_298">
-        <SetAttr RendererMask="1" />
+        <SetAttr FalloffMap="" RendererMask="1" />
     </Modify>
     <Modify Category="Entities" ID="4074" Name="PointLight_299">
-        <SetAttr RendererMask="1" />
+        <SetAttr FalloffMap="" RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="4092" Name="SpotLight_13">
+        <SetAttr FalloffMap="" />
     </Modify>
     <Modify Category="Entities" ID="4137" Name="PointLight_145">
-        <SetAttr RendererMask="1" />
+        <SetAttr FalloffMap="" RendererMask="1" />
     </Modify>
     <Modify Category="Entities" ID="4403" Name="PointLight_3">
-        <SetAttr RendererMask="1" />
+        <SetAttr FalloffMap="" RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="4405" Name="PointLight_4">
+        <SetAttr FalloffMap="" />
+    </Modify>
+    <Modify Category="Entities" ID="4435" Name="SpotLight_1">
+        <SetAttr FalloffMap="" />
+    </Modify>
+    <Modify Category="Entities" ID="4439" Name="SpotLight_4">
+        <SetAttr FalloffMap="" />
+    </Modify>
+    <Modify Category="Entities" ID="4442" Name="SpotLight_5">
+        <SetAttr FalloffMap="" />
+    </Modify>
+    <Modify Category="Entities" ID="4445" Name="SpotLight_6">
+        <SetAttr FalloffMap="" />
+    </Modify>
+    <Modify Category="Entities" ID="4454" Name="SpotLight_11">
+        <SetAttr FalloffMap="" />
+    </Modify>
+    <Modify Category="Entities" ID="4457" Name="SpotLight_14">
+        <SetAttr FalloffMap="" />
+    </Modify>
+    <Modify Category="Entities" ID="4528" Name="PointLight_120">
+        <SetAttr FalloffMap="" />
+    </Modify>
+    <Modify Category="Entities" ID="4542" Name="PointLight_131">
+        <SetAttr FalloffMap="" />
+    </Modify>
+    <Modify Category="Entities" ID="4543" Name="PointLight_132">
+        <SetAttr FalloffMap="" />
+    </Modify>
+    <Modify Category="Entities" ID="4544" Name="PointLight_136">
+        <SetAttr FalloffMap="" Re_FlickerOffIntensity="0" Re_Intensity="10" Re_SourceRadius="0" />
+    </Modify>
+    <Modify Category="Entities" ID="4545" Name="PointLight_151">
+        <SetAttr FalloffMap="" />
     </Modify>
     <Modify Category="Entities" ID="4603" Name="PointLight_12">
-        <SetAttr RendererMask="1" />
+        <SetAttr FalloffMap="" RendererMask="1" />
     </Modify>
     <Modify Category="Entities" ID="4604" Name="PointLight_14">
-        <SetAttr RendererMask="1" />
+        <SetAttr FalloffMap="" RendererMask="1" />
     </Modify>
     <Modify Category="Entities" ID="4605" Name="PointLight_21">
-        <SetAttr RendererMask="1" />
+        <SetAttr FalloffMap="" RendererMask="1" />
     </Modify>
     <Modify Category="Entities" ID="4608" Name="PointLight_5">
-        <SetAttr RendererMask="1" />
+        <SetAttr FalloffMap="" RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="4621" Name="tesla_ents_core_door_10">
+        <SetAttr Rotation="-3.14159 1.5708 -3.14159" />
+    </Modify>
+    <Modify Category="Entities" ID="4623" Name="tesla_ents_core_door_12">
+        <SetAttr Rotation="0.000462683 -1.5708 -0.000462683" />
+    </Modify>
+    <Modify Category="Entities" ID="4632" Name="SpotLight_54">
+        <SetAttr FalloffMap="" />
+    </Modify>
+    <Modify Category="Entities" ID="4635" Name="SpotLight_55">
+        <SetAttr FalloffMap="" />
+    </Modify>
+    <Modify Category="Entities" ID="4666" Name="SpotLight_62">
+        <SetAttr FalloffMap="" />
+    </Modify>
+    <Modify Category="Entities" ID="4667" Name="SpotLight_22">
+        <SetAttr FalloffMap="" />
+    </Modify>
+    <Modify Category="Entities" ID="4670" Name="SpotLight_23">
+        <SetAttr FalloffMap="" />
+    </Modify>
+    <Modify Category="Entities" ID="4673" Name="SpotLight_24">
+        <SetAttr FalloffMap="" />
+    </Modify>
+    <Modify Category="Entities" ID="4674" Name="SpotLight_25">
+        <SetAttr FalloffMap="" />
+    </Modify>
+    <Modify Category="Entities" ID="4677" Name="SpotLight_26">
+        <SetAttr FalloffMap="" />
+    </Modify>
+    <Modify Category="Entities" ID="4680" Name="SpotLight_27">
+        <SetAttr FalloffMap="" />
+    </Modify>
+    <Modify Category="Entities" ID="4681" Name="SpotLight_63">
+        <SetAttr FalloffMap="" />
+    </Modify>
+    <Modify Category="Entities" ID="4682" Name="SpotLight_64">
+        <SetAttr FalloffMap="" />
+    </Modify>
+    <Modify Category="Entities" ID="4683" Name="SpotLight_28">
+        <SetAttr FalloffMap="" />
+    </Modify>
+    <Modify Category="Entities" ID="4684" Name="SpotLight_65">
+        <SetAttr FalloffMap="" />
+    </Modify>
+    <Modify Category="Entities" ID="4685" Name="SpotLight_29">
+        <SetAttr FalloffMap="" />
+    </Modify>
+    <Modify Category="Entities" ID="4687" Name="SpotLight_66">
+        <SetAttr FalloffMap="" />
+    </Modify>
+    <Modify Category="Entities" ID="4688" Name="SpotLight_30">
+        <SetAttr FalloffMap="" />
+    </Modify>
+    <Modify Category="Entities" ID="4691" Name="SpotLight_31">
+        <SetAttr FalloffMap="" />
+    </Modify>
+    <Modify Category="Entities" ID="4694" Name="SpotLight_32">
+        <SetAttr FalloffMap="" />
+    </Modify>
+    <Modify Category="Entities" ID="4695" Name="SpotLight_33">
+        <SetAttr FalloffMap="" />
+    </Modify>
+    <Modify Category="Entities" ID="4698" Name="SpotLight_34">
+        <SetAttr FalloffMap="" />
+    </Modify>
+    <Modify Category="Entities" ID="4701" Name="SpotLight_35">
+        <SetAttr FalloffMap="" />
+    </Modify>
+    <Modify Category="Entities" ID="4702" Name="SpotLight_67">
+        <SetAttr FalloffMap="" />
+    </Modify>
+    <Modify Category="Entities" ID="4703" Name="SpotLight_68">
+        <SetAttr FalloffMap="" />
+    </Modify>
+    <Modify Category="Entities" ID="4704" Name="SpotLight_36">
+        <SetAttr FalloffMap="" />
+    </Modify>
+    <Modify Category="Entities" ID="4705" Name="SpotLight_69">
+        <SetAttr FalloffMap="" />
+    </Modify>
+    <Modify Category="Entities" ID="4706" Name="SpotLight_37">
+        <SetAttr FalloffMap="" />
     </Modify>
     <Modify Category="Entities" ID="4874" Name="PointLight_133">
-        <SetAttr RendererMask="1" />
+        <SetAttr FalloffMap="" RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="4951" Name="SpotLight_45">
+        <SetAttr FalloffMap="" />
+    </Modify>
+    <Modify Category="Entities" ID="4952" Name="SpotLight_46">
+        <SetAttr FalloffMap="" />
+    </Modify>
+    <Modify Category="Entities" ID="4961" Name="SpotLight_49">
+        <SetAttr FalloffMap="" Rotation="1.68258 1.5708 1.68258" />
+    </Modify>
+    <Modify Category="Entities" ID="4962" Name="SpotLight_50">
+        <SetAttr FalloffMap="" Rotation="2.53518e-06 -1.5708 2.53518e-06" />
+    </Modify>
+    <Modify Category="Entities" ID="4963" Name="oval_wall_lamp_2m_pipe_43">
+        <SetAttr Rotation="-0.111783 1.5708 -1.68258" />
+    </Modify>
+    <Modify Category="Entities" ID="4964" Name="oval_wall_lamp_2m_pipe_44">
+        <SetAttr Rotation="1.57079 -1.5708 2.53518e-06" />
+    </Modify>
+    <Modify Category="Entities" ID="4966" Name="SpotLight_51">
+        <SetAttr FalloffMap="" Rotation="-1.45901 1.5708 -1.45902" />
+    </Modify>
+    <Modify Category="Entities" ID="4967" Name="SpotLight_52">
+        <SetAttr FalloffMap="" Rotation="-3.14159 -1.5708 -3.14159" />
+    </Modify>
+    <Modify Category="Entities" ID="4968" Name="oval_wall_lamp_2m_pipe_45">
+        <SetAttr Rotation="3.02981 1.5708 1.45902" />
+    </Modify>
+    <Modify Category="Entities" ID="4969" Name="oval_wall_lamp_2m_pipe_46">
+        <SetAttr Rotation="-1.5708 -1.5708 -3.14159" />
+    </Modify>
+    <Modify Category="Entities" ID="4971" Name="SpotLight_53">
+        <SetAttr FalloffMap="" Rotation="1.68258 1.5708 1.68258" />
+    </Modify>
+    <Modify Category="Entities" ID="4972" Name="SpotLight_70">
+        <SetAttr FalloffMap="" Rotation="2.53518e-06 -1.5708 2.53518e-06" />
+    </Modify>
+    <Modify Category="Entities" ID="4973" Name="oval_wall_lamp_2m_pipe_47">
+        <SetAttr Rotation="-0.111783 1.5708 -1.68258" />
+    </Modify>
+    <Modify Category="Entities" ID="4974" Name="oval_wall_lamp_2m_pipe_48">
+        <SetAttr Rotation="1.57079 -1.5708 2.53518e-06" />
+    </Modify>
+    <Modify Category="Entities" ID="5011" Name="SpotLight_75">
+        <SetAttr FalloffMap="" />
+    </Modify>
+    <Modify Category="Entities" ID="5012" Name="SpotLight_76">
+        <SetAttr FalloffMap="" />
+    </Modify>
+    <Modify Category="Entities" ID="5021" Name="SpotLight_79">
+        <SetAttr FalloffMap="" />
+    </Modify>
+    <Modify Category="Entities" ID="5022" Name="SpotLight_80">
+        <SetAttr FalloffMap="" />
+    </Modify>
+    <Modify Category="Entities" ID="5026" Name="SpotLight_81">
+        <SetAttr FalloffMap="" />
+    </Modify>
+    <Modify Category="Entities" ID="5027" Name="SpotLight_82">
+        <SetAttr FalloffMap="" />
+    </Modify>
+    <Modify Category="Entities" ID="5033" Name="SpotLight_77">
+        <SetAttr FalloffMap="" />
+    </Modify>
+    <Modify Category="Entities" ID="5035" Name="SpotLight_78">
+        <SetAttr FalloffMap="" />
     </Modify>
     <Modify Category="Entities" ID="5037" Name="PointLight_6">
-        <SetAttr RendererMask="1" />
+        <SetAttr FalloffMap="" RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="5123" Name="SpotLight_87">
+        <SetAttr FalloffMap="" />
     </Modify>
     <Modify Category="Entities" ID="5124" Name="PointLight_11">
-        <SetAttr RendererMask="1" />
+        <SetAttr FalloffMap="" RendererMask="1" />
     </Modify>
     <Modify Category="Entities" ID="5130" Name="PointLight_15">
-        <SetAttr RendererMask="1" />
+        <SetAttr FalloffMap="" RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="5131" Name="SpotLight_88">
+        <SetAttr FalloffMap="" />
     </Modify>
     <Modify Category="Entities" ID="5154" Name="PointLight_23">
-        <SetAttr RendererMask="1" />
+        <SetAttr FalloffMap="" RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="5155" Name="SpotLight_94">
+        <SetAttr FalloffMap="" />
     </Modify>
     <Modify Category="Entities" ID="5158" Name="PointLight_24">
-        <SetAttr RendererMask="1" />
+        <SetAttr FalloffMap="" RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="5159" Name="SpotLight_95">
+        <SetAttr FalloffMap="" />
     </Modify>
     <Modify Category="Entities" ID="5166" Name="PointLight_26">
-        <SetAttr RendererMask="1" />
+        <SetAttr FalloffMap="" RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="5199" Name="SpotLight_85">
+        <SetAttr FalloffMap="" />
+    </Modify>
+    <Modify Category="Entities" ID="5200" Name="SpotLight_86">
+        <SetAttr FalloffMap="" />
+    </Modify>
+    <Modify Category="Entities" ID="5204" Name="SpotLight_99">
+        <SetAttr FalloffMap="" />
+    </Modify>
+    <Modify Category="Entities" ID="5205" Name="SpotLight_100">
+        <SetAttr FalloffMap="" />
     </Modify>
     <Modify Category="Entities" ID="5309" Name="PointLight_189">
-        <SetAttr RendererMask="1" />
+        <SetAttr FalloffMap="" RendererMask="1" />
     </Modify>
     <Modify Category="Entities" ID="5310" Name="PointLight_190">
-        <SetAttr RendererMask="1" />
+        <SetAttr FalloffMap="" RendererMask="1" />
     </Modify>
     <Modify Category="Entities" ID="5311" Name="PointLight_191">
-        <SetAttr RendererMask="1" />
+        <SetAttr FalloffMap="" RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="5397" Name="Globe_Light_Beam">
+        <SetAttr FalloffMap="" />
+    </Modify>
+    <Modify Category="Entities" ID="5821" Name="Tesla1Lamp_2_spot">
+        <SetAttr FalloffMap="" />
+    </Modify>
+    <Modify Category="Entities" ID="5823" Name="Tesla1Lamp_4_spot">
+        <SetAttr FalloffMap="" />
+    </Modify>
+    <Modify Category="Entities" ID="5827" Name="SpotLight_71">
+        <SetAttr FalloffMap="" Re_FlickerOffIntensity="0" Re_Intensity="10" Re_SourceRadius="0.1" Rotation="1.68258 1.5708 1.68258" />
+    </Modify>
+    <Modify Category="Entities" ID="5828" Name="SpotLight_72">
+        <SetAttr FalloffMap="" Rotation="2.53518e-06 -1.5708 2.53518e-06" />
+    </Modify>
+    <Modify Category="Entities" ID="5829" Name="oval_wall_lamp_2m_pipe_50">
+        <SetAttr Rotation="-0.111783 1.5708 -1.68258" />
+    </Modify>
+    <Modify Category="Entities" ID="5830" Name="oval_wall_lamp_2m_pipe_51">
+        <SetAttr Rotation="1.57079 -1.5708 2.53518e-06" />
+    </Modify>
+    <Modify Category="Entities" ID="5832" Name="Tesla1Lamp_3_spot">
+        <SetAttr FalloffMap="" />
+    </Modify>
+    <Modify Category="Entities" ID="5833" Name="Tesla1Lamp_1_spot">
+        <SetAttr FalloffMap="" />
     </Modify>
     <Modify Category="Entities" ID="5846" Name="PointLight_28">
-        <SetAttr RendererMask="1" />
+        <SetAttr FalloffMap="" RendererMask="1" />
     </Modify>
     <Modify Category="Entities" ID="5849" Name="PointLight_31">
-        <SetAttr RendererMask="1" />
+        <SetAttr FalloffMap="" RendererMask="1" />
     </Modify>
     <Modify Category="Entities" ID="5850" Name="PointLight_32">
-        <SetAttr RendererMask="1" />
+        <SetAttr FalloffMap="" RendererMask="1" />
     </Modify>
     <Modify Category="Entities" ID="5851" Name="PointLight_27">
-        <SetAttr RendererMask="1" />
+        <SetAttr FalloffMap="" RendererMask="1" />
     </Modify>
     <Modify Category="Entities" ID="5852" Name="PointLight_29">
-        <SetAttr RendererMask="1" />
+        <SetAttr FalloffMap="" RendererMask="1" />
     </Modify>
     <Modify Category="Entities" ID="5853" Name="PointLight_30">
-        <SetAttr RendererMask="1" />
+        <SetAttr FalloffMap="" RendererMask="1" />
     </Modify>
     <Modify Category="Entities" ID="5854" Name="PointLight_33">
-        <SetAttr RendererMask="1" />
+        <SetAttr FalloffMap="" RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="5876" Name="SpotLight_73">
+        <SetAttr FalloffMap="" Rotation="-1.45901 1.5708 -1.45901" />
+    </Modify>
+    <Modify Category="Entities" ID="5877" Name="SpotLight_74">
+        <SetAttr FalloffMap="" Rotation="-3.14159 -1.5708 -3.14159" />
+    </Modify>
+    <Modify Category="Entities" ID="5878" Name="oval_wall_lamp_2m_pipe_52">
+        <SetAttr Rotation="3.02981 1.5708 1.45901" />
+    </Modify>
+    <Modify Category="Entities" ID="5879" Name="oval_wall_lamp_2m_pipe_53">
+        <SetAttr Rotation="-1.5708 -1.5708 -3.14159" />
+    </Modify>
+    <Modify Category="Entities" ID="5884" Name="Tesla1Lamp_4_spot_1">
+        <SetAttr FalloffMap="" />
     </Modify>
     <Modify Category="Entities" ID="6202" Name="PointLight_7">
-        <SetAttr RendererMask="1" />
+        <SetAttr FalloffMap="" RendererMask="1" />
     </Modify>
     <Modify Category="Entities" ID="6205" Name="PointLight_13">
-        <SetAttr RendererMask="1" />
+        <SetAttr FalloffMap="" RendererMask="1" />
     </Modify>
     <Modify Category="Entities" ID="6206" Name="PointLight_8">
-        <SetAttr RendererMask="1" />
+        <SetAttr FalloffMap="" RendererMask="1" />
     </Modify>
     <Modify Category="Entities" ID="6218" Name="PointLight_36">
-        <SetAttr RendererMask="1" />
+        <SetAttr FalloffMap="" RendererMask="1" />
     </Modify>
     <Modify Category="Entities" ID="6222" Name="PointLight_39">
-        <SetAttr RendererMask="1" />
+        <SetAttr FalloffMap="" RendererMask="1" />
     </Modify>
     <Modify Category="Entities" ID="6223" Name="PointLight_34">
-        <SetAttr RendererMask="1" />
+        <SetAttr FalloffMap="" RendererMask="1" />
     </Modify>
     <Modify Category="Entities" ID="6242" Name="PointLight_40">
-        <SetAttr RendererMask="1" />
+        <SetAttr FalloffMap="" RendererMask="1" />
     </Modify>
     <Modify Category="Entities" ID="6243" Name="PointLight_110">
-        <SetAttr RendererMask="1" />
+        <SetAttr FalloffMap="" RendererMask="1" />
     </Modify>
     <Modify Category="Entities" ID="6260" Name="PointLight_113">
-        <SetAttr RendererMask="1" />
+        <SetAttr FalloffMap="" RendererMask="1" />
     </Modify>
     <Modify Category="Entities" ID="6263" Name="PointLight_111">
-        <SetAttr RendererMask="1" />
+        <SetAttr FalloffMap="" RendererMask="1" />
     </Modify>
     <Modify Category="Entities" ID="6276" Name="PointLight_370">
-        <SetAttr RendererMask="1" />
+        <SetAttr FalloffMap="" RendererMask="1" />
     </Modify>
     <Modify Category="Entities" ID="6278" Name="PointLight_167">
-        <SetAttr RendererMask="1" />
+        <SetAttr FalloffMap="" RendererMask="1" />
     </Modify>
     <Modify Category="Entities" ID="6311" Name="PointLight_372">
-        <SetAttr RendererMask="1" />
+        <SetAttr FalloffMap="" RendererMask="1" />
     </Modify>
     <Modify Category="Entities" ID="6313" Name="PointLight_168">
-        <SetAttr RendererMask="1" />
+        <SetAttr FalloffMap="" RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="6359" Name="BoxLight_2">
+        <SetAttr FalloffMap="" />
+    </Modify>
+    <Modify Category="Entities" ID="6360" Name="BoxLight_3">
+        <SetAttr FalloffMap="" />
+    </Modify>
+    <Modify Category="Entities" ID="6361" Name="BoxLight_1">
+        <SetAttr FalloffMap="" />
+    </Modify>
+    <Modify Category="Entities" ID="6362" Name="BoxLight_4">
+        <SetAttr FalloffMap="" />
+    </Modify>
+    <Modify Category="Entities" ID="6363" Name="BoxLight_5">
+        <SetAttr FalloffMap="" />
+    </Modify>
+    <Modify Category="Entities" ID="6364" Name="BoxLight_6">
+        <SetAttr FalloffMap="" />
+    </Modify>
+    <Modify Category="Entities" ID="6365" Name="BoxLight_7">
+        <SetAttr FalloffMap="" />
+    </Modify>
+    <Modify Category="Entities" ID="6366" Name="BoxLight_8">
+        <SetAttr FalloffMap="" />
+    </Modify>
+    <Modify Category="Entities" ID="6378" Name="armonica4_light_2">
+        <SetAttr FalloffMap="" />
+    </Modify>
+    <Modify Category="Entities" ID="6381" Name="PointLight_1">
+        <SetAttr FalloffMap="" />
+    </Modify>
+    <Modify Category="Entities" ID="6382" Name="armonica4_light_4">
+        <SetAttr FalloffMap="" />
+    </Modify>
+    <Modify Category="Entities" ID="6383" Name="armonica4_light_5">
+        <SetAttr FalloffMap="" />
+    </Modify>
+    <Modify Category="Entities" ID="6384" Name="armonica4_light_6">
+        <SetAttr FalloffMap="" />
     </Modify>
     <Modify Category="Entities" ID="6389" Name="PointLight_2">
-        <SetAttr RendererMask="1" />
+        <SetAttr FalloffMap="" RendererMask="1" />
     </Modify>
     <Modify Category="Entities" ID="6394" Name="PointLight_10">
-        <SetAttr RendererMask="1" />
+        <SetAttr FalloffMap="" RendererMask="1" />
     </Modify>
     <Modify Category="Entities" ID="6395" Name="PointLight_16">
-        <SetAttr RendererMask="1" />
+        <SetAttr FalloffMap="" RendererMask="1" />
     </Modify>
     <Modify Category="Entities" ID="6396" Name="PointLight_17">
-        <SetAttr RendererMask="1" />
+        <SetAttr FalloffMap="" RendererMask="1" />
     </Modify>
     <Modify Category="Entities" ID="6397" Name="PointLight_18">
-        <SetAttr RendererMask="1" />
+        <SetAttr FalloffMap="" RendererMask="1" />
     </Modify>
     <Modify Category="Entities" ID="6446" Name="PointLight_22">
-        <SetAttr RendererMask="1" />
+        <SetAttr FalloffMap="" RendererMask="1" />
     </Modify>
     <Modify Category="Entities" ID="6507" Name="PointLight_114">
-        <SetAttr RendererMask="1" />
+        <SetAttr FalloffMap="" RendererMask="1" />
     </Modify>
     <Modify Category="Entities" ID="6511" Name="PointLight_115">
-        <SetAttr RendererMask="1" />
+        <SetAttr FalloffMap="" RendererMask="1" />
     </Modify>
+    <Modify Category="Entities" ID="6513" Name="SpotLight_2">
+        <SetAttr FalloffMap="" />
+    </Modify>
+    <Modify Category="Entities" ID="6575" Name="Tesla_Light_Box_Global_1">
+        <SetAttr FalloffMap="" />
+    </Modify>
+    <Modify Category="Entities" ID="6579" Name="SpotLight_3">
+        <SetAttr FalloffMap="" />
+    </Modify>
+    <Add Category="Entities">
+        <Area Name="ScriptArea_1" WorldPos="-24.5 -7.12527 51.25" Rotation="0 0 0" Scale="1 1 1" Tag="" Active="true" Mesh="" AreaType="Script">
+            <UserVariables>
+                <Var Name="PlayerLookAtCallback" Value="" />
+                <Var Name="PlayerLookAtCallbackAutoRemove" Value="true" />
+                <Var Name="PlayerInteractCallback" Value="" />
+                <Var Name="PlayerInteractCallbackAutoRemove" Value="false" />
+                <Var Name="ItemInteraction" Value="false" />
+                <Var Name="MaxFocusDistance" Value="-1" />
+            </UserVariables>
+        </Area>
+        <Area Name="ScriptArea_2" WorldPos="-25.5 -7.12527 51.25" Rotation="0 0 0" Scale="1 1 1" Tag="" Active="true" Mesh="" AreaType="Script">
+            <UserVariables>
+                <Var Name="PlayerLookAtCallback" Value="" />
+                <Var Name="PlayerLookAtCallbackAutoRemove" Value="true" />
+                <Var Name="PlayerInteractCallback" Value="" />
+                <Var Name="PlayerInteractCallbackAutoRemove" Value="false" />
+                <Var Name="ItemInteraction" Value="false" />
+                <Var Name="MaxFocusDistance" Value="-1" />
+            </UserVariables>
+        </Area>
+        <Area Name="ScriptArea_3" WorldPos="-25.5 -7.12527 51.25" Rotation="0 0 0" Scale="1 1 1" Tag="" Active="true" Mesh="" AreaType="Script">
+            <UserVariables>
+                <Var Name="PlayerLookAtCallback" Value="" />
+                <Var Name="PlayerLookAtCallbackAutoRemove" Value="true" />
+                <Var Name="PlayerInteractCallback" Value="" />
+                <Var Name="PlayerInteractCallbackAutoRemove" Value="false" />
+                <Var Name="ItemInteraction" Value="false" />
+                <Var Name="MaxFocusDistance" Value="-1" />
+            </UserVariables>
+        </Area>
+    </Add>
 </MapDelta>

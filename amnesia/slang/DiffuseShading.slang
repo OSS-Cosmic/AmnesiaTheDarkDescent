@@ -21,6 +21,7 @@ import bindless;            // gTextures2D, gMaterialSampler
 import Brdf;                // decodeMaterialRoughness, evalDiffuseDemodulated
 import PerFrame.resource;   // gPerFrame.point/spotLightCount
 import Random;              // RNG for the soft-shadow disk sample
+import Utils.Color.ColorHelpers; // linearToSRGB / sRGBToLinear (rtCubeMapFold)
 
 public struct DiffuseShading
 {
@@ -91,6 +92,42 @@ public DiffuseShading prepareDiffuseShading(VertexData v, uint materialID,
     sd.rough = decodeRoughness ? decodeMaterialRoughness(m, v.texC, texLodBase)
                                : kDefaultDiffuseRoughness;
     return sd;
+}
+
+// Legacy solid_diffuse environment-map fold: the cube-map reflection (masked
+// by CubeMapAlpha, weighted by the material fresnel) is added to the albedo in
+// display space, so it is lit like the surface. World-space twin of
+// standardCubeMapFold (Standard/StandardRaster.slang) -- keep the two in sync.
+// Compute callers have no derivatives, so the cube is read at its top mip and
+// the mask through the ray-cone LOD.
+public float3 rtCubeMapFold(uint materialID, float3 albedoLinear, float3 posW,
+                            float3 normalW, float2 uv, float texLodBase)
+{
+    // Translucent / water blobs place cubeMapTextureIndex differently.
+    if (loadMaterialHeader(materialID).type != MATERIAL_TYPE_DIFFUSE)
+        return albedoLinear;
+    DiffuseMaterial m = loadDiffuseMaterial(materialID);
+    if ((m.materialConfig & kMaterialFlagEnableCubeMap) == 0u ||
+        m.cubeMapTextureIndex == kInvalidTextureIndex)
+        return albedoLinear;
+    float3 toSurface = posW - gPerFrame.posW;
+    float eyeLengthSq = dot(toSurface, toSurface);
+    float normalLengthSq = dot(normalW, normalW);
+    if (!isfinite(eyeLengthSq) || eyeLengthSq <= 1.0e-12f ||
+        !isfinite(normalLengthSq) || normalLengthSq <= 1.0e-12f)
+        return albedoLinear;
+    float3 eye = toSurface * rsqrt(eyeLengthSq);
+    float3 normal = normalW * rsqrt(normalLengthSq);
+    float4 reflection = gTexturesCube[NonUniformResourceIndex(m.cubeMapTextureIndex)]
+                            .SampleLevel(gMaterialSampler, reflect(eye, normal), 0.0f);
+    float facing = 1.0f - max(dot(-eye, normal), 0.0f);
+    float fresnel = max(m.frenselBias + (1.0f - m.frenselBias) *
+                        pow(abs(facing), m.frenselPow), 0.0f);
+    if ((m.materialConfig & kMaterialFlagEnableCubeMapAlpha) != 0u &&
+        m.tex[7] != kInvalidTextureIndex)
+        reflection *= sampleBindless2DCone(m.tex[7], uv, texLodBase).a;
+    return sRGBToLinear(saturate(linearToSRGB(max(albedoLinear, 0.0f)) +
+                                 reflection.rgb * fresnel));
 }
 
 // --- Per-light analytic diffuse shading -----------------------------------

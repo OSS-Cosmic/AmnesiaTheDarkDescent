@@ -1,20 +1,20 @@
 <EntDelta Version="1" Target="entities/lamp/cellar_gaslamp01/cellar_gaslamp01_short_dyn.ent">
-    <RemoveVar Name="CanBeTurnedOff" />
-    <RemoveVar Name="NeedsTinderbox" />
     <Modify Category="Shapes" ID="9" Name="Shape_3">
-        <SetAttr Rotation="-3.14159 1.5708 -3.14159" />
+        <SetAttr Rotation="-3.11787 1.5708 -3.11787" />
     </Modify>
     <Modify Category="Shapes" ID="10" Name="Shape_4">
-        <SetAttr Rotation="-3.14159 1.5708 -3.14159" />
+        <SetAttr Rotation="-3.11787 1.5708 -3.11787" />
+    </Modify>
+    <Modify Category="Bodies" ID="19" Name="lamp">
+        <SetAttr Rotation="0.0241454 1.5708 0.0241453" />
     </Modify>
     <Modify Category="Entities" ID="14" Name="PointLight_1">
-        <SetAttr FalloffMap="" RendererMask="1" />
-        <RemoveAttr Name="Brightness" />
-        <RemoveAttr Name="Falloff" />
+        <SetAttr FalloffMap="" RendererMask="1" Rotation="0.0241454 1.5708 0.0241453" />
     </Modify>
     <Modify Category="Entities" ID="15" Name="SpotLight_1">
-        <SetAttr FalloffMap="" Re_FlickerOffIntensity="0" Re_Intensity="15" Re_SourceRadius="0" WorldPos="0 -0.41127 0" />
-        <RemoveAttr Name="Brightness" />
-        <RemoveAttr Name="Falloff" />
+        <SetAttr FalloffMap="" Re_FlickerOffIntensity="0" Re_Intensity="15" Re_SourceRadius="0.1" Rotation="-1.54665 1.5708 0.0241453" WorldPos="0 -0.41127 0" />
+    </Modify>
+    <Modify Category="Entities" ID="16" Name="Billboard_1">
+        <SetAttr Rotation="0.0241454 1.5708 0.0241453" />
     </Modify>
 </EntDelta>

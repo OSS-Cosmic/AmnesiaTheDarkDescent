@@ -85,6 +85,12 @@ bool cEntityWrapperTypeEntity::ResolveEntFileTypes(const tString& asFilename,
 	// once per candidate type during map load).
 	if(msLastCheckedFile!=asFilename)
 	{
+		// Cache the miss too: an unparsable .ent must not inherit the previous
+		// file's types.
+		msLastCheckedFile    = asFilename;
+		msLastCheckedType    = "";
+		msLastCheckedSubType = "";
+
 		cResources* pRes = mpWorld->GetEditor()->GetEngine()->GetResources();
 		tinyxml2::XMLElement* pModelDoc = pRes->LoadXmlDocument(asFilename);
 		if(pModelDoc)
@@ -92,12 +98,15 @@ bool cEntityWrapperTypeEntity::ResolveEntFileTypes(const tString& asFilename,
 			tinyxml2::XMLElement* pUserVars = pModelDoc->FirstChildElement("UserDefinedVariables");
 			if(pUserVars)
 			{
-				msLastCheckedFile    = asFilename;
 				msLastCheckedType    = GetAttributeString(pUserVars, "EntityType");
 				msLastCheckedSubType = GetAttributeString(pUserVars, "EntitySubType");
 			}
 
 			pRes->DestroyXmlDocument(pModelDoc);
+		}
+		else
+		{
+			Log("Could not read entity file '%s' to find its type\n", asFilename.c_str());
 		}
 	}
 
@@ -175,7 +184,7 @@ bool cEntityWrapperTypeEntity::IsAppropriateDefaultType(tinyxml2::XMLElement* ap
 	if(mpUserType->GetDefinition()->GetType(sCheckedType)==NULL)
 	{
 		mpWorld->SetShowLoadErrorPopUp();
-		Log("Inconsistency found in file %s : no entity type %s is defined\n", sFilename.c_str(), sCheckedSubType.c_str());
+		Log("Inconsistency found in file %s : no entity type %s is defined\n", sFilename.c_str(), sCheckedType.c_str());
 		return true;
 	}
 

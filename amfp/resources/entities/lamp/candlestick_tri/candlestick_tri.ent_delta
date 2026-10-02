@@ -1,6 +1,4 @@
 <EntDelta Version="1" Target="entities/lamp/candlestick_tri/candlestick_tri.ent">
-    <RemoveVar Name="CanBeTurnedOff" />
-    <RemoveVar Name="NeedsTinderbox" />
     <Modify Category="Entities" ID="6" Name="PointLight_1">
         <SetAttr CastShadows="true" Re_FlickerOffIntensity="2.35" Re_Intensity="2.67" Re_Radius="22" Re_SourceRadius="0.08" ShadowResolution="Low" WorldPos="-0.000321388 0.604404 0.00103378" />
     </Modify>

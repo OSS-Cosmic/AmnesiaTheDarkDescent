@@ -1,14 +1,8 @@
 <EntDelta Version="1" Target="entities/lamp/cellar_gaslamp01/cellar_gaslamp01.ent">
-    <RemoveVar Name="CanBeTurnedOff" />
-    <RemoveVar Name="NeedsTinderbox" />
     <Modify Category="Entities" ID="14" Name="PointLight_1">
-        <SetAttr FalloffMap="" />
-        <RemoveAttr Name="Brightness" />
-        <RemoveAttr Name="Falloff" />
+        <SetAttr FalloffMap="" RendererMask="1" />
     </Modify>
     <Modify Category="Entities" ID="15" Name="SpotLight_1">
-        <SetAttr FalloffMap="" />
-        <RemoveAttr Name="Brightness" />
-        <RemoveAttr Name="Falloff" />
+        <SetAttr FalloffMap="" Radius="20" Re_FlickerOffIntensity="0" Re_Intensity="8" Re_SourceRadius="0.03" WorldPos="0 -1.54655 0" />
     </Modify>
 </EntDelta>

@@ -1,6 +1,4 @@
 <EntDelta Version="1" Target="entities/lamp/candlestick_floor/candlestick_floor.ent">
-    <RemoveVar Name="CanBeTurnedOff" />
-    <RemoveVar Name="NeedsTinderbox" />
     <Modify Category="Entities" ID="10" Name="PointLight_1">
         <SetAttr RendererMask="1" WorldPos="-0.00128174 2.3102 0.00186539" />
     </Modify>

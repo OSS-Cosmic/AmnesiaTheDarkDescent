@@ -34,6 +34,7 @@
 #include "engine/Engine.h"
 
 #include "graphics/GlobalManagedSets.h"
+#include "LightChange.h"
 #include "graphics/GraphicUtils.h"
 #include "graphics/Graphics.h"
 #include "graphics/HybridRenderer.h"
@@ -65,6 +66,7 @@
 #include "scene/FogArea.h"
 #include "scene/GuiSetEntity.h"
 #include "scene/LightArea.h"
+#include "scene/LightDirectional.h"
 #include "scene/LightPoint.h"
 #include "scene/LightSpot.h"
 #include "scene/LightBox.h"
@@ -662,6 +664,55 @@ static RectLight BuildRectLight(iLight *pLight) {
   return al;
 }
 
+static DirectionalLight BuildDirectionalLight(iLight *pLight) {
+  cLightDirectional *pSun = static_cast<cLightDirectional *>(pLight);
+  DirectionalLight dl{};
+  const cVector3f dir = pSun->GetDirection();
+  dl.direction[0] = dir.x;
+  dl.direction[1] = dir.y;
+  dl.direction[2] = dir.z;
+  const cColor c = pSun->GetDiffuseColor();
+  dl.color[0] = sRGBToLinear(c.r);
+  dl.color[1] = sRGBToLinear(c.g);
+  dl.color[2] = sRGBToLinear(c.b);
+  dl.intensity = pSun->GetIntensity();
+#ifdef AMFP
+  dl.intensity *= std::max(pSun->GetBrightness(), 0.0f); // AMFP brightness
+#endif
+  dl.cosAngularRadius =
+      std::cos(cMath::Clamp(pSun->GetAngularRadius(), 0.0f, cMath::ToRad(45.0f)));
+  dl.shadowEnabled = (Interface<cGraphics>::Get()->allLightsCastShadows || pSun->GetCastShadows()) ? 1u : 0u;
+  // No reach of its own: the constant stands in so radius 0 still means skip.
+  dl.radius = kDirectionalLightReach;
+  if (!pSun->IsVisible() || !pSun->IsRayTracedEnabled())
+    dl.radius = 0.0f;
+  return dl;
+}
+
+// Stamp each built light with last frame's power and reach (LightChange.h) and
+// remember this frame's per slot. Slots are stable for a light's lifetime, so
+// slot i last frame is the same light unless it was freed and reassigned -- a
+// reassigned slot either held a hole (power 0 ⇒ counts as newly lit) or another
+// light, which is a lighting change at that spot anyway. `powerScale` converts
+// intensity to the quantity the grid ranks on (rect lights rank on intensity /
+// area).
+template <typename T, typename PowerScaleFn>
+static void StampLightChange(std::vector<T> &lights,
+                             std::vector<cWorld::GpuLightPrev> &prev,
+                             PowerScaleFn &&powerScale) {
+  prev.resize(lights.size());
+  for (size_t i = 0; i < lights.size(); ++i) {
+    T &light = lights[i];
+    const float maxChannel =
+        std::max(light.color[0], std::max(light.color[1], light.color[2]));
+    light.prevPower = prev[i].power;
+    light.prevRadius = prev[i].radius;
+    prev[i].power = lightChangePower(
+        maxChannel, light.intensity * powerScale(light), light.radius);
+    prev[i].radius = light.radius;
+  }
+}
+
 // Grow-or-keep a per-world storage buffer, then upload its elements. The buffer
 // is sized to the reserved (doubling) capacity with a >=1-element floor so the
 // per-world binding stays valid even for an empty type. The caller pins the
@@ -724,6 +775,8 @@ IndexPool *cWorld::GpuLightPoolFor(iLight *apLight) {
     return &mSpotLightPool;
   case eLightType_Area:
     return &mAreaLightPool;
+  case eLightType_Directional:
+    return &mDirectionalLightPool;
   default:
     return nullptr; // box lights aren't uploaded to the GPU
   }
@@ -760,6 +813,7 @@ void cWorld::PrepareFrame(cGraphics::FrameContext *cntx) {
   mpGraphics->graphicsDefer.push(mpPointLightBuffer);
   mpGraphics->graphicsDefer.push(mpSpotLightBuffer);
   mpGraphics->graphicsDefer.push(mpAreaLightBuffer);
+  mpGraphics->graphicsDefer.push(mpDirectionalLightBuffer);
   mpGraphics->graphicsDefer.push(mpFogAreaBuffer);
   mpGraphics->graphicsDefer.push(mpDecalBuffer);
   mpGraphics->graphicsDefer.push(mpDecalObjectIndexBuffer);
@@ -782,6 +836,7 @@ void cWorld::PrepareFrame(cGraphics::FrameContext *cntx) {
   std::vector<PointLight> pointLight;
   std::vector<SpotLight> spotLight;
   std::vector<RectLight> rectLight;
+  std::vector<DirectionalLight> directionalLight;
   const bool bUploadGpuLights = mRendererBackend != eRendererBackend_Standard;
   auto scatter = [](auto &vec, uint32_t slot, auto &&built) {
     if (slot >= vec.size())
@@ -813,17 +868,38 @@ void cWorld::PrepareFrame(cGraphics::FrameContext *cntx) {
     case eLightType_Area:
       scatter(rectLight, slot, BuildRectLight(light));
       break;
+    case eLightType_Directional:
+      scatter(directionalLight, slot, BuildDirectionalLight(light));
+      break;
     default:
       break;
     }
   }
+  if (bUploadGpuLights) {
+    const auto unitScale = [](const auto &) { return 1.0f; };
+    StampLightChange(pointLight, mvPrevPointLight, unitScale);
+    StampLightChange(spotLight, mvPrevSpotLight, unitScale);
+    StampLightChange(rectLight, mvPrevAreaLight, [](const RectLight &al) {
+      return 1.0f / std::max(al.width * al.height, 1.0e-4f);
+    });
+    StampLightChange(directionalLight, mvPrevDirectionalLight, unitScale);
+  } else {
+    // Nothing samples the history on Standard; start clean on the switch back.
+    mvPrevPointLight.clear();
+    mvPrevSpotLight.clear();
+    mvPrevAreaLight.clear();
+    mvPrevDirectionalLight.clear();
+  }
   SyncStorageBuffer(pointLight, mpPointLightBuffer, pointLightReserved);
   SyncStorageBuffer(spotLight, mpSpotLightBuffer, spotLightReserved);
   SyncStorageBuffer(rectLight, mpAreaLightBuffer, areaLightReserved);
+  SyncStorageBuffer(directionalLight, mpDirectionalLightBuffer,
+                    directionalLightReserved);
 
   mPointLightCount = (uint32_t)pointLight.size();
   mSpotLightCount = (uint32_t)spotLight.size();
   mAreaLightCount = (uint32_t)rectLight.size();
+  mDirectionalLightCount = (uint32_t)directionalLight.size();
 
   // Fog areas are dynamic (move / colour) — rebuild + re-upload every frame too.
   std::vector<FogAreaParams> fogAreas;
@@ -1103,6 +1179,10 @@ void cWorld::BuildTlas(cGraphics::FrameContext *cntx, cFrustum *apFrustum) {
       inst.mask |= kRayMaskShadow;
     inst.instanceShaderBindingTableRecordOffset = 0;
     inst.flags = RI_ACCEL_INSTANCE_TRIANGLE_FLIP_FACING;
+    // Path-traced rays continue through glass, so they must hit its back faces
+    // on the way out even though the ray flags cull back faces for opaque hits.
+    if (translucent)
+      inst.flags |= RI_ACCEL_INSTANCE_TRIANGLE_CULL_DISABLE;
     if (!translucent) {
       const bool dissolveFlags =
           pMat->GetImage(eMaterialTexture_DissolveAlpha) ||
@@ -1114,7 +1194,20 @@ void cWorld::BuildTlas(cGraphics::FrameContext *cntx, cFrustum *apFrustum) {
     const uint64_t blasAddress = blas->getDeviceAddress(&mpGraphics->device);
     assert(blasAddress != 0);
     inst.accelerationStructureReference = blasAddress;
-    tlasInstances.push_back(inst);
+    // Two-sided shadow casters: shadow rays cull front faces, so a one-sided
+    // wall only blocks light arriving on its visible side. A cull-disabled
+    // shadow-only twin blocks both sides while primary/GI/reflection rays keep
+    // seeing through the back of the original instance.
+    if ((inst.mask & kRayMaskShadow) &&
+        pObject->GetRenderFlagBit(eRenderableFlag_TwoSidedShadow)) {
+      VkAccelerationStructureInstanceKHR shadowInst = inst;
+      shadowInst.mask = kRayMaskShadow;
+      shadowInst.flags |= RI_ACCEL_INSTANCE_TRIANGLE_CULL_DISABLE;
+      inst.mask &= ~kRayMaskShadow;
+      tlasInstances.push_back(shadowInst);
+    }
+    if (inst.mask != 0)
+      tlasInstances.push_back(inst);
   };
   for (int i = 0; i < eWorldContainerType_LastEnum; ++i) {
     cRenderableSet *pSet = &mvRenderableSets[i];
@@ -1519,6 +1612,12 @@ cLightSpot *cWorld::CreateLightSpot(const tString &asName,
 
 cLightArea *cWorld::CreateLightArea(const tString &asName, bool abStatic) {
   cLightArea *pLight = hplNew(cLightArea, (asName, mpResources));
+  RegisterLight(pLight, abStatic);
+  return pLight;
+}
+
+cLightDirectional *cWorld::CreateLightDirectional(const tString &asName, bool abStatic) {
+  cLightDirectional *pLight = hplNew(cLightDirectional, (asName, mpResources));
   RegisterLight(pLight, abStatic);
   return pLight;
 }

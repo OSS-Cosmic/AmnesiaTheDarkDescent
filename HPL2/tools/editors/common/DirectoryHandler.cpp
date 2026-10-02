@@ -253,6 +253,14 @@ tWString cDirectoryHandler::GetPathRelToWD(const tWString& asPath)
 
 	tWString sRelPath;
 
+	// Bare file names and already-relative paths have no steps to match
+	// against the working dir; walking them would prepend one "../" per
+	// working-dir step (seen as "../../..<x35>/de_skybox.dds" in saved maps).
+	bool bAbsolute = asPath.empty()==false &&
+		(asPath[0]==_W('/') || asPath[0]==_W('\\') || (asPath.size()>1 && asPath[1]==_W(':')));
+	if(bAbsolute==false)
+		return asPath;
+
 	tWString sPath = cString::GetFilePathW(asPath);
 	tWString sFile = cString::GetFileNameW(asPath);
 

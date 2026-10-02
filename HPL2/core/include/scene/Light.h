@@ -74,6 +74,8 @@ namespace hpl {
 		eLightType_Spot,
 		eLightType_Area,
 		eLightType_Box,
+		// Ray-traced only: a sun / moon with a direction and no position or reach.
+		eLightType_Directional,
 		eLightType_LastEnum
 	};
 

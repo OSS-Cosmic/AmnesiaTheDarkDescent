@@ -47,6 +47,9 @@ cEntityWrapperTypeLightBox::cEntityWrapperTypeLightBox() : iEntityWrapperTypeLig
 	mScaleType = eScaleType_Normal;
 
 	AddInt(eLightBoxInt_BlendFunc, "BlendFunc", eLightBoxBlendFunc_Add);
+#ifdef AMFP
+	AddInt(eLightBoxInt_Priority, "Priority", 0);
+#endif
 	AddVec3f(eLightBoxVec3f_Size, "Size", 1);
 }
 
@@ -79,6 +82,9 @@ cEntityWrapperLightBox::cEntityWrapperLightBox(iEntityWrapperData* apData) : iEn
 {
 	mvSize = 1;
 	mBlendFunc = eLightBoxBlendFunc_Add;
+#ifdef AMFP
+	mlPriority = 0;
+#endif
 }
 
 //---------------------------------------------------------------------------
@@ -102,6 +108,11 @@ bool cEntityWrapperLightBox::SetProperty(int alPropID, const int& alX)
 	case eLightBoxInt_BlendFunc:
 		SetBlendFunc((eLightBoxBlendFunc)alX);
 		break;
+#ifdef AMFP
+	case eLightBoxInt_Priority:
+		SetPriority(alX);
+		break;
+#endif
 	default:
 		return iEntityWrapperLight::SetProperty(alPropID, alX);
 	}
@@ -130,6 +141,11 @@ bool cEntityWrapperLightBox::GetProperty(int alPropID, int& alX)
 	case eLightBoxInt_BlendFunc:
 		alX = GetBlendFunc();
 		break;
+#ifdef AMFP
+	case eLightBoxInt_Priority:
+		alX = GetPriority();
+		break;
+#endif
 	default:
 		return iEntityWrapperLight::GetProperty(alPropID, alX);
 	}
@@ -176,6 +192,14 @@ void cEntityWrapperLightBox::SetBlendFunc(eLightBoxBlendFunc aFunc)
 	mBlendFunc = aFunc;
 	((cLightBoxLegacy*)mpEngineEntity->GetEntity())->SetBlendFunc(aFunc);
 }
+
+#ifdef AMFP
+void cEntityWrapperLightBox::SetPriority(int alX)
+{
+	mlPriority = alX;
+	((cLightBoxLegacy*)mpEngineEntity->GetEntity())->SetBoxLightPrio(alX);
+}
+#endif
 
 //---------------------------------------------------------------------------
 

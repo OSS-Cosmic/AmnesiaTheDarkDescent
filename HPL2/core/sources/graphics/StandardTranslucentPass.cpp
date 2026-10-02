@@ -153,6 +153,7 @@ float StandardTranslucentLightLevel(cWorld *world, iRenderable *object) {
   float level = 0.0f;
   for (iLight *light : *world->GetLightList()) {
     if (!light || light->GetLightType() == eLightType_Area ||
+        light->GetLightType() == eLightType_Directional ||
         !light->GetVisibleVar() || !light->IsLegacyRendererEnabled() ||
         !light->CheckObjectIntersection(object))
       continue;

@@ -33,6 +33,7 @@ import Reservoir;
 [vk::binding(3, 2)] RWTexture2D<float4> gReservoirOut;         // output: temporally-merged reservoir
 [vk::binding(4, 2)] Texture2D<float4>   gDirectKeyHistory;     // previous surface key (viewZ, normal.xyz)
 [vk::binding(5, 2)] RWTexture2D<float4> gDirectKeyOut;         // output: current surface key
+[vk::binding(6, 2)] RWTexture2D<float>  gLightConfidenceOut;   // output: NRD history confidence (LightChange.h)
 
 [shader("compute")]
 [numthreads(16, 16, 1)]
@@ -57,6 +58,7 @@ void csMain(uint3 tid : SV_DispatchThreadID)
     {
         gReservoirOut[pixelPos] = float4(0.f, 0.f, 0.f, 0.f); // empty reservoir
         gDirectKeyOut[pixelPos] = float4(0.f, 0.f, 0.f, 0.f); // zero normal → rejected
+        gLightConfidenceOut[pixelPos] = 1.f;                  // sky: NRD skips it anyway
         return;
     }
 
@@ -116,6 +118,16 @@ void csMain(uint3 tid : SV_DispatchThreadID)
              && dot(curN, normalize(histN)) >= kReprojNormalCos;
     }
 
+    // How much of this surface's lighting changed since last frame. Feeds the
+    // reservoir history cap below and, as NRD history confidence, both
+    // denoisers: a flickering light changes radiance without disoccluding
+    // anything, so NRD would otherwise keep accumulating the old lighting.
+    // Directional lights live outside the grid, so their change is global;
+    // take the larger of the two rather than weighting them against each other.
+    float lightChange = max(getCellLights(sd.posW).change, directionalLightChange());
+    gLightConfidenceOut[pixelPos] = lightChangeHistoryConfidence(
+        lightChange, kLightChangeConfidenceFullReset, kLightChangeConfidenceMin);
+
     RNG rng;
     rng.init(pixelPos, gPerFrame.totalFrames);
 
@@ -130,9 +142,13 @@ void csMain(uint3 tid : SV_DispatchThreadID)
     {
         // Reproject the previous reservoir (point-sampled — packed light index
         // can't interpolate). Clamp its confidence so it can't outweigh the
-        // fresh sample by more than kReservoirMClamp×.
+        // fresh sample by more than kReservoirMClamp×, tightened toward 1× where
+        // the cell's lighting just changed (a flickering light switching on
+        // otherwise has to outvote up to 30 frames of history).
         Reservoir prev = unpackReservoir(gReservoirHistory.Load(int3(ht, 0)));
-        prev.M = min(prev.M, kReservoirMClamp * max(cur.M, 1.0f));
+        float mClamp = lightChangeHistoryClamp(lightChange, kReservoirMClamp,
+                                               kLightChangeFullReset);
+        prev.M = min(prev.M, mClamp * max(cur.M, 1.0f));
         float pHatPrev = directTargetPdf(sd, prev.y);
         mergeDirectReservoir(R, prev, pHatPrev, rng);
     }

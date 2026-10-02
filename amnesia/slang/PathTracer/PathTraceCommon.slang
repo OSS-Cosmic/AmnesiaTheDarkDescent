@@ -28,6 +28,7 @@ import PerFrame.resource;
 import Grid;                 // gridCellPos / gridFlattenCellIndex / gridCellValid (light grid lookup)
 import Random;
 import DiffuseShading;       // shared DiffuseShading + prepareDiffuseShading
+import PathTracer.Transmission; // glass / water specular transmission
 
 // Plane-offset epsilon for the shadow / scatter ray origin.
 public static const float kRayEps = 1.0e-3f;
@@ -54,6 +55,7 @@ public struct ScatterPayload
     public float coneWidth;
     public float coneSpreadAngle;
     public uint currStep;
+    public uint transmitCount; // glass/water crossings; capped by kPathTraceMaxTransmissions
     public uint status;
     public uint rngHi;     // RNG state carried in the payload so sampling is consistent across recursion steps
     public uint rngLo;
@@ -68,6 +70,7 @@ public struct ScatterPayload
         this.coneWidth = 0.f;
         this.coneSpreadAngle = 0.f;
         this.currStep = 1u;
+        this.transmitCount = 0u;
         this.status = 0x0000;
         this.rngHi = rngState.x;
         this.rngLo = rngState.y;
@@ -79,7 +82,10 @@ public struct ScatterPayload
 // single-hit-group, so keeping shadow off the SBT lets the whole
 // pipeline build with one ray type.
 
-public void traceScatterRay(inout ScatterPayload scatterPayload, uint rayFlags)
+// `rayMask` defaults to opaque-only; the path tracer adds kRayMaskTranslucent so
+// its paths continue through glass and water (see pathTraceHandleHit).
+public void traceScatterRay(inout ScatterPayload scatterPayload, uint rayFlags,
+                            uint rayMask = kRayMaskOpaque)
 {
     RayDesc ray;
     ray.Origin    = scatterPayload.origin;
@@ -90,7 +96,7 @@ public void traceScatterRay(inout ScatterPayload scatterPayload, uint rayFlags)
     TraceRay(
         gRtAccel,
         rayFlags,
-        kRayMaskOpaque,
+        rayMask,
         0, /* hitIdx */
         1, /* rayTypeCount (scatter only — shadow uses inline RayQuery) */
         0, /* missIdx */
@@ -112,8 +118,10 @@ public void pathTraceHandleHit(TriangleHit triangleHit, inout ScatterPayload sca
     // term, not a shading-normal term.
     float3 geometricNormalW = v.normalW;
     float hitT = distance(scatterPayload.origin, v.posW);
+    // Summed so a first segment broken up by glass crossings (which keep
+    // currStep at 1) reports the full distance to the first shaded vertex.
     if (scatterPayload.currStep == 1u)
-        scatterPayload.firstRayLength = hitT;
+        scatterPayload.firstRayLength += hitT;
 
     RayCone cone;
     cone.width       = scatterPayload.coneWidth;
@@ -135,6 +143,37 @@ public void pathTraceHandleHit(TriangleHit triangleHit, inout ScatterPayload sca
     scatterPayload.coneSpreadAngle = cone.spreadAngle;
 
     uint materialID = gSceneObjects[triangleHit.instanceID].materialID;
+
+    // Refractive glass / water: a delta interface, not a shaded vertex. Bend or
+    // reflect the ray and continue without NEE, BSDF evaluation or Russian
+    // roulette, and without spending a bounce from maxPathVertices. NEE at the
+    // next opaque vertex still sees lights through the glass, because shadow
+    // rays ignore kRayMaskTranslucent (untinted, as glass casts no RT shadow).
+    if (isTransmissiveMaterial(materialID))
+    {
+        RNG trng;
+        trng.s = uint2(scatterPayload.rngHi, scatterPayload.rngLo);
+        TransmissionSample ts = sampleTransmission(v, materialID, scatterPayload.direction,
+                                                   texLodBase, trng);
+        scatterPayload.rngHi = trng.s.x;
+        scatterPayload.rngLo = trng.s.y;
+
+        scatterPayload.transmitCount++;
+        scatterPayload.thp *= ts.tint;
+        if (scatterPayload.transmitCount > kPathTraceMaxTransmissions || all(scatterPayload.thp <= 0.f))
+        {
+            scatterPayload.status |= kPathTraceStatusTerminated;
+            return;
+        }
+        // Offset to the side of the geometric surface the new ray travels into.
+        float3 Ng = normalize(geometricNormalW);
+        scatterPayload.origin    = v.posW + (dot(ts.dir, Ng) > 0.f ? Ng : -Ng) * kRayEps;
+        scatterPayload.direction = ts.dir;
+        scatterPayload.coneSpreadAngle =
+            rayConeWiden(cone, rayConeSurfaceSpreadAngle(0.f, true)).spreadAngle;
+        return;
+    }
+
     float illuminationAmount = gSceneObjects[triangleHit.instanceID].illuminationAmount;
     DiffuseShading sd = prepareDiffuseShading(v, materialID, illuminationAmount,
                                               texLodBase, surfaceFootprintW,
@@ -159,21 +198,24 @@ public void pathTraceHandleHit(TriangleHit triangleHit, inout ScatterPayload sca
     // so the outgoing/"view" direction ("V") at the hit is its negation; the
     // BSDF is view-dependent.
     //
-    // Importance-sample lights from the world-space light grid: pick uniformly
-    // among only the lights whose radius reaches this shading point's cell
-    // (pdf = 1/count). Empty / out-of-grid cell → no contribution.
+    // Importance-sample lights from the world-space light grid plus the
+    // directional lights (which reach everywhere and are not binned): pick
+    // uniformly among the cell's lights and the directional slots
+    // (pdf = 1/count). Empty / out-of-grid cell and no sun → no contribution.
     if (enableAnalyticLights)
     {
         CellLights cl = getCellLights(sd.posW);
-        if (cl.count != 0u)
+        const uint nCandidates = cl.count + getDirectionalLightCount();
+        if (nCandidates != 0u)
         {
             // Category (b): the outgoing view direction at a secondary hit is
             // the negated incoming traced-ray direction, not a pixel-derived
             // camera vector, so it must remain free of camera jitter.
             float3 V        = -scatterPayload.direction;
-            uint   pick     = rng.next_uint(cl.count);
-            uint   lightIdx = cellLightAt(cl, pick);
-            float  invPdf   = float(cl.count);
+            uint   pick     = rng.next_uint(nCandidates);
+            uint   lightIdx = pick < cl.count ? cellLightAt(cl, pick)
+                                              : directionalLightId(pick - cl.count);
+            float  invPdf   = float(nCandidates);
 
             // Shared shadow-ray gate (shadeAnalyticLightRadiance: sample →
             // NdotL-cull → shadow ray → raw Li·NdotL, undemodulated and BRDF-free),
