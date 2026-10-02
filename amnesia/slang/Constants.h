@@ -219,13 +219,10 @@ SHARED_CONST uint kMaterialFlagIsAlphaSingleChannel     = 1u << 10;
 // Water surface — drives the V-buffer RT wave-animated refraction +
 // reflection bounce and the GIRenderPass refraction swap (water also sets
 // HasRefraction). Not a texture-presence flag; set host-side per MaterialID.
-// Bit 11 is free (12/13 unused, 14/15/16 are the refraction/dissolve bits).
 SHARED_CONST uint kMaterialFlagIsWater                  = 1u << 11;
-// Bit 14 is solid-diffuse UseDissolveFilter aliased with translucent
-// UseRefractionNormals — safe because the two material variants never share
-// a draw call. Keep both names so the host populates either flag against the
-// same bit per material kind.
-SHARED_CONST uint kMaterialFlagUseDissolveFilter        = 1u << 14;
+// Translucent shaders also test dissolve flags. Keep this distinct from
+// refraction normals so ordinary translucent halos do not dither their alpha.
+SHARED_CONST uint kMaterialFlagUseDissolveFilter        = 1u << 12;
 SHARED_CONST uint kMaterialFlagUseRefractionNormals     = 1u << 14;
 SHARED_CONST uint kMaterialFlagUseRefractionEdgeCheck   = 1u << 15;
 SHARED_CONST uint kMaterialFlagHasRefraction            = 1u << 16;
@@ -241,6 +238,14 @@ SHARED_CONST uint kMaterialFlagLitDiffuse               = 1u << 20;
 // can pick a transmission tint.
 SHARED_CONST uint kMaterialBlendModeShift               = 24u;
 SHARED_CONST uint kMaterialBlendModeMask                = 0x7u;
+
+#ifdef __cplusplus
+static_assert(((kMaterialFlagEnableDissolveAlpha | kMaterialFlagUseDissolveFilter) &
+               (kMaterialFlagUseRefractionNormals | kMaterialFlagUseRefractionEdgeCheck |
+                kMaterialFlagHasRefraction |
+                (kMaterialBlendModeMask << kMaterialBlendModeShift))) == 0u,
+              "Dissolve flags must not overlap refraction or blend-mode bits");
+#endif
 
 // Soft particles: world-space view-depth band (meters) over which a particle
 // fades to zero alpha as it approaches the opaque geometry behind it. Larger =
