@@ -415,5 +415,5 @@ float4 psMain(V v) : SV_TARGET0
     result += standardIllumination(material, object.illuminationAmount, uv);
 
     // Emission is added here after direct lighting, before environment and fog composite.
-    return float4(result, 1.0f);
+    return float4(standardLightingToScene(result), 1.0f);
 }

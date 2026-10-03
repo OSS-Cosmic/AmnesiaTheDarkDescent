@@ -7,6 +7,7 @@ import Fog;
 import Translucent.WaterCommon;
 import Utils.Color.ColorHelpers;
 import StandardEnvironmentBindings;
+import LegacyEffectMath;
 
 [vk::binding(0,2)] Texture2D<float4> sceneColorInput;
 [vk::binding(1,2)] Texture2D<float>  sceneDepthInput;
@@ -55,7 +56,12 @@ public bool waterProjectReflectionUV(float3 p, float4x4 viewProjection, out floa
 public float3 waterCompose(float3 sampledScene, float3 tint, float3 reflected,
                            float fresnel, float visibility, float3 fogColor)
 {
-    return (tint*sampledScene+reflected*saturate(fresnel))*saturate(visibility)+fogColor/kSceneExposure;
+    // Inputs are display-space, except computeFog's premultiplied linear color.
+    float coverage = 1.0f-saturate(visibility);
+    float3 fogDisplay = coverage > 0.0f
+        ? linearToSRGB(max(fogColor / coverage, 0.0f))*coverage : float3(0.0f);
+    float3 display = legacyWaterColor(sampledScene,tint,reflected,fresnel)*saturate(visibility)+fogDisplay;
+    return sRGBToLinear(saturate(display))/kSceneExposure;
 }
 
 [shader("vertex")]
@@ -87,25 +93,31 @@ float4 psMain(V v):SV_TARGET0
         tangentNormal=wave;
     }
     if (gPushConstants.refractionEnabled!=0u && (w.materialConfig&kMaterialFlagHasRefraction)!=0u) {
-        float viewZ=max(abs(mul(gPerFrame.viewMat,float4(v.p,1)).z),1.0e-3f);
-        distorted=uv+mul((float3x3)gPerFrame.viewMat,n).xy*w.refractionScale/viewZ;
+        // Retail uses tangent-normal XY and signed view Z, with a pixel
+        // offset scaled by viewport width. Convert pixels to top-down UVs.
+        float viewZ=min(mul(gPerFrame.viewMat,float4(v.p,1)).z,-1.0e-3f);
+        float aspect=gPerFrame.viewTexel.y/gPerFrame.viewTexel.x;
+        distorted=uv+legacyWaterDistortion(tangentNormal.xy,w.refractionScale,viewZ,aspect);
         if (!waterScreenUV(distorted) || sceneDepthInput.SampleLevel(waterSampler,distorted,0)<v.h.z-1.0e-3f) distorted=uv;
     }
-    float3 scene=sceneColorInput.SampleLevel(waterSampler,distorted,0).rgb; float3 tint=float3(1.0f);
+    float3 scene = gPushConstants.refractionEnabled != 0u
+        ? linearToSRGB(max(sceneColorInput.SampleLevel(waterSampler,distorted,0).rgb*kSceneExposure,0.0f))
+        : float3(1.0f);
+    float3 tint=float3(1.0f);
     if ((w.materialConfig&kMaterialFlagEnableDiffuse)!=0u && w.tex[0]!=kInvalidTextureIndex)
-        tint=sampleBindless2D(w.tex[0],v.uv).rgb*kWaterRefractionExposure;
-    else
-        tint*=kWaterRefractionExposure;
+        tint=linearToSRGB(max(sampleBindless2D(w.tex[0],v.uv).rgb,0.0f));
     // reflectionEnabled is the host's authored HasReflection setting; the
     // separate availability bit only says that a planar image was produced.
     float3 reflected=float3(0.0f); bool reflectionAuthored=gPushConstants.reflectionEnabled!=0u;
     if (gPushConstants.reflectionEnabled!=0u && reflectionAuthored) {
         float f=waterFresnelFinite(dot(eye,n),w.frenselBias,w.frenselPow)*waterReflectionFadeFinite(-mul(gPerFrame.viewMat,float4(v.p,1)).z,w.reflectionFadeStart,w.reflectionFadeEnd);
         if (gPushConstants.cubeMapTextureIndex!=kInvalidTextureIndex)
-            reflected=sRGBToLinear(sampleEnvironmentCube(gPushConstants.cubeMapTextureIndex,reflect(-eye,n),0.0f).rgb);
+            reflected=sampleEnvironmentCube(gPushConstants.cubeMapTextureIndex,reflect(-eye,n),0.0f).rgb;
         else {
-            float2 ruv; bool planar=gPushConstants.reflectionAvailable!=0u && waterProjectReflectionUV(v.p,gPushConstants.reflectionViewProjection,ruv);
-            if (planar) reflected=waterReflectionInput.SampleLevel(waterSampler,ruv,0).rgb;
+            // Reflection captures use the same viewport framing at reduced
+            // resolution. Normalized distorted UVs preserve retail sampling.
+            if (gPushConstants.reflectionAvailable!=0u)
+                reflected=linearToSRGB(max(waterReflectionInput.SampleLevel(waterSampler,distorted,0).rgb*kSceneExposure,0.0f));
         }
         reflected*=f;
     }
@@ -115,7 +127,7 @@ float4 psMain(V v):SV_TARGET0
         // light over the wave normal, half-Lambert diffuse plus a pow-16 lobe.
         float lDotN=max(dot(normalize(float3(0.5f,0.5f,0.5f)),tangentNormal),0.0f);
         float fakeSpecular=pow(lDotN,16.0f);
-        return float4(waterCompose(scene,tint*(lDotN*0.5f+0.5f),float3(fakeSpecular/kSceneExposure),
+        return float4(waterCompose(scene,tint*(lDotN*0.5f+0.5f),float3(fakeSpecular),
                                    1.0f,fog.visibility,fog.color),1.0f);
     }
     return float4(waterCompose(scene,tint,reflected,1.0f,fog.visibility,fog.color),1.0f);

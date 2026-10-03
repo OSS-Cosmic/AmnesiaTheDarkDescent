@@ -19,6 +19,7 @@
 //   binding 8 : Texture2D<float4> gradientMap
 
 #include "../HostDefinitions.h"
+import LegacyEffectMath;
 
 [vk::binding(0, 0)]
 SamplerState inputSampler;
@@ -72,9 +73,7 @@ struct PSIn
 
 float3 overlayBlend(float3 base, float3 blend)
 {
-    return lerp(2.0f * base * blend,
-                1.0f - 2.0f * (1.0f - base) * (1.0f - blend),
-                step(0.5f, blend));
+    return legacyOverlay(base, blend);
 }
 
 float3 colorDodgeBlend(float3 base, float3 blend)
@@ -125,11 +124,9 @@ float4 psMain(PSIn pin) : SV_Target
     // gradient.  The threshold offset and falloff exponent are intentionally
     // left as direct config controls; a non-positive exponent is treated as
     // a linear falloff so an omitted config cannot produce undefined output.
-    float threshold = max(gPushConstants.gradientThresholdOffset, 0.0f);
-    float gradientAmount = saturate((gPushConstants.infectionFactor - gradient)
-                                    * threshold);
-    float falloff = max(gPushConstants.gradientFallofExponent, 1.0f);
-    float infectionMask = pow(gradientAmount, falloff);
+    float infectionMask = legacyInfectionMask(gradient,
+        gPushConstants.gradientThresholdOffset, gPushConstants.infectionFactor,
+        gPushConstants.gradientFallofExponent);
 
     float4 normalLayer = normalBlendMap.Sample(inputSampler, mapUV);
     float4 overlayLayer = overlayBlendMap.Sample(inputSampler, mapUV);

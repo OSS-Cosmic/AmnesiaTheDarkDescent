@@ -7794,10 +7794,10 @@
         <SetAttr Corner1UV="-12.1997 -6.17315" Corner3UV="-9.52283 -3.15" Corner4UV="-12.1976 -3.14815" Rotation="-2.53518e-06 -1.57011 -0.0125927" TwoSidedShadow="false" />
     </Modify>
     <Modify Category="Primitives" ID="4570" Name="Plane_178">
-        <SetAttr Corner1UV="-12.1997 -2.39815" Corner3UV="-9.52283 0.625" Corner4UV="-12.1976 0.626847" Rotation="-2.53518e-06 -1.57011 -0.0125927" TwoSidedShadow="false" />
+        <SetAttr Corner1UV="-12.1997 -2.39815" Corner3UV="-9.52283 0.624999" Corner4UV="-12.1976 0.626847" Rotation="-2.53518e-06 -1.57011 -0.0125927" TwoSidedShadow="false" />
     </Modify>
     <Modify Category="Primitives" ID="4571" Name="Plane_179">
-        <SetAttr Corner1UV="-12.1997 -3.15161" Corner3UV="-10.3005 -2.4" Corner4UV="-12.2004 -2.40161" Rotation="3.14159 -1.56995 3.129" TwoSidedShadow="false" />
+        <SetAttr Corner1UV="-12.1997 -3.15131" Corner3UV="-10.3004 -2.4" Corner4UV="-12.2003 -2.40131" Rotation="3.14159 -1.57011 3.129" TwoSidedShadow="false" />
     </Modify>
     <Modify Category="Primitives" ID="4572" Name="Plane_171">
         <SetAttr TwoSidedShadow="false" />
@@ -8154,7 +8154,7 @@
         <SetAttr FalloffMap="" RendererMask="1" />
     </Modify>
     <Modify Category="Entities" ID="3489" Name="PointLight_107">
-        <SetAttr FalloffMap="" Re_FlickerOffIntensity="0" Re_Intensity="20" Re_SourceRadius="0.01" />
+        <SetAttr FalloffMap="" Re_FlickerOffIntensity="0" Re_Intensity="10" Re_SourceRadius="0.01" RendererMask="1" />
     </Modify>
     <Modify Category="Entities" ID="3490" Name="PointLight_108">
         <SetAttr FalloffMap="" RendererMask="1" />
@@ -8178,13 +8178,13 @@
         <SetAttr FalloffMap="" RendererMask="1" />
     </Modify>
     <Modify Category="Entities" ID="3505" Name="PointLight_115">
-        <SetAttr FalloffMap="" RendererMask="1" />
+        <SetAttr FalloffMap="" Re_FlickerOffIntensity="0" Re_Intensity="50" Re_SourceRadius="0" RendererMask="1" />
     </Modify>
     <Modify Category="Entities" ID="3506" Name="PointLight_116">
-        <SetAttr FalloffMap="" RendererMask="1" />
+        <SetAttr FalloffMap="" Re_FlickerOffIntensity="0" Re_Intensity="50" Re_SourceRadius="0" RendererMask="1" />
     </Modify>
     <Modify Category="Entities" ID="3507" Name="PointLight_117">
-        <SetAttr FalloffMap="" RendererMask="1" />
+        <SetAttr FalloffMap="" Re_FlickerOffIntensity="0" Re_Intensity="50" Re_SourceRadius="0" RendererMask="1" />
     </Modify>
     <Modify Category="Entities" ID="3508" Name="PointLight_118">
         <SetAttr FalloffMap="" RendererMask="1" />
@@ -8328,7 +8328,7 @@
         <SetAttr FalloffMap="" />
     </Modify>
     <Modify Category="Entities" ID="5738" Name="PointLight_145">
-        <SetAttr FalloffMap="" />
+        <SetAttr FalloffMap="" RendererMask="1" />
     </Modify>
     <Modify Category="Entities" ID="6255" Name="caustics_3">
         <SetAttr FalloffMap="" />
@@ -8454,7 +8454,7 @@
         <SetAttr FalloffMap="" RendererMask="1" />
     </Modify>
     <Modify Category="Entities" ID="6724" Name="PointLight_164">
-        <SetAttr FalloffMap="" />
+        <SetAttr FalloffMap="" Re_FlickerOffIntensity="0" Re_Intensity="20" Re_SourceRadius="0" />
     </Modify>
     <Modify Category="Entities" ID="6725" Name="PointLight_165">
         <SetAttr FalloffMap="" />

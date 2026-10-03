@@ -25,6 +25,7 @@ import Brdf;                 // SurfaceBRDF / prepareSurface / evalBrdf / sample
 import HitInfo;
 import ILight;
 import PerFrame.resource;
+import Fog;                  // computeFogSegment — fog along each traced path segment
 import Grid;                 // gridCellPos / gridFlattenCellIndex / gridCellValid (light grid lookup)
 import Random;
 import DiffuseShading;       // shared DiffuseShading + prepareDiffuseShading
@@ -118,6 +119,18 @@ public void pathTraceHandleHit(TriangleHit triangleHit, inout ScatterPayload sca
     // term, not a shading-normal term.
     float3 geometricNormalW = v.normalW;
     float hitT = distance(scatterPayload.origin, v.posW);
+
+    // Fog along the segment this ray just travelled (origin -> hit). Light from
+    // the hit reaches the origin as `L * visibility + color`, so the in-scatter
+    // joins the path radiance at the current throughput and the throughput is
+    // then attenuated before anything at the hit is shaded. The primary
+    // eye -> surface segment is fogged separately by MainCompositePass, so no
+    // segment is fogged twice. In-scatter rides `thp` like emission does: on the
+    // diffuse channel `thp` carries the primary 1/albedo, which the composite's
+    // `albedo *` cancels exactly as it does for any other radiance.
+    FogResult segFog = computeFogSegment(scatterPayload.origin, v.posW);
+    scatterPayload.radiance += scatterPayload.thp * segFog.color / kSceneExposure;
+    scatterPayload.thp      *= segFog.visibility;
     // Summed so a first segment broken up by glass crossings (which keep
     // currStep at 1) reports the full distance to the first shaded vertex.
     if (scatterPayload.currStep == 1u)

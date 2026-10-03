@@ -100,6 +100,9 @@ public WaterReflectionSample sampleWaterReflectionHalfRes(
     // blockOrigin = p * 2 mapping. The full pixel becomes a half-grid owner
     // address, not a normalized-UV sample, so no jitter conversion is needed.
     uint2 ownerHalfPixel = fullPixel >> 1u;
+    // Pixel centres in half-grid coordinates. Preserve the full-pixel phase
+    // so a flat normal does not give all four pixels identical filter weights.
+    float2 halfSamplePosition = (float2(fullPixel) + 0.5f) * 0.5f - 0.5f;
     uint2 halfDim = uint2(halfWidth, halfHeight);
     int2 maxHalfPixel = int2(halfDim) - int2(1, 1);
 
@@ -147,8 +150,9 @@ public WaterReflectionSample sampleWaterReflectionHalfRes(
             ownerCompatible = true;
         }
 
-        float imageDistanceWeight = (offset.x == 0) ? 1.0f : 0.5f;
-        imageDistanceWeight *= (offset.y == 0) ? 1.0f : 0.5f;
+        float2 spatialWeight = saturate(1.0f
+            - abs(float2(unclampedTap) - halfSamplePosition) / 1.5f);
+        float imageDistanceWeight = spatialWeight.x * spatialWeight.y;
         float normalAgreementWeight = saturate(
             (normalAgreement - kWaterReflectionNormalCosThreshold)
             / (1.0f - kWaterReflectionNormalCosThreshold));

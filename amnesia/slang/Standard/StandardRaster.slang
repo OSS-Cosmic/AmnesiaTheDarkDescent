@@ -166,7 +166,8 @@ float standardParallaxDepth(DiffuseMaterial material, float2 uv, float2 dUVdx, f
 }
 
 public float2 standardParallaxUV(DiffuseMaterial material, float2 uv, float3 positionV,
-                                 float3 normalV, float3 tangentV, float3 bitangentV)
+                                 float3 normalV, float3 tangentV, float3 bitangentV,
+                                 float2 dUVdx, float2 dUVdy)
 {
     if ((material.materialConfig & kMaterialFlagEnableHeight) == 0u ||
         material.tex[4] == kInvalidTextureIndex)
@@ -185,8 +186,6 @@ public float2 standardParallaxUV(DiffuseMaterial material, float2 uv, float3 pos
     if (!(abs(dirToCameraTS.z) > 1.0e-3f))
         return uv;
 
-    float2 dUVdx = ddx(uv);
-    float2 dUVdy = ddy(uv);
     float step = 1.0f / float(kStandardParallaxSteps);
     float3 delta = -dirToCameraTS * heightMapScale * (1.0f / dirToCameraTS.z) * step;
     float3 parallaxOffset = float3(0.0f, 0.0f, 0.0f);
