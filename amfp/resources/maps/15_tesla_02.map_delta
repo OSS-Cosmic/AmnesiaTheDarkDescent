@@ -687,19 +687,19 @@
         <SetAttr TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="4315" Name="tesla_modules_core_wall_inner_47">
-        <SetAttr Rotation="3.14159 1.5708 3.14159" TwoSidedShadow="false" />
+        <SetAttr TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="4316" Name="tesla_modules_core_wall_inner_48">
-        <SetAttr Rotation="3.14159 1.5708 3.14159" TwoSidedShadow="false" />
+        <SetAttr TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="4317" Name="tesla_modules_core_wall_inner_49">
         <SetAttr TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="4318" Name="tesla_modules_core_wall_inner_50">
-        <SetAttr Rotation="-2.53518e-06 -1.5708 -2.53518e-06" TwoSidedShadow="false" />
+        <SetAttr TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="4319" Name="tesla_modules_core_wall_inner_51">
-        <SetAttr Rotation="-2.53518e-06 -1.5708 -2.53518e-06" TwoSidedShadow="false" />
+        <SetAttr TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="4320" Name="tesla_modules_core_floor_26">
         <SetAttr TwoSidedShadow="false" />
@@ -711,10 +711,10 @@
         <SetAttr TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="4323" Name="tesla_modules_core_floor_27">
-        <SetAttr Rotation="3.14159 -1.5708 3.14159" TwoSidedShadow="false" />
+        <SetAttr TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="4324" Name="tesla_modules_core_floor_28">
-        <SetAttr Rotation="-2.53518e-06 1.5708 -2.53518e-06" TwoSidedShadow="false" />
+        <SetAttr TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="4325" Name="tesla_modules_core_floor_29">
         <SetAttr TwoSidedShadow="false" />
@@ -756,19 +756,19 @@
         <SetAttr TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="4342" Name="tesla_modules_core_wall_inner_55">
-        <SetAttr Rotation="3.14159 1.5708 3.14159" TwoSidedShadow="false" />
+        <SetAttr TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="4343" Name="tesla_modules_core_wall_inner_56">
-        <SetAttr Rotation="3.14159 1.5708 3.14159" TwoSidedShadow="false" />
+        <SetAttr TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="4344" Name="tesla_modules_core_wall_inner_57">
         <SetAttr TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="4345" Name="tesla_modules_core_wall_inner_58">
-        <SetAttr Rotation="-2.53518e-06 -1.5708 -2.53518e-06" TwoSidedShadow="false" />
+        <SetAttr TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="4346" Name="tesla_modules_core_wall_inner_59">
-        <SetAttr Rotation="-2.53518e-06 -1.5708 -2.53518e-06" TwoSidedShadow="false" />
+        <SetAttr TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="4348" Name="tesla_modules_core_wall_inner_60">
         <SetAttr TwoSidedShadow="false" />
@@ -1017,7 +1017,7 @@
         <SetAttr TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="4797" Name="tesla_modules1_wall_simple_217">
-        <SetAttr Rotation="-3.12158 1.5708 -3.12158" TwoSidedShadow="false" />
+        <SetAttr TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="4799" Name="structure_engineroom_walls_9">
         <SetAttr TwoSidedShadow="false" />
@@ -1467,19 +1467,19 @@
         <SetAttr TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="5336" Name="structure_engineroom_beam_45degree_cut_13">
-        <SetAttr Rotation="0.0051426 -1.5708 -0.0051426" TwoSidedShadow="false" />
+        <SetAttr TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="5337" Name="structure_engineroom_beam_45degree_cut_14">
         <SetAttr TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="5338" Name="structure_engineroom_beam_45degree_cut_15">
-        <SetAttr Rotation="3.13639 1.5708 3.13639" TwoSidedShadow="false" />
+        <SetAttr TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="5339" Name="structure_engineroom_beam_45degree_cut_16">
         <SetAttr TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="5341" Name="tesla_structure_catwalk_ladder_7">
-        <SetAttr Rotation="3.13639 1.5708 3.13639" TwoSidedShadow="false" />
+        <SetAttr TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="5343" Name="dressing_tesla_dressing_metaldetails_4">
         <SetAttr TwoSidedShadow="false" />
@@ -2475,25 +2475,25 @@
         <SetAttr TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="6476" Name="floortiles_tesla_modules_floortiles_simple_22">
-        <SetAttr Rotation="-2.28313 -1.5708 2.28313" TwoSidedShadow="false" />
+        <SetAttr TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="6477" Name="tesla_modules1_wall_pipes_22">
-        <SetAttr Rotation="3.00055 -1.5708 -3.00055" TwoSidedShadow="false" />
+        <SetAttr TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="6478" Name="tesla_modules1_wall_pipes_23">
-        <SetAttr Rotation="-2.53518e-06 1.5708 -2.53518e-06" TwoSidedShadow="false" />
+        <SetAttr TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="6479" Name="tesla_modules1_ceiling_114">
         <SetAttr TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="6481" Name="floortiles_tesla_modules_floortiles_simple_42">
-        <SetAttr Rotation="0.858463 -1.5708 -0.858463" TwoSidedShadow="false" />
+        <SetAttr TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="6482" Name="tesla_modules1_wall_pipes_24">
-        <SetAttr Rotation="-0.141043 -1.5708 0.141043" TwoSidedShadow="false" />
+        <SetAttr TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="6483" Name="tesla_modules1_wall_pipes_25">
-        <SetAttr Rotation="3.14159 1.5708 3.14159" TwoSidedShadow="false" />
+        <SetAttr TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="6484" Name="tesla_modules1_ceiling_116">
         <SetAttr TwoSidedShadow="false" />
@@ -2612,20 +2612,11 @@
     <Modify Category="Primitives" ID="6574" Name="Plane_5">
         <SetAttr TwoSidedShadow="false" />
     </Modify>
-    <Remove Category="Entities" ID="5433" Name="ghost_1" />
-    <Remove Category="Entities" ID="5434" Name="ghost_2" />
-    <Remove Category="Entities" ID="5856" Name="tesla_1" />
-    <Remove Category="Entities" ID="5887" Name="tesla_2" />
-    <Remove Category="Entities" ID="5892" Name="tesla_3" />
-    <Remove Category="Entities" ID="5915" Name="tesla_4" />
-    <Remove Category="Entities" ID="5927" Name="tesla_5" />
-    <Remove Category="Entities" ID="6247" Name="FinalTesla" />
-    <Remove Category="Entities" ID="6584" Name="FinalTesla_Hunter" />
     <Modify Category="Entities" ID="674" Name="Tesla_Light_Box_Global">
         <SetAttr FalloffMap="" />
     </Modify>
     <Modify Category="Entities" ID="837" Name="PointLight_9">
-        <SetAttr FalloffMap="" />
+        <SetAttr FalloffMap="" Re_FlickerOffIntensity="0" Re_Intensity="500" Re_SourceRadius="0" />
     </Modify>
     <Modify Category="Entities" ID="841" Name="PointLight_112">
         <SetAttr FalloffMap="" />
@@ -2704,12 +2695,6 @@
     </Modify>
     <Modify Category="Entities" ID="4608" Name="PointLight_5">
         <SetAttr FalloffMap="" RendererMask="1" />
-    </Modify>
-    <Modify Category="Entities" ID="4621" Name="tesla_ents_core_door_10">
-        <SetAttr Rotation="-3.14159 1.5708 -3.14159" />
-    </Modify>
-    <Modify Category="Entities" ID="4623" Name="tesla_ents_core_door_12">
-        <SetAttr Rotation="0.000462683 -1.5708 -0.000462683" />
     </Modify>
     <Modify Category="Entities" ID="4632" Name="SpotLight_54">
         <SetAttr FalloffMap="" />
@@ -2799,40 +2784,22 @@
         <SetAttr FalloffMap="" />
     </Modify>
     <Modify Category="Entities" ID="4961" Name="SpotLight_49">
-        <SetAttr FalloffMap="" Rotation="1.68258 1.5708 1.68258" />
+        <SetAttr FalloffMap="" />
     </Modify>
     <Modify Category="Entities" ID="4962" Name="SpotLight_50">
-        <SetAttr FalloffMap="" Rotation="2.53518e-06 -1.5708 2.53518e-06" />
-    </Modify>
-    <Modify Category="Entities" ID="4963" Name="oval_wall_lamp_2m_pipe_43">
-        <SetAttr Rotation="-0.111783 1.5708 -1.68258" />
-    </Modify>
-    <Modify Category="Entities" ID="4964" Name="oval_wall_lamp_2m_pipe_44">
-        <SetAttr Rotation="1.57079 -1.5708 2.53518e-06" />
+        <SetAttr FalloffMap="" />
     </Modify>
     <Modify Category="Entities" ID="4966" Name="SpotLight_51">
-        <SetAttr FalloffMap="" Rotation="-1.45901 1.5708 -1.45902" />
+        <SetAttr FalloffMap="" />
     </Modify>
     <Modify Category="Entities" ID="4967" Name="SpotLight_52">
-        <SetAttr FalloffMap="" Rotation="-3.14159 -1.5708 -3.14159" />
-    </Modify>
-    <Modify Category="Entities" ID="4968" Name="oval_wall_lamp_2m_pipe_45">
-        <SetAttr Rotation="3.02981 1.5708 1.45902" />
-    </Modify>
-    <Modify Category="Entities" ID="4969" Name="oval_wall_lamp_2m_pipe_46">
-        <SetAttr Rotation="-1.5708 -1.5708 -3.14159" />
+        <SetAttr FalloffMap="" />
     </Modify>
     <Modify Category="Entities" ID="4971" Name="SpotLight_53">
-        <SetAttr FalloffMap="" Rotation="1.68258 1.5708 1.68258" />
+        <SetAttr FalloffMap="" />
     </Modify>
     <Modify Category="Entities" ID="4972" Name="SpotLight_70">
-        <SetAttr FalloffMap="" Rotation="2.53518e-06 -1.5708 2.53518e-06" />
-    </Modify>
-    <Modify Category="Entities" ID="4973" Name="oval_wall_lamp_2m_pipe_47">
-        <SetAttr Rotation="-0.111783 1.5708 -1.68258" />
-    </Modify>
-    <Modify Category="Entities" ID="4974" Name="oval_wall_lamp_2m_pipe_48">
-        <SetAttr Rotation="1.57079 -1.5708 2.53518e-06" />
+        <SetAttr FalloffMap="" />
     </Modify>
     <Modify Category="Entities" ID="5011" Name="SpotLight_75">
         <SetAttr FalloffMap="" />
@@ -2919,16 +2886,10 @@
         <SetAttr FalloffMap="" />
     </Modify>
     <Modify Category="Entities" ID="5827" Name="SpotLight_71">
-        <SetAttr FalloffMap="" Re_FlickerOffIntensity="0" Re_Intensity="10" Re_SourceRadius="0.1" Rotation="1.68258 1.5708 1.68258" />
+        <SetAttr FalloffMap="" Re_FlickerOffIntensity="0" Re_Intensity="10" Re_SourceRadius="0.1" />
     </Modify>
     <Modify Category="Entities" ID="5828" Name="SpotLight_72">
-        <SetAttr FalloffMap="" Rotation="2.53518e-06 -1.5708 2.53518e-06" />
-    </Modify>
-    <Modify Category="Entities" ID="5829" Name="oval_wall_lamp_2m_pipe_50">
-        <SetAttr Rotation="-0.111783 1.5708 -1.68258" />
-    </Modify>
-    <Modify Category="Entities" ID="5830" Name="oval_wall_lamp_2m_pipe_51">
-        <SetAttr Rotation="1.57079 -1.5708 2.53518e-06" />
+        <SetAttr FalloffMap="" />
     </Modify>
     <Modify Category="Entities" ID="5832" Name="Tesla1Lamp_3_spot">
         <SetAttr FalloffMap="" />
@@ -2958,16 +2919,10 @@
         <SetAttr FalloffMap="" RendererMask="1" />
     </Modify>
     <Modify Category="Entities" ID="5876" Name="SpotLight_73">
-        <SetAttr FalloffMap="" Rotation="-1.45901 1.5708 -1.45901" />
+        <SetAttr FalloffMap="" />
     </Modify>
     <Modify Category="Entities" ID="5877" Name="SpotLight_74">
-        <SetAttr FalloffMap="" Rotation="-3.14159 -1.5708 -3.14159" />
-    </Modify>
-    <Modify Category="Entities" ID="5878" Name="oval_wall_lamp_2m_pipe_52">
-        <SetAttr Rotation="3.02981 1.5708 1.45901" />
-    </Modify>
-    <Modify Category="Entities" ID="5879" Name="oval_wall_lamp_2m_pipe_53">
-        <SetAttr Rotation="-1.5708 -1.5708 -3.14159" />
+        <SetAttr FalloffMap="" />
     </Modify>
     <Modify Category="Entities" ID="5884" Name="Tesla1Lamp_4_spot_1">
         <SetAttr FalloffMap="" />

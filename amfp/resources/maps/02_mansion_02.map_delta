@@ -1,18 +1,4 @@
 <MapDelta Version="1" Target="maps/02_mansion_02.map">
-    <Remove Category="Entities" ID="13339" Name="Child1" />
-    <Remove Category="Entities" ID="13346" Name="Child2" />
-    <Remove Category="Entities" ID="13726" Name="Child_Last" />
-    <Remove Category="Entities" ID="14192" Name="nest_wretch_sleeping" />
-    <Remove Category="Entities" ID="14706" Name="Child1a" />
-    <Remove Category="Entities" ID="14707" Name="Child2a" />
-    <Remove Category="Entities" ID="14712" Name="wretch_1" />
-    <Remove Category="Entities" ID="14728" Name="BackCorridorChild1" />
-    <Remove Category="Entities" ID="14729" Name="BackCorridorChild2" />
-    <Remove Category="Entities" ID="14798" Name="ChildYard_1_2" />
-    <Remove Category="Entities" ID="14799" Name="ChildYard_1_1" />
-    <Remove Category="Entities" ID="14800" Name="ChildYard_2_2" />
-    <Remove Category="Entities" ID="14801" Name="ChildYard_2_1" />
-    <Remove Category="Entities" ID="14832" Name="wretch_road" />
     <Modify Category="Entities" ID="3774" Name="BoxLight_1">
         <SetAttr FalloffMap="" />
     </Modify>

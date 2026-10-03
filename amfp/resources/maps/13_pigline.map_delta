@@ -7880,23 +7880,14 @@
     <Modify Category="Primitives" ID="6732" Name="Plane_203">
         <SetAttr TwoSidedShadow="false" />
     </Modify>
-    <Remove Category="Entities" ID="3423" Name="CrispyFriedWretch" />
-    <Remove Category="Entities" ID="5481" Name="ControlWretch" />
-    <Remove Category="Entities" ID="6107" Name="tripery_wretch_2" />
-    <Remove Category="Entities" ID="6108" Name="tripery_wretch_3" />
-    <Remove Category="Entities" ID="6109" Name="tripery_wretch_4" />
-    <Remove Category="Entities" ID="6136" Name="child_1" />
-    <Remove Category="Entities" ID="6137" Name="child_2" />
-    <Remove Category="Entities" ID="6231" Name="tripery_wretch_1" />
-    <Remove Category="Entities" ID="6349" Name="ControlWretch_Kill" />
     <Modify Category="Entities" ID="782" Name="PointLight_3">
-        <SetAttr FalloffMap="" RendererMask="1" />
+        <SetAttr FalloffMap="" Re_FlickerOffIntensity="0" Re_Intensity="15" Re_SourceRadius="0" />
     </Modify>
     <Modify Category="Entities" ID="783" Name="PointLight_2">
-        <SetAttr FalloffMap="" RendererMask="1" />
+        <SetAttr FalloffMap="" Re_FlickerOffIntensity="0" Re_Intensity="20" Re_SourceRadius="0" RendererMask="1" />
     </Modify>
     <Modify Category="Entities" ID="788" Name="PointLight_1">
-        <SetAttr FalloffMap="" RendererMask="1" />
+        <SetAttr FalloffMap="" Re_FlickerOffIntensity="0" Re_Intensity="20" Re_SourceRadius="0" RendererMask="1" />
     </Modify>
     <Modify Category="Entities" ID="1028" Name="PointLight_4">
         <SetAttr FalloffMap="" RendererMask="1" />
@@ -8250,13 +8241,13 @@
         <SetAttr FalloffMap="" RendererMask="1" />
     </Modify>
     <Modify Category="Entities" ID="4024" Name="PointLight_135">
-        <SetAttr FalloffMap="" RendererMask="1" />
+        <SetAttr FalloffMap="" />
     </Modify>
     <Modify Category="Entities" ID="4203" Name="PointLight_136">
         <SetAttr FalloffMap="" />
     </Modify>
     <Modify Category="Entities" ID="4331" Name="SpotLight_6">
-        <SetAttr FalloffMap="" />
+        <SetAttr FalloffMap="" Re_FlickerOffIntensity="0" Re_Intensity="50" Re_SourceRadius="0" />
     </Modify>
     <Modify Category="Entities" ID="4334" Name="PointLight_137">
         <SetAttr FalloffMap="" RendererMask="1" />
@@ -8277,10 +8268,10 @@
         <SetAttr FalloffMap="" RendererMask="1" />
     </Modify>
     <Modify Category="Entities" ID="4374" Name="PointLight_143">
-        <SetAttr FalloffMap="" RendererMask="1" />
+        <SetAttr FalloffMap="" />
     </Modify>
     <Modify Category="Entities" ID="4375" Name="SpotLight_8">
-        <SetAttr FalloffMap="" />
+        <SetAttr FalloffMap="" Re_FlickerOffIntensity="0" Re_Intensity="20" Re_SourceRadius="0" />
     </Modify>
     <Modify Category="Entities" ID="4506" Name="SpotLight_9">
         <SetAttr FalloffMap="" />
@@ -8289,7 +8280,7 @@
         <SetAttr FalloffMap="" RendererMask="1" />
     </Modify>
     <Modify Category="Entities" ID="4553" Name="SpotLight_10">
-        <SetAttr FalloffMap="" />
+        <SetAttr FalloffMap="" Re_FlickerOffIntensity="0" Re_Intensity="18" Re_SourceRadius="0" />
     </Modify>
     <Modify Category="Entities" ID="4587" Name="SpotLight_11">
         <SetAttr FalloffMap="" />
@@ -8319,10 +8310,10 @@
         <SetAttr FalloffMap="" />
     </Modify>
     <Modify Category="Entities" ID="5165" Name="SpotLight_7">
-        <SetAttr FalloffMap="" />
+        <SetAttr FalloffMap="" Re_FlickerOffIntensity="0" Re_Intensity="20" Re_SourceRadius="0" />
     </Modify>
     <Modify Category="Entities" ID="5166" Name="SpotLight_12">
-        <SetAttr FalloffMap="" />
+        <SetAttr FalloffMap="" Re_FlickerOffIntensity="0" Re_Intensity="20" Re_SourceRadius="0" />
     </Modify>
     <Modify Category="Entities" ID="5265" Name="ElectroLightEnd">
         <SetAttr FalloffMap="" />
@@ -8418,7 +8409,7 @@
         <SetAttr FalloffMap="" RendererMask="1" />
     </Modify>
     <Modify Category="Entities" ID="6435" Name="PointLight_161">
-        <SetAttr FalloffMap="" RendererMask="1" />
+        <SetAttr FalloffMap="" />
     </Modify>
     <Modify Category="Entities" ID="6538" Name="FireLight_1">
         <SetAttr FalloffMap="" />
@@ -8463,9 +8454,17 @@
         <SetAttr FalloffMap="" RendererMask="1" />
     </Modify>
     <Modify Category="Entities" ID="6724" Name="PointLight_164">
-        <SetAttr FalloffMap="" RendererMask="1" />
+        <SetAttr FalloffMap="" />
     </Modify>
     <Modify Category="Entities" ID="6725" Name="PointLight_165">
-        <SetAttr FalloffMap="" RendererMask="1" />
+        <SetAttr FalloffMap="" />
     </Modify>
+    <Add Category="Entities">
+        <AreaLight Name="AreaLight_triptic_2" WorldPos="-51.041 -15.5487 -26.6836" Rotation="0 1.5708 1.5708" Scale="1 1 1" RendererMask="2" Tag="" Active="true" CastShadows="false" ShadowResolution="High" ShadowsAffectStatic="true" ShadowsAffectDynamic="true" Intensity="15" Radius="6" SourceRadius="0" FalloffMap="" Gobo="" GoboAnimMode="None" GoboAnimFrameTime="0" DiffuseColor="1 0.85 0.7 1" FlickerActive="false" FlickerOnMinLength="0" FlickerOnMaxLength="0" FlickerOnPS="" FlickerOnSound="" FlickerOffMinLength="0" FlickerOffMaxLength="0" FlickerOffPS="" FlickerOffSound="" FlickerOffColor="0 0 0 1" FlickerOffIntensity="0" FlickerFade="false" FlickerOnFadeMinLength="0" FlickerOnFadeMaxLength="0" FlickerOffFadeMinLength="0" FlickerOffFadeMaxLength="0" SourceWidth="1.3" SourceHeight="5.1" BarnDoorAngle="0.820305" BarnDoorLength="0" SourceTexture="" />
+        <AreaLight Name="AreaLight_triptic_3" WorldPos="-59.041 -15.5487 -26.7822" Rotation="0 1.5708 1.5708" Scale="1 1 1" RendererMask="2" Tag="" Active="true" CastShadows="false" ShadowResolution="High" ShadowsAffectStatic="true" ShadowsAffectDynamic="true" Intensity="15" Radius="6" SourceRadius="0" FalloffMap="" Gobo="" GoboAnimMode="None" GoboAnimFrameTime="0" DiffuseColor="0.964844 0.667099 0.667099 1" FlickerActive="false" FlickerOnMinLength="0" FlickerOnMaxLength="0" FlickerOnPS="" FlickerOnSound="" FlickerOffMinLength="0" FlickerOffMaxLength="0" FlickerOffPS="" FlickerOffSound="" FlickerOffColor="0 0 0 1" FlickerOffIntensity="0" FlickerFade="false" FlickerOnFadeMinLength="0" FlickerOnFadeMaxLength="0" FlickerOffFadeMinLength="0" FlickerOffFadeMaxLength="0" SourceWidth="1.3" SourceHeight="5.1" BarnDoorAngle="0.820305" BarnDoorLength="0" SourceTexture="" />
+        <AreaLight Name="AreaLight_triptic_4" WorldPos="-67.041 -15.5487 -26.8429" Rotation="0 1.5708 1.5708" Scale="1 1 1" RendererMask="2" Tag="" Active="true" CastShadows="false" ShadowResolution="High" ShadowsAffectStatic="true" ShadowsAffectDynamic="true" Intensity="15" Radius="6" SourceRadius="0" FalloffMap="" Gobo="" GoboAnimMode="None" GoboAnimFrameTime="0" DiffuseColor="1 0.85 0.7 1" FlickerActive="false" FlickerOnMinLength="0" FlickerOnMaxLength="0" FlickerOnPS="" FlickerOnSound="" FlickerOffMinLength="0" FlickerOffMaxLength="0" FlickerOffPS="" FlickerOffSound="" FlickerOffColor="0 0 0 1" FlickerOffIntensity="0" FlickerFade="false" FlickerOnFadeMinLength="0" FlickerOnFadeMaxLength="0" FlickerOffFadeMinLength="0" FlickerOffFadeMaxLength="0" SourceWidth="1.3" SourceHeight="5.1" BarnDoorAngle="0.820305" BarnDoorLength="0" SourceTexture="" />
+        <AreaLight Name="AreaLight_stream_2" WorldPos="-42.9405 -15.7639 -27.4425" Rotation="3.05603 0.602739 -1.75358" Scale="1 1 1" RendererMask="2" Tag="" Active="true" CastShadows="true" ShadowResolution="High" ShadowsAffectStatic="true" ShadowsAffectDynamic="true" Intensity="2" Radius="19" SourceRadius="0" FalloffMap="" Gobo="" GoboAnimMode="None" GoboAnimFrameTime="0" DiffuseColor="1 0.799652 0.605469 1" FlickerActive="false" FlickerOnMinLength="0" FlickerOnMaxLength="0" FlickerOnPS="" FlickerOnSound="" FlickerOffMinLength="0" FlickerOffMaxLength="0" FlickerOffPS="" FlickerOffSound="" FlickerOffColor="0 0 0 1" FlickerOffIntensity="0" FlickerFade="false" FlickerOnFadeMinLength="0" FlickerOnFadeMaxLength="0" FlickerOffFadeMinLength="0" FlickerOffFadeMaxLength="0" SourceWidth="2" SourceHeight="2" BarnDoorAngle="0.644341" BarnDoorLength="0.6" SourceTexture="" />
+        <AreaLight Name="AreaLight_stream_3" WorldPos="-37.9048 -15.9946 -26.4985" Rotation="-2.65018 0.477973 -0.95655" Scale="1 1 1" RendererMask="2" Tag="" Active="true" CastShadows="true" ShadowResolution="High" ShadowsAffectStatic="true" ShadowsAffectDynamic="true" Intensity="2" Radius="17.5" SourceRadius="3" FalloffMap="" Gobo="" GoboAnimMode="None" GoboAnimFrameTime="0" DiffuseColor="0.847656 0.695033 0.45694 1" FlickerActive="false" FlickerOnMinLength="0" FlickerOnMaxLength="0" FlickerOnPS="" FlickerOnSound="" FlickerOffMinLength="0" FlickerOffMaxLength="0" FlickerOffPS="" FlickerOffSound="" FlickerOffColor="0 0 0 1" FlickerOffIntensity="0" FlickerFade="false" FlickerOnFadeMinLength="0" FlickerOnFadeMaxLength="0" FlickerOffFadeMinLength="0" FlickerOffFadeMaxLength="0" SourceWidth="2.1" SourceHeight="2" BarnDoorAngle="0.434901" BarnDoorLength="0.8" SourceTexture="" />
+        <AreaLight Name="AreaLight_stream_5" WorldPos="-24.7785 -15.8521 -27.296" Rotation="-2.66068 0.519573 -0.95926" Scale="1 1 1" RendererMask="2" Tag="" Active="true" CastShadows="true" ShadowResolution="High" ShadowsAffectStatic="true" ShadowsAffectDynamic="true" Intensity="1" Radius="18.5" SourceRadius="0" FalloffMap="" Gobo="" GoboAnimMode="None" GoboAnimFrameTime="0" DiffuseColor="1 0.799652 0.605469 1" FlickerActive="false" FlickerOnMinLength="0" FlickerOnMaxLength="0" FlickerOnPS="" FlickerOnSound="" FlickerOffMinLength="0" FlickerOffMaxLength="0" FlickerOffPS="" FlickerOffSound="" FlickerOffColor="0 0 0 1" FlickerOffIntensity="0" FlickerFade="false" FlickerOnFadeMinLength="0" FlickerOnFadeMaxLength="0" FlickerOffFadeMinLength="0" FlickerOffFadeMaxLength="0" SourceWidth="2" SourceHeight="2" BarnDoorAngle="0.539621" BarnDoorLength="1.1" SourceTexture="" />
+    </Add>
 </MapDelta>

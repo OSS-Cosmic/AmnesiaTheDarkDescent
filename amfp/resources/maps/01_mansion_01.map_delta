@@ -171,13 +171,13 @@
         <SetAttr TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="6959" Name="wall_wood_panneling_30">
-        <SetAttr TwoSidedShadow="false" />
+        <SetAttr CastShadows="true" TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="6960" Name="wall_wood_panneling_31">
         <SetAttr TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="6961" Name="wall_wood_panneling_32">
-        <SetAttr TwoSidedShadow="false" />
+        <SetAttr CastShadows="true" TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="6972" Name="wall_wood_panneling_33">
         <SetAttr TwoSidedShadow="false" />
@@ -240,7 +240,7 @@
         <SetAttr TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="7100" Name="wall_wood_panneling_39">
-        <SetAttr TwoSidedShadow="false" />
+        <SetAttr CastShadows="false" TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="7102" Name="wall_wood_panneling_41">
         <SetAttr TwoSidedShadow="false" />
@@ -3081,7 +3081,7 @@
         <SetAttr TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="10994" Name="carpets_carpet01_22">
-        <SetAttr TwoSidedShadow="false" />
+        <SetAttr TwoSidedShadow="true" />
     </Modify>
     <Modify Category="StaticObjects" ID="10996" Name="carpets_carpet01_23">
         <SetAttr TwoSidedShadow="false" />
@@ -3480,10 +3480,10 @@
         <SetAttr TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="11862" Name="draw_lock_draw_lock_4">
-        <SetAttr Rotation="-2.53518e-06 -1.5708 -3.14159" TwoSidedShadow="false" />
+        <SetAttr TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="11863" Name="draw_lock_draw_lock_5">
-        <SetAttr Rotation="-2.53518e-06 -1.5708 -3.14159" TwoSidedShadow="false" />
+        <SetAttr TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="11865" Name="draw_lock_draw_lock_6">
         <SetAttr TwoSidedShadow="false" />
@@ -3498,16 +3498,16 @@
         <SetAttr TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="11871" Name="draw_lock_draw_lock_10">
-        <SetAttr Rotation="-3.14159 1.5708 2.57523e-06" TwoSidedShadow="false" />
+        <SetAttr TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="11872" Name="draw_lock_draw_lock_11">
-        <SetAttr Rotation="-3.14159 1.5708 2.57523e-06" TwoSidedShadow="false" />
+        <SetAttr TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="11874" Name="draw_lock_draw_lock_12">
-        <SetAttr Rotation="2.51242e-06 1.5708 -3.14159" TwoSidedShadow="false" />
+        <SetAttr TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="11875" Name="draw_lock_draw_lock_13">
-        <SetAttr Rotation="2.51242e-06 1.5708 -3.14159" TwoSidedShadow="false" />
+        <SetAttr TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="11877" Name="draw_lock_draw_lock_14">
         <SetAttr TwoSidedShadow="false" />
@@ -3522,22 +3522,22 @@
         <SetAttr TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="11883" Name="draw_lock_draw_lock_18">
-        <SetAttr Rotation="3.11142 1.5708 -0.0301728" Scale="1 1 1.1" TwoSidedShadow="false" />
+        <SetAttr TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="11884" Name="draw_lock_draw_lock_19">
-        <SetAttr Rotation="3.11142 1.5708 -0.0301728" Scale="1 1 1.1" TwoSidedShadow="false" />
+        <SetAttr TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="11886" Name="draw_lock_draw_lock_20">
-        <SetAttr Rotation="-3.07617 -1.5708 -0.0654227" Scale="1 1 1.1" TwoSidedShadow="false" />
+        <SetAttr TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="11887" Name="draw_lock_draw_lock_21">
-        <SetAttr Rotation="-3.07617 -1.5708 -0.0654227" Scale="1 1 1.1" TwoSidedShadow="false" />
+        <SetAttr TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="11889" Name="draw_lock_draw_lock_22">
-        <SetAttr Rotation="0.0654227 -1.5708 3.07617" Scale="1 1 1.1" TwoSidedShadow="false" />
+        <SetAttr TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="11890" Name="draw_lock_draw_lock_23">
-        <SetAttr Rotation="0.0654227 -1.5708 3.07617" Scale="1 1 1.1" TwoSidedShadow="false" />
+        <SetAttr TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="11899" Name="draw_lock_draw_lock_28">
         <SetAttr TwoSidedShadow="false" />
@@ -4383,10 +4383,10 @@
         <SetAttr TwoSidedShadow="false" />
     </Modify>
     <Modify Category="Primitives" ID="10692" Name="Plane_303">
-        <SetAttr TwoSidedShadow="false" />
+        <SetAttr CastShadows="true" TwoSidedShadow="true" />
     </Modify>
     <Modify Category="Primitives" ID="10693" Name="Plane_304">
-        <SetAttr TwoSidedShadow="false" />
+        <SetAttr CastShadows="true" TwoSidedShadow="true" />
     </Modify>
     <Modify Category="Primitives" ID="10694" Name="Plane_305">
         <SetAttr TwoSidedShadow="false" />
@@ -4398,19 +4398,19 @@
         <SetAttr TwoSidedShadow="false" />
     </Modify>
     <Modify Category="Primitives" ID="10702" Name="Plane_308">
-        <SetAttr TwoSidedShadow="false" />
+        <SetAttr CastShadows="true" TwoSidedShadow="true" />
     </Modify>
     <Modify Category="Primitives" ID="10712" Name="Plane_309">
-        <SetAttr TwoSidedShadow="false" />
+        <SetAttr TwoSidedShadow="true" />
     </Modify>
     <Modify Category="Primitives" ID="10713" Name="Plane_310">
-        <SetAttr TwoSidedShadow="false" />
+        <SetAttr CastShadows="true" TwoSidedShadow="true" />
     </Modify>
     <Modify Category="Primitives" ID="10714" Name="Plane_311">
         <SetAttr TwoSidedShadow="false" />
     </Modify>
     <Modify Category="Primitives" ID="10715" Name="Plane_312">
-        <SetAttr TwoSidedShadow="false" />
+        <SetAttr CastShadows="true" TwoSidedShadow="true" />
     </Modify>
     <Modify Category="Primitives" ID="10716" Name="Plane_313">
         <SetAttr TwoSidedShadow="false" />
@@ -4422,7 +4422,7 @@
         <SetAttr TwoSidedShadow="false" />
     </Modify>
     <Modify Category="Primitives" ID="10727" Name="Plane_315">
-        <SetAttr TwoSidedShadow="false" />
+        <SetAttr CastShadows="true" TwoSidedShadow="true" />
     </Modify>
     <Modify Category="Primitives" ID="10730" Name="Plane_316">
         <SetAttr TwoSidedShadow="false" />
@@ -4437,7 +4437,7 @@
         <SetAttr TwoSidedShadow="false" />
     </Modify>
     <Modify Category="Primitives" ID="10737" Name="Plane_320">
-        <SetAttr TwoSidedShadow="false" />
+        <SetAttr CastShadows="true" TwoSidedShadow="true" />
     </Modify>
     <Modify Category="Primitives" ID="10738" Name="Plane_321">
         <SetAttr TwoSidedShadow="false" />
@@ -4541,15 +4541,6 @@
     <Modify Category="Primitives" ID="11892" Name="Plane_122">
         <SetAttr TwoSidedShadow="false" />
     </Modify>
-    <Remove Category="Entities" ID="6836" Name="Child2" />
-    <Remove Category="Entities" ID="6837" Name="Child1" />
-    <Remove Category="Entities" ID="6842" Name="Child3" />
-    <Remove Category="Entities" ID="6850" Name="Child4" />
-    <Remove Category="Entities" ID="10378" Name="Child5" />
-    <Remove Category="Entities" ID="10384" Name="child6" />
-    <Remove Category="Entities" ID="10385" Name="child7" />
-    <Remove Category="Entities" ID="10605" Name="IntroChild" />
-    <Remove Category="Entities" ID="11610" Name="Child1a" />
     <Modify Category="Entities" ID="6938" Name="attic_stair_middle_VO">
         <SetAttr RendererMask="1" />
     </Modify>
@@ -4572,45 +4563,6 @@
     </Modify>
     <Modify Category="Entities" ID="8397" Name="PointLight_105">
         <SetAttr FalloffMap="" />
-    </Modify>
-    <Modify Category="Entities" ID="8824" Name="BedCeilingLookTarget">
-        <SetAttr Rotation="-3.12847 1.5708 -3.12847" />
-    </Modify>
-    <Modify Category="Entities" ID="8825" Name="BedDoorLookTarget">
-        <SetAttr Rotation="-3.12847 1.5708 -3.12847" />
-    </Modify>
-    <Modify Category="Entities" ID="8830" Name="GettingUpLookTarget1">
-        <SetAttr Rotation="-3.12847 1.5708 -3.12847" />
-    </Modify>
-    <Modify Category="Entities" ID="8831" Name="GettingUpLookTarget2">
-        <SetAttr Rotation="-3.12847 1.5708 -3.12847" />
-    </Modify>
-    <Modify Category="Entities" ID="8832" Name="GettingUpLookTarget3">
-        <SetAttr Rotation="-3.12847 1.5708 -3.12847" />
-    </Modify>
-    <Modify Category="Entities" ID="8833" Name="GettingUpLookTarget4">
-        <SetAttr Rotation="-3.12847 1.5708 -3.12847" />
-    </Modify>
-    <Modify Category="Entities" ID="8834" Name="BlackoutLookTarget">
-        <SetAttr Rotation="-3.12847 1.5708 -3.12847" />
-    </Modify>
-    <Modify Category="Entities" ID="8835" Name="HeadRollLookTarget">
-        <SetAttr Rotation="-3.12847 1.5708 -3.12847" />
-    </Modify>
-    <Modify Category="Entities" ID="8838" Name="AwakenLookTarget1">
-        <SetAttr Rotation="-3.12847 1.5708 -3.12847" />
-    </Modify>
-    <Modify Category="Entities" ID="8839" Name="GettingUpLookTarget0">
-        <SetAttr Rotation="-3.12847 1.5708 -3.12847" />
-    </Modify>
-    <Modify Category="Entities" ID="8840" Name="AwakenLookTarget2">
-        <SetAttr Rotation="-3.12847 1.5708 -3.12847" />
-    </Modify>
-    <Modify Category="Entities" ID="8841" Name="AwakenLookTarget3">
-        <SetAttr Rotation="-3.12847 1.5708 -3.12847" />
-    </Modify>
-    <Modify Category="Entities" ID="8842" Name="AwakenLookTarget4">
-        <SetAttr Rotation="-3.12847 1.5708 -3.12847" />
     </Modify>
     <Modify Category="Entities" ID="9480" Name="SpotLight_170">
         <SetAttr FalloffMap="" RendererMask="1" />
@@ -4643,15 +4595,6 @@
     </Modify>
     <Modify Category="Entities" ID="10200" Name="PointLight_184">
         <SetAttr FalloffMap="" RendererMask="1" />
-    </Modify>
-    <Modify Category="Entities" ID="10424" Name="BlockPileLookTarget">
-        <SetAttr Rotation="2.53518e-06 1.5708 2.53518e-06" />
-    </Modify>
-    <Modify Category="Entities" ID="10440" Name="block_box_nonchar_7">
-        <SetAttr Rotation="-1.49758 -1.5708 3.06838" />
-    </Modify>
-    <Modify Category="Entities" ID="10442" Name="block_box_nonchar_9">
-        <SetAttr Rotation="-1.49758 1.5708 -3.06838" />
     </Modify>
     <Modify Category="Entities" ID="10541" Name="ParticleSystem_33">
         <SetAttr WorldPos="0.252644 20 -27.5" />
@@ -4698,9 +4641,6 @@
     <Modify Category="Entities" ID="11306" Name="PointLight_202">
         <SetAttr FalloffMap="" RendererMask="1" />
     </Modify>
-    <Modify Category="Entities" ID="11377" Name="Hint1Trigger">
-        <SetAttr Rotation="-3.12847 1.5708 -3.12847" />
-    </Modify>
     <Modify Category="Entities" ID="11379" Name="lantern_2">
         <SetVar Name="NoteText" Value="SewerPumpRoomOne" />
         <SetVar Name="OpenNoteInJournal" Value="true" />
@@ -4713,7 +4653,7 @@
         <SetAttr FalloffMap="" />
     </Modify>
     <Modify Category="Entities" ID="11392" Name="SpotLight_53">
-        <SetAttr FalloffMap="" />
+        <SetAttr FalloffMap="" Re_FlickerOffIntensity="0" Re_Intensity="50" Re_SourceRadius="0.1" />
     </Modify>
     <Modify Category="Entities" ID="11394" Name="PointLight_6">
         <SetAttr FalloffMap="" RendererMask="1" />
@@ -4725,13 +4665,13 @@
         <SetAttr FalloffMap="" RendererMask="1" />
     </Modify>
     <Modify Category="Entities" ID="11400" Name="SpotLight_54">
-        <SetAttr FalloffMap="" Re_FlickerOffIntensity="0" Re_Intensity="40" Re_SourceRadius="0.1" />
+        <SetAttr FalloffMap="" Re_FlickerOffIntensity="0" Re_Intensity="50" Re_SourceRadius="0.1" />
     </Modify>
     <Modify Category="Entities" ID="11403" Name="SpotLight_55">
         <SetAttr FalloffMap="" />
     </Modify>
     <Modify Category="Entities" ID="11407" Name="SpotLight_56">
-        <SetAttr FalloffMap="" />
+        <SetAttr FalloffMap="" Re_FlickerOffIntensity="0" Re_Intensity="15" Re_SourceRadius="0.01" />
     </Modify>
     <Modify Category="Entities" ID="11408" Name="PointLight_10">
         <SetAttr FalloffMap="" RendererMask="1" />
@@ -4740,13 +4680,13 @@
         <SetAttr FalloffMap="" RendererMask="1" />
     </Modify>
     <Modify Category="Entities" ID="11415" Name="SpotLight_57">
-        <SetAttr FalloffMap="" />
+        <SetAttr FalloffMap="" Re_FlickerOffIntensity="0" Re_Intensity="15" Re_Radius="38.982" Re_SourceRadius="0.01" />
     </Modify>
     <Modify Category="Entities" ID="11417" Name="PointLight_12">
         <SetAttr FalloffMap="" RendererMask="1" />
     </Modify>
     <Modify Category="Entities" ID="11418" Name="SpotLight_59">
-        <SetAttr FalloffMap="" />
+        <SetAttr FalloffMap="" Re_FlickerOffIntensity="0" Re_Intensity="15" Re_SourceRadius="0.01" />
     </Modify>
     <Modify Category="Entities" ID="11419" Name="SpotLight_60">
         <SetAttr FalloffMap="" Re_FlickerOffIntensity="0" Re_Intensity="6.5" Re_Radius="6.5" Re_SourceRadius="0" />
@@ -4764,7 +4704,7 @@
         <SetAttr FalloffMap="" Re_FlickerOffIntensity="0" Re_Intensity="15" Re_Radius="6.482" Re_SourceRadius="0" />
     </Modify>
     <Modify Category="Entities" ID="11432" Name="PointLight_17">
-        <SetAttr FalloffMap="" RendererMask="1" Rotation="2.53518e-06 -1.5708 2.53518e-06" />
+        <SetAttr FalloffMap="" RendererMask="1" />
     </Modify>
     <Modify Category="Entities" ID="11436" Name="PointLight_208">
         <SetAttr FalloffMap="" RendererMask="1" />
@@ -4848,7 +4788,7 @@
         <SetAttr FalloffMap="" RendererMask="1" />
     </Modify>
     <Modify Category="Entities" ID="11484" Name="SpotLight_44">
-        <SetAttr FalloffMap="" Rotation="0.523603 -1.5708 -3.14159" />
+        <SetAttr FalloffMap="" />
     </Modify>
     <Modify Category="Entities" ID="11487" Name="SpotLight_45">
         <SetAttr FalloffMap="" />
@@ -4875,7 +4815,7 @@
         <SetAttr FalloffMap="" RendererMask="1" />
     </Modify>
     <Modify Category="Entities" ID="11498" Name="SpotLight_47">
-        <SetAttr FalloffMap="" Rotation="-2.61799 -1.5708 2.53518e-06" />
+        <SetAttr FalloffMap="" />
     </Modify>
     <Modify Category="Entities" ID="11499" Name="PointLight_25">
         <SetAttr FalloffMap="" RendererMask="1" />
@@ -4911,7 +4851,7 @@
         <SetAttr FalloffMap="" RendererMask="1" />
     </Modify>
     <Modify Category="Entities" ID="11520" Name="SpotLight_31">
-        <SetAttr FalloffMap="" Rotation="0.636902 -1.5708 3.11556" />
+        <SetAttr FalloffMap="" />
     </Modify>
     <Modify Category="Entities" ID="11521" Name="PointLight_32">
         <SetAttr FalloffMap="" RendererMask="1" />
@@ -4944,7 +4884,7 @@
         <SetAttr FalloffMap="" RendererMask="1" />
     </Modify>
     <Modify Category="Entities" ID="11538" Name="PointLight_213">
-        <SetAttr FalloffMap="" RendererMask="1" Rotation="-0.0416926 1.5708 -0.0416926" />
+        <SetAttr FalloffMap="" RendererMask="1" />
     </Modify>
     <Modify Category="Entities" ID="11540" Name="PointLight_214">
         <SetAttr FalloffMap="" RendererMask="1" />
@@ -4998,10 +4938,10 @@
         <SetAttr FalloffMap="" />
     </Modify>
     <Modify Category="Entities" ID="11562" Name="PointLight_231">
-        <SetAttr FalloffMap="" RendererMask="1" Rotation="-0.0416926 1.5708 -0.0416926" />
+        <SetAttr FalloffMap="" RendererMask="1" />
     </Modify>
     <Modify Category="Entities" ID="11563" Name="SpotLight_228">
-        <SetAttr FalloffMap="" Rotation="1.52653 -1.5708 2.40046" />
+        <SetAttr FalloffMap="" />
     </Modify>
     <Modify Category="Entities" ID="11565" Name="PointLight_42">
         <SetAttr FalloffMap="" RendererMask="1" />
@@ -5166,5 +5106,7 @@
         <AreaLight Name="AreaLight_wall_window02_large_blue_5" WorldPos="-35.75 2.218 -45.084" Rotation="0 -1.5708 0" Scale="1 1 1" RendererMask="2" Tag="" Active="true" CastShadows="true" ShadowResolution="High" ShadowsAffectStatic="true" ShadowsAffectDynamic="true" Intensity="15" Radius="15.5" SourceRadius="0" FalloffMap="" Gobo="" GoboAnimMode="None" GoboAnimFrameTime="0" DiffuseColor="0.483 0.586 0.697 0" FlickerActive="false" FlickerOnMinLength="0" FlickerOnMaxLength="0" FlickerOnPS="" FlickerOnSound="" FlickerOffMinLength="0" FlickerOffMaxLength="0" FlickerOffPS="" FlickerOffSound="" FlickerOffColor="0 0 0 1" FlickerOffIntensity="0" FlickerFade="false" FlickerOnFadeMinLength="0" FlickerOnFadeMaxLength="0" FlickerOffFadeMinLength="0" FlickerOffFadeMaxLength="0" SourceWidth="5.7925" SourceHeight="2.1846" BarnDoorAngle="0.401426" BarnDoorLength="0.2" SourceTexture="" />
         <AreaLight Name="AreaLight_wall_window02_large_blue_6" WorldPos="-31.75 2.218 -45.084" Rotation="0 -1.5708 0" Scale="1 1 1" RendererMask="2" Tag="" Active="true" CastShadows="true" ShadowResolution="High" ShadowsAffectStatic="true" ShadowsAffectDynamic="true" Intensity="15" Radius="15.5" SourceRadius="0" FalloffMap="" Gobo="" GoboAnimMode="None" GoboAnimFrameTime="0" DiffuseColor="0.483 0.586 0.697 0" FlickerActive="false" FlickerOnMinLength="0" FlickerOnMaxLength="0" FlickerOnPS="" FlickerOnSound="" FlickerOffMinLength="0" FlickerOffMaxLength="0" FlickerOffPS="" FlickerOffSound="" FlickerOffColor="0 0 0 1" FlickerOffIntensity="0" FlickerFade="false" FlickerOnFadeMinLength="0" FlickerOnFadeMaxLength="0" FlickerOffFadeMinLength="0" FlickerOffFadeMaxLength="0" SourceWidth="5.7925" SourceHeight="2.1846" BarnDoorAngle="0.401426" BarnDoorLength="0.2" SourceTexture="" />
         <AreaLight Name="AreaLight_wall_attic_wall_153" WorldPos="-23.716 20.4441 -27.4966" Rotation="0 0 0" Scale="1 1 1" RendererMask="2" Tag="" Active="true" CastShadows="true" ShadowResolution="High" ShadowsAffectStatic="true" ShadowsAffectDynamic="true" Intensity="15" Radius="15.5" SourceRadius="0" FalloffMap="" Gobo="" GoboAnimMode="None" GoboAnimFrameTime="0" DiffuseColor="0.483 0.586 0.697 0" FlickerActive="false" FlickerOnMinLength="0" FlickerOnMaxLength="0" FlickerOnPS="" FlickerOnSound="" FlickerOffMinLength="0" FlickerOffMaxLength="0" FlickerOffPS="" FlickerOffSound="" FlickerOffColor="0 0 0 1" FlickerOffIntensity="0" FlickerFade="false" FlickerOnFadeMinLength="0" FlickerOnFadeMaxLength="0" FlickerOffFadeMinLength="0" FlickerOffFadeMaxLength="0" SourceWidth="1.6528" SourceHeight="1.7686" BarnDoorAngle="0.401426" BarnDoorLength="0.2" SourceTexture="" />
+        <AreaLight Name="AreaLight_wall_wood_panneling_30" WorldPos="-50.102 8.81571 -46.4504" Rotation="0 0 0" Scale="1 1 1" RendererMask="2" Tag="" Active="true" CastShadows="true" ShadowResolution="High" ShadowsAffectStatic="true" ShadowsAffectDynamic="true" Intensity="20" Radius="15.5" SourceRadius="0" FalloffMap="" Gobo="" GoboAnimMode="None" GoboAnimFrameTime="0" DiffuseColor="0.483 0.586 0.697 0" FlickerActive="false" FlickerOnMinLength="0" FlickerOnMaxLength="0" FlickerOnPS="" FlickerOnSound="" FlickerOffMinLength="0" FlickerOffMaxLength="0" FlickerOffPS="" FlickerOffSound="" FlickerOffColor="0 0 0 1" FlickerOffIntensity="0" FlickerFade="false" FlickerOnFadeMinLength="0" FlickerOnFadeMaxLength="0" FlickerOffFadeMinLength="0" FlickerOffFadeMaxLength="0" SourceWidth="2.9" SourceHeight="1.6" BarnDoorAngle="0.785398" BarnDoorLength="0" SourceTexture="" />
+        <AreaLight Name="AreaLight_wall_wood_panneling_32" WorldPos="-50.106 8.5337 -38.428" Rotation="0 0 0" Scale="1 1 1" RendererMask="2" Tag="" Active="true" CastShadows="true" ShadowResolution="High" ShadowsAffectStatic="true" ShadowsAffectDynamic="true" Intensity="20" Radius="15.5" SourceRadius="0" FalloffMap="" Gobo="" GoboAnimMode="None" GoboAnimFrameTime="0" DiffuseColor="0.483 0.586 0.697 0" FlickerActive="false" FlickerOnMinLength="0" FlickerOnMaxLength="0" FlickerOnPS="" FlickerOnSound="" FlickerOffMinLength="0" FlickerOffMaxLength="0" FlickerOffPS="" FlickerOffSound="" FlickerOffColor="0 0 0 1" FlickerOffIntensity="0" FlickerFade="false" FlickerOnFadeMinLength="0" FlickerOnFadeMaxLength="0" FlickerOffFadeMinLength="0" FlickerOffFadeMaxLength="0" SourceWidth="2.4" SourceHeight="1.9" BarnDoorAngle="0.785398" BarnDoorLength="0" SourceTexture="" />
     </Add>
 </MapDelta>

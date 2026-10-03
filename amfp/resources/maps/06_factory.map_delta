@@ -2107,7 +2107,7 @@
         <SetAttr TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="6781" Name="structure_engineroom_floor_lip_outer_29">
-        <SetAttr TwoSidedShadow="true" />
+        <SetAttr Rotation="-2.53518e-06 -1.5708 -2.53518e-06" TwoSidedShadow="true" />
     </Modify>
     <Modify Category="StaticObjects" ID="6782" Name="structure_engineroom_floor_196">
         <SetAttr TwoSidedShadow="true" />
@@ -10810,16 +10810,16 @@
         <SetAttr TwoSidedShadow="true" />
     </Modify>
     <Modify Category="StaticObjects" ID="14181" Name="structure_engineroom_floor_lip_125">
-        <SetAttr TwoSidedShadow="true" />
+        <SetAttr Rotation="2.73483 1.5708 2.73483" TwoSidedShadow="true" />
     </Modify>
     <Modify Category="StaticObjects" ID="14182" Name="structure_engineroom_floor_lip_railpost_38">
-        <SetAttr TwoSidedShadow="true" />
+        <SetAttr Rotation="-2.53518e-06 -1.5708 -2.53518e-06" TwoSidedShadow="true" />
     </Modify>
     <Modify Category="StaticObjects" ID="14184" Name="structure_engineroom_floor_lip_137">
-        <SetAttr TwoSidedShadow="true" />
+        <SetAttr Rotation="-0.406763 1.5708 -0.406763" TwoSidedShadow="true" />
     </Modify>
     <Modify Category="StaticObjects" ID="14185" Name="structure_engineroom_floor_lip_railpost_39">
-        <SetAttr TwoSidedShadow="true" />
+        <SetAttr Rotation="-3.14159 -1.5708 -3.14159" TwoSidedShadow="true" />
     </Modify>
     <Modify Category="StaticObjects" ID="14187" Name="structure_engineroom_floor_321">
         <SetAttr TwoSidedShadow="true" />
@@ -11020,10 +11020,10 @@
         <SetAttr TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="14582" Name="vertical_dividing_wall_2">
-        <SetAttr TwoSidedShadow="false" />
+        <SetAttr Rotation="0.110113 -1.5708 -0.110113" TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="14583" Name="vertical_dividing_wall_3">
-        <SetAttr TwoSidedShadow="false" />
+        <SetAttr Rotation="0.110113 -1.5708 -0.110113" TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="14584" Name="vertical_dividing_wall_4">
         <SetAttr TwoSidedShadow="false" />
@@ -11554,7 +11554,7 @@
         <SetAttr TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="14810" Name="vertical_dividing_wall_182">
-        <SetAttr TwoSidedShadow="false" />
+        <SetAttr Rotation="0.110113 -1.5708 -0.110113" TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="14813" Name="vertical_dividing_wall_185">
         <SetAttr TwoSidedShadow="false" />
@@ -11617,13 +11617,13 @@
         <SetAttr TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="14867" Name="vertical_dividing_wall_179">
-        <SetAttr TwoSidedShadow="false" />
+        <SetAttr Rotation="-3.12281 1.5708 -3.12281" TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="14868" Name="vertical_dividing_wall_183">
-        <SetAttr TwoSidedShadow="false" />
+        <SetAttr Rotation="-3.12281 1.5708 -3.12281" TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="14869" Name="vertical_dividing_wall_189">
-        <SetAttr TwoSidedShadow="false" />
+        <SetAttr Rotation="-3.12281 1.5708 -3.12281" TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="14871" Name="vertical_dividing_wall_8">
         <SetAttr TwoSidedShadow="false" />
@@ -12106,13 +12106,13 @@
         <SetAttr TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="16032" Name="tesla_structure_catwalk_caps_7">
-        <SetAttr TwoSidedShadow="false" />
+        <SetAttr Rotation="-3.14159 1.5708 -3.14159" TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="16036" Name="tesla_structure_catwalk_caps_8">
         <SetAttr TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="16044" Name="tesla_structure_catwalk_caps_9">
-        <SetAttr TwoSidedShadow="false" />
+        <SetAttr Rotation="2.53518e-06 1.5708 2.53518e-06" TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="16048" Name="tesla_structure_catwalk_caps_10">
         <SetAttr TwoSidedShadow="false" />
@@ -12319,7 +12319,7 @@
         <SetAttr Rotation="-1.5708 1.57011 2.53518e-06" TwoSidedShadow="false" />
     </Modify>
     <Modify Category="Primitives" ID="16031" Name="Plane_29">
-        <SetAttr TwoSidedShadow="false" />
+        <SetAttr Rotation="-3.07741 -1.5708 1.50662" TwoSidedShadow="false" />
     </Modify>
     <Modify Category="Primitives" ID="16034" Name="Plane_30">
         <SetAttr TwoSidedShadow="false" />
@@ -12328,7 +12328,7 @@
         <SetAttr TwoSidedShadow="false" />
     </Modify>
     <Modify Category="Primitives" ID="16043" Name="Plane_32">
-        <SetAttr TwoSidedShadow="false" />
+        <SetAttr Rotation="0.0641827 -1.5708 -1.63497" TwoSidedShadow="false" />
     </Modify>
     <Modify Category="Primitives" ID="16045" Name="Plane_36">
         <SetAttr Rotation="1.57079 1.57011 -3.14159" TwoSidedShadow="false" />
@@ -12339,14 +12339,6 @@
     <Modify Category="Primitives" ID="16049" Name="Plane_38">
         <SetAttr TwoSidedShadow="false" />
     </Modify>
-    <Remove Category="Entities" ID="13977" Name="child_1" />
-    <Remove Category="Entities" ID="15110" Name="wretch_1" />
-    <Remove Category="Entities" ID="15121" Name="wretch_2" />
-    <Remove Category="Entities" ID="15440" Name="wretch_3" />
-    <Remove Category="Entities" ID="15442" Name="wretch_4" />
-    <Remove Category="Entities" ID="15462" Name="wretch_5" />
-    <Remove Category="Entities" ID="15466" Name="wretch_6" />
-    <Remove Category="Entities" ID="15492" Name="wretch_7" />
     <Modify Category="Entities" ID="4869" Name="fan_ceiling_short_2">
         <SetVar Name="CallbackFunc" Value="" />
         <SetVar Name="ConnectedProps" Value="" />
@@ -12419,6 +12411,24 @@
     </Modify>
     <Modify Category="Entities" ID="13823" Name="Furnace3SwitchLight">
         <SetAttr FalloffMap="" />
+    </Modify>
+    <Modify Category="Entities" ID="14161" Name="youarehereA">
+        <SetAttr Rotation="3.14158 -1.5708 -3.14158" />
+    </Modify>
+    <Modify Category="Entities" ID="14164" Name="pigline_lamp_1">
+        <SetAttr Rotation="2.53518e-06 -1.5708 2.53518e-06" />
+    </Modify>
+    <Modify Category="Entities" ID="14165" Name="pigline_lamp_2">
+        <SetAttr Rotation="2.53518e-06 -1.5708 2.53518e-06" />
+    </Modify>
+    <Modify Category="Entities" ID="14167" Name="pigline_lamp_3">
+        <SetAttr Rotation="-3.14159 -1.5708 -3.14159" />
+    </Modify>
+    <Modify Category="Entities" ID="14168" Name="youarehereA_1">
+        <SetAttr Rotation="-1.25488e-05 -1.5708 1.25488e-05" />
+    </Modify>
+    <Modify Category="Entities" ID="14169" Name="pigline_lamp_4">
+        <SetAttr Rotation="-3.14159 -1.5708 -3.14159" />
     </Modify>
     <Modify Category="Entities" ID="14296" Name="SpotLight_1">
         <SetAttr FalloffMap="" />

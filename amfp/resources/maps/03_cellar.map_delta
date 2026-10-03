@@ -29,14 +29,6 @@
     <Modify Category="StaticObjects" ID="10614" Name="wall_default_314">
         <SetAttr Rotation="3.139 -1.5708 1.57339" />
     </Modify>
-    <Remove Category="Entities" ID="9218" Name="Child1" />
-    <Remove Category="Entities" ID="9245" Name="Child2" />
-    <Remove Category="Entities" ID="9254" Name="Child3" />
-    <Remove Category="Entities" ID="9255" Name="Child4" />
-    <Remove Category="Entities" ID="10673" Name="Child2a" />
-    <Remove Category="Entities" ID="10735" Name="wretch_1" />
-    <Remove Category="Entities" ID="10736" Name="wretch_2" />
-    <Remove Category="Entities" ID="10747" Name="wretch_3" />
     <Modify Category="Entities" ID="6092" Name="catwalk_machine_spotlight">
         <SetAttr FalloffMap="" />
     </Modify>
