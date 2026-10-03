@@ -354,6 +354,23 @@ void cWorld::Compile(bool abCalcPhysicsWorldSize) {
       }
     }
 
+    // Renderable bounds don't cover collision: static physics bodies (e.g. combined static
+    // meshes) can extend well past them, and anything outside the world box is dropped from
+    // the Newton broadphase, so the player falls through it. Fold every body in.
+    cPhysicsBodyIterator bodyIt = mpPhysicsWorld->GetBodyIterator();
+    while (bodyIt.HasNext()) {
+      iPhysicsBody *pBody = bodyIt.Next();
+      const cVector3f vBodyMin = pBody->GetBoundingVolume()->GetMin();
+      const cVector3f vBodyMax = pBody->GetBoundingVolume()->GetMax();
+      if (bHasBounds) {
+        CheckMinMaxUpdate(vMin, vMax, vBodyMin, vBodyMax);
+      } else {
+        vMin = vBodyMin;
+        vMax = vBodyMax;
+        bHasBounds = true;
+      }
+    }
+
     if (bHasBounds) {
       // Create a 10 m border around the world too
       mpPhysicsWorld->SetWorldSize(vMin - cVector3f(10, 10, 10),
