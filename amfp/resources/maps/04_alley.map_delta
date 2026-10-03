@@ -4662,11 +4662,6 @@
         <Plane Name="Plane_Occluder_1" WorldPos="-42.8448 5 2.17247" Rotation="0 0 0" Scale="1 1 1" Material="static_objects/technical/plane_black/plane_black.mat" StartCorner="0 0 0" EndCorner="74.0663 0 48.3848" Tag="" Active="true" CastShadows="true" TwoSidedShadow="false" Collides="true" IsOccluder="true" TileAmount="1 1 1" TileOffset="0 0 0" TextureAngle="0" AlignToWorldCoords="false" Corner1UV="0 48.3848" Corner2UV="0 0" Corner3UV="74.0663 0" Corner4UV="74.0663 48.3848" />
         <Plane Name="Plane_Occluder_2" WorldPos="-49.3293 5 1.92085" Rotation="0 0 0" Scale="1 1 1" Material="static_objects/technical/plane_black/plane_black.mat" StartCorner="0 0 0" EndCorner="88.7781 0 23.1438" Tag="" Active="true" CastShadows="true" TwoSidedShadow="false" Collides="true" IsOccluder="true" TileAmount="1 1 1" TileOffset="0 0 0" TextureAngle="0" AlignToWorldCoords="false" Corner1UV="0 23.1438" Corner2UV="0 0" Corner3UV="88.7781 0" Corner4UV="88.7781 23.1438" />
     </Add>
-    <Remove Category="Entities" ID="10184" Name="WalkwayPig" />
-    <Remove Category="Entities" ID="14223" Name="Child3" />
-    <Remove Category="Entities" ID="14224" Name="Child4" />
-    <Remove Category="Entities" ID="15385" Name="Child2" />
-    <Remove Category="Entities" ID="15765" Name="Child1" />
     <Modify Category="Entities" ID="8288" Name="BoxLight_1">
         <SetAttr FalloffMap="" />
     </Modify>

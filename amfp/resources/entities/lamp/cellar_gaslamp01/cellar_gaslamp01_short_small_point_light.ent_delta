@@ -1,0 +1,10 @@
+<EntDelta Version="1" Target="entities/lamp/cellar_gaslamp01/cellar_gaslamp01_short_small_point_light.ent">
+    <RemoveVar Name="CanBeTurnedOff" />
+    <RemoveVar Name="NeedsTinderbox" />
+    <Modify Category="Entities" ID="14" Name="PointLight_1">
+        <SetAttr FalloffMap="" RendererMask="1" />
+    </Modify>
+    <Add Category="Entities">
+        <PointLight Name="PointLight_2" WorldPos="0 -0.61305 0" Rotation="0 0 0" Scale="1 1 1" Tag="" Active="true" CastShadows="false" ShadowResolution="High" ShadowsAffectStatic="true" ShadowsAffectDynamic="true" Radius="1" Brightness="1" Falloff="1" Re_Intensity="20" Re_SourceRadius="0.1" FalloffMap="" Gobo="" GoboAnimMode="None" GoboAnimFrameTime="0" DiffuseColor="0.6 0.4 0.25098 0" FlickerActive="false" FlickerOnMinLength="0" FlickerOnMaxLength="0" FlickerOnPS="" FlickerOnSound="" FlickerOffMinLength="0" FlickerOffMaxLength="0" FlickerOffPS="" FlickerOffSound="" FlickerOffColor="0 0 0 1" FlickerOffRadius="0" Re_FlickerOffIntensity="0" FlickerFade="false" FlickerOnFadeMinLength="0" FlickerOnFadeMaxLength="0" FlickerOffFadeMinLength="0" FlickerOffFadeMaxLength="0" />
+    </Add>
+</EntDelta>
