@@ -19,8 +19,6 @@
 
 #include <string>
 
-using namespace std;
-
 #include "LuxSaveHandler.h"
 
 #include "LuxMapHandler.h"
@@ -41,6 +39,10 @@ using namespace std;
 #include "LuxProgressLogHandler.h"
 #include "LuxLoadScreenHandler.h"
 #include "LuxSavedGame.h"
+
+// After the includes: a Lux header pulls in <windows.h>, whose rpcndr.h
+// declares a global 'byte' that is ambiguous with std::byte under this using.
+using namespace std;
 
 //-----------------------------------------------------------------------
 

@@ -22,6 +22,8 @@
 #include "scene/World.h"
 #include "graphics/Color.h"
 
+#include <tracy/Tracy.hpp>
+
 #include <tinyxml2.h>
 
 #include "system/LowLevelSystem.h"
@@ -1060,6 +1062,7 @@ uint32_t cWorld::SubmitRenderableObject(iRenderable *pObject,
 // and BuildBlas ensures each mesh's BLAS is current before its device address is
 // read. Then grow/upload the instance buffer and record the TLAS build.
 void cWorld::BuildTlas(cGraphics::FrameContext *cntx, cFrustum *apFrustum) {
+  ZoneScopedN("cWorld::BuildTlas");
   if (!mpGraphics->device.accelerationStructureEnabled)
     return;
   // Nothing reads a TLAS while Standard is drawing.

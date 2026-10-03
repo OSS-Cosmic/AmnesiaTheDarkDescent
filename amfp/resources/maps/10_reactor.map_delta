@@ -1809,7 +1809,7 @@
         <SetAttr TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="4623" Name="pipes_thin_straight_long_714">
-        <SetAttr Rotation="-2.28347 1.5708 -0.712683" TwoSidedShadow="false" />
+        <SetAttr TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="4624" Name="pipes_thin_straight_long_715">
         <SetAttr TwoSidedShadow="false" />
@@ -1818,7 +1818,7 @@
         <SetAttr TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="4626" Name="pipes_thin_straight_long_717">
-        <SetAttr Rotation="3.12882 -1.5708 -1.55803" TwoSidedShadow="false" />
+        <SetAttr TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="4627" Name="pipes_thin_straight_long_718">
         <SetAttr TwoSidedShadow="false" />
@@ -2859,16 +2859,16 @@
         <SetAttr TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="5599" Name="wall_welder_wood_178">
-        <SetAttr Rotation="1.91103 1.5708 0.340263" TwoSidedShadow="false" />
+        <SetAttr TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="5600" Name="wall_welder_wood_179">
-        <SetAttr Rotation="1.91103 1.5708 0.340263" TwoSidedShadow="false" />
+        <SetAttr TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="5601" Name="wall_welder_wood_182">
-        <SetAttr Rotation="-0.445163 1.56982 -2.80133" TwoSidedShadow="false" />
+        <SetAttr Rotation="-0.445163 1.5697 -2.80133" TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="5603" Name="wall_welder_wood_183">
-        <SetAttr Rotation="-2.01596 1.5708 0.340263" TwoSidedShadow="false" />
+        <SetAttr Rotation="1.12563 1.57031 -2.80133" TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="5605" Name="wall_welder_wood_184">
         <SetAttr TwoSidedShadow="false" />
@@ -3837,7 +3837,7 @@
         <SetAttr TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="6186" Name="tesla_props_pipes_02_cap_6">
-        <SetAttr Rotation="1.56095 1.57045 -1.58063" TwoSidedShadow="false" />
+        <SetAttr Rotation="1.56095 1.5708 -1.58063" TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="6193" Name="pipe_3m_copper_8">
         <SetAttr TwoSidedShadow="false" />
@@ -3870,13 +3870,13 @@
         <SetAttr TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="6215" Name="special_fence_frame_3">
-        <SetAttr Rotation="3.14159 -1.5708 3.14159" TwoSidedShadow="false" />
+        <SetAttr TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="6217" Name="tesla_props_pipes_02_cap_9">
         <SetAttr TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="6220" Name="special_fence_frame_4">
-        <SetAttr Rotation="3.14159 -1.5708 3.14159" TwoSidedShadow="false" />
+        <SetAttr TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="6225" Name="special_pipe_support_frame_1">
         <SetAttr TwoSidedShadow="false" />
@@ -3903,13 +3903,13 @@
         <SetAttr TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="6235" Name="pipe_elbow_copper_8">
-        <SetAttr Rotation="-1.57079 1.5708 3.14159" TwoSidedShadow="false" />
+        <SetAttr TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="6236" Name="pipe_elbow_copper_9">
-        <SetAttr Rotation="-1.57079 1.5708 3.14159" TwoSidedShadow="false" />
+        <SetAttr TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="6237" Name="pipe_elbow_copper_10">
-        <SetAttr Rotation="-1.57079 1.5708 3.14159" TwoSidedShadow="false" />
+        <SetAttr TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="6246" Name="catwalk_factory_4m_dirty_17">
         <SetAttr TwoSidedShadow="false" />
@@ -4611,7 +4611,7 @@
         <SetAttr TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="6580" Name="pipes_thin_straight_medium_146">
-        <SetAttr Rotation="2.00674 -1.5708 -2.00674" TwoSidedShadow="false" />
+        <SetAttr TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="6581" Name="pipe_4m_43">
         <SetAttr TwoSidedShadow="false" />
@@ -4620,7 +4620,7 @@
         <SetAttr TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="6583" Name="pipes_thin_straight_medium_148">
-        <SetAttr Rotation="-1.13485 -1.5708 -2.00674" TwoSidedShadow="false" />
+        <SetAttr TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="6584" Name="pipes_thin_straight_medium_149">
         <SetAttr TwoSidedShadow="false" />
@@ -5118,10 +5118,10 @@
         <SetAttr TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="6929" Name="pipe_4m_copper_64">
-        <SetAttr Rotation="-2.79574 -1.5708 1.22495" TwoSidedShadow="false" />
+        <SetAttr TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="6931" Name="valve_spraylock_1">
-        <SetAttr Rotation="2.53518e-06 -1.5708 2.53518e-06" TwoSidedShadow="false" />
+        <SetAttr TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="6932" Name="pipe_4m_copper_60">
         <SetAttr TwoSidedShadow="false" />
@@ -5181,16 +5181,16 @@
         <SetAttr TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="6955" Name="pipe_4m_copper_82">
-        <SetAttr Rotation="-2.79574 -1.5708 1.22494" TwoSidedShadow="false" />
+        <SetAttr TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="6956" Name="valve_spraylock_3">
-        <SetAttr Rotation="2.53518e-06 -1.5708 2.53518e-06" TwoSidedShadow="false" />
+        <SetAttr TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="6958" Name="pipe_4m_copper_83">
-        <SetAttr Rotation="0.345853 -1.5708 -1.91664" TwoSidedShadow="false" />
+        <SetAttr TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="6959" Name="valve_spraylock_4">
-        <SetAttr Rotation="-3.14159 -1.5708 -3.14159" TwoSidedShadow="false" />
+        <SetAttr TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="6962" Name="pipe_4m_copper_84">
         <SetAttr TwoSidedShadow="false" />
@@ -5289,16 +5289,16 @@
         <SetAttr TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="7000" Name="pipe_4m_copper_118">
-        <SetAttr Rotation="-2.79574 -1.5708 1.22495" TwoSidedShadow="false" />
+        <SetAttr TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="7001" Name="valve_spraylock_5">
-        <SetAttr Rotation="2.53518e-06 -1.5708 2.53518e-06" TwoSidedShadow="false" />
+        <SetAttr TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="7002" Name="pipe_4m_copper_119">
-        <SetAttr Rotation="0.345853 -1.5708 -1.91665" TwoSidedShadow="false" />
+        <SetAttr TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="7003" Name="valve_spraylock_6">
-        <SetAttr Rotation="-3.14159 -1.5708 -3.14159" TwoSidedShadow="false" />
+        <SetAttr TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="7004" Name="pipe_4m_copper_120">
         <SetAttr TwoSidedShadow="false" />
@@ -5337,25 +5337,25 @@
         <SetAttr TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="7017" Name="pipe_4m_copper_132">
-        <SetAttr Rotation="0.345853 -1.5708 -1.91664" TwoSidedShadow="false" />
+        <SetAttr TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="7018" Name="valve_spraylock_7">
-        <SetAttr Rotation="-3.14159 -1.5708 -3.14159" TwoSidedShadow="false" />
+        <SetAttr TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="7020" Name="pipe_4m_copper_133">
-        <SetAttr Rotation="-2.79574 -1.5708 1.22495" TwoSidedShadow="false" />
+        <SetAttr TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="7021" Name="valve_spraylock_8">
-        <SetAttr Rotation="2.53518e-06 -1.5708 2.53518e-06" TwoSidedShadow="false" />
+        <SetAttr TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="7023" Name="pipe_4m_copper_96">
         <SetAttr TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="7024" Name="pipe_4m_copper_134">
-        <SetAttr Rotation="0.345853 -1.5708 -1.91664" TwoSidedShadow="false" />
+        <SetAttr TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="7025" Name="valve_spraylock_9">
-        <SetAttr Rotation="-3.14159 -1.5708 -3.14159" TwoSidedShadow="false" />
+        <SetAttr TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="7027" Name="pipe_4m_copper_101">
         <SetAttr TwoSidedShadow="false" />
@@ -6147,7 +6147,7 @@
         <SetAttr TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="7386" Name="wall_welder_wood_97">
-        <SetAttr Rotation="-1.57079 1.5708 -2.53518e-06" TwoSidedShadow="false" />
+        <SetAttr TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="7387" Name="wall_welder_wood_98">
         <SetAttr TwoSidedShadow="false" />
@@ -6156,22 +6156,22 @@
         <SetAttr TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="7389" Name="wall_welder_wood_100">
-        <SetAttr Rotation="-1.57079 1.5708 -2.53518e-06" TwoSidedShadow="false" />
+        <SetAttr TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="7391" Name="wall_welder_wood_102">
         <SetAttr TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="7392" Name="wall_welder_wood_103">
-        <SetAttr Rotation="0.634103 1.5708 2.99029" TwoSidedShadow="false" />
+        <SetAttr TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="7393" Name="wall_welder_wood_104">
-        <SetAttr Rotation="0.634103 1.5708 2.99029" TwoSidedShadow="false" />
+        <SetAttr TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="7394" Name="wall_welder_wood_125">
         <SetAttr TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="7396" Name="wall_welder_wood_126">
-        <SetAttr Rotation="-1.65509 -1.5708 0.0842926" TwoSidedShadow="false" />
+        <SetAttr TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="7397" Name="wall_welder_wood_128">
         <SetAttr TwoSidedShadow="false" />
@@ -6180,22 +6180,22 @@
         <SetAttr TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="7399" Name="wall_welder_wood_597">
-        <SetAttr Rotation="-1.65509 -1.5708 0.0842926" TwoSidedShadow="false" />
+        <SetAttr TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="7401" Name="wall_welder_wood_598">
         <SetAttr TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="7402" Name="wall_welder_wood_599">
-        <SetAttr Rotation="-0.121303 -1.5708 -2.23488" TwoSidedShadow="false" />
+        <SetAttr TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="7403" Name="wall_welder_wood_600">
-        <SetAttr Rotation="-0.121303 -1.5708 -2.23488" TwoSidedShadow="false" />
+        <SetAttr TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="7404" Name="wall_welder_wood_601">
         <SetAttr TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="7406" Name="wall_welder_wood_602">
-        <SetAttr Rotation="-1.73819 1.5708 -0.167403" TwoSidedShadow="false" />
+        <SetAttr TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="7407" Name="wall_welder_wood_603">
         <SetAttr TwoSidedShadow="false" />
@@ -6204,7 +6204,7 @@
         <SetAttr TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="7409" Name="wall_welder_wood_605">
-        <SetAttr Rotation="-1.73819 1.5708 -0.167403" TwoSidedShadow="false" />
+        <SetAttr TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="7416" Name="wall_welder_wood_606">
         <SetAttr TwoSidedShadow="false" />
@@ -6270,10 +6270,10 @@
         <SetAttr TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="7460" Name="wall_welder_wood_628">
-        <SetAttr Rotation="-2.01596 1.5708 0.340263" TwoSidedShadow="false" />
+        <SetAttr Rotation="1.12563 1.57031 -2.80133" TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="7461" Name="wall_welder_wood_629">
-        <SetAttr Rotation="-2.01596 1.5708 0.340263" TwoSidedShadow="false" />
+        <SetAttr Rotation="1.12563 1.57031 -2.80133" TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="7462" Name="wall_welder_wood_77">
         <SetAttr TwoSidedShadow="false" />
@@ -7598,7 +7598,7 @@
         <SetAttr FalloffMap="" />
     </Modify>
     <Modify Category="Entities" ID="6630" Name="SpotLight_8">
-        <SetAttr FalloffMap="" />
+        <SetAttr FalloffMap="" RendererMask="1" />
     </Modify>
     <Modify Category="Entities" ID="6738" Name="SpotLight_15">
         <SetAttr FalloffMap="" />
@@ -7671,19 +7671,19 @@
         <SetAttr FalloffMap="" RendererMask="1" />
     </Modify>
     <Modify Category="Entities" ID="6883" Name="PointLight_25">
-        <SetAttr FalloffMap="" RendererMask="1" />
+        <SetAttr FalloffMap="" Re_FlickerOffIntensity="0" Re_Intensity="2.5" Re_SourceRadius="0.01" WorldPos="110.177 -71.3513 21.969" />
     </Modify>
     <Modify Category="Entities" ID="6885" Name="PointLight_26">
         <SetAttr FalloffMap="" RendererMask="1" />
     </Modify>
     <Modify Category="Entities" ID="6893" Name="PointLight_27">
-        <SetAttr FalloffMap="" RendererMask="1" Rotation="2.53518e-06 -1.5708 2.53518e-06" />
+        <SetAttr FalloffMap="" Re_FlickerOffIntensity="0" Re_Intensity="2" Re_SourceRadius="0.01" WorldPos="109.908 -73.6018 10.3117" />
     </Modify>
     <Modify Category="Entities" ID="6897" Name="PointLight_28">
-        <SetAttr FalloffMap="" RendererMask="1" />
+        <SetAttr FalloffMap="" Re_FlickerOffIntensity="0" Re_Intensity="2" Re_SourceRadius="0.01" WorldPos="102.562 -76.521 10.9107" />
     </Modify>
     <Modify Category="Entities" ID="6900" Name="PointLight_29">
-        <SetAttr FalloffMap="" RendererMask="1" />
+        <SetAttr FalloffMap="" Re_FlickerOffIntensity="0" Re_Intensity="2" Re_SourceRadius="0.01" WorldPos="102.52 -79.4648 10.889" />
     </Modify>
     <Modify Category="Entities" ID="6902" Name="PointLight_30">
         <SetAttr FalloffMap="" RendererMask="1" />
@@ -7815,7 +7815,6 @@
         <SetVar Name="UpdateAnimationWhenCulled" Value="false" />
     </Modify>
     <Modify Category="Entities" ID="7643" Name="block_box_metal_engroom_14">
-        <SetAttr Rotation="-3.14159 -1.5708 -3.14159" />
         <SetVar Name="UpdateAnimationWhenCulled" Value="false" />
     </Modify>
     <Modify Category="Entities" ID="7644" Name="block_box_metal_engroom_15">
@@ -7828,14 +7827,12 @@
         <SetVar Name="UpdateAnimationWhenCulled" Value="false" />
     </Modify>
     <Modify Category="Entities" ID="7647" Name="block_box_metal_engroom_18">
-        <SetAttr Rotation="2.53518e-06 -1.5708 2.53518e-06" />
         <SetVar Name="UpdateAnimationWhenCulled" Value="false" />
     </Modify>
     <Modify Category="Entities" ID="7648" Name="block_box_metal_engroom_19">
         <SetVar Name="UpdateAnimationWhenCulled" Value="false" />
     </Modify>
     <Modify Category="Entities" ID="7649" Name="block_box_metal_engroom_20">
-        <SetAttr Rotation="-3.14159 -1.5708 -3.14159" />
         <SetVar Name="UpdateAnimationWhenCulled" Value="false" />
     </Modify>
     <Modify Category="Entities" ID="7708" Name="ReactorOuterLight_63">
@@ -7866,42 +7863,38 @@
         <SetVar Name="UpdateAnimationWhenCulled" Value="false" />
     </Modify>
     <Modify Category="Entities" ID="7742" Name="block_box_8">
-        <SetAttr Rotation="0.858463 -1.5708 -0.858463" />
         <SetVar Name="UpdateAnimationWhenCulled" Value="false" />
     </Modify>
     <Modify Category="Entities" ID="7743" Name="block_box_9">
         <SetVar Name="UpdateAnimationWhenCulled" Value="false" />
     </Modify>
     <Modify Category="Entities" ID="7744" Name="block_box_10">
-        <SetAttr Rotation="-2.28313 -1.5708 2.28313" />
         <SetVar Name="UpdateAnimationWhenCulled" Value="false" />
     </Modify>
     <Modify Category="Entities" ID="7745" Name="block_box_11">
         <SetVar Name="UpdateAnimationWhenCulled" Value="false" />
     </Modify>
     <Modify Category="Entities" ID="7746" Name="block_box_12">
-        <SetAttr Rotation="-2.28313 -1.57031 2.28313" />
+        <SetAttr Rotation="-2.28313 -1.5702 2.28313" />
         <SetVar Name="UpdateAnimationWhenCulled" Value="false" />
     </Modify>
     <Modify Category="Entities" ID="7747" Name="block_box_13">
         <SetVar Name="UpdateAnimationWhenCulled" Value="false" />
     </Modify>
     <Modify Category="Entities" ID="7748" Name="block_box_14">
-        <SetAttr Rotation="0.858463 -1.57045 -0.858463" />
+        <SetAttr Rotation="0.858463 -1.5708 -0.858463" />
         <SetVar Name="UpdateAnimationWhenCulled" Value="false" />
     </Modify>
     <Modify Category="Entities" ID="7749" Name="block_box_15">
         <SetVar Name="UpdateAnimationWhenCulled" Value="false" />
     </Modify>
     <Modify Category="Entities" ID="7750" Name="block_box_16">
-        <SetAttr Rotation="-2.28313 -1.5708 2.28313" />
         <SetVar Name="UpdateAnimationWhenCulled" Value="false" />
     </Modify>
     <Modify Category="Entities" ID="7751" Name="block_box_17">
         <SetVar Name="UpdateAnimationWhenCulled" Value="false" />
     </Modify>
     <Modify Category="Entities" ID="7752" Name="block_box_18">
-        <SetAttr Rotation="-2.28313 -1.5708 2.28313" />
         <SetVar Name="UpdateAnimationWhenCulled" Value="false" />
     </Modify>
     <Modify Category="Entities" ID="7753" Name="block_box_19">
@@ -8118,11 +8111,10 @@
         <SetVar Name="UpdateAnimationWhenCulled" Value="false" />
     </Modify>
     <Modify Category="Entities" ID="7840" Name="reactor_gaslamp_CS_8">
-        <SetAttr Rotation="-2.53518e-06 -1.5708 -2.53518e-06" />
         <SetVar Name="UpdateAnimationWhenCulled" Value="false" />
     </Modify>
     <Modify Category="Entities" ID="7841" Name="PointLight_20">
-        <SetAttr FalloffMap="" RendererMask="1" Rotation="-2.53518e-06 -1.5708 -2.53518e-06" />
+        <SetAttr FalloffMap="" RendererMask="1" />
     </Modify>
     <Modify Category="Entities" ID="7847" Name="reactor_gaslamp_CS_9">
         <SetVar Name="UpdateAnimationWhenCulled" Value="false" />

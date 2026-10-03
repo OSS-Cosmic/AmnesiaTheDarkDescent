@@ -28,6 +28,15 @@ newoption {
 }
 
 newoption {
+    trigger = "with-tracy",
+    value = "yes/no",
+    description = "Compile the Tracy profiler client into the engine (default no). Zones in the "
+        .. "engine compile to nothing when this is off.",
+    allowed = { { "yes", "Enable Tracy (TRACY_ENABLE, on-demand)" }, { "no", "Zones compile out" } },
+    default = "no",
+}
+
+newoption {
     trigger = "with-fsr",
     value = "yes/no",
     description = "Build and link the FidelityFX Super Resolution SDK (default yes).",

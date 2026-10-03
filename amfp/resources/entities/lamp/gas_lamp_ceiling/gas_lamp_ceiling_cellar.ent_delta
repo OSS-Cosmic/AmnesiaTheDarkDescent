@@ -3,6 +3,9 @@
         <SetAttr Brightness="1" Falloff="1" RendererMask="1" />
     </Modify>
     <Modify Category="Entities" ID="9" Name="SpotLight_1">
-        <SetAttr Brightness="1" Falloff="1" Re_FlickerOffIntensity="0" Re_Intensity="2" Re_SourceRadius="0.1" />
+        <SetAttr Brightness="1" Falloff="1" Re_FlickerOffIntensity="0" Re_Intensity="15" Re_SourceRadius="0.1" />
     </Modify>
+    <Add Category="Entities">
+        <PointLight Name="PointLight_2" WorldPos="0.00475502 -0.826236 0.00950432" Rotation="0 0 0" Scale="1 1 1" Tag="" Active="true" CastShadows="false" ShadowResolution="High" ShadowsAffectStatic="true" ShadowsAffectDynamic="true" Radius="1" Brightness="1" Falloff="1" Re_Intensity="15" Re_SourceRadius="0.8" FalloffMap="" Gobo="" GoboAnimMode="None" GoboAnimFrameTime="0" DiffuseColor="0.533333 0.34902 0.14902 1" FlickerActive="false" FlickerOnMinLength="0" FlickerOnMaxLength="0" FlickerOnPS="" FlickerOnSound="" FlickerOffMinLength="0" FlickerOffMaxLength="0" FlickerOffPS="" FlickerOffSound="" FlickerOffColor="0 0 0 1" FlickerOffRadius="0" Re_FlickerOffIntensity="0" FlickerFade="false" FlickerOnFadeMinLength="0" FlickerOnFadeMaxLength="0" FlickerOffFadeMinLength="0" FlickerOffFadeMaxLength="0" />
+    </Add>
 </EntDelta>

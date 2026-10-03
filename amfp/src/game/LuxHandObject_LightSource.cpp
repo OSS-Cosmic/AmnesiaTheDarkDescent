@@ -347,9 +347,13 @@ void cLuxHandObject_LightSource::UpdateSwayPhysics(float afTimeStep)
 		mpMeshEntity->SetMatrix(m_mtxOffset);
 	}
 
+	// Emitter stays rigid with the lens (else it sinks into the body and the
+	// RT shadow rays hit the lantern); the beam keeps the damped retail sway.
 	for(size_t i=0; i<mvLights.size(); ++i)
 	{
-		mvLights[i]->SetMatrix(cMath::MatrixMul(mtxSwayLight, mvDefaultLightMatrix[i]) );
+		cMatrixf mtxLight = cMath::MatrixMul(mtxSwayLight, mvDefaultLightMatrix[i]);
+		mtxLight.SetTranslation(cMath::MatrixMul(mtxSway, mvDefaultLightMatrix[i]).GetTranslation());
+		mvLights[i]->SetMatrix(mtxLight);
 	}
 	
 	for(size_t i=0; i<mvBillboards.size(); ++i)

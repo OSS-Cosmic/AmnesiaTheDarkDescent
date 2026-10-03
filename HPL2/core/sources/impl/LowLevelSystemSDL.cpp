@@ -24,7 +24,6 @@
 
 #include <cassert>
 #ifdef _WIN32
-#pragma comment(lib, "angelscript.lib")
 #define UNICODE
 #include <shlobj.h>
 #include <windows.h>

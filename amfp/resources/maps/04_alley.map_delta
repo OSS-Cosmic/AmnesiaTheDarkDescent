@@ -204,7 +204,7 @@
         <SetAttr TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="6748" Name="wall_fencepillar01_16">
-        <SetAttr TwoSidedShadow="false" />
+        <SetAttr Rotation="-3.1341 -1.5708 3.1341" TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="6751" Name="wall_default_25">
         <SetAttr TwoSidedShadow="false" />
@@ -1845,7 +1845,7 @@
         <SetAttr TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="8634" Name="special_mandus_1">
-        <SetAttr TwoSidedShadow="false" />
+        <SetAttr Rotation="-2.53518e-06 -1.5708 -2.53518e-06" TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="8639" Name="roof_factory_roof_52">
         <SetAttr TwoSidedShadow="false" />
@@ -2127,7 +2127,7 @@
         <SetAttr TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="8822" Name="special_ventilation_pipe_elbow_wall_28">
-        <SetAttr TwoSidedShadow="false" />
+        <SetAttr Rotation="0.0203628 1.5708 0.0203628" TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="8825" Name="ceiling_welder_wood_middle_246">
         <SetAttr TwoSidedShadow="false" />
@@ -3402,13 +3402,13 @@
         <SetAttr TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="14559" Name="wall_fencewall02_31">
-        <SetAttr TwoSidedShadow="false" />
+        <SetAttr Rotation="3.14159 1.5708 3.14159" TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="14596" Name="wall_fencepillar01_21">
         <SetAttr TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="14597" Name="wall_fencewall02_32">
-        <SetAttr TwoSidedShadow="false" />
+        <SetAttr Rotation="-2.53518e-06 1.5708 -2.53518e-06" TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="14600" Name="wall_window_large_blue_seethrough_1">
         <SetAttr TwoSidedShadow="false" />
@@ -3477,7 +3477,7 @@
         <SetAttr TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="14757" Name="wall_default_extension_231">
-        <SetAttr TwoSidedShadow="false" />
+        <SetAttr Rotation="-2.53518e-06 -1.5708 -2.53518e-06" TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="14760" Name="wall_default_extension_233">
         <SetAttr TwoSidedShadow="false" />
@@ -3537,7 +3537,7 @@
         <SetAttr TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="14806" Name="structure_engineroom_beam_buttress_18">
-        <SetAttr TwoSidedShadow="false" />
+        <SetAttr Rotation="3.14159 1.5708 3.14159" TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="14807" Name="wall_factory_concrete_pillar_27">
         <SetAttr TwoSidedShadow="false" />
@@ -3546,7 +3546,7 @@
         <SetAttr TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="14809" Name="structure_engineroom_beam_buttress_19">
-        <SetAttr TwoSidedShadow="false" />
+        <SetAttr Rotation="0.0093526 -1.5708 -1.58015" TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="14810" Name="wall_factory_concrete_pillar_29">
         <SetAttr TwoSidedShadow="false" />
@@ -3780,10 +3780,10 @@
         <SetAttr TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="14936" Name="structure_engineroom_beam_buttress_26">
-        <SetAttr TwoSidedShadow="false" />
+        <SetAttr Rotation="1.54128 1.5708 3.11209" TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="14937" Name="structure_engineroom_beam_buttress_27">
-        <SetAttr TwoSidedShadow="false" />
+        <SetAttr Rotation="0.0198726 -1.5708 -0.0198726" TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="14987" Name="roof_factory_roof_101">
         <SetAttr TwoSidedShadow="false" />
@@ -3801,16 +3801,16 @@
         <SetAttr TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="15004" Name="structure_engineroom_beam_buttress_28">
-        <SetAttr TwoSidedShadow="false" />
+        <SetAttr Rotation="0.878523 -1.5708 -0.878533" TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="15005" Name="structure_engineroom_beam_buttress_29">
-        <SetAttr TwoSidedShadow="false" />
+        <SetAttr Rotation="0.878523 -1.5708 -0.878533" TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="15007" Name="structure_engineroom_beam_buttress_30">
-        <SetAttr TwoSidedShadow="false" />
+        <SetAttr Rotation="-2.26307 -1.5708 2.26306" TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="15008" Name="structure_engineroom_beam_buttress_31">
-        <SetAttr TwoSidedShadow="false" />
+        <SetAttr Rotation="-2.26307 -1.5708 2.26306" TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="15010" Name="pillars_tunnel_pillars_single_38">
         <SetAttr TwoSidedShadow="false" />
@@ -3987,7 +3987,7 @@
         <SetAttr TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="15148" Name="wall_fencewall02_33">
-        <SetAttr TwoSidedShadow="false" />
+        <SetAttr Rotation="3.14159 1.5708 3.14159" TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="15150" Name="buildings_streets_windows_plain_25">
         <SetAttr TwoSidedShadow="false" />
@@ -4659,8 +4659,8 @@
         <SetAttr TwoSidedShadow="false" />
     </Modify>
     <Add Category="Primitives">
-        <Plane Name="Plane" WorldPos="-42.8448 5 2.17247" Rotation="0 0 0" Scale="1 1 1" Material="home/michaelpollind/projects/ATDD-Redux/build-premake/amfp/Release/static_objects/technical/plane_black/plane_black.mat" StartCorner="0 0 0" EndCorner="74.0663 0 48.3848" Tag="" Active="true" CastShadows="true" TwoSidedShadow="false" Collides="true" IsOccluder="true" TileAmount="1 1 1" TileOffset="0 0 0" TextureAngle="0" AlignToWorldCoords="false" Corner1UV="0 48.3848" Corner2UV="0 0" Corner3UV="74.0663 0" Corner4UV="74.0663 48.3848" />
-        <Plane Name="Plane" WorldPos="-49.3293 5 1.92085" Rotation="0 0 0" Scale="1 1 1" Material="home/michaelpollind/projects/ATDD-Redux/build-premake/amfp/Release/static_objects/technical/plane_black/plane_black.mat" StartCorner="0 0 0" EndCorner="88.7781 0 23.1438" Tag="" Active="true" CastShadows="true" TwoSidedShadow="false" Collides="true" IsOccluder="true" TileAmount="1 1 1" TileOffset="0 0 0" TextureAngle="0" AlignToWorldCoords="false" Corner1UV="0 23.1438" Corner2UV="0 0" Corner3UV="88.7781 0" Corner4UV="88.7781 23.1438" />
+        <Plane Name="Plane_Occluder_1" WorldPos="-42.8448 5 2.17247" Rotation="0 0 0" Scale="1 1 1" Material="static_objects/technical/plane_black/plane_black.mat" StartCorner="0 0 0" EndCorner="74.0663 0 48.3848" Tag="" Active="true" CastShadows="true" TwoSidedShadow="false" Collides="true" IsOccluder="true" TileAmount="1 1 1" TileOffset="0 0 0" TextureAngle="0" AlignToWorldCoords="false" Corner1UV="0 48.3848" Corner2UV="0 0" Corner3UV="74.0663 0" Corner4UV="74.0663 48.3848" />
+        <Plane Name="Plane_Occluder_2" WorldPos="-49.3293 5 1.92085" Rotation="0 0 0" Scale="1 1 1" Material="static_objects/technical/plane_black/plane_black.mat" StartCorner="0 0 0" EndCorner="88.7781 0 23.1438" Tag="" Active="true" CastShadows="true" TwoSidedShadow="false" Collides="true" IsOccluder="true" TileAmount="1 1 1" TileOffset="0 0 0" TextureAngle="0" AlignToWorldCoords="false" Corner1UV="0 23.1438" Corner2UV="0 0" Corner3UV="88.7781 0" Corner4UV="88.7781 23.1438" />
     </Add>
     <Remove Category="Entities" ID="10184" Name="WalkwayPig" />
     <Remove Category="Entities" ID="14223" Name="Child3" />
@@ -4669,6 +4669,9 @@
     <Remove Category="Entities" ID="15765" Name="Child1" />
     <Modify Category="Entities" ID="8288" Name="BoxLight_1">
         <SetAttr FalloffMap="" />
+    </Modify>
+    <Modify Category="Entities" ID="13332" Name="radiator_rusted_2">
+        <SetAttr Rotation="-2.53518e-06 1.5708 -2.53518e-06" />
     </Modify>
     <Modify Category="Entities" ID="15443" Name="PointLight_1">
         <SetAttr FalloffMap="" RendererMask="1" />
@@ -4859,14 +4862,26 @@
     <Modify Category="Entities" ID="15560" Name="SpotLight_20">
         <SetAttr FalloffMap="" Re_FlickerOffIntensity="0" Re_Intensity="15" Re_SourceRadius="0" WorldPos="-49.8303 0.514097 -21" />
     </Modify>
+    <Modify Category="Entities" ID="15561" Name="streetlight_ground_40">
+        <SetAttr Rotation="0.196953 1.5708 0.196953" />
+    </Modify>
     <Modify Category="Entities" ID="15563" Name="SpotLight_21">
         <SetAttr FalloffMap="" Re_FlickerOffIntensity="0" Re_Intensity="15" Re_SourceRadius="0" WorldPos="-39.7453 0.516988 -21" />
+    </Modify>
+    <Modify Category="Entities" ID="15564" Name="streetlight_ground_41">
+        <SetAttr Rotation="-2.94464 1.5708 -2.94464" />
     </Modify>
     <Modify Category="Entities" ID="15566" Name="SpotLight_22">
         <SetAttr FalloffMap="" Re_FlickerOffIntensity="0" Re_Intensity="15" Re_SourceRadius="0" WorldPos="-29.75 1.47357 -21" />
     </Modify>
+    <Modify Category="Entities" ID="15567" Name="streetlight_ground_42">
+        <SetAttr Rotation="0.196953 1.5708 0.196953" />
+    </Modify>
     <Modify Category="Entities" ID="15572" Name="SpotLight_23">
         <SetAttr FalloffMap="" RendererMask="1" WorldPos="-24.8543 1.50689 -21" />
+    </Modify>
+    <Modify Category="Entities" ID="15573" Name="streetlight_ground_43">
+        <SetAttr Rotation="-2.94464 1.5708 -2.94464" />
     </Modify>
     <Modify Category="Entities" ID="15575" Name="PointLight_55">
         <SetAttr FalloffMap="" RendererMask="1" />
@@ -4914,7 +4929,7 @@
         <SetAttr FalloffMap="" WorldPos="-66.375 -0.114242 -22.875" />
     </Modify>
     <Modify Category="Entities" ID="15599" Name="SpotLight_29">
-        <SetAttr FalloffMap="" WorldPos="-62.375 -0.0785073 -22.875" />
+        <SetAttr FalloffMap="" Rotation="-1.59403 1.5708 -0.0232326" WorldPos="-62.375 -0.0785073 -22.875" />
     </Modify>
     <Modify Category="Entities" ID="15602" Name="PointLight_68">
         <SetAttr FalloffMap="" RendererMask="1" />
@@ -4941,13 +4956,13 @@
         <SetAttr FalloffMap="" RendererMask="1" />
     </Modify>
     <Modify Category="Entities" ID="15615" Name="PointLight_76">
-        <SetAttr FalloffMap="" RendererMask="1" />
+        <SetAttr FalloffMap="" />
     </Modify>
     <Modify Category="Entities" ID="15616" Name="PointLight_77">
-        <SetAttr FalloffMap="" RendererMask="1" />
+        <SetAttr FalloffMap="" Re_FlickerOffIntensity="0" Re_Intensity="15" Re_SourceRadius="0" />
     </Modify>
     <Modify Category="Entities" ID="15619" Name="PointLight_80">
-        <SetAttr FalloffMap="" RendererMask="1" />
+        <SetAttr FalloffMap="" />
     </Modify>
     <Modify Category="Entities" ID="15621" Name="PointLight_82">
         <SetAttr FalloffMap="" RendererMask="1" />

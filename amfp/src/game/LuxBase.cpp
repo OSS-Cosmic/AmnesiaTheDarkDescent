@@ -428,6 +428,7 @@ cLuxBase::cLuxBase()
 	///////////////////////////////
 	// Init variables
 	mbPTestActivated = false;
+	mRenderApi = eRenderApiPreference_Auto;
 }
 
 //-----------------------------------------------------------------------
@@ -534,8 +535,8 @@ int GenerateDump(EXCEPTION_POINTERS* pExceptionPointers)
 {
     BOOL bMiniDumpSuccessful;
     CHAR szFileName[MAX_PATH];
-    CHAR* szAppName = "AmnesiaForPigs";
-    CHAR* szVersion = "v1.0";
+    const CHAR* szAppName = "AmnesiaForPigs";
+    const CHAR* szVersion = "v1.0";
     DWORD dwBufferSize = MAX_PATH;
     HANDLE hDumpFile;
     SYSTEMTIME stLocalTime;
@@ -709,9 +710,56 @@ bool cLuxBase::StartCustomStory()
 
 bool cLuxBase::ParseCommandLine(const tString &asCommandline)
 {
-	if(asCommandline == "ptest")
+	//////////////////////////////////
+	// Split into tokens so a flag can be recognised next to a map file. The
+	// whole line used to be taken as the map file, so "--vulkan" loaded "kan".
+	tStringVec vTokens;
+	tString sSeparators = " \t";
+	cString::GetStringVec(asCommandline, vTokens, &sSeparators);
+
+	tString sRemainder = "";
+	bool bPTest = false;
+	for(size_t i=0; i<vTokens.size(); ++i)
 	{
-		mbPTestActivated = true;
+		const tString& sToken = vTokens[i];
+
+		//////////////////////////////////
+		// Graphics backend override. Last one wins; the engine turns Auto into
+		// the platform default (D3D12 on Windows, Vulkan elsewhere) and fails
+		// with a named error if the build has no such backend.
+		const tString sLower = cString::ToLowerCase(sToken);
+		if(sLower == "--d3d12" || sLower == "-d3d12")
+		{
+			mRenderApi = eRenderApiPreference_D3D12;
+			continue;
+		}
+		if(sLower == "--vulkan" || sLower == "-vulkan")
+		{
+			mRenderApi = eRenderApiPreference_Vulkan;
+			continue;
+		}
+
+		if(sToken == "ptest")
+		{
+			mbPTestActivated = true;
+			bPTest = true;
+			continue;
+		}
+
+		// An unknown "--" switch would otherwise be taken as the map file and
+		// surface much later as a missing world. Say so here instead.
+		if(sToken.compare(0, 2, "--") == 0)
+		{
+			Warning("Unknown command line option '%s', ignoring.\n", sToken.c_str());
+			continue;
+		}
+
+		if(sRemainder.empty() == false) sRemainder.append(" ");
+		sRemainder.append(sToken);
+	}
+
+	if(bPTest)
+	{
 		msInitConfigFile = cString::To16Char(DecryptString((char*)gv_main_init_str)); //_W("config/ptest_main_init.cfg");
 		
 		/*#ifndef SKIP_PTEST_TESTS
@@ -728,9 +776,7 @@ bool cLuxBase::ParseCommandLine(const tString &asCommandline)
 
 	//////////////////////////////////
 	//Main Init config file
-	// TODO: Parse the command line better?
-	msCommandLineMapFile = asCommandline;
-	msCommandLineMapFile = cString::Sub(msCommandLineMapFile, 5);
+	msCommandLineMapFile = cString::Sub(sRemainder, 5);
 	if(msInitConfigFile==_W("")) msInitConfigFile = _W("config/main_init.cfg");
 
 	return true;
@@ -1130,6 +1176,7 @@ bool cLuxBase::InitEngine()
 	vars.mGraphics.mbFullscreen =  mpConfigHandler->mbFullscreen;
 	vars.mGraphics.mbVsync = mpConfigHandler->mbVSync;
 	vars.mGraphics.mRendererBackend = mpConfigHandler->mRendererBackend;
+	vars.mGraphics.mRenderApi = mRenderApi;
 	vars.mGraphics.msWindowCaption = msGameName + " Loading...";
 
 	vars.mSound.mlSoundDeviceID = mpConfigHandler->mlSoundDevID;

@@ -115,6 +115,13 @@ project(name)
         DEPS_EXTERN .. "/cgltf",            -- cgltf.h single-header glTF 2.0 parser (MeshLoaderGLTF)
         DEPS_EXTERN .. "/ufbx",             -- ufbx single-file FBX parser (FbxImport / MeshLoaderFBX)
     }
+    -- Tracy zones live only in engine TUs, so TRACY_ENABLE is needed here and
+    -- nowhere else. Tracy.hpp turns every macro into a no-op when it is unset.
+    includedirs { DEPS_EXTERN .. "/tracy/public" }
+    if _OPTIONS["with-tracy"] == "yes" then
+        defines { "TRACY_ENABLE", "TRACY_ON_DEMAND" }
+        files { DEPS_EXTERN .. "/tracy/public/TracyClient.cpp" }
+    end
     generated_includes()
     d3d12ma_includes()
     if os.target() == "windows" and _OPTIONS["with-d3d12"] == "yes" then

@@ -185,11 +185,14 @@ windows_serialized_commands = function(commands, mutex_name)
     end
     -- The generated command is itself parsed by cmd.exe. Escape the quotes
     -- belonging to the nested CMake commands so quoted executable/path names
-    -- survive both cmd.exe and powershell.exe argument parsing.
+    -- survive both cmd.exe and powershell.exe argument parsing. Backslashes
+    -- directly before a quote (e.g. a "dir\" copy destination) must be doubled
+    -- too: powershell.exe reads \\" as one backslash plus a bare quote, so the
+    -- destination would lose its closing quote.
     local script = string.format(
         "& {$mutex = [System.Threading.Mutex]::new($false, 'Local\\%s'); $acquired = $false; try {try {$mutex.WaitOne(); $acquired = $true} catch [System.Threading.AbandonedMutexException] {$acquired = $true}; %s} finally {if ($acquired) {$mutex.ReleaseMutex()}; $mutex.Dispose()}}",
         mutex_name, table.concat(body, " "))
-    script = script:gsub('"', '\\"')
+    script = script:gsub('(\\*)"', function(slashes) return slashes .. slashes .. '\\"' end)
     return "powershell -NoProfile -ExecutionPolicy Bypass -Command \"" .. script .. "\""
 end
 
@@ -521,7 +524,7 @@ local function declare_nrd_staging(context)
     local windows_commands = {
         string.format('if not exist "%s" mkdir "%s"', winpath(context.runtime), winpath(context.runtime)),
         string.format('copy /Y "%s" "%s\\"',
-            winpath(NRD_BUILD .. "/_Bin/%%{cfg.buildcfg}/NRD.dll"), winpath(context.runtime)),
+            winpath(NRD_BUILD .. "/_Bin/%{cfg.buildcfg}/NRD.dll"), winpath(context.runtime)),
         string.format('if not exist "%s" mkdir "%s"', winpath(license_dir), winpath(license_dir)),
         string.format('copy /Y "%s" "%s\\"', winpath(license_src), winpath(license_dir)),
     }
