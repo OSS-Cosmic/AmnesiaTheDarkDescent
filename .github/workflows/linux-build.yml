@@ -29,6 +29,7 @@ jobs:
     runs-on: ubuntu-24.04
     env:
       CONFIG_NAME: "linux-x86_64-${{ inputs.config }}${{ inputs.name_suffix }}"
+      AMFP_CONFIG_NAME: "amfp-linux-x86_64-${{ inputs.config }}${{ inputs.name_suffix }}"
       # premake's cfg.buildcfg is capitalized; gmake2's `config=` is lowercase.
       BUILD_FOLDER: "${{ inputs.config == 'release' && 'Release' || 'Debug' }}"
       BUILD_VERSION: ${{ inputs.build_version }}
@@ -73,10 +74,10 @@ jobs:
           path: build-premake/_deps/slang-prebuilt
           key: slang-${{ runner.os }}-${{ hashFiles('premake/slang.lua') }}
 
-      - name: Generate makefiles
+      - name: Generate makefiles (TDD and AMFP)
         run: premake5 gmake2 "--build-version=$BUILD_VERSION" ${{ inputs.premake_args }}
 
-      - name: Build
+      - name: Build TDD and AMFP
         run: make -C build-premake config=${{ inputs.config }} -j"$(nproc)"
 
       # Copy/staging steps only fail on a rebuild over an existing destination;
@@ -123,4 +124,37 @@ jobs:
           path: ${{ env.CONFIG_NAME }}.tar.gz
           # Release keeps DWARF symbols (premake5.lua: symbols "On"), so this
           # archive is ~570MB. Expire it quickly to stay inside the storage quota.
+          retention-days: 7
+
+      - name: Assert AMFP runtime deployed
+        run: |
+          set -euo pipefail
+          runtime="build-premake/amfp/${BUILD_FOLDER}"
+          test -x "$runtime/AmnesiaAMFP" || { echo "AMFP executable was not deployed: $runtime/AmnesiaAMFP"; exit 1; }
+          for tool in LevelEditor ModelEditor ParticleEditor MaterialEditor MshConverter; do
+            test -x "$runtime/$tool" || { echo "AMFP tool was not deployed: $runtime/$tool"; exit 1; }
+          done
+          test -d "$runtime/compiled_shaders/vk" || { echo "AMFP generated shader directory is missing: $runtime/compiled_shaders/vk"; exit 1; }
+          shader=$(find "$runtime/compiled_shaders/vk" -type f -name '*.spv' -print -quit)
+          test -n "$shader" || { echo "AMFP generated SPIR-V shaders are missing"; exit 1; }
+          test -f "$shader.meta" || { echo "AMFP shader dependency metadata is missing: $shader.meta"; exit 1; }
+          for pattern in \
+            "libs/libSDL2-2.0*.so*" \
+            "libs/libopenal.so*" \
+            "libs/libNRD.so*" \
+            "libs/libffx_fsr3upscaler_api_vk.so"; do
+            compgen -G "$runtime/$pattern" > /dev/null \
+              || { echo "AMFP runtime dependency is missing: $runtime/$pattern"; exit 1; }
+          done
+
+      - name: Package AMFP
+        run: |
+          tar --exclude='*.a' -zcf "${AMFP_CONFIG_NAME}.tar.gz" \
+            -C "build-premake/amfp/${BUILD_FOLDER}" .
+
+      - name: Upload AMFP artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.AMFP_CONFIG_NAME }}
+          path: ${{ env.AMFP_CONFIG_NAME }}.tar.gz
           retention-days: 7

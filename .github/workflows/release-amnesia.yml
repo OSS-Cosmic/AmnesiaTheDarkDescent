@@ -1,0 +1,129 @@
+name: release-amnesia
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Tagged version, e.g. v1'
+        required: true
+      itch_channel_suffix:
+        description: 'Appended to the itch.io channel names, e.g. "-beta" for a test push'
+        required: false
+        default: ''
+
+env:
+  ITCH_TARGET: mpollind/amnesia-the-dark-descent-redux
+
+jobs:
+  linux:
+    uses: ./.github/workflows/linux-build.yml
+    with:
+      config: release
+      name_suffix: -${{ github.event.inputs.tag }}
+      build_version: ${{ github.event.inputs.tag }}
+
+  windows:
+    uses: ./.github/workflows/windows-build.yml
+    with:
+      config: release
+      name_suffix: -${{ github.event.inputs.tag }}
+      build_version: ${{ github.event.inputs.tag }}
+
+  publish:
+    needs: [linux, windows]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout release resources
+        uses: actions/checkout@v4
+
+      - name: Download TDD Linux artifact
+        uses: actions/download-artifact@v8
+        with:
+          name: linux-x86_64-release-${{ github.event.inputs.tag }}
+          path: artifacts/linux-x86_64-release-${{ github.event.inputs.tag }}
+
+      - name: Download TDD Windows artifact
+        uses: actions/download-artifact@v8
+        with:
+          name: win-x86_64-release-${{ github.event.inputs.tag }}
+          path: artifacts/win-x86_64-release-${{ github.event.inputs.tag }}
+
+      # Unpack into per-platform trees. butler pushes a directory, not an
+      # archive, so that it can compute an incremental patch against the
+      # previous build on the channel.
+      - name: Stage payloads
+        env:
+          TAG: ${{ github.event.inputs.tag }}
+        run: |
+          set -euo pipefail
+          mkdir -p stage/linux stage/windows release
+          tar -xzf "artifacts/linux-x86_64-release-${TAG}/linux-x86_64-release-${TAG}.tar.gz" -C stage/linux
+          unzip -q "artifacts/win-x86_64-release-${TAG}/win-x86_64-release-${TAG}.zip" -d stage/windows
+
+          # Tell the itch app which executables to offer; without this it guesses.
+          write_manifest() {
+            local dir="$1" ext="$2" game="$3"
+            cat > "${dir}/.itch.toml" <<TOML
+          [[actions]]
+          name = "play"
+          path = "${game}${ext}"
+
+          [[actions]]
+          name = "Level Editor"
+          path = "LevelEditor${ext}"
+
+          [[actions]]
+          name = "Model Editor"
+          path = "ModelEditor${ext}"
+
+          [[actions]]
+          name = "Material Editor"
+          path = "MaterialEditor${ext}"
+
+          [[actions]]
+          name = "Particle Editor"
+          path = "ParticleEditor${ext}"
+          TOML
+          }
+          write_manifest stage/linux "" Amnesia
+          write_manifest stage/windows ".exe" Amnesia
+
+          # Ship every repository asset at its game-relative path. Copying the
+          # release into an installed game overlays these files directly; do
+          # not nest them under an extra resources/ directory.
+          cp -a amnesia/resources/. stage/linux/
+          cp -a amnesia/resources/. stage/windows/
+
+          tar -C stage/linux -zcf "release/Amnesia-linux-x86_64-${TAG}.tar.gz" .
+          (cd stage/windows && zip -qr "${GITHUB_WORKSPACE}/release/Amnesia-win-x86_64-${TAG}.zip" .)
+          ls -l release
+
+      - name: Install butler
+        run: |
+          set -euo pipefail
+          curl -fsSL -o /tmp/butler.zip \
+            "https://broth.itch.zone/butler/linux-amd64/LATEST/archive/default"
+          unzip -q -o /tmp/butler.zip -d "${HOME}/.butler"
+          chmod +x "${HOME}/.butler/butler"
+          echo "${HOME}/.butler" >> "$GITHUB_PATH"
+
+      - name: Push to itch.io
+        env:
+          BUTLER_API_KEY: ${{ secrets.ITCH_API_KEY }}
+          TAG: ${{ github.event.inputs.tag }}
+          SUFFIX: ${{ github.event.inputs.itch_channel_suffix }}
+        run: |
+          set -euo pipefail
+          butler push stage/linux   "${ITCH_TARGET}:linux${SUFFIX}"   --userversion "$TAG"
+          butler push stage/windows "${ITCH_TARGET}:windows${SUFFIX}" --userversion "$TAG"
+          butler status "${ITCH_TARGET}"
+
+      - name: Publish GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.event.inputs.tag }}
+          name: "Release: ${{ github.event.inputs.tag }}"
+          prerelease: true
+          files: release/*
