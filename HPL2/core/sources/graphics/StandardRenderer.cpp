@@ -646,11 +646,10 @@ static bool BuildStandardLights(
         data.color[1] = diffuse.g;
         data.color[2] = diffuse.b;
         data.specularScale = diffuse.a;
-        // Legacy ABI name: this field carries the complete authored lightWorld
-        // matrix. The deferred reference uploads all four rows, including its
-        // translation, for the homogeneous point-gobo lookup.
+        // Standard shades in world space. Retail's rotation(lightWorld *
+        // inverseView) therefore reduces to the authored light rotation.
         const ml::float4x4 lightWorld =
-            cMath::ToFloatTranspose4x4(light->GetWorldMatrix());
+            cMath::ToFloatTranspose4x4(light->GetWorldMatrix().GetRotation());
         std::memcpy(data.invViewRotation, lightWorld.a,
                     sizeof(data.invViewRotation));
         data.falloffTexture = StandardTextureSlot(light->GetFalloffImage());

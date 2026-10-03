@@ -154,8 +154,7 @@ public float3 standardBoxLight(float3 accumulated, float3 materialColor, float3 
                   position.z >= light.boxMin.z && position.z <= light.boxMax.z;
     if (!inside) return accumulated;
     // Base game: albedo * colour in display space (deferred_light_box_frag.glsl).
-    float3 lightContrib = sRGBToLinear(max(linearToSRGB(max(materialColor, 0.0f)) * light.color, 0.0f))
-                        / kSceneExposure;
+    float3 lightContrib = max(linearToSRGB(max(materialColor, 0.0f)) * light.color, 0.0f);
     return light.blendFunc == 0u ? lightContrib : accumulated + lightContrib;
 }
 
@@ -253,7 +252,7 @@ public float3 standardLegacyLight(StandardLightSurface s, float3 V,
     // Base game evaluates the whole term in display space
     // (deferred_light_frag.glsl): albedo, light colour, gobo, ramps, N.L and
     // shadow are used raw. Re-encode the linear albedo, build that value, then
-    // decode once so the tonemap's exposure + encode reproduce it.
+    // accumulate in display space; the caller decodes the completed sum once.
     float3 diffuse = linearToSRGB(max(s.color, 0.0f)) * lightColor * NoL;
 
     float3 specular = float3(0.0f);
@@ -268,7 +267,14 @@ public float3 standardLegacyLight(StandardLightSurface s, float3 V,
         specular = lightColor * value;
     }
     float3 display = (diffuse + specular) * attenuation * visibility;
-    return sRGBToLinear(max(display, 0.0f)) / kSceneExposure;
+    return max(display, 0.0f);
+}
+
+// All Standard lighting helpers return display-space contributions. Convert
+// only after box/point/spot/emission accumulation, at the scene-buffer boundary.
+public float3 standardLightingToScene(float3 display)
+{
+    return sRGBToLinear(saturate(display)) / kSceneExposure;
 }
 
 // The radial reach test both standardPointLight and standardSpotLight open
@@ -295,6 +301,11 @@ public bool standardLightReaches(uint config, float radius, float3 lightPosition
            distanceOverRadius < 1.0f && distanceOverRadius > 0.0f;
 }
 
+public float3 standardPointGoboDirection(float4x4 lightRotation, float3 worldLightDirection)
+{
+    return mul((float3x3)lightRotation, worldLightDirection);
+}
+
 public float3 standardPointLight(StandardLightSurface s, float3 V,
                                  StandardPointLight light, float visibility)
 {
@@ -315,15 +326,9 @@ public float3 standardPointLight(StandardLightSurface s, float3 V,
     if ((light.config & kStandardLightHasGobo) != 0u &&
         light.goboTexture != kInvalidTextureIndex)
     {
-        // Legacy ABI name: invViewRotation contains the complete lightWorld
-        // matrix. The enhanced deferred reference uses the homogeneous point
-        // position L + cameraWorldPosition, where V is cameraWorldPosition -
-        // surfaceWorldPosition in this shared helper contract.
-        float3 cameraWorldPosition = V + s.position;
-        if (!standardFinite3(cameraWorldPosition)) return float3(0.0f);
-        float4 localDirH = mul(light.invViewRotation,
-                               float4(L + cameraWorldPosition, 1.0f));
-        float3 localDir = float3(localDirH.x, localDirH.y, localDirH.z);
+        // Retail uploads rotation(lightWorld * inverseView). L is already
+        // world-space here, so only the authored light rotation remains.
+        float3 localDir = standardPointGoboDirection(light.invViewRotation, L);
         if (!standardFinite3(localDir) ||
             (localDir.x == 0.0f && localDir.y == 0.0f && localDir.z == 0.0f))
             return float3(0.0f);
@@ -411,6 +416,5 @@ public float3 standardIllumination(DiffuseMaterial material, float illuminationA
         material.tex[5] == kInvalidTextureIndex)
         return float3(0.0f);
     // Base game adds texture * amount in display space (deferred_illumination_frag.glsl).
-    return sRGBToLinear(linearToSRGB(max(sampleBindless2D(material.tex[5], uv).rgb, 0.0f)) * illuminationAmount)
-         / kSceneExposure;
+    return linearToSRGB(max(sampleBindless2D(material.tex[5], uv).rgb, 0.0f)) * illuminationAmount;
 }

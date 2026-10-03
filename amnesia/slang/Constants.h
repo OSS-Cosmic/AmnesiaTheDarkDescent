@@ -361,7 +361,7 @@ SHARED_CONST float kGlassRefractionIorBoost = 1000.0f;
 // reads dimmer than the base game's fully-lit framebuffer/cubemap sample; this
 // lifts them back toward that brightness. 1.0 = raw re-shade.
 SHARED_CONST float kWaterReflectionExposure = 1.0f;
-SHARED_CONST float kWaterRefractionExposure = 2.0f; //0.5f;
+SHARED_CONST float kWaterRefractionExposure = 1.0f; // Neutral water preserves background radiance.
 
 // Global scene exposure, applied by the tonemap post effect before the display
 // encode (posteffect_tonemap.frag.slang). The maps carry legacy light
@@ -418,7 +418,12 @@ SHARED_CONST float kRayTracedSaturation = 1.0f;
 // trace; blending its normal back toward the flat surface normal calms the
 // ripples so it reads more like a mirror and less turbulent. 0 = perfect
 // mirror, 1 = full wave distortion.
-SHARED_CONST float kWaterReflectionTurbulence = 0.3f;
+// AMFP's original water_surface_frag.glsl reflected with the full wave normal.
+#ifdef AMFP
+SHARED_CONST float kWaterReflectionTurbulence = 1.0f;
+#else
+SHARED_CONST float kWaterReflectionTurbulence = 0.65f;
+#endif
 
 // Continuation gain for the reduced-resolution water reflection producer.
 // WaterReflection.rt.slang keeps the first reflected vertex at full strength and

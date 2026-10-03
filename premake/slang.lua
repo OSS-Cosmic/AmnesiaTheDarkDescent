@@ -211,8 +211,11 @@ function slang_prebuild(product)
     -- import resolves from the slang root (bare names map to root-level .slang;
     -- dotted names like SurfelGI.SurfelTypes map to subpaths), and #include "..." is
     -- resolved relative to the including file's own directory by slangc automatically.
+    -- AMFP-only shader branches (#ifdef AMFP) are selected per product; the
+    -- shared sources stay identical and each product has its own output dir.
     local flags = "-target spirv -profile sm_6_6 -emit-spirv-directly "
         .. "-fvk-use-entrypoint-name -matrix-layout-column-major -fvk-use-scalar-layout"
+        .. (product == "amfp" and " -DAMFP" or "")
     local compile = string.format(
         '"%s" "%%{file.abspath}" %s -I"%s" -o "%s/%%{file.basename}.spv"',
         slangc, flags, src, out)
@@ -430,6 +433,7 @@ function slang_dxil_production_prebuild(product)
     local slangc = resolve_slangc()
     local src = ROOT .. "/amnesia/slang"
     local out = runtime_dir(product, "compiled_shaders/d3d12")
+    local dxilDefs = "-DDXIL" .. (product == "amfp" and " -DAMFP" or "")
     local generated = BUILD_OUT .. "/generated/%{cfg.buildcfg}/dxil"
     local embedder = BUILD_OUT .. "/tools/%{cfg.buildcfg}/ri_shader_embed.exe"
     dependson { "RIShaderEmbed" }
@@ -489,8 +493,8 @@ function slang_dxil_production_prebuild(product)
             compileProfile = "lib_6_8"
         end
         local command = string.format(
-            '"%s" "%s" -target dxil -profile %s -matrix-layout-column-major -DDXIL%s -I"%s" -o "%s" -reflection-json "%s"',
-            slangc, source.path, compileProfile, compileEntry, src, dxil, reflection)
+            '"%s" "%s" -target dxil -profile %s -matrix-layout-column-major %s%s -I"%s" -o "%s" -reflection-json "%s"',
+            slangc, source.path, compileProfile, dxilDefs, compileEntry, src, dxil, reflection)
         table.insert(win_commands, command)
         table.insert(nix_commands, command)
         local embed_command = string.format(
@@ -527,8 +531,8 @@ function slang_dxil_production_prebuild(product)
                     table.insert(outputs, entryReflection)
                     table.insert(outputs, entryMeta)
                     local entryCommand = string.format(
-                        '"%s" "%s" -target dxil -profile sm_6_8 -matrix-layout-column-major -DDXIL -entry "%s" -stage "%s" -I"%s" -o "%s" -reflection-json "%s"',
-                        slangc, source.path, entry.entry, entry.stage, src,
+                        '"%s" "%s" -target dxil -profile sm_6_8 -matrix-layout-column-major %s -entry "%s" -stage "%s" -I"%s" -o "%s" -reflection-json "%s"',
+                        slangc, source.path, dxilDefs, entry.entry, entry.stage, src,
                         entryDxil, entryReflection)
                     table.insert(win_commands, entryCommand)
                     table.insert(nix_commands, entryCommand)
