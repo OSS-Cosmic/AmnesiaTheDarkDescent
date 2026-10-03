@@ -4,8 +4,9 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: 'Tagged version, e.g. v1'
+        description: 'Tagged version, e.g. amfp-v1'
         required: true
+        default: 'amfp-v'
       itch_channel_suffix:
         description: 'Appended to the itch.io channel names, e.g. "-beta" for a test push'
         required: false
