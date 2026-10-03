@@ -314,6 +314,9 @@ function link_engine(target_layout, product)
             links { "d3d12", "dxgi", "dxguid" }
             link_agility_runtime(target_layout, product)
         end
+        if _OPTIONS["with-tracy"] == "yes" then
+            links { "ws2_32", "dbghelp" }   -- TracyClient (network + symbol resolution)
+        end
     filter "toolset:gcc or clang"
         linkgroups "On"
     filter {}

@@ -345,13 +345,9 @@ cLuxInputHandler::cLuxInputHandler() : iLuxUpdateable("LuxInputHandler")
 	SetUpGamepad();
 #endif
 
-#ifdef WIN32
-	mfPointerSpeed = cPlatform::GetMousePointerSpeed();
-
-	if(mfPointerSpeed == 0.0f) mfPointerSpeed = 1.0f;
-#else
+	// The original engine scaled by the Windows pointer speed; this HPL2 has
+	// no cPlatform::GetMousePointerSpeed, so match the non-Windows behaviour.
 	mfPointerSpeed = 1.0f;
-#endif
 
 	////////////////////////////////////
 	// Create the actions

@@ -266,6 +266,10 @@ public:
 	tString msStartMapFolder;
 	tString msStartMapPos;
 
+	// From --d3d12 / --vulkan on the command line; Auto takes the platform
+	// default (D3D12 on Windows, Vulkan elsewhere).
+	eRenderApiPreference mRenderApi;
+
 	tWString msDefaultProfileName;
 
 	tWString msBaseSavePath;

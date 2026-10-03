@@ -19,6 +19,8 @@
 
 #include "scene/MeshEntity.h"
 
+#include <tracy/Tracy.hpp>
+
 #include "resources/Resources.h"
 #include "resources/MaterialManager.h"
 #include "resources/MeshManager.h"
@@ -398,23 +400,29 @@ namespace hpl {
 		/////////////////////////////////////////////
 		//Check if all bodies connected to the skeleton is at rest,
 		//If so we can skip skinning the body and simply just use the mesh as is.
-		//(has some problems so turned off at the moment)
+		//Without this a resting ragdoll is re-skinned and re-uploaded every frame,
+		//which also forces a BLAS rebuild per submesh on the ray traced backend.
 		mbSkeletonPhysicsSleeping = false;
 		if(mbSkeletonPhysics && mfSkeletonPhysicsWeight==1.0f && mbSkeletonPhysicsCanSleep)
 		{
 			bool bEnabled = false;
+			bool bHasBody = false;
 			for(int bone =0; bone< GetBoneStateNum(); ++bone)
 			{
 				cBoneState *pState = GetBoneState(bone);
 				iPhysicsBody *pBody = pState->GetBody();
 				
-				if(pBody && pBody->GetEnabled()){
-					bEnabled = true;
-					break;
+				if(pBody)
+				{
+					bHasBody = true;
+					if(pBody->GetEnabled()){
+						bEnabled = true;
+						break;
+					}
 				}
 			}
-			if(bEnabled == false){
-				//mbSkeletonPhysicsSleeping = true;
+			if(bHasBody && bEnabled == false){
+				mbSkeletonPhysicsSleeping = true;
 			}
 		}
 		/////////////////////////////////////////////
@@ -1285,6 +1293,7 @@ namespace hpl {
 
 	void cMeshEntity::UpdateGraphicsForFrame(float afFrameTime)
 	{
+		ZoneScopedN("cMeshEntity::UpdateGraphicsForFrame");
 		//////////////////////////////////////////
 		//Check so update is needed
 		if(	mbBoneMatricesNeedUpdate == false &&

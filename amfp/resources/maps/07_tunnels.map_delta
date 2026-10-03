@@ -219,10 +219,10 @@
         <SetAttr TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="88" Name="pillars_tunnel_pillars_single_386">
-        <SetAttr Rotation="-1.55861 1.5708 -1.56303" TwoSidedShadow="false" />
+        <SetAttr TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="89" Name="pillars_tunnel_pillars_single_387">
-        <SetAttr Rotation="1.58296 1.5708 -1.56303" TwoSidedShadow="false" />
+        <SetAttr TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="91" Name="pillars_tunnel_pillars_single_371">
         <SetAttr TwoSidedShadow="false" />
@@ -333,10 +333,10 @@
         <SetAttr TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="137" Name="pillars_tunnel_pillars_single_388">
-        <SetAttr Rotation="1.58296 1.5708 -1.56303" TwoSidedShadow="false" />
+        <SetAttr TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="138" Name="pillars_tunnel_pillars_single_389">
-        <SetAttr Rotation="1.58298 1.5708 1.57856" TwoSidedShadow="false" />
+        <SetAttr TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="141" Name="wall_factory_facade_doorway_590">
         <SetAttr TwoSidedShadow="false" />
@@ -570,10 +570,10 @@
         <SetAttr TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="260" Name="pillars_tunnel_pillars_single_390">
-        <SetAttr Rotation="1.58296 1.5708 -1.56303" TwoSidedShadow="false" />
+        <SetAttr TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="261" Name="pillars_tunnel_pillars_single_391">
-        <SetAttr Rotation="1.58298 1.5708 1.57856" TwoSidedShadow="false" />
+        <SetAttr TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="262" Name="wall_factory_facade_doorway_617">
         <SetAttr TwoSidedShadow="false" />
@@ -582,10 +582,10 @@
         <SetAttr TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="264" Name="pillars_tunnel_pillars_single_394">
-        <SetAttr Rotation="1.58298 1.5708 1.57856" TwoSidedShadow="false" />
+        <SetAttr TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="265" Name="pillars_tunnel_pillars_single_395">
-        <SetAttr Rotation="1.58296 1.5708 -1.56303" TwoSidedShadow="false" />
+        <SetAttr TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="266" Name="pillars_tunnel_pillars_single_355">
         <SetAttr TwoSidedShadow="false" />
@@ -750,7 +750,7 @@
         <SetAttr TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="454" Name="pillars_tunnel_pillars_single_400">
-        <SetAttr Rotation="-1.55619 1.57045 1.57726" TwoSidedShadow="false" />
+        <SetAttr TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="455" Name="pillars_tunnel_pillars_single_401">
         <SetAttr Rotation="-1.55617 1.57045 -1.56432" TwoSidedShadow="false" />
@@ -777,16 +777,16 @@
         <SetAttr TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="472" Name="structure_engineroom_floor_4">
-        <SetAttr Rotation="-3.14159 1.5708 -3.14159" TwoSidedShadow="false" />
+        <SetAttr TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="473" Name="structure_engineroom_floor_5">
-        <SetAttr Rotation="-3.14159 1.5708 -3.14159" TwoSidedShadow="false" />
+        <SetAttr TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="475" Name="structure_engineroom_floor_6">
-        <SetAttr Rotation="-3.14159 1.5708 -2.53518e-06" TwoSidedShadow="false" />
+        <SetAttr TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="476" Name="structure_engineroom_floor_7">
-        <SetAttr Rotation="-3.14159 1.5708 -2.53518e-06" TwoSidedShadow="false" />
+        <SetAttr TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="478" Name="structure_engineroom_beam_short_12">
         <SetAttr TwoSidedShadow="false" />
@@ -1080,13 +1080,13 @@
         <SetAttr TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="732" Name="special_pipe_support_frame_9">
-        <SetAttr Rotation="-1.5708 -1.5708 -3.14159" TwoSidedShadow="false" />
+        <SetAttr TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="733" Name="special_pipe_support_frame_10">
         <SetAttr TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="734" Name="special_pipe_support_frame_5">
-        <SetAttr Rotation="-1.5708 -1.5708 -3.14159" TwoSidedShadow="false" />
+        <SetAttr TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="735" Name="pneumatic_pipes_elbow_blue_6">
         <SetAttr TwoSidedShadow="false" />
@@ -1263,7 +1263,7 @@
         <SetAttr TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="801" Name="special_pipe_support_frame_6">
-        <SetAttr Rotation="-1.5708 -1.5708 -3.14159" TwoSidedShadow="false" />
+        <SetAttr TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="813" Name="walls_tunnels_curved_wall_11">
         <SetAttr TwoSidedShadow="false" />
@@ -2664,13 +2664,13 @@
         <SetAttr TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="2323" Name="special_pipe_support_frame_75">
-        <SetAttr Rotation="-1.64401 1.5708 3.06838" TwoSidedShadow="false" />
+        <SetAttr TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="2324" Name="special_pipe_support_frame_76">
-        <SetAttr Rotation="-1.64401 1.5708 3.06838" TwoSidedShadow="false" />
+        <SetAttr TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="2325" Name="special_pipe_support_frame_77">
-        <SetAttr Rotation="-1.64401 1.5708 3.06838" TwoSidedShadow="false" />
+        <SetAttr TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="2332" Name="pneumatic_pipes_elbow_blue_160">
         <SetAttr TwoSidedShadow="false" />
@@ -3378,7 +3378,7 @@
         <SetAttr TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="2824" Name="pillars_tunnel_pillars_single_562">
-        <SetAttr Rotation="0.0260326 -1.5708 -0.0260326" TwoSidedShadow="false" />
+        <SetAttr TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="2827" Name="machinery_engineroom_tank_large_7">
         <SetAttr TwoSidedShadow="false" />
@@ -4506,10 +4506,10 @@
         <SetAttr TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="3480" Name="pneumatic_pipes_elbow_blue_182">
-        <SetAttr Rotation="-3.13304 -1.5708 -1.57935" TwoSidedShadow="false" />
+        <SetAttr TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="3481" Name="pneumatic_pipes_elbow_blue_183">
-        <SetAttr Rotation="2.18306 1.5708 3.14159" TwoSidedShadow="false" />
+        <SetAttr TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="3483" Name="pneumatic_pipes_elbow_blue_184">
         <SetAttr TwoSidedShadow="false" />
@@ -4713,7 +4713,7 @@
         <SetAttr TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="3718" Name="pillars_tunnel_pillars_single_308">
-        <SetAttr Rotation="2.53518e-06 1.5708 2.53518e-06" TwoSidedShadow="false" />
+        <SetAttr TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="3719" Name="pillars_tunnel_pillars_single_309">
         <SetAttr TwoSidedShadow="false" />
@@ -4815,7 +4815,7 @@
         <SetAttr TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="3789" Name="pillars_tunnel_pillars_single_403">
-        <SetAttr Rotation="-3.08236 1.5708 -3.08235" TwoSidedShadow="false" />
+        <SetAttr TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="3790" Name="pillars_tunnel_pillars_single_404">
         <SetAttr TwoSidedShadow="false" />
@@ -4827,7 +4827,7 @@
         <SetAttr TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="3794" Name="pillars_tunnel_pillars_single_405">
-        <SetAttr Rotation="0.0592327 1.5708 0.0592327" TwoSidedShadow="false" />
+        <SetAttr TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="3795" Name="pillars_tunnel_pillars_single_406">
         <SetAttr TwoSidedShadow="false" />
@@ -4836,7 +4836,7 @@
         <SetAttr TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="3798" Name="pillars_tunnel_pillars_single_408">
-        <SetAttr Rotation="0.845253 1.5708 0.845253" TwoSidedShadow="false" />
+        <SetAttr TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="3800" Name="ceiling_tunnel_ceiling_support_35">
         <SetAttr TwoSidedShadow="false" />
@@ -4860,7 +4860,7 @@
         <SetAttr TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="3835" Name="pillars_tunnel_pillars_single_412">
-        <SetAttr Rotation="-2.30947 -1.5708 2.30947" TwoSidedShadow="false" />
+        <SetAttr TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="3837" Name="special_railing_4">
         <SetAttr TwoSidedShadow="false" />
@@ -4872,7 +4872,7 @@
         <SetAttr TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="3843" Name="pillars_tunnel_pillars_single_413">
-        <SetAttr Rotation="0.0592327 1.5708 0.0592327" TwoSidedShadow="false" />
+        <SetAttr TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="3844" Name="pillars_tunnel_pillars_single_414">
         <SetAttr TwoSidedShadow="false" />
@@ -4884,10 +4884,10 @@
         <SetAttr TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="3853" Name="pillars_tunnel_pillars_single_416">
-        <SetAttr Rotation="3.13408 -1.5708 -3.13408" TwoSidedShadow="false" />
+        <SetAttr TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="3855" Name="pillars_tunnel_pillars_single_417">
-        <SetAttr Rotation="-1.28948 -1.5708 1.28948" TwoSidedShadow="false" />
+        <SetAttr TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="3856" Name="pillars_tunnel_pillars_single_418">
         <SetAttr TwoSidedShadow="false" />
@@ -4899,7 +4899,7 @@
         <SetAttr TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="3861" Name="pillars_tunnel_pillars_single_419">
-        <SetAttr Rotation="0.0407027 -1.5708 -0.0407027" TwoSidedShadow="false" />
+        <SetAttr TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="3862" Name="pillars_tunnel_pillars_single_420">
         <SetAttr TwoSidedShadow="false" />
@@ -5751,7 +5751,7 @@
         <SetAttr TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="4311" Name="wall_factory_facade_doorway_816">
-        <SetAttr Rotation="-2.53518e-06 -1.5708 -2.53518e-06" TwoSidedShadow="false" />
+        <SetAttr TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="4313" Name="wall_factory_facade_doorway_817">
         <SetAttr TwoSidedShadow="false" />
@@ -5916,7 +5916,7 @@
         <SetAttr TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="4467" Name="pillars_tunnel_pillars_single_589">
-        <SetAttr Rotation="-3.08236 1.5708 -3.08235" TwoSidedShadow="false" />
+        <SetAttr TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="4468" Name="pillars_tunnel_pillars_single_590">
         <SetAttr TwoSidedShadow="false" />
@@ -5928,13 +5928,13 @@
         <SetAttr TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="4472" Name="pillars_tunnel_pillars_single_325">
-        <SetAttr Rotation="-3.14159 1.5708 -3.14159" TwoSidedShadow="false" />
+        <SetAttr TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="4474" Name="pillars_tunnel_pillars_single_591">
         <SetAttr TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="4475" Name="pillars_tunnel_pillars_single_592">
-        <SetAttr Rotation="-1.59838 -1.5708 1.59837" TwoSidedShadow="false" />
+        <SetAttr TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="4661" Name="pillars_tunnel_pillars_single_595">
         <SetAttr TwoSidedShadow="false" />
@@ -6024,19 +6024,19 @@
         <SetAttr TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="4785" Name="structure_engineroom_floor_24">
-        <SetAttr Rotation="3.14159 1.5708 3.14159" TwoSidedShadow="false" />
+        <SetAttr TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="4786" Name="structure_engineroom_beam_short_29">
         <SetAttr TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="4787" Name="structure_engineroom_floor_25">
-        <SetAttr Rotation="3.14159 1.5708 3.14159" TwoSidedShadow="false" />
+        <SetAttr TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="4790" Name="structure_engineroom_floor_26">
-        <SetAttr Rotation="-2.53518e-06 1.5708 3.14159" TwoSidedShadow="false" />
+        <SetAttr TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="4791" Name="structure_engineroom_floor_27">
-        <SetAttr Rotation="-2.53518e-06 1.5708 3.14159" TwoSidedShadow="false" />
+        <SetAttr TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="4793" Name="structure_engineroom_beam_short_32">
         <SetAttr TwoSidedShadow="false" />
@@ -6078,10 +6078,10 @@
         <SetAttr TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="4815" Name="pillars_tunnel_pillars_single_604">
-        <SetAttr Rotation="1.64155 -1.5708 1.50004" TwoSidedShadow="false" />
+        <SetAttr TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="4817" Name="pillars_tunnel_pillars_single_605">
-        <SetAttr Rotation="-0.797963 1.5708 2.34367" TwoSidedShadow="false" />
+        <SetAttr TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="4818" Name="pillars_tunnel_pillars_single_606">
         <SetAttr TwoSidedShadow="false" />
@@ -6165,7 +6165,7 @@
         <SetAttr TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="4863" Name="pillars_tunnel_pillars_single_125">
-        <SetAttr Rotation="-1.98304 1.5708 -1.98304" TwoSidedShadow="false" />
+        <SetAttr TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="4868" Name="wall_factory_facade_doorway_834">
         <SetAttr TwoSidedShadow="false" />
@@ -6198,7 +6198,7 @@
         <SetAttr TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="4878" Name="pillars_tunnel_pillars_single_611">
-        <SetAttr Rotation="1.64155 1.5708 -1.50004" TwoSidedShadow="false" />
+        <SetAttr TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="4880" Name="pillars_tunnel_pillars_single_126">
         <SetAttr TwoSidedShadow="false" />
@@ -6213,13 +6213,13 @@
         <SetAttr TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="4885" Name="pillars_tunnel_pillars_single_128">
-        <SetAttr Rotation="1.15855 1.5708 1.15855" TwoSidedShadow="false" />
+        <SetAttr TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="4886" Name="pillars_tunnel_pillars_single_129">
-        <SetAttr Rotation="1.15855 1.5708 1.15855" TwoSidedShadow="false" />
+        <SetAttr TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="4887" Name="pillars_tunnel_pillars_single_130">
-        <SetAttr Rotation="1.15855 1.5708 1.15855" TwoSidedShadow="false" />
+        <SetAttr TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="4888" Name="wall_factory_facade_doorway_238">
         <SetAttr TwoSidedShadow="false" />
@@ -6333,7 +6333,7 @@
         <SetAttr TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="4926" Name="pillars_tunnel_pillars_single_612">
-        <SetAttr Rotation="1.28132 1.5708 -1.86024" TwoSidedShadow="false" />
+        <SetAttr TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="4927" Name="pillars_tunnel_pillars_single_613">
         <SetAttr TwoSidedShadow="false" />
@@ -6354,7 +6354,7 @@
         <SetAttr TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="4934" Name="pillars_tunnel_pillars_single_131">
-        <SetAttr Rotation="-1.98304 1.5708 -1.98304" TwoSidedShadow="false" />
+        <SetAttr TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="4935" Name="pillars_tunnel_pillars_single_132">
         <SetAttr TwoSidedShadow="false" />
@@ -6390,7 +6390,7 @@
         <SetAttr TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="4951" Name="pillars_tunnel_pillars_single_133">
-        <SetAttr Rotation="1.1733 -1.5708 -1.1733" TwoSidedShadow="false" />
+        <SetAttr TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="4954" Name="wall_factory_facade_doorway_254">
         <SetAttr TwoSidedShadow="false" />
@@ -6408,7 +6408,7 @@
         <SetAttr TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="4959" Name="pillars_tunnel_pillars_single_134">
-        <SetAttr Rotation="3.12673 -1.5708 -3.12674" TwoSidedShadow="false" />
+        <SetAttr TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="4960" Name="pillars_tunnel_pillars_single_135">
         <SetAttr TwoSidedShadow="false" />
@@ -6423,7 +6423,7 @@
         <SetAttr TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="4966" Name="pillars_tunnel_pillars_single_137">
-        <SetAttr Rotation="-3.14159 1.5708 -3.14159" TwoSidedShadow="false" />
+        <SetAttr TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="4969" Name="wall_factory_facade_doorway_260">
         <SetAttr TwoSidedShadow="false" />
@@ -6654,16 +6654,16 @@
         <SetAttr TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="5252" Name="catwalk_factory_support_dirty_8">
-        <SetAttr Scale="2 2 0.125" TwoSidedShadow="false" />
+        <SetAttr Scale="4 2 0.0625" TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="5253" Name="catwalk_factory_support_dirty_9">
-        <SetAttr Scale="2 2 0.125" TwoSidedShadow="false" />
+        <SetAttr Scale="4 2 0.0625" TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="5255" Name="catwalk_factory_support_dirty_10">
-        <SetAttr Scale="2 2 0.125" TwoSidedShadow="false" />
+        <SetAttr Scale="4 2 0.0625" TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="5256" Name="catwalk_factory_support_dirty_11">
-        <SetAttr Scale="2 2 0.125" TwoSidedShadow="false" />
+        <SetAttr Scale="4 2 0.0625" TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="5258" Name="tesla_props_pipes_02_cap_1">
         <SetAttr TwoSidedShadow="false" />
@@ -6675,43 +6675,43 @@
         <SetAttr TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="5261" Name="catwalk_factory_support_dirty_12">
-        <SetAttr Scale="2 2 0.125" TwoSidedShadow="false" />
+        <SetAttr Scale="4 2 0.0625" TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="5262" Name="catwalk_factory_support_dirty_13">
-        <SetAttr Scale="2 2 0.125" TwoSidedShadow="false" />
+        <SetAttr Scale="4 2 0.0625" TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="5264" Name="tesla_props_pipes_02_cap_7">
         <SetAttr TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="5265" Name="catwalk_factory_support_dirty_14">
-        <SetAttr Scale="2 2 0.125" TwoSidedShadow="false" />
+        <SetAttr Scale="4 2 0.0625" TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="5266" Name="catwalk_factory_support_dirty_15">
-        <SetAttr Scale="2 2 0.125" TwoSidedShadow="false" />
+        <SetAttr Scale="4 2 0.0625" TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="5268" Name="tesla_props_pipes_02_cap_8">
         <SetAttr TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="5269" Name="catwalk_factory_support_dirty_16">
-        <SetAttr Scale="0.5 1 1" TwoSidedShadow="false" />
+        <SetAttr TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="5270" Name="catwalk_factory_support_dirty_17">
-        <SetAttr Scale="0.5 1 1" TwoSidedShadow="false" />
+        <SetAttr TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="5274" Name="catwalk_factory_support_dirty_18">
-        <SetAttr Scale="0.75 1 1" TwoSidedShadow="false" />
+        <SetAttr TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="5275" Name="catwalk_factory_support_dirty_19">
-        <SetAttr Scale="0.75 1 1" TwoSidedShadow="false" />
+        <SetAttr TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="5277" Name="tesla_props_pipes_02_cap_9">
         <SetAttr TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="5278" Name="catwalk_factory_support_dirty_20">
-        <SetAttr Scale="4 4 0.015625" TwoSidedShadow="false" />
+        <SetAttr Scale="16 4 0.00390625" TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="5279" Name="catwalk_factory_support_dirty_21">
-        <SetAttr Scale="4 4 0.015625" TwoSidedShadow="false" />
+        <SetAttr Scale="16 4 0.00390625" TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="5281" Name="tesla_props_pipes_02_cap_10">
         <SetAttr TwoSidedShadow="false" />
@@ -6720,10 +6720,10 @@
         <SetAttr TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="5284" Name="catwalk_factory_support_dirty_22">
-        <SetAttr Scale="2 2 0.125" TwoSidedShadow="false" />
+        <SetAttr Scale="4 2 0.0625" TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="5285" Name="catwalk_factory_support_dirty_23">
-        <SetAttr Scale="2 2 0.125" TwoSidedShadow="false" />
+        <SetAttr Scale="4 2 0.0625" TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="5371" Name="pneumatic_pipes_elbow_blue_198">
         <SetAttr TwoSidedShadow="false" />
@@ -6840,7 +6840,7 @@
         <SetAttr TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="5414" Name="pillars_tunnel_pillars_single_89">
-        <SetAttr Rotation="1.58804 -1.5708 -1.58804" TwoSidedShadow="false" />
+        <SetAttr TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="5415" Name="wall_tarp_8">
         <SetAttr TwoSidedShadow="false" />
@@ -7005,7 +7005,7 @@
         <SetAttr TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="5598" Name="pillars_tunnel_pillars_single_103">
-        <SetAttr Rotation="-3.06443 1.5708 -3.06442" TwoSidedShadow="false" />
+        <SetAttr TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="5601" Name="pipe_4m_13">
         <SetAttr TwoSidedShadow="false" />
@@ -7035,7 +7035,7 @@
         <SetAttr TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="5615" Name="tunnels_sign_4">
-        <SetAttr Rotation="-0.00966254 1.5708 -0.00966254" TwoSidedShadow="false" />
+        <SetAttr TwoSidedShadow="false" />
     </Modify>
     <Modify Category="StaticObjects" ID="5616" Name="tunnels_sign_5">
         <SetAttr TwoSidedShadow="false" />
@@ -7502,12 +7502,6 @@
     <Modify Category="Primitives" ID="6336" Name="Plane_94">
         <SetAttr TwoSidedShadow="false" />
     </Modify>
-    <Modify Category="Entities" ID="357" Name="book_pile02_1">
-        <SetAttr Rotation="-1.4848 1.5708 -1.4848" />
-    </Modify>
-    <Modify Category="Entities" ID="361" Name="torturetable_1">
-        <SetAttr Rotation="-2.65155 -1.5708 2.65155" />
-    </Modify>
     <Modify Category="Entities" ID="590" Name="PointLight_2">
         <SetAttr FalloffMap="" RendererMask="1" />
     </Modify>
@@ -7520,50 +7514,17 @@
     <Modify Category="Entities" ID="809" Name="SpotLight_39">
         <SetAttr FalloffMap="" />
     </Modify>
-    <Modify Category="Entities" ID="890" Name="wood_box02_new_static_43">
-        <SetAttr Rotation="-2.53518e-06 1.5708 -2.53518e-06" />
-    </Modify>
-    <Modify Category="Entities" ID="1435" Name="paperpile01_1">
-        <SetAttr Rotation="-1.60527 1.5708 -1.60527" />
-    </Modify>
-    <Modify Category="Entities" ID="1628" Name="wood_box01_2">
-        <SetAttr Rotation="2.53518e-06 1.5708 -2.53518e-06" />
-    </Modify>
-    <Modify Category="Entities" ID="1633" Name="book_pile01_1">
-        <SetAttr Rotation="1.59744 -1.5708 -1.59744" />
-    </Modify>
-    <Modify Category="Entities" ID="1648" Name="wood_box01_3">
-        <SetAttr Rotation="2.53518e-06 1.5708 -2.53518e-06" />
-    </Modify>
     <Modify Category="Entities" ID="1656" Name="SpotLight_9">
         <SetAttr FalloffMap="" />
     </Modify>
     <Modify Category="Entities" ID="1983" Name="PointLight_23">
         <SetAttr FalloffMap="" RendererMask="1" />
     </Modify>
-    <Modify Category="Entities" ID="1989" Name="wood_box03_new_static_18">
-        <SetAttr Rotation="-2.53518e-06 1.5708 -2.53518e-06" />
-    </Modify>
-    <Modify Category="Entities" ID="1991" Name="wood_box02_new_static_15">
-        <SetAttr Rotation="-2.53518e-06 1.5708 -2.53518e-06" />
-    </Modify>
-    <Modify Category="Entities" ID="1992" Name="wood_box02_new_static_17">
-        <SetAttr Rotation="-2.53518e-06 1.5708 -2.53518e-06" />
-    </Modify>
-    <Modify Category="Entities" ID="1994" Name="shelf_no_back_6">
-        <SetAttr Rotation="3.14159 1.5708 3.14159" />
-    </Modify>
     <Modify Category="Entities" ID="2114" Name="PointLight_40">
         <SetAttr FalloffMap="" RendererMask="1" />
     </Modify>
     <Modify Category="Entities" ID="2152" Name="PointLight_28">
         <SetAttr FalloffMap="" RendererMask="1" />
-    </Modify>
-    <Modify Category="Entities" ID="2740" Name="oval_wall_lamp_4m_pipe_22">
-        <SetAttr Rotation="2.53518e-06 1.5708 2.53518e-06" />
-    </Modify>
-    <Modify Category="Entities" ID="2743" Name="oval_wall_lamp_4m_pipe_23">
-        <SetAttr Rotation="3.14159 1.5708 3.14159" />
     </Modify>
     <Modify Category="Entities" ID="2745" Name="PointLight_26">
         <SetAttr FalloffMap="" RendererMask="1" />
@@ -7580,50 +7541,26 @@
     <Modify Category="Entities" ID="3025" Name="PointLight_33">
         <SetAttr FalloffMap="" RendererMask="1" />
     </Modify>
-    <Modify Category="Entities" ID="3026" Name="oval_wall_lamp_4m_pipe_29">
-        <SetAttr Rotation="0.781673 1.5708 2.35247" />
-    </Modify>
     <Modify Category="Entities" ID="3028" Name="PointLight_34">
         <SetAttr FalloffMap="" RendererMask="1" />
-    </Modify>
-    <Modify Category="Entities" ID="3029" Name="oval_wall_lamp_4m_pipe_30">
-        <SetAttr Rotation="0.781673 1.5708 2.35247" />
     </Modify>
     <Modify Category="Entities" ID="3031" Name="PointLight_35">
         <SetAttr FalloffMap="" RendererMask="1" />
     </Modify>
-    <Modify Category="Entities" ID="3032" Name="oval_wall_lamp_4m_pipe_31">
-        <SetAttr Rotation="-2.35992 1.5708 -0.789123" />
-    </Modify>
     <Modify Category="Entities" ID="3034" Name="PointLight_37">
         <SetAttr FalloffMap="" RendererMask="1" />
-    </Modify>
-    <Modify Category="Entities" ID="3035" Name="oval_wall_lamp_4m_pipe_32">
-        <SetAttr Rotation="0.781673 1.5708 2.35247" />
     </Modify>
     <Modify Category="Entities" ID="3038" Name="PointLight_38">
         <SetAttr FalloffMap="" RendererMask="1" />
     </Modify>
-    <Modify Category="Entities" ID="3039" Name="oval_wall_lamp_4m_pipe_33">
-        <SetAttr Rotation="1.56367 -1.5708 -3.13448" />
-    </Modify>
     <Modify Category="Entities" ID="3041" Name="PointLight_39">
         <SetAttr FalloffMap="" RendererMask="1" />
-    </Modify>
-    <Modify Category="Entities" ID="3042" Name="oval_wall_lamp_4m_pipe_34">
-        <SetAttr Rotation="-1.56356 -1.5708 -0.00723258" />
     </Modify>
     <Modify Category="Entities" ID="3044" Name="PointLight_42">
         <SetAttr FalloffMap="" RendererMask="1" />
     </Modify>
-    <Modify Category="Entities" ID="3045" Name="oval_wall_lamp_4m_pipe_35">
-        <SetAttr Rotation="-1.56356 -1.5708 -0.00723258" />
-    </Modify>
     <Modify Category="Entities" ID="3047" Name="PointLight_43">
         <SetAttr FalloffMap="" RendererMask="1" />
-    </Modify>
-    <Modify Category="Entities" ID="3048" Name="oval_wall_lamp_4m_pipe_36">
-        <SetAttr Rotation="1.56367 -1.5708 -3.13448" />
     </Modify>
     <Modify Category="Entities" ID="3373" Name="SpotLight_4">
         <SetAttr FalloffMap="" />
@@ -7676,29 +7613,11 @@
     <Modify Category="Entities" ID="4776" Name="CentrifugeSwitchLight">
         <SetAttr FalloffMap="" Re_FlickerOffIntensity="2" Re_Intensity="2" Re_SourceRadius="0.01" />
     </Modify>
-    <Modify Category="Entities" ID="5199" Name="wood_box03_new_static_22">
-        <SetAttr Rotation="3.14159 1.5708 3.14159" />
-    </Modify>
-    <Modify Category="Entities" ID="5201" Name="shelf_no_back_15">
-        <SetAttr Rotation="-2.53518e-06 1.5708 -2.53518e-06" />
-    </Modify>
-    <Modify Category="Entities" ID="5205" Name="wood_box02_new_static_22">
-        <SetAttr Rotation="3.14159 1.5708 3.14159" />
-    </Modify>
-    <Modify Category="Entities" ID="5206" Name="wood_box02_new_static_23">
-        <SetAttr Rotation="3.14159 1.5708 3.14159" />
-    </Modify>
-    <Modify Category="Entities" ID="5503" Name="CagesHidingArea_3">
-        <SetAttr Rotation="2.53518e-06 1.5708 2.53518e-06" />
-    </Modify>
-    <Modify Category="Entities" ID="5512" Name="cage_04_grab_28">
-        <SetAttr Rotation="2.53518e-06 -1.5708 2.53518e-06" />
-    </Modify>
     <Modify Category="Entities" ID="5633" Name="SpotLight_23">
-        <SetAttr FalloffMap="" Rotation="-2.0944 -1.5708 -3.14159" />
+        <SetAttr FalloffMap="" Re_FlickerOffIntensity="0" Re_Intensity="15" Re_SourceRadius="0" />
     </Modify>
     <Modify Category="Entities" ID="5634" Name="PointLight_17">
-        <SetAttr FalloffMap="" RendererMask="1" />
+        <SetAttr FalloffMap="" Re_FlickerOffIntensity="0" Re_Intensity="4" Re_SourceRadius="0" RendererMask="1" />
     </Modify>
     <Modify Category="Entities" ID="5636" Name="PointLight_5">
         <SetAttr FalloffMap="" RendererMask="1" />
@@ -7710,28 +7629,19 @@
         <SetAttr FalloffMap="" RendererMask="1" />
     </Modify>
     <Modify Category="Entities" ID="5641" Name="PointLight_73">
-        <SetAttr FalloffMap="" RendererMask="1" Rotation="-3.14159 -1.5708 -3.14159" />
+        <SetAttr FalloffMap="" RendererMask="1" />
     </Modify>
     <Modify Category="Entities" ID="5642" Name="SpotLight_25">
         <SetAttr FalloffMap="" />
     </Modify>
-    <Modify Category="Entities" ID="5643" Name="oval_wall_lamp_4m_pipe_3">
-        <SetAttr Rotation="-3.14159 -1.5708 -3.14159" />
-    </Modify>
     <Modify Category="Entities" ID="5646" Name="PointLight_74">
-        <SetAttr FalloffMap="" RendererMask="1" Rotation="-3.14159 -1.5708 -3.14159" />
-    </Modify>
-    <Modify Category="Entities" ID="5647" Name="oval_wall_lamp_4m_pipe_4">
-        <SetAttr Rotation="-3.14159 -1.5708 -3.14159" />
+        <SetAttr FalloffMap="" RendererMask="1" />
     </Modify>
     <Modify Category="Entities" ID="5648" Name="SpotLight_26">
         <SetAttr FalloffMap="" />
     </Modify>
     <Modify Category="Entities" ID="5650" Name="PointLight_75">
-        <SetAttr FalloffMap="" RendererMask="1" Rotation="-3.14159 -1.5708 -3.14159" />
-    </Modify>
-    <Modify Category="Entities" ID="5651" Name="oval_wall_lamp_4m_pipe_5">
-        <SetAttr Rotation="-3.14159 -1.5708 -3.14159" />
+        <SetAttr FalloffMap="" RendererMask="1" />
     </Modify>
     <Modify Category="Entities" ID="5652" Name="SpotLight_27">
         <SetAttr FalloffMap="" />
@@ -7740,7 +7650,7 @@
         <SetAttr FalloffMap="" RendererMask="1" />
     </Modify>
     <Modify Category="Entities" ID="5656" Name="SpotLight_28">
-        <SetAttr FalloffMap="" Rotation="3.11706 -1.5708 -1.459" />
+        <SetAttr FalloffMap="" />
     </Modify>
     <Modify Category="Entities" ID="5666" Name="PointLight_11">
         <SetAttr FalloffMap="" RendererMask="1" />
@@ -7752,10 +7662,10 @@
         <SetAttr FalloffMap="" Re_FlickerOffIntensity="0" Re_Intensity="20" Re_SourceRadius="0" />
     </Modify>
     <Modify Category="Entities" ID="5679" Name="PointLight_9">
-        <SetAttr FalloffMap="" RendererMask="1" Rotation="3.14159 -1.5708 3.14159" />
+        <SetAttr FalloffMap="" RendererMask="1" />
     </Modify>
     <Modify Category="Entities" ID="5680" Name="SpotLight_32">
-        <SetAttr FalloffMap="" Re_FlickerOffIntensity="0" Re_Intensity="20" Re_SourceRadius="0" Rotation="-2.29689 -1.5708 -2.4155" />
+        <SetAttr FalloffMap="" Re_FlickerOffIntensity="0" Re_Intensity="20" Re_SourceRadius="0" />
     </Modify>
     <Modify Category="Entities" ID="5682" Name="PointLight_10">
         <SetAttr FalloffMap="" RendererMask="1" />
@@ -7776,16 +7686,16 @@
         <SetAttr FalloffMap="" Re_FlickerOffIntensity="0" Re_Intensity="20" Re_SourceRadius="0" />
     </Modify>
     <Modify Category="Entities" ID="5691" Name="PointLight_21">
-        <SetAttr FalloffMap="" RendererMask="1" Rotation="-0.0105328 1.5708 -0.0105328" />
+        <SetAttr FalloffMap="" RendererMask="1" />
     </Modify>
     <Modify Category="Entities" ID="5692" Name="SpotLight_36">
-        <SetAttr FalloffMap="" Re_FlickerOffIntensity="0" Re_Intensity="20" Re_SourceRadius="0" Rotation="1.56377 1.5708 -0.00702272" />
+        <SetAttr FalloffMap="" Re_FlickerOffIntensity="0" Re_Intensity="20" Re_SourceRadius="0" />
     </Modify>
     <Modify Category="Entities" ID="5695" Name="PointLight_22">
-        <SetAttr FalloffMap="" RendererMask="1" Rotation="3.13106 1.5708 3.13106" />
+        <SetAttr FalloffMap="" RendererMask="1" />
     </Modify>
     <Modify Category="Entities" ID="5696" Name="SpotLight_37">
-        <SetAttr FalloffMap="" Rotation="-1.57782 1.5708 3.13457" />
+        <SetAttr FalloffMap="" />
     </Modify>
     <Modify Category="Entities" ID="5698" Name="PointLight_4">
         <SetAttr FalloffMap="" RendererMask="1" />
@@ -7818,22 +7728,19 @@
         <SetAttr FalloffMap="" RendererMask="1" />
     </Modify>
     <Modify Category="Entities" ID="5725" Name="SpotLight_45">
-        <SetAttr FalloffMap="" />
+        <SetAttr FalloffMap="" Re_FlickerOffIntensity="0" Re_Intensity="4" Re_SourceRadius="0.1" />
     </Modify>
     <Modify Category="Entities" ID="5729" Name="SpotLight_47">
-        <SetAttr FalloffMap="" />
+        <SetAttr FalloffMap="" Re_FlickerOffIntensity="0" Re_Intensity="4" Re_SourceRadius="0.1" />
     </Modify>
     <Modify Category="Entities" ID="5731" Name="PointLight_30">
         <SetAttr FalloffMap="" RendererMask="1" />
     </Modify>
     <Modify Category="Entities" ID="5732" Name="PointLight_8">
-        <SetAttr FalloffMap="" RendererMask="1" />
+        <SetAttr FalloffMap="" />
     </Modify>
     <Modify Category="Entities" ID="5733" Name="PointLight_13">
-        <SetAttr FalloffMap="" RendererMask="1" Rotation="3.13976 1.5708 -0.00182262" />
-    </Modify>
-    <Modify Category="Entities" ID="5735" Name="oval_wall_lamp_4m_pipe_15">
-        <SetAttr Rotation="3.13976 1.5708 -0.00182262" />
+        <SetAttr FalloffMap="" RendererMask="1" />
     </Modify>
     <Modify Category="Entities" ID="5736" Name="SpotLight_48">
         <SetAttr FalloffMap="" />
@@ -7883,9 +7790,6 @@
     <Modify Category="Entities" ID="5769" Name="SpotLight_56">
         <SetAttr FalloffMap="" />
     </Modify>
-    <Modify Category="Entities" ID="5770" Name="oval_wall_lamp_4m_pipe_42">
-        <SetAttr Rotation="-1.57339 -1.5708 -1.5682" />
-    </Modify>
     <Modify Category="Entities" ID="5785" Name="PointLight_41">
         <SetAttr FalloffMap="" RendererMask="1" />
     </Modify>
@@ -7904,9 +7808,6 @@
     <Modify Category="Entities" ID="5798" Name="SpotLight_57">
         <SetAttr FalloffMap="" />
     </Modify>
-    <Modify Category="Entities" ID="5799" Name="oval_wall_lamp_4m_pipe_45">
-        <SetAttr Rotation="1.5682 -1.5708 1.57339" />
-    </Modify>
     <Modify Category="Entities" ID="5800" Name="PointLight_66">
         <SetAttr FalloffMap="" RendererMask="1" />
     </Modify>
@@ -7923,67 +7824,55 @@
         <SetAttr FalloffMap="" RendererMask="1" />
     </Modify>
     <Modify Category="Entities" ID="5807" Name="SpotLight_58">
-        <SetAttr FalloffMap="" Rotation="0.931643 1.5708 2.50244" />
+        <SetAttr FalloffMap="" />
     </Modify>
     <Modify Category="Entities" ID="5810" Name="PointLight_82">
         <SetAttr FalloffMap="" RendererMask="1" />
     </Modify>
     <Modify Category="Entities" ID="5811" Name="SpotLight_59">
-        <SetAttr FalloffMap="" Rotation="-2.20995 1.5708 -0.639153" />
+        <SetAttr FalloffMap="" />
     </Modify>
     <Modify Category="Entities" ID="5814" Name="PointLight_83">
-        <SetAttr FalloffMap="" RendererMask="1" Rotation="-0.00183264 1.5708 3.13977" />
+        <SetAttr FalloffMap="" RendererMask="1" />
     </Modify>
     <Modify Category="Entities" ID="5815" Name="SpotLight_60">
         <SetAttr FalloffMap="" />
     </Modify>
-    <Modify Category="Entities" ID="5816" Name="oval_wall_lamp_4m_pipe_47">
-        <SetAttr Rotation="-0.00183264 1.5708 3.13977" />
-    </Modify>
     <Modify Category="Entities" ID="5818" Name="PointLight_84">
-        <SetAttr FalloffMap="" RendererMask="1" Rotation="3.13976 1.5708 -0.00182262" />
+        <SetAttr FalloffMap="" RendererMask="1" />
     </Modify>
     <Modify Category="Entities" ID="5819" Name="SpotLight_61">
         <SetAttr FalloffMap="" />
     </Modify>
-    <Modify Category="Entities" ID="5820" Name="oval_wall_lamp_4m_pipe_48">
-        <SetAttr Rotation="3.13976 1.5708 -0.00182262" />
-    </Modify>
     <Modify Category="Entities" ID="5822" Name="PointLight_85">
-        <SetAttr FalloffMap="" RendererMask="1" Rotation="-0.00183264 1.5708 3.13977" />
+        <SetAttr FalloffMap="" RendererMask="1" />
     </Modify>
     <Modify Category="Entities" ID="5823" Name="SpotLight_62">
         <SetAttr FalloffMap="" />
     </Modify>
-    <Modify Category="Entities" ID="5824" Name="oval_wall_lamp_4m_pipe_49">
-        <SetAttr Rotation="-0.00183264 1.5708 3.13977" />
-    </Modify>
     <Modify Category="Entities" ID="5827" Name="PointLight_63">
-        <SetAttr FalloffMap="" RendererMask="1" Rotation="-2.53518e-06 1.5708 2.53518e-06" />
+        <SetAttr FalloffMap="" RendererMask="1" />
     </Modify>
     <Modify Category="Entities" ID="5828" Name="SpotLight_63">
-        <SetAttr FalloffMap="" Rotation="1.33371 1.5708 -0.237093" />
+        <SetAttr FalloffMap="" />
     </Modify>
     <Modify Category="Entities" ID="5831" Name="PointLight_67">
-        <SetAttr FalloffMap="" RendererMask="1" Rotation="-2.53518e-06 1.5708 2.53518e-06" />
+        <SetAttr FalloffMap="" RendererMask="1" />
     </Modify>
     <Modify Category="Entities" ID="5832" Name="SpotLight_64">
-        <SetAttr FalloffMap="" Rotation="1.33371 1.5708 -0.237093" />
+        <SetAttr FalloffMap="" />
     </Modify>
     <Modify Category="Entities" ID="5835" Name="PointLight_69">
-        <SetAttr FalloffMap="" RendererMask="1" Rotation="-2.53518e-06 1.5708 2.53518e-06" />
+        <SetAttr FalloffMap="" RendererMask="1" />
     </Modify>
     <Modify Category="Entities" ID="5836" Name="SpotLight_65">
-        <SetAttr FalloffMap="" Rotation="1.33371 1.5708 -0.237093" />
+        <SetAttr FalloffMap="" />
     </Modify>
     <Modify Category="Entities" ID="5851" Name="PointLight_79">
         <SetAttr FalloffMap="" RendererMask="1" />
     </Modify>
     <Modify Category="Entities" ID="5852" Name="SpotLight_68">
         <SetAttr FalloffMap="" />
-    </Modify>
-    <Modify Category="Entities" ID="5853" Name="oval_wall_lamp_4m_pipe_55">
-        <SetAttr Rotation="0.0290226 -1.5708 -0.0290226" />
     </Modify>
     <Modify Category="Entities" ID="5855" Name="PointLight_86">
         <SetAttr FalloffMap="" RendererMask="1" />
@@ -7997,14 +7886,11 @@
     <Modify Category="Entities" ID="5860" Name="SpotLight_70">
         <SetAttr FalloffMap="" />
     </Modify>
-    <Modify Category="Entities" ID="5861" Name="oval_wall_lamp_4m_pipe_57">
-        <SetAttr Rotation="1.77755 1.5708 1.77755" />
-    </Modify>
     <Modify Category="Entities" ID="5863" Name="PointLight_88">
-        <SetAttr FalloffMap="" RendererMask="1" Rotation="3.11825 -1.5708 -3.11826" />
+        <SetAttr FalloffMap="" RendererMask="1" />
     </Modify>
     <Modify Category="Entities" ID="5864" Name="SpotLight_71">
-        <SetAttr FalloffMap="" Rotation="-1.5948 -1.5708 -3.11759" />
+        <SetAttr FalloffMap="" />
     </Modify>
     <Modify Category="Entities" ID="5868" Name="PointLight_89">
         <SetAttr FalloffMap="" RendererMask="1" />
@@ -8035,9 +7921,6 @@
     </Modify>
     <Modify Category="Entities" ID="5919" Name="PointLight_78">
         <SetAttr FalloffMap="" RendererMask="1" />
-    </Modify>
-    <Modify Category="Entities" ID="5924" Name="SignArea_7">
-        <SetAttr Rotation="-3.14159 1.57045 -3.14159" />
     </Modify>
     <Modify Category="Entities" ID="5931" Name="PointLight_93">
         <SetAttr FalloffMap="" RendererMask="1" />

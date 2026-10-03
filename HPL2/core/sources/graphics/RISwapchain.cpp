@@ -375,6 +375,10 @@ RISwapchain RISwapchain::create(struct RIDevice *device,
       }
     }
 
+    // Report the extent DXGI actually created (a 0 in desc means "size to the
+    // window"), matching the Vulkan path's clamped imageExtent.
+    sc.width = (uint16_t)sc.textures[0].d3d12.width;
+    sc.height = (uint16_t)sc.textures[0].d3d12.height;
     sc.imageCount = (uint16_t)bufferCount;
     sc.d3d12.allowTearing = allowTearing;
     sc.d3d12.syncInterval = desc.vsync ? 1 : 0;

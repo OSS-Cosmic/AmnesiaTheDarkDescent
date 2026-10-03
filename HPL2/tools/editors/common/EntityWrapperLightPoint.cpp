@@ -126,6 +126,18 @@ void cEntityWrapperLightPoint::DrawLightTypeSpecific(cEditorWindowViewport* apVi
 	if(abIsSelected==false) return;
 	
 	apFunctions->DebugDrawSphere(mvPosition, mfRadius, mcolDiffuseColor);
+
+	// Ray traced: the light grid culls at the reach, which differs from the retail radius.
+	// RT-only lights store the reach in mfRadius, so the sphere above already shows it.
+	if(UsesRayTracedLightClass() && IsRayTracedOnly()==false)
+	{
+		float fReach = GetEffectiveReach();
+		if(fReach > 0.0f && fabsf(fReach - mfRadius) > 0.001f)
+		{
+			cColor reachColor(mcolDiffuseColor.r*0.5f, mcolDiffuseColor.g*0.5f, mcolDiffuseColor.b*0.5f, mcolDiffuseColor.a);
+			apFunctions->DebugDrawSphere(mvPosition, fReach, reachColor);
+		}
+	}
 }
 
 //---------------------------------------------------------------------------

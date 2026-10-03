@@ -22,6 +22,8 @@
 #include "graphics/Graphics.h"
 #include "graphics/RendererBackendSwitch.h"
 
+#include <tracy/Tracy.hpp>
+
 #include "engine/EngineTypes.h"
 #include "engine/Updateable.h"
 
@@ -557,11 +559,14 @@ void cGraphics::Init(const cEngineInitVars::cGraphicsVars &aVars,
     // (RICreateWindowSurface) and the new swapchain adopts ownership. The
     // surface then rides inside the swapchain across every recreate and is
     // freed by the last live swapchain's dispose() — cGraphics never owns it.
+    // Sized from the live window, not aVars.mvScreenSize: a 0x0 config means
+    // fullscreen-desktop (cWindow::Init), so only the window knows the size.
+    const cVector2l winSize = mpWindow->GetSize();
     RISwapchainDesc desc = {};
     desc.requestImageCount = RI_NUMBER_FRAMES_FLIGHT;
     desc.queue = &device.queues[RI_QUEUE_GRAPHICS];
-    desc.width = (uint16_t)aVars.mvScreenSize.x;
-    desc.height = (uint16_t)aVars.mvScreenSize.y;
+    desc.width = (uint16_t)winSize.x;
+    desc.height = (uint16_t)winSize.y;
     desc.format = RI_SWAPCHAIN_BT709_G22_8BIT;
     desc.vsync = m_vsync;
     desc.source = windowHandle;
@@ -569,9 +574,8 @@ void cGraphics::Init(const cEngineInitVars::cGraphicsVars &aVars,
     swapchain = RISharedPointer<RISwapchain>(
         &device, RISwapchain::create(&device, desc));
     if (swapchain.isEmpty()) {
-      FatalError("Failed to create swapchain (%ux%u)!\n",
-                 (uint32_t)aVars.mvScreenSize.x,
-                 (uint32_t)aVars.mvScreenSize.y);
+      FatalError("Failed to create swapchain (%ux%u)!\n", (uint32_t)winSize.x,
+                 (uint32_t)winSize.y);
     }
   }
 
@@ -1354,8 +1358,19 @@ void cGraphics::CloseAndSubmitActiveSet() {
     swapchain->d3d12.frameFenceValues[swapchainIndex] = primary.d3d12.value;
     const RISwapchainStatus_e presentStatus =
         RISwapchainPresent(&device, swapchain.Get());
+    FrameMark;
     if (presentStatus == RI_SWAPCHAIN_STATUS_OUT_OF_DATE)
       m_forceSwapchainRebuild = true;
+
+    // TEMP DIAGNOSTIC (live-only pixel noise at high resolution): with
+    // HPL_SERIALIZE_FRAMES=1 the CPU waits for the GPU after every present, so
+    // no two frames are ever in flight together.
+    static const bool kSerializeFrames = [] {
+      const char *env = getenv("HPL_SERIALIZE_FRAMES");
+      return env && atoi(env) != 0;
+    }();
+    if (kSerializeFrames)
+      graphicsQueue->waitIdle(&device);
 
     graphicsDefer.seal(frameTimelineValue);
     RISealRetiredBuffers(&device, frameTimelineValue);
@@ -1460,6 +1475,7 @@ void cGraphics::CloseAndSubmitActiveSet() {
     }
     const RISwapchainStatus_e presentStatus =
         RISwapchainPresent(&device, swapchain.Get());
+    FrameMark;
     if (presentStatus == RI_SWAPCHAIN_STATUS_OUT_OF_DATE) {
       // The present was rejected: its wait on finishSem[frameIndex] did
       // NOT run, so that binary semaphore is left signaled. Reusing this

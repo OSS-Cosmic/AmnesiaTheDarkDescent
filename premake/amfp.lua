@@ -52,6 +52,9 @@ project(PRODUCT.project)
         slang_dxil_production_prebuild(PRODUCT)
     end
 
+    -- LuxBase.cpp writes a crash minidump with MiniDumpWriteDump.
+    filter "system:windows"
+        links { "dbghelp" }
     filter "system:linux"
         defines { "LINUX" }
         buildoptions { "-Wno-switch", "-Wno-undefined-var-template", "-Wno-extern-c-compat" }

@@ -25,6 +25,8 @@
 #include "system/LowLevelSystem.h"
 #include "graphics/RIScratchAlloc.h"
 
+#include <tracy/Tracy.hpp>
+
 #include <algorithm>
 #include <cstdint>
 #include <cstdio>
@@ -463,6 +465,7 @@ bool cVertexBuffer::Compile(tVertexCompileFlag aFlags) {
 }
 
 void cVertexBuffer::SubmitToGPU(RIDevice *device) {
+  ZoneScopedN("cVertexBuffer::SubmitToGPU");
   cGraphics* pGraphics = Interface<cGraphics>::Get();
   assert(device);
 
@@ -589,6 +592,7 @@ void cVertexBuffer::SubmitToGPU(RIDevice *device) {
 
 void cVertexBuffer::BuildBlas(RICmd *cmd, RIDevice *device,
                                 cGraphics::FrameContext *cntx) {
+  ZoneScopedN("cVertexBuffer::BuildBlas");
   cGraphics* pGraphics = Interface<cGraphics>::Get();
   // Streams must be current before any build — no-op if a prior submit (e.g.
   // the translucent/decal prepare) already uploaded this generation.
@@ -655,6 +659,13 @@ void cVertexBuffer::BuildBlas(RICmd *cmd, RIDevice *device,
   uint64_t storageSize = 0;
   uint64_t buildScratchSize = 0;
   asDesc.getMemoryReqs(device, &storageSize, &buildScratchSize, NULL );
+
+  // Cumulative; the plot's per-frame slope is the build rate.
+  static int64_t s_blasBuilds = 0, s_blasStorageBytes = 0;
+  ++s_blasBuilds;
+  s_blasStorageBytes += (int64_t)storageSize;
+  TracyPlot("BLAS full builds (cumulative)", s_blasBuilds);
+  TracyPlot("BLAS storage bytes (cumulative)", s_blasStorageBytes);
 
   m_blasStorage = RISharedPointer<RIBuffer>(
       device, RIBuffer::create(
