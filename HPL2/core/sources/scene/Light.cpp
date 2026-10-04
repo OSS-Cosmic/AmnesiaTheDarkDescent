@@ -122,6 +122,10 @@ namespace hpl {
 		mfFlickerOnLevel = 1.0f;
 
 		mfFadeTime =0;
+		mfFadeDuration =0;
+
+		mfBrightness = 1.0f;
+		mfFalloff = 1.0f;
 
 		///////////////////////////////
 		//Data init
@@ -160,8 +164,15 @@ namespace hpl {
 		if(diffuse.r <=0 && diffuse.g <=0 && diffuse.b <=0 && diffuse.a <=0) 
 			return false;
 		if(GetAnimatedValue() <= 0) return false;
+		if(mfBrightness <= 0) return false;
 
 		return mbIsVisible; 
+	}
+
+	cColor iLight::GetColor() const
+	{
+		const cColor& diffuse = GetDiffuseColor();
+		return cColor(diffuse.r * mfBrightness, diffuse.g * mfBrightness, diffuse.b * mfBrightness, diffuse.a);
 	}
 
 	//-----------------------------------------------------------------------
@@ -335,6 +346,7 @@ namespace hpl {
 		if(afTime<=0) afTime = 0.0001f;
 
 		mfFadeTime = afTime;
+		mfFadeDuration = afTime;
 
 		const cColor from = GetDiffuseColor();
 		mColAdd.r = (aCol.r - from.r)/afTime;
@@ -951,6 +963,11 @@ namespace hpl {
 					tString sFalloffImage = GetAttributeString(pMainElem, "FalloffImage");
 					Image *pImage = mpTextureManager->Create1DImage(sFalloffImage,false).Release();
 					if(pImage) SetFalloffMap(pImage);
+
+#ifdef AMFP
+					mfBrightness = GetAttributeFloat(pMainElem, "Brightness", mfBrightness);
+					mfFalloff = GetAttributeFloat(pMainElem, "Falloff", mfFalloff);
+#endif
 
 					ExtraXMLProperties(pMainElem);
 				}

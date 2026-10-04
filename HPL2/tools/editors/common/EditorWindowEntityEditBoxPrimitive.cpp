@@ -117,6 +117,10 @@ void cEditorWindowEntityEditBoxPrimitive::AddPrimitivePropertySet(cWidgetTab* ap
 	vPos.y += mpInpCollides->GetSize().y+10;
 
 	mpInpCastShadows = CreateInputBool(vPos, _W("Cast Shadows"), "", apParentTab);
+
+	vPos.y += mpInpCastShadows->GetSize().y+10;
+
+	mpInpTwoSidedShadow = CreateInputBool(vPos, _W("Two-sided Shadow"), "", apParentTab);
 }
 
 //----------------------------------------------------------------------------
@@ -175,6 +179,7 @@ void cEditorWindowEntityEditBoxPrimitive::OnUpdate(float afTimeStep)
 	mpInpMaterial->SetValue(cString::To16Char(mpEntity->GetMaterial()),false);
 	mpInpCollides->SetValue(mpEntity->GetCollides(), false);
 	mpInpCastShadows->SetValue(mpEntity->GetCastShadows(), false);
+	mpInpTwoSidedShadow->SetValue(mpEntity->GetTwoSidedShadow(), false);
 
 	switch(mpEntity->GetPrimitiveType())
 	{
@@ -274,6 +279,10 @@ bool cEditorWindowEntityEditBoxPrimitive::WindowSpecificInputCallback(iEditorInp
 	{
 		pAction = mpEntity->CreateSetPropertyActionBool(ePrimitiveBool_CastShadows, mpInpCastShadows->GetValue());
 		//pAction = hplNew(cEditorActionPrimitivePlaneSetBoolProperty,(pWorld, lID, ePrimitivePlaneBoolProperty_CastShadows, mpInpCastShadows->GetValue()));
+	}
+	else if(apInput==mpInpTwoSidedShadow)
+	{
+		pAction = mpEntity->CreateSetPropertyActionBool(ePrimitiveBool_TwoSidedShadow, mpInpTwoSidedShadow->GetValue());
 	}
 	else if(apInput==mpInpCollides)
 	{

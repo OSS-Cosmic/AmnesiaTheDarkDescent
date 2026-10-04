@@ -133,7 +133,7 @@ WaterGuideOut psMain(WaterGuideVSOut psIn)
         return o;
 
     float3 eye  = normalize(psIn.posW - gPerFrame.posW);
-    WaterSurfaceFrame frame = waterSurfaceFrame(dpdx, dpdy, eye);
+    WaterSurfaceFrame frame = waterSurfaceFrame(dpdx, dpdy, dBaseUvDx, dBaseUvDy, eye);
     if (!frame.valid || !guideFinite3(frame.N) || !guideFinite3(frame.T)
         || !guideFinite3(frame.B) || !guideLengthUsable(frame.N)
         || !guideLengthUsable(frame.T) || !guideLengthUsable(frame.B))

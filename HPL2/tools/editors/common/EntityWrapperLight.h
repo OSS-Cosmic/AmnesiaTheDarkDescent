@@ -120,6 +120,10 @@ enum eLightFloat
 	eLightFloat_FlickerOffFadeMinLength,
 	eLightFloat_FlickerOffFadeMaxLength,
 	eLightFloat_FlickerOffIntensity,          // ray-traced lights only
+#ifdef AMFP
+	eLightFloat_Brightness,                   // AMFP retail tuning, Standard only
+	eLightFloat_Falloff,
+#endif
 
 	eLightFloat_LastEnum,
 };
@@ -195,6 +199,12 @@ public:
 			// The retail radius. On a Dual shape the ray-traced reach is a
 			// DIFFERENT quantity and lives in Re_Radius -- see LightParameters.h.
 			AddFloat(eLightFloat_Radius, "Radius", 1.0f);
+#ifdef AMFP
+			// AMFP's retail light tuning (cEngineFileLoading reads both). No
+			// Re_ twin: the ray-traced backend has its own intensity.
+			AddFloat(eLightFloat_Brightness, "Brightness", 1.0f);
+			AddFloat(eLightFloat_Falloff, "Falloff", 1.0f);
+#endif
 			if(aSchema==eLightSchema_Dual)
 			{
 				AddReduxOnlyFloat(eLightFloat_Intensity, "Intensity", 1.0f);
@@ -416,6 +426,12 @@ public:
 	float GetFlickerOffValue() { return UsesRayTracedLightClass() ? GetEffectiveFlickerOffValue()
 																  : mfFlickerOffRadius; }
 	cColor GetFlickerOffColor() { return mcolFlickerOffColor; }
+#ifdef AMFP
+	float GetBrightness() { return mfBrightness; }
+	float GetFalloff() { return mfFalloff; }
+	void SetBrightness(float afX);
+	void SetFalloff(float afX);
+#endif
 	const tString& GetFlickerOffSound() { return msFlickerOffSound; }
 	const tString& GetFlickerOffPS() { return msFlickerOffPS; }
 
@@ -524,6 +540,10 @@ protected:
 	float mfFlickerOffRadius;
 	float mfFlickerOffIntensity;
 	cColor mcolFlickerOffColor;
+#ifdef AMFP
+	float mfBrightness;
+	float mfFalloff;
+#endif
 
 	bool mbFlickerFade;
 

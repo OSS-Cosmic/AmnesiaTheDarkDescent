@@ -52,6 +52,7 @@ namespace hpl {
 		mbFadeStart = false;
 		mbFadeStop = false;
 
+		mfAIVolume = 1;
 		mfVolume = 1;
 		mfMaxDistance =0;
 		mfMinDistance=0;
@@ -59,6 +60,8 @@ namespace hpl {
 		mbStream  = false;
 		mbLoop = false;
 		mbUse3D = true;
+
+		mbKeepPlayingOutOfRange = false;
 
 		mfRandom = 1;
 		mfInterval =0;
@@ -99,6 +102,14 @@ namespace hpl {
 		int lSize = (int)mvSoundNameVecs[aType].size();
 		if(lSize==1) return mvSoundNameVecs[aType][0];
 		
+#ifdef AMFP
+		// Skipping the previous variant also works with only two variants.
+		int lRand = cMath::RandRectl(0, lSize - 1);
+		if(abSkipPrevious && lRand == mlPrevious[aType])
+		{
+			lRand = (lRand + 1) % lSize;
+		}
+#else
 		int lStart = -1;
 		int lSizeAdd = -1;
 		if(abSkipPrevious && lSize > 2 && mlPrevious[aType] < lSize && mlPrevious[aType] > 0)
@@ -109,6 +120,7 @@ namespace hpl {
 		
 		int lRand = cMath::RandRectl(lStart+1, lSize + lSizeAdd);
 		if(lRand >= lSize) lRand = lRand - lSize;
+#endif
 		
 		mlPrevious[aType] = lRand;
 
@@ -213,6 +225,9 @@ namespace hpl {
 		mfMaxDistance = GetAttributeFloat(pPropElem, "MaxDistance",1);
 		mfMinDistance = GetAttributeFloat(pPropElem, "MinDistance",1);
 
+		// Loudness enemies hear; defaults to the played volume.
+		mfAIVolume = GetAttributeFloat(pPropElem, "AIVolume", mfVolume);
+
 		mbFadeStart = GetAttributeBool(pPropElem, "FadeStart",true);
 		mbFadeStop = GetAttributeBool(pPropElem, "FadeStop",true);
 
@@ -220,6 +235,8 @@ namespace hpl {
 		mfInterval = GetAttributeFloat(pPropElem, "Interval",0);
 
 		mlPriority = GetAttributeInt(pPropElem, "Priority",0);
+
+		mbKeepPlayingOutOfRange = GetAttributeBool(pPropElem, "KeepPlayingOutOfRange",false);
 
         return true;
 	}

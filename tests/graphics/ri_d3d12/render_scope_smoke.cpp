@@ -361,6 +361,76 @@ void RunSmoke() {
   Release(depthReadback.buffer);
   Release(stencilReadback.buffer);
 
+  // Reopening scopes (e.g. per-object refraction) must not consume a finite
+  // per-recording descriptor budget. Do not use RenderScope here: it resets
+  // and submits the command list for every call, hiding cumulative exhaustion.
+  RITexture otherDepth = MakeTexture(&device, RI_FORMAT_D24_UNORM_S8_UINT,
+      RI_USAGE_DEPTH_STENCIL_ATTACHMENT | RI_USAGE_TRANSFER_SRC, 8, 8);
+  RITextureView otherDepthView = MakeView(&device, &otherDepth,
+      RI_VIEWTYPE_DEPTH_STENCIL_ATTACHMENT, RI_FORMAT_D24_UNORM_S8_UINT);
+  for (uint32_t recording = 0; recording < 2; ++recording) {
+    cmd.begin(&device);
+    for (uint32_t scope = 0; scope < 600; ++scope) {
+      const bool alternate = (scope % 2) != 0;
+      RIRenderingAttachment colors[2] = {
+          ColorAttachment(alternate ? secondView : colorView,
+              RI_ATTACHMENT_LOAD_OP_CLEAR, RI_ATTACHMENT_STORE_OP_STORE,
+              alternate ? 0.0f : 1.0f, alternate ? 1.0f : 0.0f,
+              float(recording), 1),
+          ColorAttachment(secondView, RI_ATTACHMENT_LOAD_OP_CLEAR,
+              RI_ATTACHMENT_STORE_OP_STORE, 0, 1, float(recording), 1)};
+      RIRenderingAttachment stressDepth = DepthAttachment(
+          alternate ? otherDepthView : depthView,
+          RI_ATTACHMENT_LOAD_OP_CLEAR, RI_ATTACHMENT_STORE_OP_STORE, false,
+          RI_ATTACHMENT_LOAD_OP_CLEAR, RI_ATTACHMENT_STORE_OP_STORE,
+          alternate ? 0.75f : 0.25f, alternate ? 11 : 3);
+      RIBeginRenderingDesc begin = {};
+      begin.renderArea.width = 8;
+      begin.renderArea.height = 8;
+      begin.colorCount = alternate ? 1 : 2;
+      begin.colors = colors;
+      begin.depthStencil = &stressDepth;
+      cmd.vk_d3d12_beginRendering(&device, begin);
+      cmd.vk_d3d12_endRendering(&device);
+      // LOAD must preserve the clear after the same slots are reused again.
+      for (auto &attachment : colors)
+        attachment.loadOp = RI_ATTACHMENT_LOAD_OP_LOAD;
+      stressDepth.loadOp = RI_ATTACHMENT_LOAD_OP_LOAD;
+      stressDepth.stencilLoadOp = RI_ATTACHMENT_LOAD_OP_LOAD;
+      cmd.vk_d3d12_beginRendering(&device, begin);
+      cmd.vk_d3d12_endRendering(&device);
+    }
+    cmd.end(&device);
+    SubmitAndWait(&device, &cmd);
+    Readback a = ReadSubresource(&device, &cmd, &color, 0, 0,
+                                D3D12_RESOURCE_STATE_RENDER_TARGET);
+    Readback b = ReadSubresource(&device, &cmd, &second, 0, 0,
+                                D3D12_RESOURCE_STATE_RENDER_TARGET);
+    CheckColor(a, 0, 0, 255, 0, BYTE(recording * 255), 255,
+               "scope stress preserves earlier color target");
+    CheckColor(b, 0, 0, 0, 255, BYTE(recording * 255), 255,
+               "scope stress clears alternate color target");
+    a.buffer->Unmap(0, nullptr);
+    b.buffer->Unmap(0, nullptr);
+    Release(a.buffer);
+    Release(b.buffer);
+    for (uint32_t target = 0; target < 2; ++target) {
+      RITexture *texture = target ? &otherDepth : &depth;
+      Readback d = ReadSubresource(&device, &cmd, texture, 0, 0,
+                                  D3D12_RESOURCE_STATE_DEPTH_WRITE);
+      Readback s = ReadSubresource(&device, &cmd, texture, 0, 0,
+                                  D3D12_RESOURCE_STATE_DEPTH_WRITE, 1);
+      CheckDepthStencil(d, s, 0, 0, target ? 0.75f : 0.25f, target ? 11 : 3,
+                        "scope stress preserves distinct depth/stencil targets");
+      d.buffer->Unmap(0, nullptr);
+      s.buffer->Unmap(0, nullptr);
+      Release(d.buffer);
+      Release(s.buffer);
+    }
+  }
+  otherDepthView.dispose(&device);
+  otherDepth.dispose(&device);
+
   UINT64 debugErrors = 0;
   if (device.d3d12.infoQueue) {
     const UINT64 messageCount = device.d3d12.infoQueue->GetNumStoredMessages();

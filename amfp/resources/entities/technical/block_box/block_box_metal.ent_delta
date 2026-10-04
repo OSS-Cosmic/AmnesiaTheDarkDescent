@@ -1,0 +1,46 @@
+<EntDelta Version="1" Target="entities/technical/block_box/block_box_metal.ent">
+    <SetVar Name="Active" Value="true" />
+    <SetVar Name="GrabDepth" Value="1.5" />
+    <SetVar Name="GrabDepthInc" Value="0.15" />
+    <SetVar Name="GrabForceMul" Value="1" />
+    <SetVar Name="GrabMassMul" Value="0.1" />
+    <SetVar Name="GrabMaxDepth" Value="2.2" />
+    <SetVar Name="GrabMinDepth" Value="1.0" />
+    <SetVar Name="GrabMinPushBackDepth" Value="0.2" />
+    <SetVar Name="GrabPositionOffset" Value="0" />
+    <SetVar Name="GrabPushBackDepthStep" Value="0.05" />
+    <SetVar Name="GrabRotationOffset" Value="0" />
+    <SetVar Name="GrabSkipNonOuterBodies" Value="false" />
+    <SetVar Name="GrabThrowImpulse" Value="10" />
+    <SetVar Name="GrabTorqueMul" Value="1" />
+    <SetVar Name="GrabUseDepth" Value="false" />
+    <SetVar Name="GrabUseOffset" Value="false" />
+    <SetVar Name="GrabUseRotation" Value="true" />
+    <SetVar Name="GrabUseRotationOffset" Value="true" />
+    <SetVar Name="ImageFile" Value="hand_drill_part03.tga" />
+    <SetVar Name="PickSound" Value="Generic" />
+    <SetVar Name="PushAtPoint" Value="false" />
+    <SetVar Name="PushForceMul" Value="1" />
+    <SetVar Name="PushImpulse" Value="2" />
+    <SetVar Name="ShowHints" Value="true" />
+    <SetVar Name="SlideMaxSpeed" Value="10" />
+    <SetVar Name="SlideSlowDownFactor" Value="1" />
+    <SetVar Name="SlideSpeedFactor" Value="1" />
+    <SetVar Name="SlideThrowImpulse" Value="3" />
+    <SetVar Name="SubItemTypeName" Value="drill_part" />
+    <SetVar Name="TempVar" Value="0" />
+    <Modify Category="Mesh" ID="0" Name="pCube1">
+        <SetAttr Material="" />
+        <RemoveAttr Name="GroupID" />
+        <RemoveAttr Name="Type" />
+    </Modify>
+    <Modify Category="Shapes" ID="1" Name="Shape_1">
+        <RemoveAttr Name="GroupID" />
+        <RemoveAttr Name="ShapeTypeID" />
+        <RemoveAttr Name="Type" />
+    </Modify>
+    <Modify Category="Bodies" ID="3" Name="Body_1">
+        <RemoveAttr Name="GroupID" />
+        <RemoveAttr Name="Type" />
+    </Modify>
+</EntDelta>

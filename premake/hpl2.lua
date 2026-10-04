@@ -1,10 +1,27 @@
 -- HPL2 engine -- static library.
 local CORE = ROOT .. "/HPL2/core"
 
-project "HPL2"
+-- The engine is built once per product. AMFP behaviour that differs from TDD
+-- sits behind #ifdef AMFP, so each product gets its own project (and thus its
+-- own objdir): flipping a define on a shared objdir would not rebuild anything.
+-- link_engine() picks the matching library and define for the consumer.
+--
+-- opts.defines      extra defines (e.g. AMFP)
+-- opts.angelscript  "AngelScript" or "AngelScript_AMFP": which AngelScript the
+--                   engine compiles against. AMFP also swaps the TDD script
+--                   string add-on for AMFP's std::string + array add-ons.
+local function hpl2_engine_project(name, opts)
+project(name)
     kind "StaticLib"
     language "C++"
     set_output("static")
+    opts = opts or {}
+    if opts.defines then defines(opts.defines) end
+    local amfp_script = opts.angelscript == "AngelScript_AMFP"
+    config_stamp(name, {
+        table.concat(opts.defines or {}, ","),
+        amfp_script and ANGELSCRIPT_AMFP_INCLUDE or ANGELSCRIPT_INCLUDE,
+    })
     -- USE_OALWRAPPER only selects the legacy OALWrapper/-prefixed header path in
     -- LowLevelSoundOpenAL.cpp and OpenALSound{Data,Channel}.h (it gates no backend
     -- code -- those sources are compiled unconditionally via the glob below). The
@@ -28,8 +45,7 @@ project "HPL2"
     end
     -- Implementation-specific sources.
     local impl_patterns = {
-        "SqScript.cpp", "scriptarray.cpp", "scripthelper.cpp",
-        "scriptstring.cpp", "scriptstring_utils.cpp",
+        "SqScript.cpp",
         "BitmapLoader*", "*Newton.cpp", "LegacyVertexBuffer.cpp",
         "GamepadSDL.cpp", "GamepadSDL2.cpp", "KeyboardSDL.cpp", "MouseSDL.cpp",
         "TimerSDL.cpp", "LowLevelInputSDL.cpp",
@@ -40,13 +56,21 @@ project "HPL2"
         "HplMainShim.cpp",
         "SDLFontData.cpp", "LowLevelSoundOpenAL.cpp", "OpenAL*",
         "MeshLoaderCollada.cpp", "MeshLoaderColladaHelpers.cpp",
-        "MeshLoaderColladaLoader.cpp", "MeshLoaderMSH.cpp", "MeshLoaderFBX.cpp",
+        "MeshLoaderColladaLoader.cpp", "MeshLoaderMSH.cpp", "MeshLoaderFBX.cpp", "FbxImport.cpp",
         "MeshLoaderGLTF.cpp",
         "ThreadSDL.cpp", "MutexSDL.cpp", "VertexBuffer.cpp",
     }
     for _, p in ipairs(impl_patterns) do table.insert(patterns, IMPL .. p) end
+    -- AngelScript add-ons are written against one AngelScript version, so each
+    -- engine build compiles only the set matching the AngelScript it links.
+    local script_addons = amfp_script
+        and { "scripthelper.cpp", "scriptarray.cpp", "scriptstdstring.cpp", "scriptstdstring_utils.cpp" }
+        or  { "scripthelper.cpp", "scriptstring.cpp", "scriptstring_utils.cpp" }
+    for _, p in ipairs(script_addons) do table.insert(patterns, IMPL .. p) end
     table.insert(patterns, CORE .. "/sources/platform/sdl2/*.cpp")
     local file_list = glob(patterns)
+    -- ufbx is a single C file (FbxImport); it builds as C beside the C++ sources.
+    table.insert(file_list, DEPS_EXTERN .. "/ufbx/ufbx.c")
     -- RID3D12.cpp is Windows-only (opt-in DX12 backend). Prune it from the source
     -- list on non-Windows targets so gmake doesn't emit a compile target for it;
     -- the file's own `#if DEVICE_IMPL_D3D12` guard already keeps it a trivially
@@ -80,16 +104,24 @@ project "HPL2"
     -- Include directories. premake does not propagate dependency includes, so
     -- everything HPL2's sources #include must be listed explicitly.
     includedirs {
+        amfp_script and ANGELSCRIPT_AMFP_INCLUDE or ANGELSCRIPT_INCLUDE,
         CORE .. "/include",
         ROOT .. "/HPL2/include",            -- BuildID_HPL2_0.h
         ROOT .. "/amnesia/glsl",
         ROOT .. "/amnesia/slang",
-        DEPS_SOURCES .. "/AngelScript/include",
         DEPS_EXTERN .. "/tinyxml2",
         DEPS_EXTERN .. "/rapidjson/include", -- RIProgram's reflection parser
         DEPS_EXTERN .. "/zlib",             -- zlib.h/zconf.h for BinaryBuffer/SerializeClass
         DEPS_EXTERN .. "/cgltf",            -- cgltf.h single-header glTF 2.0 parser (MeshLoaderGLTF)
+        DEPS_EXTERN .. "/ufbx",             -- ufbx single-file FBX parser (FbxImport / MeshLoaderFBX)
     }
+    -- Tracy zones live only in engine TUs, so TRACY_ENABLE is needed here and
+    -- nowhere else. Tracy.hpp turns every macro into a no-op when it is unset.
+    includedirs { DEPS_EXTERN .. "/tracy/public" }
+    if _OPTIONS["with-tracy"] == "yes" then
+        defines { "TRACY_ENABLE", "TRACY_ON_DEMAND" }
+        files { DEPS_EXTERN .. "/tracy/public/TracyClient.cpp" }
+    end
     generated_includes()
     d3d12ma_includes()
     if os.target() == "windows" and _OPTIONS["with-d3d12"] == "yes" then
@@ -111,7 +143,7 @@ project "HPL2"
     -- Keep HPL2 aware of its dependency set; final executables still call
     -- link_engine() because static-library links are not relied on transitively.
     links {
-        "OALWrapper", "AngelScript", "Newton", "tinyxml2", "fmt",
+        "OALWrapper", opts.angelscript or "AngelScript", "Newton", "tinyxml2", "fmt",
         "vorbisfile", "vorbis", "ogg", "freealut",
         "zlib", "volk", "IL", "png", "jpeg",
     }
@@ -137,3 +169,7 @@ project "HPL2"
         -- unwind semantics enabled avoids C4530 warnings from headers like <vector>.
         exceptionhandling "On"
     filter {}
+end
+
+hpl2_engine_project("HPL2", { angelscript = "AngelScript" })
+hpl2_engine_project("HPL2_AMFP", { defines = { "AMFP" }, angelscript = "AngelScript_AMFP" })

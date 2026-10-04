@@ -1,0 +1,14 @@
+<EntDelta Version="1" Target="entities/lamp/gas_lamp_desk/gas_lamp_desk.ent">
+    <Modify Category="Shapes" ID="8" Name="Shape_2">
+        <SetAttr RelativeScale="0.07 0.07 0.07" Scale="0.07 0.07 0.07" />
+    </Modify>
+    <Modify Category="Shapes" ID="10" Name="Shape_3">
+        <SetAttr RelativeScale="0.18 0.18 0.18" Scale="0.18 0.18 0.18" />
+    </Modify>
+    <Modify Category="Entities" ID="2" Name="PointLight_1">
+        <SetAttr FalloffMap="" Re_FlickerOffIntensity="0" Re_Intensity="15" Re_SourceRadius="0.1" RendererMask="2" WorldPos="-0.00772476 0.736605 -0.0187988" />
+    </Modify>
+    <Add Category="Entities">
+        <PointLight Name="PointLight_2" WorldPos="0.00844955 0.71487 0.00455475" Rotation="2.97964e-08 3.18964e-06 -1.80246e-06" Scale="1.33333 1.33333 1.33333" Tag="" Active="true" CastShadows="false" ShadowResolution="High" ShadowsAffectStatic="true" ShadowsAffectDynamic="true" Radius="1" Brightness="1" Falloff="1" Re_Intensity="5" Re_SourceRadius="1" FalloffMap="" Gobo="" GoboAnimMode="None" GoboAnimFrameTime="0" DiffuseColor="0.712326 0.964844 0.712326 1" FlickerActive="false" FlickerOnMinLength="0" FlickerOnMaxLength="0" FlickerOnPS="" FlickerOnSound="" FlickerOffMinLength="0" FlickerOffMaxLength="0" FlickerOffPS="" FlickerOffSound="" FlickerOffColor="0 0 0 1" FlickerOffRadius="0" Re_FlickerOffIntensity="0" FlickerFade="false" FlickerOnFadeMinLength="0" FlickerOnFadeMaxLength="0" FlickerOffFadeMinLength="0" FlickerOffFadeMaxLength="0" />
+    </Add>
+</EntDelta>

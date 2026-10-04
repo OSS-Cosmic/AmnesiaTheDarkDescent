@@ -1,0 +1,5 @@
+<EntDelta Version="1" Target="entities/spraylock/green_light_single.ent">
+    <Modify Category="Entities" ID="1" Name="PointLight_1">
+        <SetAttr FalloffMap="" />
+    </Modify>
+</EntDelta>

@@ -9,6 +9,10 @@ local EDITORS = TOOLS .. "/editors"
 -- "editor/" as a resource dir -- so they must sit next to the built editor
 -- executables. Mirrors the CMake `install(DIRECTORY tools/resources/ ...)` hack.
 local RESOURCES = TOOLS .. "/resources"
+-- AMFP editor class definitions (scripts/gen_amfp_editor_types.py). Copied
+-- over RESOURCES for the AMFP product only: the shared EntityTypes.cfg /
+-- AreaTypes.cfg are TDD's, and the editors drop whatever those don't declare.
+local RESOURCES_AMFP = TOOLS .. "/resources_amfp"
 
 local function winpath(p) return (p:gsub("/", "\\")) end
 
@@ -25,15 +29,19 @@ local function resolve(basenames)
 end
 
 -- Shared scaffolding for every editor target, including the engine include set
--- the editor sources need.
-local function editor_includes()
+-- the editor sources need. product selects the engine build: "amfp" links
+-- HPL2_AMFP (+ -DAMFP via link_engine), whose class layouts only match the
+-- AMFP AngelScript headers.
+local function editor_includes(product)
+    local angelscript_include =
+        product == "amfp" and ANGELSCRIPT_AMFP_INCLUDE or ANGELSCRIPT_INCLUDE
     includedirs {
         EDITORS .. "/common",
         ROOT .. "/HPL2/core/include",
         ROOT .. "/HPL2/tools/tests/Common",
         ROOT .. "/amnesia/slang",     -- HPL2 headers pull in Constants.h
         ROOT .. "/amnesia/glsl",
-        DEPS_SOURCES .. "/AngelScript/include",
+        angelscript_include,
         DEPS_EXTERN .. "/tinyxml2",
         DEPS_EXTERN .. "/rapidjson/include", -- RapidJSON submodule (header-only, MCP server)
         DEPS_EXTERN .. "/httplib",    -- cpp-httplib (header-only, MCP server)
@@ -42,7 +50,7 @@ local function editor_includes()
     vulkan_includes()
     mathlib_use()
     defines { "USERDIR_RESOURCES", "RAPIDJSON_HAS_STDSTRING=1" }
-    link_engine()
+    link_engine("game", product)
     filter "system:linux"
         linkoptions { "-Wl,-rpath,'$$ORIGIN/libs'", "-Wl,-rpath,'$$ORIGIN'" }
     filter "system:windows"
@@ -54,23 +62,39 @@ end
 -- (postbuild) rather than only in deploy.sh, so a plain `make` -- and
 -- therefore the CI release archive, which just tars the runtime dir -- carries
 -- the editor data even when no retail install is deployed over it.
-local function tool_resources_postbuild()
-    local dest = runtime_dir("")
+local function tool_resources_postbuild(product)
+    local dest = runtime_dir(product or "amnesia", "")
     filter "system:not windows"
         postbuildcommands {
             string.format('{MKDIR} "%s"', dest),
             string.format('cp -R "%s/." "%s/"', RESOURCES, dest),
         }
+        if product == "amfp" then
+            postbuildcommands { string.format('cp -R "%s/." "%s/"', RESOURCES_AMFP, dest) }
+        end
     filter "system:windows"
         postbuildcommands {
             string.format('xcopy /E /I /Y /Q "%s" "%s\\" >nul',
                 winpath(RESOURCES), winpath(dest)),
         }
+        if product == "amfp" then
+            postbuildcommands {
+                string.format('xcopy /E /I /Y /Q "%s" "%s\\" >nul',
+                    winpath(RESOURCES_AMFP), winpath(dest)),
+            }
+        end
     filter {}
 end
 
-local function editor_target(name, subdir, basenames)
-    project(name)
+-- The AMFP copy gets its own project (and so its own objdir) but keeps the
+-- executable name, staged into the AMFP runtime dir next to AmnesiaAMFP.
+local function tool_project_name(name, product)
+    return product == "amfp" and (name .. "_AMFP") or name
+end
+
+local function editor_target(name, subdir, basenames, product)
+    project(tool_project_name(name, product))
+        targetname(name)
         -- HPL2's entry wrapper (LowLevelSystemSDL.cpp) provides WinMain on Windows
         -- (GUI subsystem) and main elsewhere -- mirror amnesia.lua's kind split.
         filter "system:windows"
@@ -79,11 +103,11 @@ local function editor_target(name, subdir, basenames)
             kind "ConsoleApp"
         filter {}
         language "C++"
-        set_output("runtime")
+        set_output("runtime", product)
         files (resolve(basenames))
         includedirs { EDITORS .. "/" .. subdir }
-        editor_includes()
-        tool_resources_postbuild()
+        editor_includes(product)
+        tool_resources_postbuild(product)
         buildid(name, EDITORS .. "/" .. subdir)
 end
 
@@ -128,6 +152,7 @@ local leveleditor = {
     "EntityWrapperEntity.cpp", "EntityWrapperFogArea.cpp", "EntityWrapperLight.cpp",
     "EntityWrapperLightBox.cpp", "EntityWrapperLightPoint.cpp",
     "EntityWrapperLightSpot.cpp", "EntityWrapperLightArea.cpp",
+    "EntityWrapperLightDirectional.cpp",
     "EntityWrapperParticleSystem.cpp", "EntityWrapperPrimitive.cpp",
     "EntityWrapperPrimitivePlane.cpp", "EntityWrapperSound.cpp",
     "EntityWrapperStaticObject.cpp", "SphereCreator.cpp", "StdAfx.cpp",
@@ -200,7 +225,8 @@ local modeleditor = {
     "EntityWrapperJointScrew.cpp", "EntityWrapperJointSlider.cpp",
     "EntityWrapperLight.cpp", "EntityWrapperLightBox.cpp",
     "EntityWrapperLightPoint.cpp", "EntityWrapperLightSpot.cpp",
-    "EntityWrapperLightArea.cpp", "EntityWrapperParticleSystem.cpp",
+    "EntityWrapperLightArea.cpp", "EntityWrapperLightDirectional.cpp",
+    "EntityWrapperParticleSystem.cpp",
     "EntityWrapperSound.cpp", "EntityWrapperSubMesh.cpp", "SphereCreator.cpp",
     "StdAfx.cpp", "SurfacePicker.cpp",
     "ModelEditor.cpp", "ModelEditorActions.cpp", "ModelEditorLowerToolbar.cpp",
@@ -261,28 +287,42 @@ local materialeditor = {
     "EditorFileWatcher.cpp", "PrefabManager.cpp",
 }
 
-editor_target("LevelEditor",    "leveleditor",    leveleditor)
-editor_target("ModelEditor",    "modeleditor",    modeleditor)
-editor_target("ParticleEditor", "particleeditor", particleeditor)
-editor_target("MaterialEditor", "materialeditor", materialeditor)
-
 -- MshConverter -- single source file, links HPL2 directly (not via AddToolTarget).
-project "MshConverter"
-    kind "ConsoleApp"
-    language "C++"
-    set_output("runtime")
-    files { TOOLS .. "/mshconverter/MshConverter.cpp" }
-    includedirs {
-        ROOT .. "/HPL2/core/include",
-        ROOT .. "/amnesia/slang",
-        ROOT .. "/amnesia/glsl",
-        DEPS_SOURCES .. "/AngelScript/include",
-        DEPS_EXTERN .. "/tinyxml2",
-    }
-    deps_public_includes()
-    vulkan_includes()
-    mathlib_use()
-    link_engine()
-    filter "system:linux"
-        linkoptions { "-Wl,-rpath,'$$ORIGIN/libs'", "-Wl,-rpath,'$$ORIGIN'" }
-    filter {}
+local function mshconverter_target(product)
+    project(tool_project_name("MshConverter", product))
+        targetname "MshConverter"
+        kind "ConsoleApp"
+        language "C++"
+        set_output("runtime", product)
+        files { TOOLS .. "/mshconverter/MshConverter.cpp" }
+        includedirs {
+            ROOT .. "/HPL2/core/include",
+            ROOT .. "/amnesia/slang",
+            ROOT .. "/amnesia/glsl",
+            product == "amfp" and ANGELSCRIPT_AMFP_INCLUDE or ANGELSCRIPT_INCLUDE,
+            DEPS_EXTERN .. "/tinyxml2",
+        }
+        deps_public_includes()
+        vulkan_includes()
+        mathlib_use()
+        link_engine("game", product)
+        filter "system:linux"
+            linkoptions { "-Wl,-rpath,'$$ORIGIN/libs'", "-Wl,-rpath,'$$ORIGIN'" }
+        filter {}
+end
+
+local function declare_tools(product)
+    editor_target("LevelEditor",    "leveleditor",    leveleditor,    product)
+    editor_target("ModelEditor",    "modeleditor",    modeleditor,    product)
+    editor_target("ParticleEditor", "particleeditor", particleeditor, product)
+    editor_target("MaterialEditor", "materialeditor", materialeditor, product)
+    mshconverter_target(product)
+end
+
+declare_tools()
+
+-- The same tool set against the AMFP engine, staged into build-premake/amfp/.
+-- Activate the AMFP external context so SDL2/OpenAL/NRD/FSR/XeSS stage there.
+product_activate(product_context("amfp"))
+declare_tools("amfp")
+product_deactivate()

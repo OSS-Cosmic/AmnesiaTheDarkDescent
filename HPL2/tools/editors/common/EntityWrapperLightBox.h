@@ -39,6 +39,9 @@ public:
 enum eLightBoxInt
 {
 	eLightBoxInt_BlendFunc = LightBoxPropIdStart,
+#ifdef AMFP
+	eLightBoxInt_Priority,
+#endif
 
 	eLightBoxInt_LastEnum,
 };
@@ -92,6 +95,11 @@ public:
 
 	void SetBlendFunc(eLightBoxBlendFunc aFunc);
 	eLightBoxBlendFunc GetBlendFunc() { return mBlendFunc; }
+#ifdef AMFP
+	// AMFP: which box light wins where several overlap.
+	void SetPriority(int alX);
+	int GetPriority() { return mlPriority; }
+#endif
 
 	void SetAbsScale(const cVector3f& avScale, int alAxis=-1);
 
@@ -104,6 +112,9 @@ protected:
 	// Data
 	cVector3f mvSize;
 	eLightBoxBlendFunc mBlendFunc;
+#ifdef AMFP
+	int mlPriority;
+#endif
 };
 
 //---------------------------------------------------------------------

@@ -923,9 +923,9 @@ namespace hpl {
 		
 		//RenderClipRegion();
 
-		///////////////////////////////
-		//Clear the render object set
-		mBaseClipRegion.Clear();
+		// The clip regions are freed in ClearRenderObjects, together with the
+		// render objects that point at them: a set can be rendered by more
+		// than one viewport in a frame.
 
 		//if(mbIs3D)
 		//{
@@ -937,6 +937,7 @@ namespace hpl {
 	void cGuiSet::ClearRenderObjects()
 	{
 		m_setRenderObjects.clear();
+		mBaseClipRegion.Clear();
 	}
 
 	//-----------------------------------------------------------------------

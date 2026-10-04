@@ -99,9 +99,12 @@ void csMain(uint3 dtid : SV_DispatchThreadID)
             float2 duv = newUv - v.texC;
 
             // Invert the UV delta into a barycentric delta using the
-            // triangle's UV edge vectors (UV is affine in barycentrics).
-            float2 E1 = vtx.uv[1] - vtx.uv[0];
-            float2 E2 = vtx.uv[2] - vtx.uv[0];
+            // triangle's UV edge vectors (UV is affine in barycentrics). duv is
+            // in material-animated UV space (v.texC carries uvMat), so carry the
+            // edges through uvMat's linear part (w = 0 drops the translation).
+            float4x4 uvMat = gSceneObjects[triangleHit.instanceID].uvMat;
+            float2 E1 = mul(uvMat, float4(vtx.uv[1] - vtx.uv[0], 0.0f, 0.0f)).xy;
+            float2 E2 = mul(uvMat, float4(vtx.uv[2] - vtx.uv[0], 0.0f, 0.0f)).xy;
             float det = E1.x * E2.y - E2.x * E1.y;
             if (abs(det) >= 1.0e-12f)
             {

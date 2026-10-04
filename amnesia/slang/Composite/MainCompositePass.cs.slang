@@ -297,6 +297,11 @@ void csMain(uint3 tid : SV_DispatchThreadID)
     albedoG = saturate(albedoG * gDecalMul[pixelPos].rgb + gDecalAdd[pixelPos].rgb);
     sd.albedo = sRGBToLinear(albedoG);
 
+    // Legacy cube-map reflection (e.g. AMFP's opaque soliddiffuse sewer water),
+    // folded into the albedo like Standard so it is lit the same way.
+    sd.albedo = rtCubeMapFold(materialID, sd.albedo, sd.posW, sd.normalW,
+                              v.texC, texLodBase);
+
     bool wantDirect = kDefaultRenderDirectLighting != 0u;
     float3 direct = wantDirect
         ? RELAX_BackEnd_UnpackRadiance(gDirectLighting[pixelPos]).rgb : float3(0.f);

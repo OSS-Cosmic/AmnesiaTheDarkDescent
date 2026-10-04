@@ -1,0 +1,5 @@
+<EntDelta Version="1" Target="entities/lamp/tesla_lamp/tesla_lamp.ent">
+    <Modify Category="Entities" ID="4" Name="PointLight_1">
+        <SetAttr Brightness="1" Falloff="1" Re_FlickerOffIntensity="0" Re_Intensity="5" Re_SourceRadius="0.01" />
+    </Modify>
+</EntDelta>

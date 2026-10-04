@@ -90,9 +90,12 @@ float environmentBackgroundAlpha(float clearAlpha, float skyAlpha,
                         * gPerFrame.skyBoxColor.rgb;
         }
         color = sRGBToLinear(saturate(display)) / kSceneExposure;
-        // Background pixels still represent a ray ending at the finite far
-        // plane. This keeps world and local fog visible over sky/clear color.
-        if (gPerFrame.fogEnabled != 0u || gPerFrame.fogAreaCount != 0u)
+        // Base game runs RenderFog/RenderFullScreenFog before RenderBasicSkyBox,
+        // so the sky box overwrites fogged background and is never fogged.
+        // Without a sky box the cleared background keeps its fog, evaluated
+        // at the finite far plane.
+        if (gPerFrame.skyBoxEnabled == 0u &&
+            (gPerFrame.fogEnabled != 0u || gPerFrame.fogAreaCount != 0u))
             color = applyFog(color, reconstructed.farPoint, cameraOrigin);
         O o; o.color = float4(color, alpha); return o;
     }

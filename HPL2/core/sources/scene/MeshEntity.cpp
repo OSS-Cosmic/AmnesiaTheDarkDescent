@@ -19,6 +19,8 @@
 
 #include "scene/MeshEntity.h"
 
+#include <tracy/Tracy.hpp>
+
 #include "resources/Resources.h"
 #include "resources/MaterialManager.h"
 #include "resources/MeshManager.h"
@@ -89,6 +91,7 @@ namespace hpl {
 		mbBoneMatricesNeedUpdate = true;
 
 		mbStatic = false;
+		mbUpdateBonesWhenCulled = false;
 
 		mbSkeletonPhysics = false;
 		mfSkeletonPhysicsWeight = 1.0f;
@@ -371,7 +374,15 @@ namespace hpl {
 	
 	void cMeshEntity::UpdateLogic(float afTimeStep)
 	{	
+#ifdef AMFP
+		if(mbStatic)
+		{
+			mbSkeletonPhysicsSleeping = true;
+			return; //No update on static models
+		}
+#else
 		if(mbStatic) return; //No update on static models
+#endif
 
 		/////////////////////////////////////////////
 		//Update the skeleton physics fade
@@ -389,23 +400,29 @@ namespace hpl {
 		/////////////////////////////////////////////
 		//Check if all bodies connected to the skeleton is at rest,
 		//If so we can skip skinning the body and simply just use the mesh as is.
-		//(has some problems so turned off at the moment)
+		//Without this a resting ragdoll is re-skinned and re-uploaded every frame,
+		//which also forces a BLAS rebuild per submesh on the ray traced backend.
 		mbSkeletonPhysicsSleeping = false;
 		if(mbSkeletonPhysics && mfSkeletonPhysicsWeight==1.0f && mbSkeletonPhysicsCanSleep)
 		{
 			bool bEnabled = false;
+			bool bHasBody = false;
 			for(int bone =0; bone< GetBoneStateNum(); ++bone)
 			{
 				cBoneState *pState = GetBoneState(bone);
 				iPhysicsBody *pBody = pState->GetBody();
 				
-				if(pBody && pBody->GetEnabled()){
-					bEnabled = true;
-					break;
+				if(pBody)
+				{
+					bHasBody = true;
+					if(pBody->GetEnabled()){
+						bEnabled = true;
+						break;
+					}
 				}
 			}
-			if(bEnabled == false){
-				//mbSkeletonPhysicsSleeping = true;
+			if(bHasBody && bEnabled == false){
+				mbSkeletonPhysicsSleeping = true;
 			}
 		}
 		/////////////////////////////////////////////
@@ -489,12 +506,25 @@ namespace hpl {
 				float fAnimationWeightMul = GetAnimationWeightMul();
 
 				//////////////////////////////////
-				//Go through all animations states and update the bones 
+				//An active state that can't blend is applied solo.
+				int lSoloIndex = -1;
+				for(size_t i=0; i< mvAnimationStates.size(); i++)
+				{
+					cAnimationState *pAnimState = mvAnimationStates[i];
+					if(pAnimState->CanBlend()==false && pAnimState->IsActive())
+					{
+						lSoloIndex = (int)i;
+						fAnimationWeightMul = 1.0f;
+					}
+				}
+
+				//////////////////////////////////
+				//Go through all animations states and update the bones
 				for(size_t i=0; i< mvAnimationStates.size(); i++)
 				{
 					cAnimationState *pAnimState = mvAnimationStates[i];
 
-					if(pAnimState->IsActive())
+					if(pAnimState->IsActive() && (lSoloIndex == -1 || lSoloIndex == (int)i))
 					{
 						cAnimation *pAnim = pAnimState->GetAnimation();
 
@@ -529,8 +559,10 @@ namespace hpl {
 							}
 						}
 
-					
+#ifndef AMFP
+						//AMFP advances every state in the event loop instead.
 						pAnimState->Update(afTimeStep);
+#endif
 					}
 				}
 				
@@ -629,7 +661,10 @@ namespace hpl {
 									pTrack->ApplyToNode(pNodeState,pAnimState->GetTimePosition(),pAnimState->GetWeight() * fAnimationWeightMul);
 							}
 
+#ifndef AMFP
+							//AMFP advances every state in the event loop instead.
 							pAnimState->Update(afTimeStep);
+#endif
 						}
 					}
 
@@ -683,6 +718,23 @@ namespace hpl {
 			{
 				cAnimationState *pState = mvAnimationStates[i];
 
+#ifdef AMFP
+				pState->Update(afTimeStep);
+
+				if(pState->IsActive()==false || pState->IsPaused() || pState->IsFadingOut()) continue;
+
+				for(int j=0; j < pState->GetEventNum(); ++j)
+				{
+					cAnimationEvent *pEvent = pState->GetEvent(j);
+
+					//Second case: a looping state wrapped past its end this frame.
+					if(	( pEvent->mfTime >= pState->GetPreviousTimePosition() && pEvent->mfTime < pState->GetTimePosition() ) ||
+						( pState->GetPreviousTimePosition() > pState->GetTimePosition() && pState->GetTimePosition() > pEvent->mfTime ) )
+					{
+						HandleAnimationEvent(pEvent);
+					}
+				}
+#else
 				if(pState->IsActive()==false || pState->IsPaused()) continue;
 
 				for(int j=0; j < pState->GetEventNum(); ++j)
@@ -695,6 +747,7 @@ namespace hpl {
 						HandleAnimationEvent(pEvent);
 					}
 				}
+#endif
 			}
 		}
 
@@ -796,6 +849,26 @@ namespace hpl {
 
 	void cMeshEntity::PlayFadeTo(int alIndex,bool abLoop, float afTime)
 	{
+#ifdef AMFP
+		// A zero fade time switches instantly (FadeIn/FadeOut would divide by 0).
+		if(afTime == 0)
+		{
+			for(size_t i=0; i< mvAnimationStates.size(); i++)
+			{
+				cAnimationState *pAnim = mvAnimationStates[i];
+				pAnim->SetActive(false);
+				pAnim->SetTimePosition(0);
+			}
+
+			cAnimationState *pAnim = mvAnimationStates[alIndex];
+			pAnim->SetActive(true);
+			pAnim->SetTimePosition(0);
+			pAnim->SetLoop(abLoop);
+			pAnim->SetWeight(1.0f);
+			return;
+		}
+#endif
+
 		///////////////////////
 		// Fade out previous
 		for(size_t i=0; i< mvAnimationStates.size(); i++)
@@ -816,6 +889,49 @@ namespace hpl {
 		pAnim->SetTimePosition(0);
 		pAnim->SetLoop(abLoop);
 		pAnim->FadeIn(afTime);
+	}
+
+	//-----------------------------------------------------------------------
+
+	void cMeshEntity::FadeOutCurrent(float afTime)
+	{
+		for(size_t i=0; i< mvAnimationStates.size(); i++)
+		{
+			if(mvAnimationStates[i]->IsActive())
+			{
+				mvAnimationStates[i]->FadeOutSpeed(afTime);
+			}
+		}
+	}
+
+	void cMeshEntity::FadeInCurrent(float afTime, bool abLoop)
+	{
+		bool bAny = false;
+
+		for(size_t i=0; i< mvAnimationStates.size(); i++)
+		{
+			if(mvAnimationStates[i]->IsActive())
+			{
+				mvAnimationStates[i]->FadeInSpeed(afTime);
+				mvAnimationStates[i]->SetLoop(abLoop);
+				bAny = true;
+			}
+		}
+
+		if(bAny == false)
+		{
+			///////////////
+			// Play the first animation if none are active
+			for(size_t i=0; i< mvAnimationStates.size(); i++)
+			{
+				mvAnimationStates[i]->SetActive(true);
+				mvAnimationStates[i]->SetTimePosition(0);
+				mvAnimationStates[i]->SetLoop(abLoop);
+				mvAnimationStates[i]->FadeIn(0.0001f);
+				mvAnimationStates[i]->FadeInSpeed(afTime);
+				mvAnimationStates[i]->SetSpeed(0);
+			}
+		}
 	}
 	
 	void cMeshEntity::PlayFadeToName(const tString &asName,bool abLoop, float afTime)
@@ -1177,6 +1293,7 @@ namespace hpl {
 
 	void cMeshEntity::UpdateGraphicsForFrame(float afFrameTime)
 	{
+		ZoneScopedN("cMeshEntity::UpdateGraphicsForFrame");
 		//////////////////////////////////////////
 		//Check so update is needed
 		if(	mbBoneMatricesNeedUpdate == false &&
@@ -1466,19 +1583,31 @@ namespace hpl {
 		{
 		case eAnimationEventType_PlaySound:
 			{
+#ifdef AMFP
+				cSoundEntity *pSound = mpWorld->CreateSoundEntity(msName + "_AnimEvent",apEvent->msValue,true);
+#else
 				cSoundEntity *pSound = mpWorld->CreateSoundEntity("AnimEvent",apEvent->msValue,true);
+#endif
 				if(pSound)
 				{
 					pSound->SetIsSaved(false);
-					cNode3DIterator nodeIt = mpBoneStateRoot->GetChildIterator();
-					if(nodeIt.HasNext())
+					//Node animated meshes have no skeleton, so no bone state root.
+					if(mpBoneStateRoot)
 					{
-						cNode3D *pNode = nodeIt.Next();
-						pNode->AddEntity(pSound);
+						cNode3DIterator nodeIt = mpBoneStateRoot->GetChildIterator();
+						if(nodeIt.HasNext())
+						{
+							cNode3D *pNode = nodeIt.Next();
+							pNode->AddEntity(pSound);
+						}
+						else
+						{
+							pSound->SetPosition(mBoundingVolume.GetWorldCenter());
+						}
 					}
 					else
 					{
-						pSound->SetPosition(mBoundingVolume.GetWorldCenter());
+						pSound->SetPosition(GetWorldPosition());
 					}
 				}
 				break;

@@ -8,12 +8,32 @@ newoption {
 }
 
 newoption {
+    trigger = "product",
+    value = "PRODUCT",
+    description = "Select the product/runtime context for product-specific declarations (default amnesia); existing targets remain unchanged.",
+    allowed = {
+        { "amnesia", "Use the existing Amnesia runtime context" },
+        { "amfp", "Prepare the Amnesia: A Machine for Pigs product context" },
+    },
+    default = "amnesia",
+}
+
+newoption {
     trigger = "slangc",
     value = "PATH",
     description = "Path to a slangc executable. If omitted, the script reuses one already "
         .. "extracted under build-premake/_deps/slang-prebuilt, "
         .. "otherwise it downloads the pinned release "
         .. "(SLANG_VERSION in premake/slang.lua) at configure time."
+}
+
+newoption {
+    trigger = "with-tracy",
+    value = "yes/no",
+    description = "Compile the Tracy profiler client into the engine (default no). Zones in the "
+        .. "engine compile to nothing when this is off.",
+    allowed = { { "yes", "Enable Tracy (TRACY_ENABLE, on-demand)" }, { "no", "Zones compile out" } },
+    default = "no",
 }
 
 newoption {

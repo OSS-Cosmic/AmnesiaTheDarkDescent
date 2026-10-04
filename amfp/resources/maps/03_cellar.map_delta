@@ -1,0 +1,288 @@
+<MapDelta Version="1" Target="maps/03_cellar.map">
+    <Modify Category="StaticObjects" ID="10605" Name="wall_default_195">
+        <SetAttr Rotation="3.139 -1.5708 1.57339" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="10606" Name="wall_default_254">
+        <SetAttr Rotation="3.139 -1.5708 1.57339" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="10607" Name="wall_default_255">
+        <SetAttr Rotation="3.139 -1.5708 1.57339" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="10608" Name="wall_default_308">
+        <SetAttr Rotation="3.139 -1.5708 1.57339" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="10609" Name="wall_default_309">
+        <SetAttr Rotation="3.139 -1.5708 1.57339" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="10610" Name="wall_default_310">
+        <SetAttr Rotation="3.139 -1.5708 1.57339" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="10611" Name="wall_default_311">
+        <SetAttr Rotation="3.139 -1.5708 1.57339" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="10612" Name="wall_default_312">
+        <SetAttr Rotation="3.139 -1.5708 1.57339" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="10613" Name="wall_default_313">
+        <SetAttr Rotation="3.139 -1.5708 1.57339" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="10614" Name="wall_default_314">
+        <SetAttr Rotation="3.139 -1.5708 1.57339" />
+    </Modify>
+    <Modify Category="Entities" ID="6092" Name="catwalk_machine_spotlight">
+        <SetAttr FalloffMap="" />
+    </Modify>
+    <Modify Category="Entities" ID="6113" Name="BoxLight_1">
+        <SetAttr FalloffMap="" />
+    </Modify>
+    <Modify Category="Entities" ID="6655" Name="cellar01_lamp_15">
+        <SetAttr WorldPos="-42.25 7.75 23.5167" />
+    </Modify>
+    <Modify Category="Entities" ID="6708" Name="catwalk_machine_spotlight_1">
+        <SetAttr FalloffMap="" />
+    </Modify>
+    <Modify Category="Entities" ID="7319" Name="catwalk_machine_spotlight_2">
+        <SetAttr FalloffMap="" />
+    </Modify>
+    <Modify Category="Entities" ID="8578" Name="Lantern_2">
+        <SetVar Name="NoteText" Value="SewerPumpRoomOne" />
+        <SetVar Name="OpenNoteInJournal" Value="true" />
+        <SetVar Name="UseNarration" Value="false" />
+    </Modify>
+    <Modify Category="Entities" ID="8579" Name="Lantern_3">
+        <SetVar Name="NoteText" Value="SewerPumpRoomOne" />
+        <SetVar Name="OpenNoteInJournal" Value="true" />
+        <SetVar Name="UseNarration" Value="false" />
+    </Modify>
+    <Modify Category="Entities" ID="8580" Name="Lantern_4">
+        <SetVar Name="NoteText" Value="SewerPumpRoomOne" />
+        <SetVar Name="OpenNoteInJournal" Value="true" />
+        <SetVar Name="UseNarration" Value="false" />
+    </Modify>
+    <Modify Category="Entities" ID="8582" Name="Lantern_5">
+        <SetVar Name="NoteText" Value="SewerPumpRoomOne" />
+        <SetVar Name="OpenNoteInJournal" Value="true" />
+        <SetVar Name="UseNarration" Value="false" />
+    </Modify>
+    <Modify Category="Entities" ID="8607" Name="PointLight_12">
+        <SetAttr FalloffMap="" RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="8612" Name="PointLight_17">
+        <SetAttr FalloffMap="" RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="8729" Name="SpotLight_17">
+        <SetAttr FalloffMap="" RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="8736" Name="PointLight_8">
+        <SetAttr FalloffMap="" RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="8737" Name="PointLight_9">
+        <SetAttr FalloffMap="" RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="8756" Name="PointLight_25">
+        <SetAttr FalloffMap="" RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="8757" Name="PointLight_26">
+        <SetAttr FalloffMap="" RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="8758" Name="SpotLight_28">
+        <SetAttr FalloffMap="" RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="8759" Name="SpotLight_29">
+        <SetAttr FalloffMap="" RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="8763" Name="PointLight_31">
+        <SetAttr FalloffMap="" RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="9578" Name="PointLight_279">
+        <SetAttr FalloffMap="" RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="9579" Name="PointLight_276">
+        <SetAttr FalloffMap="" RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="9580" Name="PointLight_277">
+        <SetAttr FalloffMap="" RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="9685" Name="spraylock_fire_3">
+        <SetAttr FalloffMap="" RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="9688" Name="spraylock_fire_4">
+        <SetAttr FalloffMap="" RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="9697" Name="spraylock_spark_light">
+        <SetAttr FalloffMap="" />
+    </Modify>
+    <Modify Category="Entities" ID="9703" Name="spraylock_center_pointlight">
+        <SetAttr FalloffMap="" RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="9716" Name="spraylock_fan">
+        <SetVar Name="CallbackFunc" Value="" />
+        <SetVar Name="ConnectedProps" Value="" />
+        <SetVar Name="ConnectionStateChangeCallback" Value="" />
+        <SetVar Name="FullGameSave" Value="false" />
+        <SetVar Name="PlayerInteractCallback" Value="" />
+        <SetVar Name="PlayerInteractCallbackAutoRemove" Value="false" />
+        <SetVar Name="PlayerLookAtCallback" Value="" />
+        <SetVar Name="PlayerLookAtCallbackAutoRemove" Value="false" />
+        <SetVar Name="StaticPhysics" Value="false" />
+    </Modify>
+    <Modify Category="Entities" ID="9740" Name="spraylock_fan_spotlight">
+        <SetAttr FalloffMap="" Re_FlickerOffIntensity="0" Re_Intensity="50" Re_SourceRadius="0" />
+    </Modify>
+    <Modify Category="Entities" ID="9742" Name="spraylock_fire_1">
+        <SetAttr FalloffMap="" RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="9743" Name="spraylock_fire_2">
+        <SetAttr FalloffMap="" RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="10060" Name="SpotLight_21">
+        <SetAttr FalloffMap="" />
+    </Modify>
+    <Modify Category="Entities" ID="10062" Name="SpotLight_22">
+        <SetAttr FalloffMap="" Re_FlickerOffIntensity="0" Re_Intensity="10" Re_SourceRadius="0" />
+    </Modify>
+    <Modify Category="Entities" ID="10063" Name="SpotLight_23">
+        <SetAttr FalloffMap="" Re_FlickerOffIntensity="0" Re_Intensity="10" Re_SourceRadius="0" />
+    </Modify>
+    <Modify Category="Entities" ID="10066" Name="SpotLight_24">
+        <SetAttr FalloffMap="" Re_FlickerOffIntensity="0" Re_Intensity="10" Re_SourceRadius="0" />
+    </Modify>
+    <Modify Category="Entities" ID="10600" Name="SpotLight_83">
+        <SetAttr FalloffMap="" />
+    </Modify>
+    <Modify Category="Entities" ID="10602" Name="PointLight_30BG">
+        <SetAttr FalloffMap="" RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="10618" Name="SpotLight_30">
+        <SetAttr FalloffMap="" RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="10623" Name="SpotLight_31">
+        <SetAttr FalloffMap="" RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="10625" Name="PointLight_2">
+        <SetAttr FalloffMap="" RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="10626" Name="PointLight_3">
+        <SetAttr FalloffMap="" RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="10627" Name="PointLight_4">
+        <SetAttr FalloffMap="" RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="10629" Name="PointLight_5">
+        <SetAttr FalloffMap="" RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="10630" Name="PointLight_33">
+        <SetAttr FalloffMap="" RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="10631" Name="PointLight_37">
+        <SetAttr FalloffMap="" RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="10632" Name="PointLight_13">
+        <SetAttr FalloffMap="" RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="10633" Name="PointLight_14">
+        <SetAttr FalloffMap="" RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="10634" Name="PointLight_18">
+        <SetAttr FalloffMap="" RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="10635" Name="PointLight_36">
+        <SetAttr FalloffMap="" RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="10640" Name="PointLight_38">
+        <SetAttr FalloffMap="" RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="10641" Name="PointLight_39">
+        <SetAttr FalloffMap="" RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="10642" Name="SpotLight_18">
+        <SetAttr FalloffMap="" Re_FlickerOffIntensity="0" Re_Intensity="150" Re_SourceRadius="0" />
+    </Modify>
+    <Modify Category="Entities" ID="10643" Name="PointLight_40">
+        <SetAttr FalloffMap="" RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="10644" Name="PointLight_41">
+        <SetAttr FalloffMap="" RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="10645" Name="PointLight_42">
+        <SetAttr FalloffMap="" RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="10646" Name="PointLight_43">
+        <SetAttr FalloffMap="" RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="10647" Name="PointLight_44">
+        <SetAttr FalloffMap="" RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="10648" Name="PointLight_45">
+        <SetAttr FalloffMap="" RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="10650" Name="PointLight_46">
+        <SetAttr FalloffMap="" RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="10651" Name="SpotLight_20">
+        <SetAttr FalloffMap="" RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="10655" Name="SpotLight_1">
+        <SetAttr FalloffMap="" RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="10656" Name="PointLight_34">
+        <SetAttr FalloffMap="" RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="10657" Name="PointLight_35">
+        <SetAttr FalloffMap="" RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="10658" Name="PointLight_47">
+        <SetAttr FalloffMap="" RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="10659" Name="PointLight_48">
+        <SetAttr FalloffMap="" RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="10660" Name="PointLight_49">
+        <SetAttr FalloffMap="" RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="10661" Name="PointLight_32">
+        <SetAttr FalloffMap="" RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="10662" Name="PointLight_50">
+        <SetAttr FalloffMap="" RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="10663" Name="PointLight_51">
+        <SetAttr FalloffMap="" RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="10664" Name="PointLight_52">
+        <SetAttr FalloffMap="" RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="10665" Name="PointLight_53">
+        <SetAttr FalloffMap="" RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="10666" Name="PointLight_54">
+        <SetAttr FalloffMap="" RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="10667" Name="PointLight_55">
+        <SetAttr FalloffMap="" RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="10668" Name="PointLight_56">
+        <SetAttr FalloffMap="" RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="10669" Name="PointLight_57">
+        <SetAttr FalloffMap="" RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="10670" Name="PointLight_58">
+        <SetAttr FalloffMap="" RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="10760" Name="PointLight_1">
+        <SetAttr FalloffMap="" RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="10772" Name="SideRoomBrokenFuseLight">
+        <SetAttr FalloffMap="" />
+    </Modify>
+    <Modify Category="Entities" ID="10774" Name="CatwalkBrokenFuseLight">
+        <SetAttr FalloffMap="" />
+    </Modify>
+    <Modify Category="Entities" ID="10776" Name="SideRoomBrokenFuseLight_Intense">
+        <SetAttr FalloffMap="" />
+    </Modify>
+    <Modify Category="Entities" ID="10777" Name="CatwalkBrokenFuseLight_Intense">
+        <SetAttr FalloffMap="" />
+    </Modify>
+</MapDelta>

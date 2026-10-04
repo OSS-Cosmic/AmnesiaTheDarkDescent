@@ -51,8 +51,8 @@ ReflectionOutputs psMain(V v)
     bool boxLit=false;
     for(uint i=0u;i<standardLightCounts.boxCount;i++) {
         float3 boxContrib=standardBoxLight(float3(0,0,0),c,s.position,standardBoxLights[i]);
+        lit=standardBoxLight(lit,c,s.position,standardBoxLights[i]);
         if(any(boxContrib!=float3(0,0,0))) {
-            lit+=boxContrib;
             boxLit=true;
         }
     }
@@ -60,13 +60,12 @@ ReflectionOutputs psMain(V v)
         lit+=standardPointLight(s,viewDirection,standardPointLights[i]);
     for(uint i=0u;i<standardLightCounts.spotCount;i++)
         lit+=standardSpotLight(s,viewDirection,standardSpotLights[i],1.0f,float3(0),float3(0));
-    // Fallbacks share the lights' pre-exposure units (see Standard.environment.3d.slang).
-    // skyBoxColor is a display-space tint, so tint the display albedo and decode.
-    if (all(lit==float3(0,0,0))) lit=sRGBToLinear(saturate(linearToSRGB(c)*gPerFrame.skyBoxColor.rgb))/kSceneExposure;
-    else if (!boxLit) lit+=c*0.08f/kSceneExposure;
+    // Fallbacks join the display-space accumulation before its final decode.
+    if (all(lit==float3(0,0,0))) lit=saturate(linearToSRGB(c)*gPerFrame.skyBoxColor.rgb);
+    else if (!boxLit) lit+=linearToSRGB(c*0.08f);
     lit += standardIllumination(m, o.illuminationAmount, v.uv);
     ReflectionOutputs output;
-    output.color = float4(lit,1.0f);
+    output.color = float4(standardLightingToScene(lit),1.0f);
     output.position = float4(v.p,1.0f);
     return output;
 }

@@ -27,6 +27,7 @@
 #include "EntityWrapperLightSpot.h"
 #include "EntityWrapperLightArea.h"
 #include "EntityWrapperLightBox.h"
+#include "EntityWrapperLightDirectional.h"
 
 #include "EditorAction.h"
 
@@ -49,6 +50,7 @@ cEditorWindowEntityEditBoxLight::cEditorWindowEntityEditBoxLight(cEditorEditMode
 	mpGroupFalloff = NULL;
 	mpInpFalloffMap = NULL;
 	mpInpBoxBlendFunc = NULL;
+	mpInpDirectionalAngularRadius = NULL;
 
 	// Box and area lights never build the Raytraced group, but OnUpdate still
 	// tests these.
@@ -102,12 +104,17 @@ void cEditorWindowEntityEditBoxLight::Create()
 		pTab = mpTabs->AddTab(_W("Box"));
 		AddPropertySetBox(pTab);
 	}
+	else if(lLightType==eEditorEntityLightType_Directional)
+	{
+		pTab = mpTabs->AddTab(_W("Directional"));
+		AddPropertySetDirectional(pTab);
+	}
 
 	mpTabFlicker = mpTabs->AddTab(_W("Flicker"));
 	AddPropertySetFlicker(mpTabFlicker);
 
-	// Box lights have no gobo or falloff.
-	if(lLightType!=eEditorEntityLightType_Box)
+	// Box and directional lights have no gobo or falloff.
+	if(lLightType!=eEditorEntityLightType_Box && lLightType!=eEditorEntityLightType_Directional)
 	{
 		AddPropertyGobo(mpTabGeneral);
 		AddPropertyFalloffMap(mpTabGeneral);
@@ -486,6 +493,29 @@ void cEditorWindowEntityEditBoxLight::AddPropertySetArea(cWidgetTab* apParentTab
 
 //------------------------------------------------------------
 
+void cEditorWindowEntityEditBoxLight::AddPropertySetDirectional(cWidgetTab* apParentTab)
+{
+	cVector3f vPos = cVector3f(10,10,0.1f);
+	AddPropertyRotation(apParentTab);
+	mpInpRotation->SetPosition(vPos);
+	vPos.y += mpInpRotation->GetSize().y + 5;
+
+	AddPropertyCastShadows(apParentTab);
+	mpGroupShadows->SetPosition(vPos);
+	vPos.y += mpGroupShadows->GetSize().y + 5;
+
+	// Only the intensity: a directional light has no reach and no source size.
+	AddPropertyIntensity(apParentTab);
+	mpGroupIntensity->SetPosition(vPos);
+	vPos.y += mpGroupIntensity->GetSize().y + 5;
+
+	// Degrees in the UI, radians in the file. Sets the soft-shadow width.
+	mpInpDirectionalAngularRadius = CreateInputNumber(vPos, _W("Angular Radius"), "", apParentTab, 50, 0.1f);
+	mpInpDirectionalAngularRadius->SetDecimals(3);
+}
+
+//------------------------------------------------------------
+
 void cEditorWindowEntityEditBoxLight::AddPropertySetBox(cWidgetTab* apParentTab)
 {
 	cVector3f vPos = cVector3f(10,10,0.1f);
@@ -608,6 +638,13 @@ void cEditorWindowEntityEditBoxLight::OnUpdate(float afTimeStep)
 	else if(lightType==eEditorEntityLightType_Box)
 	{
 		mpInpBoxBlendFunc->SetValue(((cEntityWrapperLightBox*)mpLight)->GetBlendFunc(), false);
+	}
+	////////////
+	// Directional
+	else if(lightType==eEditorEntityLightType_Directional)
+	{
+		cEntityWrapperLightDirectional* pLight = (cEntityWrapperLightDirectional*)mpLight;
+		mpInpDirectionalAngularRadius->SetValue(cMath::ToDeg(pLight->GetAngularRadius()), false);
 	}
 }
 
@@ -939,6 +976,11 @@ bool cEditorWindowEntityEditBoxLight::WindowSpecificInputCallback(iEditorInput* 
 	else if(apInput==mpInpAreaBarnDoorLength)
 	{
 		pAction = mpEntity->CreateSetPropertyActionFloat(eLightAreaFloat_BarnDoorLength, mpInpAreaBarnDoorLength->GetValue());
+	}
+	// Directional angular radius (UI in degrees, stored in radians)
+	else if(mpInpDirectionalAngularRadius && apInput==mpInpDirectionalAngularRadius)
+	{
+		pAction = mpEntity->CreateSetPropertyActionFloat(eLightDirectionalFloat_AngularRadius, cMath::ToRad(mpInpDirectionalAngularRadius->GetValue()));
 	}
 	// Source texture
 	else if(apInput==mpInpAreaSourceTex)

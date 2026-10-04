@@ -115,6 +115,7 @@ SHARED_CONST uint kBindingWorldPointLights            = 0u;  // RWStructuredBuff
 SHARED_CONST uint kBindingWorldSpotLights             = 1u;  // RWStructuredBuffer<SpotLight>
 SHARED_CONST uint kBindingWorldAreaLights             = 2u;  // RWStructuredBuffer<RectLight>
 SHARED_CONST uint kBindingWorldFogAreas               = 3u;  // RWStructuredBuffer<FogAreaParams>
+SHARED_CONST uint kBindingWorldDirectionalLights      = 4u;  // RWStructuredBuffer<DirectionalLight>
 
 // -----------------------------------------------------------------------------
 // Bindless pool capacities + sentinel.
@@ -182,12 +183,12 @@ SHARED_CONST uint kAnimModeOscillate         = 2u;
 // TLAS instance-mask categories. Each TLAS instance picks one (or more) of
 // these bits; each TraceRay / TraceRayInline passes a cull mask of the
 // categories it wants to hit. instance.mask & ray.cullMask must be non-zero
-// for a hit to be considered. Translucents joined the TLAS in the same
-// commit that added the mesh translucent / refraction-bounce path, and the
-// indirect-lighting path tracer must not bounce off them — sampling
-// a translucent's shared DiffuseMaterial slot (no albedo texture, no solid
-// scalars) feeds NaN into the bounce radiance, which surfaces as NaN in the
-// indirect output.
+// for a hit to be considered. Only refractive translucents (glass / water)
+// carry kRayMaskTranslucent. The path tracer's scatter rays include it and
+// dispatch on the material type: a translucent/water hit continues through a
+// specular transmission lobe (PathTracer/Transmission.slang) instead of being
+// shaded as a DiffuseMaterial, whose layout it does not share. Shadow and
+// reflection queries still exclude it, so glass casts no shadow.
 SHARED_CONST uint kRayMaskOpaque             = 0x01u;
 SHARED_CONST uint kRayMaskTranslucent        = 0x02u;
 // Shadow queries always use this bit. The TLAS applies allLightsCastShadows
@@ -218,13 +219,10 @@ SHARED_CONST uint kMaterialFlagIsAlphaSingleChannel     = 1u << 10;
 // Water surface — drives the V-buffer RT wave-animated refraction +
 // reflection bounce and the GIRenderPass refraction swap (water also sets
 // HasRefraction). Not a texture-presence flag; set host-side per MaterialID.
-// Bit 11 is free (12/13 unused, 14/15/16 are the refraction/dissolve bits).
 SHARED_CONST uint kMaterialFlagIsWater                  = 1u << 11;
-// Bit 14 is solid-diffuse UseDissolveFilter aliased with translucent
-// UseRefractionNormals — safe because the two material variants never share
-// a draw call. Keep both names so the host populates either flag against the
-// same bit per material kind.
-SHARED_CONST uint kMaterialFlagUseDissolveFilter        = 1u << 14;
+// Translucent shaders also test dissolve flags. Keep this distinct from
+// refraction normals so ordinary translucent halos do not dither their alpha.
+SHARED_CONST uint kMaterialFlagUseDissolveFilter        = 1u << 12;
 SHARED_CONST uint kMaterialFlagUseRefractionNormals     = 1u << 14;
 SHARED_CONST uint kMaterialFlagUseRefractionEdgeCheck   = 1u << 15;
 SHARED_CONST uint kMaterialFlagHasRefraction            = 1u << 16;
@@ -235,6 +233,19 @@ SHARED_CONST uint kMaterialFlagAffectedByLightLevel     = 1u << 17;
 SHARED_CONST uint kMaterialFlagDiffuseIsMask            = 1u << 18;
 SHARED_CONST uint kMaterialFlagSmoothHalo               = 1u << 19;
 SHARED_CONST uint kMaterialFlagLitDiffuse               = 1u << 20;
+// Translucent only: raw eMaterialBlendMode (kMaterialBlendMode*) packed in
+// bits 24..26 so ray-traced consumers, which have no per-draw push constant,
+// can pick a transmission tint.
+SHARED_CONST uint kMaterialBlendModeShift               = 24u;
+SHARED_CONST uint kMaterialBlendModeMask                = 0x7u;
+
+#ifdef __cplusplus
+static_assert(((kMaterialFlagEnableDissolveAlpha | kMaterialFlagUseDissolveFilter) &
+               (kMaterialFlagUseRefractionNormals | kMaterialFlagUseRefractionEdgeCheck |
+                kMaterialFlagHasRefraction |
+                (kMaterialBlendModeMask << kMaterialBlendModeShift))) == 0u,
+              "Dissolve flags must not overlap refraction or blend-mode bits");
+#endif
 
 // Soft particles: world-space view-depth band (meters) over which a particle
 // fades to zero alpha as it approaches the opaque geometry behind it. Larger =
@@ -335,16 +346,22 @@ SHARED_CONST float kGIAlbedoBoostExp = 1.0f;
 // Reference per-pixel path tracer (PathTracePass.rt.slang).
 SHARED_CONST uint  kPathTraceMaxBounces        = 3u;   // path vertices after the primary hit
 SHARED_CONST uint  kPathTraceSamplesPerPixel   = 1u;   // rays per pixel per frame; temporal accumulation does the rest
+SHARED_CONST uint  kPathTraceMaxTransmissions  = 4u;   // glass/water crossings per path; not counted against kPathTraceMaxBounces
 
 // determins the strenght of the wave intensity
 SHARED_CONST float kWaterRefractionIntensity = 0.6f;
+
+// Glass IOR = 1 + kGlassRefractionIorBoost * refractionScale (Transmission.slang).
+// Authored scales (~0.1) were screen-space offsets; 5 maps 0.1 to ior 1.5
+// (real glass). Water is not boosted.
+SHARED_CONST float kGlassRefractionIorBoost = 1000.0f;
 
 // Brightness multiplier for the water refraction/reflection bounce radiance.
 // The RT bounces are re-shaded (NEE direct + indirect + emission), which
 // reads dimmer than the base game's fully-lit framebuffer/cubemap sample; this
 // lifts them back toward that brightness. 1.0 = raw re-shade.
 SHARED_CONST float kWaterReflectionExposure = 1.0f;
-SHARED_CONST float kWaterRefractionExposure = 2.0f; //0.5f;
+SHARED_CONST float kWaterRefractionExposure = 1.0f; // Neutral water preserves background radiance.
 
 // Global scene exposure, applied by the tonemap post effect before the display
 // encode (posteffect_tonemap.frag.slang). The maps carry legacy light
@@ -401,7 +418,12 @@ SHARED_CONST float kRayTracedSaturation = 1.0f;
 // trace; blending its normal back toward the flat surface normal calms the
 // ripples so it reads more like a mirror and less turbulent. 0 = perfect
 // mirror, 1 = full wave distortion.
-SHARED_CONST float kWaterReflectionTurbulence = 0.3f;
+// AMFP's original water_surface_frag.glsl reflected with the full wave normal.
+#ifdef AMFP
+SHARED_CONST float kWaterReflectionTurbulence = 1.0f;
+#else
+SHARED_CONST float kWaterReflectionTurbulence = 0.65f;
+#endif
 
 // Continuation gain for the reduced-resolution water reflection producer.
 // WaterReflection.rt.slang keeps the first reflected vertex at full strength and
@@ -463,6 +485,18 @@ SHARED_CONST float3 kNrdHitDistanceParameters    = float3(3.0f, 0.1f, 20.0f);
 //     the spatial-reuse pass; neighbours are geometry-rejected on the depth/
 //     normal key (kReproj* tolerances) to stop light leaking across surfaces.
 SHARED_CONST float kReservoirMClamp                = 30.0f;   // temporal staleness cap (× current M)
+// Fraction of a grid cell's lighting that must change in one frame (LightChange.h)
+// before the temporal cap drops all the way to 1× current M; smaller changes
+// scale it linearly between kReservoirMClamp and 1. Lower = snappier flicker,
+// more noise while any light in the cell fades.
+SHARED_CONST float kLightChangeFullReset           = 0.5f;
+// Same idea for the NRD denoisers (IN_DIFF/SPEC_CONFIDENCE, LightChange.h):
+// history confidence falls from 1 to kLightChangeConfidenceMin as the cell's
+// change fraction reaches kLightChangeConfidenceFullReset. One texture feeds
+// both RELAX (direct) and REBLUR (indirect). The floor stays above 0 so a
+// changed cell restarts from a frame or two of history rather than raw noise.
+SHARED_CONST float kLightChangeConfidenceFullReset = 0.5f;
+SHARED_CONST float kLightChangeConfidenceMin       = 0.1f;
 SHARED_CONST int   kSpatialSamples                 = 6;       // spatial neighbours resampled
 SHARED_CONST float kSpatialRadius                  = 16.0f;   // spatial search radius (px)
 
@@ -502,6 +536,12 @@ SHARED_CONST float kPointLightSourceRadiusSq   = 0.25f;  // soft source radius²
 // lights are soft by default instead of hard. Host-only fallback in the point-light
 // upload; an explicitly authored sourceRadius always wins.
 SHARED_CONST float kPointLightDefaultSourceRadiusFrac = 0.05f;  // 5% of authored radius (e.g. 5m reach ⇒ 0.25m penumbra disk)
+
+// Directional lights have no position or reach. This stands in for both: the
+// uploaded `radius` of a lit directional light (0 still means skip) and the
+// shadow-ray length toward it, so it must outrun any map. Retail AMFP maps
+// span a few hundred units at most.
+SHARED_CONST float kDirectionalLightReach = 2000.0f;
 
 SHARED_CONST float kParalaxScale = 0.4f;
 

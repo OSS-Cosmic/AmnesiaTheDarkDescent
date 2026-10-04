@@ -1,0 +1,641 @@
+<MapDelta Version="1" Target="maps/05_church.map">
+    <Modify Category="StaticObjects" ID="15954" Name="pillar_NC_pillar_arch_53">
+        <SetAttr Rotation="-2.53518e-06 -1.5708 -2.53518e-06" Scale="0.799999 0.75 1" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="15955" Name="pillar_NC_pillar_arch_54">
+        <SetAttr Rotation="-3.14159 1.5708 -3.14159" Scale="0.799999 0.75 1" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="15960" Name="pillar_NC_pillar_arch_55">
+        <SetAttr Rotation="2.53518e-06 1.5708 2.53518e-06" Scale="0.850002 0.75 1" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="15961" Name="pillar_NC_pillar_arch_56">
+        <SetAttr Rotation="-3.14159 -1.5708 -3.14159" Scale="0.850002 0.75 1" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="16174" Name="ceiling_welder_wood_middle_111">
+        <SetAttr Scale="1 1.3125 0.375" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="16175" Name="ceiling_welder_wood_middle_112">
+        <SetAttr Scale="1 1.3125 0.375" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="16177" Name="ceiling_welder_wood_middle_113">
+        <SetAttr Scale="1.16349 1.15173 0.5" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="16178" Name="ceiling_welder_wood_middle_114">
+        <SetAttr Scale="1.16349 1.15173 0.5" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="16182" Name="ceiling_welder_wood_middle_116">
+        <SetAttr Scale="1.16349 1.15173 0.5" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="16183" Name="ceiling_welder_wood_middle_117">
+        <SetAttr Scale="1 1.5 0.375" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="16184" Name="ceiling_welder_wood_middle_118">
+        <SetAttr Scale="1 1.3125 0.375" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="16185" Name="ceiling_welder_wood_middle_119">
+        <SetAttr Scale="1 1.3125 0.375" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="16186" Name="ceiling_welder_wood_middle_120">
+        <SetAttr Scale="1.16349 1.15173 0.5" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="16189" Name="ceiling_welder_wood_middle_121">
+        <SetAttr Scale="1 1.3125 0.375" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="16190" Name="ceiling_welder_wood_middle_122">
+        <SetAttr Scale="1 1.3125 0.375" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="16192" Name="ceiling_welder_wood_middle_123">
+        <SetAttr Scale="1.16349 1.15173 0.5" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="16193" Name="ceiling_welder_wood_middle_124">
+        <SetAttr Scale="1.16349 1.15173 0.5" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="16197" Name="ceiling_welder_wood_middle_126">
+        <SetAttr Scale="1.16349 1.15173 0.5" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="16198" Name="ceiling_welder_wood_middle_127">
+        <SetAttr Scale="1 1.5 0.375" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="16199" Name="ceiling_welder_wood_middle_128">
+        <SetAttr Scale="1 1.3125 0.375" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="16200" Name="ceiling_welder_wood_middle_129">
+        <SetAttr Scale="1 1.3125 0.375" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="16201" Name="ceiling_welder_wood_middle_130">
+        <SetAttr Scale="1.16349 1.15173 0.5" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="16204" Name="ceiling_welder_wood_middle_131">
+        <SetAttr Scale="1 1.3125 0.375" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="16205" Name="ceiling_welder_wood_middle_132">
+        <SetAttr Scale="1 1.3125 0.375" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="16207" Name="ceiling_welder_wood_middle_133">
+        <SetAttr Scale="1.16349 1.15173 0.5" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="16208" Name="ceiling_welder_wood_middle_134">
+        <SetAttr Scale="1.16349 1.15173 0.5" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="16212" Name="ceiling_welder_wood_middle_136">
+        <SetAttr Scale="1.16349 1.15173 0.5" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="16213" Name="ceiling_welder_wood_middle_137">
+        <SetAttr Scale="1 1.5 0.375" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="16214" Name="ceiling_welder_wood_middle_138">
+        <SetAttr Scale="1 1.3125 0.375" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="16215" Name="ceiling_welder_wood_middle_139">
+        <SetAttr Scale="1 1.3125 0.375" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="16216" Name="ceiling_welder_wood_middle_140">
+        <SetAttr Scale="1.16349 1.15173 0.5" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="16219" Name="ceiling_welder_wood_middle_141">
+        <SetAttr Scale="1 1.3125 0.375" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="16220" Name="ceiling_welder_wood_middle_142">
+        <SetAttr Scale="1 1.3125 0.375" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="16222" Name="ceiling_welder_wood_middle_143">
+        <SetAttr Scale="1.16349 1.15173 0.5" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="16223" Name="ceiling_welder_wood_middle_144">
+        <SetAttr Scale="1.16349 1.15173 0.5" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="16227" Name="ceiling_welder_wood_middle_146">
+        <SetAttr Scale="1.16349 1.15173 0.5" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="16228" Name="ceiling_welder_wood_middle_147">
+        <SetAttr Scale="1 1.5 0.375" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="16229" Name="ceiling_welder_wood_middle_148">
+        <SetAttr Scale="1 1.3125 0.375" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="16230" Name="ceiling_welder_wood_middle_149">
+        <SetAttr Scale="1 1.3125 0.375" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="16231" Name="ceiling_welder_wood_middle_150">
+        <SetAttr Scale="1.16349 1.15173 0.5" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="16234" Name="ceiling_welder_wood_middle_151">
+        <SetAttr Scale="1 1.3125 0.375" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="16235" Name="ceiling_welder_wood_middle_152">
+        <SetAttr Scale="1 1.3125 0.375" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="16237" Name="ceiling_welder_wood_middle_153">
+        <SetAttr Scale="1.16349 1.15173 0.5" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="16238" Name="ceiling_welder_wood_middle_154">
+        <SetAttr Scale="1.16349 1.15173 0.5" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="16242" Name="ceiling_welder_wood_middle_156">
+        <SetAttr Scale="1.16349 1.15173 0.5" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="16243" Name="ceiling_welder_wood_middle_157">
+        <SetAttr Scale="1 1.5 0.375" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="16244" Name="ceiling_welder_wood_middle_158">
+        <SetAttr Scale="1 1.3125 0.375" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="16245" Name="ceiling_welder_wood_middle_159">
+        <SetAttr Scale="1 1.3125 0.375" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="16246" Name="ceiling_welder_wood_middle_160">
+        <SetAttr Scale="1.16349 1.15173 0.5" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="16249" Name="ceiling_welder_wood_middle_161">
+        <SetAttr Scale="1 1.3125 0.375" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="16250" Name="ceiling_welder_wood_middle_162">
+        <SetAttr Scale="1 1.3125 0.375" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="16252" Name="ceiling_welder_wood_middle_163">
+        <SetAttr Scale="1.16349 1.15173 0.5" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="16253" Name="ceiling_welder_wood_middle_164">
+        <SetAttr Scale="1.16349 1.15173 0.5" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="16257" Name="ceiling_welder_wood_middle_166">
+        <SetAttr Scale="1.16349 1.15173 0.5" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="16258" Name="ceiling_welder_wood_middle_167">
+        <SetAttr Scale="1 1.5 0.375" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="16259" Name="ceiling_welder_wood_middle_168">
+        <SetAttr Scale="1 1.3125 0.375" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="16260" Name="ceiling_welder_wood_middle_169">
+        <SetAttr Scale="1 1.3125 0.375" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="16261" Name="ceiling_welder_wood_middle_170">
+        <SetAttr Scale="1.16349 1.15173 0.5" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="16264" Name="ceiling_welder_wood_middle_171">
+        <SetAttr Scale="1 1.3125 0.375" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="16265" Name="ceiling_welder_wood_middle_172">
+        <SetAttr Scale="1 1.3125 0.375" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="16267" Name="ceiling_welder_wood_middle_173">
+        <SetAttr Scale="1.16349 1.15173 0.5" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="16268" Name="ceiling_welder_wood_middle_174">
+        <SetAttr Scale="1.16349 1.15173 0.5" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="16272" Name="ceiling_welder_wood_middle_176">
+        <SetAttr Scale="1.16349 1.15173 0.5" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="16273" Name="ceiling_welder_wood_middle_177">
+        <SetAttr Scale="1 1.5 0.375" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="16274" Name="ceiling_welder_wood_middle_178">
+        <SetAttr Scale="1 1.3125 0.375" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="16275" Name="ceiling_welder_wood_middle_179">
+        <SetAttr Scale="1 1.3125 0.375" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="16276" Name="ceiling_welder_wood_middle_180">
+        <SetAttr Scale="1.16349 1.15173 0.5" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="16279" Name="ceiling_welder_wood_middle_181">
+        <SetAttr Scale="1 1.3125 0.375" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="16280" Name="ceiling_welder_wood_middle_182">
+        <SetAttr Scale="1 1.3125 0.375" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="16282" Name="ceiling_welder_wood_middle_183">
+        <SetAttr Scale="1.16349 1.15173 0.5" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="16283" Name="ceiling_welder_wood_middle_184">
+        <SetAttr Scale="1.16349 1.15173 0.5" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="16287" Name="ceiling_welder_wood_middle_186">
+        <SetAttr Scale="1.16349 1.15173 0.5" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="16288" Name="ceiling_welder_wood_middle_187">
+        <SetAttr Scale="1 1.5 0.375" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="16289" Name="ceiling_welder_wood_middle_188">
+        <SetAttr Scale="1 1.3125 0.375" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="16290" Name="ceiling_welder_wood_middle_189">
+        <SetAttr Scale="1 1.3125 0.375" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="16291" Name="ceiling_welder_wood_middle_190">
+        <SetAttr Scale="1.16349 1.15173 0.5" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="16294" Name="ceiling_welder_wood_middle_191">
+        <SetAttr Scale="1 1.3125 0.375" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="16295" Name="ceiling_welder_wood_middle_192">
+        <SetAttr Scale="1 1.3125 0.375" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="16297" Name="ceiling_welder_wood_middle_193">
+        <SetAttr Scale="1.16349 1.15173 0.5" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="16298" Name="ceiling_welder_wood_middle_194">
+        <SetAttr Scale="1.16349 1.15173 0.5" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="16302" Name="ceiling_welder_wood_middle_196">
+        <SetAttr Scale="1.16349 1.15173 0.5" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="16303" Name="ceiling_welder_wood_middle_197">
+        <SetAttr Scale="1 1.5 0.375" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="16304" Name="ceiling_welder_wood_middle_198">
+        <SetAttr Scale="1 1.3125 0.375" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="16305" Name="ceiling_welder_wood_middle_199">
+        <SetAttr Scale="1 1.3125 0.375" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="16306" Name="ceiling_welder_wood_middle_200">
+        <SetAttr Scale="1.16349 1.15173 0.5" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="16309" Name="ceiling_welder_wood_middle_201">
+        <SetAttr Scale="1 1.3125 0.375" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="16310" Name="ceiling_welder_wood_middle_202">
+        <SetAttr Scale="1 1.3125 0.375" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="16312" Name="ceiling_welder_wood_middle_203">
+        <SetAttr Scale="1.16349 1.15173 0.5" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="16313" Name="ceiling_welder_wood_middle_204">
+        <SetAttr Scale="1.16349 1.15173 0.5" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="16317" Name="ceiling_welder_wood_middle_206">
+        <SetAttr Scale="1.16349 1.15173 0.5" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="16318" Name="ceiling_welder_wood_middle_207">
+        <SetAttr Scale="1 1.5 0.375" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="16319" Name="ceiling_welder_wood_middle_208">
+        <SetAttr Scale="1 1.3125 0.375" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="16320" Name="ceiling_welder_wood_middle_209">
+        <SetAttr Scale="1 1.3125 0.375" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="16321" Name="ceiling_welder_wood_middle_210">
+        <SetAttr Scale="1.16349 1.15173 0.5" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="16324" Name="ceiling_welder_wood_middle_211">
+        <SetAttr Scale="1 1.3125 0.375" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="16325" Name="ceiling_welder_wood_middle_212">
+        <SetAttr Scale="1 1.3125 0.375" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="16327" Name="ceiling_welder_wood_middle_213">
+        <SetAttr Scale="1.16349 1.15173 0.5" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="16328" Name="ceiling_welder_wood_middle_214">
+        <SetAttr Scale="1.16349 1.15173 0.5" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="16332" Name="ceiling_welder_wood_middle_216">
+        <SetAttr Scale="1.16349 1.15173 0.5" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="16333" Name="ceiling_welder_wood_middle_217">
+        <SetAttr Scale="1 1.5 0.375" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="16334" Name="ceiling_welder_wood_middle_218">
+        <SetAttr Scale="1 1.3125 0.375" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="16335" Name="ceiling_welder_wood_middle_219">
+        <SetAttr Scale="1 1.3125 0.375" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="16336" Name="ceiling_welder_wood_middle_220">
+        <SetAttr Scale="1.16349 1.15173 0.5" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="16339" Name="ceiling_welder_wood_middle_221">
+        <SetAttr Scale="1 1.3125 0.375" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="16340" Name="ceiling_welder_wood_middle_222">
+        <SetAttr Scale="1 1.3125 0.375" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="16342" Name="ceiling_welder_wood_middle_223">
+        <SetAttr Scale="1.16349 1.15173 0.5" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="16343" Name="ceiling_welder_wood_middle_224">
+        <SetAttr Scale="1.16349 1.15173 0.5" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="16347" Name="ceiling_welder_wood_middle_226">
+        <SetAttr Scale="1.16349 1.15173 0.5" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="16348" Name="ceiling_welder_wood_middle_227">
+        <SetAttr Scale="1 1.5 0.375" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="16349" Name="ceiling_welder_wood_middle_228">
+        <SetAttr Scale="1 1.3125 0.375" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="16350" Name="ceiling_welder_wood_middle_229">
+        <SetAttr Scale="1 1.3125 0.375" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="16351" Name="ceiling_welder_wood_middle_230">
+        <SetAttr Scale="1.16349 1.15173 0.5" />
+    </Modify>
+    <Modify Category="Entities" ID="10461" Name="SpotLight_24">
+        <SetAttr FalloffMap="" Re_FlickerOffIntensity="0" Re_Intensity="50" Re_SourceRadius="0" />
+    </Modify>
+    <Modify Category="Entities" ID="10483" Name="SpotLight_62">
+        <SetAttr FalloffMap="" Re_FlickerOffIntensity="0" Re_Intensity="50" Re_SourceRadius="0" />
+    </Modify>
+    <Modify Category="Entities" ID="10484" Name="SpotLight_63">
+        <SetAttr FalloffMap="" Re_FlickerOffIntensity="0" Re_Intensity="50" Re_SourceRadius="0" />
+    </Modify>
+    <Modify Category="Entities" ID="14538" Name="BoxLight_9">
+        <SetAttr FalloffMap="" />
+    </Modify>
+    <Modify Category="Entities" ID="16399" Name="PointLight_9">
+        <SetAttr FalloffMap="" RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="16401" Name="PointLight_11">
+        <SetAttr FalloffMap="" />
+    </Modify>
+    <Modify Category="Entities" ID="19087" Name="SpotLight_52">
+        <SetAttr FalloffMap="" />
+    </Modify>
+    <Modify Category="Entities" ID="19116" Name="SpotLight_3">
+        <SetAttr FalloffMap="" />
+    </Modify>
+    <Modify Category="Entities" ID="19254" Name="SpotLight_2">
+        <SetAttr FalloffMap="" />
+    </Modify>
+    <Modify Category="Entities" ID="19420" Name="PointLight_15">
+        <SetAttr FalloffMap="" RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="19422" Name="PointLight_17">
+        <SetAttr FalloffMap="" RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="19425" Name="PointLight_20">
+        <SetAttr FalloffMap="" RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="19426" Name="PointLight_21">
+        <SetAttr FalloffMap="" RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="19427" Name="PointLight_22">
+        <SetAttr FalloffMap="" RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="19428" Name="PointLight_23">
+        <SetAttr FalloffMap="" RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="19430" Name="PointLight_18">
+        <SetAttr FalloffMap="" RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="19431" Name="PointLight_19">
+        <SetAttr FalloffMap="" RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="19433" Name="PointLight_25">
+        <SetAttr FalloffMap="" RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="19435" Name="PointLight_27">
+        <SetAttr FalloffMap="" RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="19438" Name="PointLight_30">
+        <SetAttr FalloffMap="" RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="19440" Name="PointLight_31">
+        <SetAttr FalloffMap="" RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="19443" Name="PointLight_34">
+        <SetAttr FalloffMap="" RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="19480" Name="SpotLight_5">
+        <SetAttr FalloffMap="" />
+    </Modify>
+    <Modify Category="Entities" ID="19482" Name="SpotLight_6">
+        <SetAttr FalloffMap="" />
+    </Modify>
+    <Modify Category="Entities" ID="19483" Name="SpotLight_7">
+        <SetAttr FalloffMap="" />
+    </Modify>
+    <Modify Category="Entities" ID="19484" Name="SpotLight_8">
+        <SetAttr FalloffMap="" />
+    </Modify>
+    <Modify Category="Entities" ID="19485" Name="SpotLight_9">
+        <SetAttr FalloffMap="" />
+    </Modify>
+    <Modify Category="Entities" ID="19486" Name="SpotLight_10">
+        <SetAttr FalloffMap="" />
+    </Modify>
+    <Modify Category="Entities" ID="19487" Name="SpotLight_11">
+        <SetAttr FalloffMap="" />
+    </Modify>
+    <Modify Category="Entities" ID="19488" Name="SpotLight_12">
+        <SetAttr FalloffMap="" />
+    </Modify>
+    <Modify Category="Entities" ID="19489" Name="SpotLight_13">
+        <SetAttr FalloffMap="" />
+    </Modify>
+    <Modify Category="Entities" ID="19490" Name="SpotLight_14">
+        <SetAttr FalloffMap="" />
+    </Modify>
+    <Modify Category="Entities" ID="19492" Name="PointLight_32">
+        <SetAttr FalloffMap="" RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="19493" Name="PointLight_35">
+        <SetAttr FalloffMap="" RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="19494" Name="PointLight_36">
+        <SetAttr FalloffMap="" RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="19495" Name="PointLight_37">
+        <SetAttr FalloffMap="" RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="19498" Name="PointLight_38">
+        <SetAttr FalloffMap="" RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="19499" Name="PointLight_39">
+        <SetAttr FalloffMap="" RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="19500" Name="PointLight_40">
+        <SetAttr FalloffMap="" RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="19501" Name="PointLight_33">
+        <SetAttr FalloffMap="" RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="19502" Name="PointLight_41">
+        <SetAttr FalloffMap="" RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="19510" Name="PointLight_6">
+        <SetAttr FalloffMap="" RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="19511" Name="PointLight_7">
+        <SetAttr FalloffMap="" RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="19512" Name="PointLight_8">
+        <SetAttr FalloffMap="" RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="19514" Name="PointLight_13">
+        <SetAttr FalloffMap="" RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="19516" Name="PointLight_24">
+        <SetAttr FalloffMap="" RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="19518" Name="PointLight_28">
+        <SetAttr FalloffMap="" RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="19520" Name="PointLight_42">
+        <SetAttr FalloffMap="" RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="19522" Name="PointLight_43">
+        <SetAttr FalloffMap="" RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="19525" Name="SpotLight_16">
+        <SetAttr FalloffMap="" RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="19527" Name="PointLight_44">
+        <SetAttr FalloffMap="" RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="19528" Name="PointLight_45">
+        <SetAttr FalloffMap="" RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="19529" Name="SpotLight_17">
+        <SetAttr FalloffMap="" />
+    </Modify>
+    <Modify Category="Entities" ID="19533" Name="PointLight_47">
+        <SetAttr FalloffMap="" RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="19536" Name="PointLight_50">
+        <SetAttr FalloffMap="" RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="19537" Name="PointLight_51">
+        <SetAttr FalloffMap="" RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="19538" Name="PointLight_52">
+        <SetAttr FalloffMap="" RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="19540" Name="PointLight_53">
+        <SetAttr FalloffMap="" RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="19541" Name="PointLight_54">
+        <SetAttr FalloffMap="" RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="19542" Name="PointLight_55">
+        <SetAttr FalloffMap="" RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="19543" Name="PointLight_56">
+        <SetAttr FalloffMap="" RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="19544" Name="PointLight_57">
+        <SetAttr FalloffMap="" RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="19545" Name="PointLight_10">
+        <SetAttr FalloffMap="" RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="19546" Name="PointLight_46">
+        <SetAttr FalloffMap="" RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="19547" Name="PointLight_58">
+        <SetAttr FalloffMap="" RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="19548" Name="PointLight_59">
+        <SetAttr FalloffMap="" RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="19549" Name="PointLight_60">
+        <SetAttr FalloffMap="" RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="19550" Name="PointLight_61">
+        <SetAttr FalloffMap="" RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="19551" Name="PointLight_62">
+        <SetAttr FalloffMap="" RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="19552" Name="PointLight_63">
+        <SetAttr FalloffMap="" RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="19555" Name="PointLight_64">
+        <SetAttr FalloffMap="" RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="19556" Name="PointLight_66">
+        <SetAttr FalloffMap="" RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="19557" Name="PointLight_67">
+        <SetAttr FalloffMap="" RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="19558" Name="PointLight_68">
+        <SetAttr FalloffMap="" RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="19559" Name="PointLight_69">
+        <SetAttr FalloffMap="" RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="19560" Name="PointLight_70">
+        <SetAttr FalloffMap="" RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="19561" Name="PointLight_71">
+        <SetAttr FalloffMap="" RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="19562" Name="PointLight_72">
+        <SetAttr FalloffMap="" RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="19563" Name="PointLight_73">
+        <SetAttr FalloffMap="" RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="19564" Name="PointLight_14">
+        <SetAttr FalloffMap="" RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="19565" Name="PointLight_48">
+        <SetAttr FalloffMap="" RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="19600" Name="PointLight_1">
+        <SetAttr FalloffMap="" RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="19601" Name="PointLight_2">
+        <SetAttr FalloffMap="" RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="19602" Name="PointLight_3">
+        <SetAttr FalloffMap="" RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="19647" Name="SpotLight_4">
+        <SetAttr FalloffMap="" />
+    </Modify>
+    <Modify Category="Entities" ID="19660" Name="SpotLight_25">
+        <SetAttr FalloffMap="" Re_FlickerOffIntensity="0" Re_Intensity="50" Re_SourceRadius="0" />
+    </Modify>
+    <Modify Category="Entities" ID="19724" Name="PointLight_4">
+        <SetAttr FalloffMap="" RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="19730" Name="PointLight_49">
+        <SetAttr FalloffMap="" RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="19731" Name="PointLight_65">
+        <SetAttr FalloffMap="" RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="19732" Name="PointLight_74">
+        <SetAttr FalloffMap="" RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="19733" Name="PointLight_75">
+        <SetAttr FalloffMap="" RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="19734" Name="BoxLight_10">
+        <SetAttr FalloffMap="" />
+    </Modify>
+    <Modify Category="Entities" ID="19738" Name="BoxLight_11">
+        <SetAttr FalloffMap="" />
+    </Modify>
+    <Modify Category="Entities" ID="19739" Name="BoxLight_12">
+        <SetAttr FalloffMap="" />
+    </Modify>
+    <Modify Category="Entities" ID="19740" Name="BoxLight_13">
+        <SetAttr FalloffMap="" />
+    </Modify>
+    <Modify Category="Entities" ID="19741" Name="BoxLight_14">
+        <SetAttr FalloffMap="" />
+    </Modify>
+    <Modify Category="Entities" ID="19742" Name="BoxLight_15">
+        <SetAttr FalloffMap="" />
+    </Modify>
+    <Modify Category="Entities" ID="19745" Name="BoxLight_16">
+        <SetAttr FalloffMap="" />
+    </Modify>
+    <Modify Category="Entities" ID="19746" Name="BoxLight_17">
+        <SetAttr FalloffMap="" />
+    </Modify>
+    <Modify Category="Entities" ID="19747" Name="BoxLight_18">
+        <SetAttr FalloffMap="" />
+    </Modify>
+    <Modify Category="Entities" ID="19748" Name="BoxLight_19">
+        <SetAttr FalloffMap="" />
+    </Modify>
+</MapDelta>

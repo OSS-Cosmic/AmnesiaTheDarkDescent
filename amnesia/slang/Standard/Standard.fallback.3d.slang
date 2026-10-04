@@ -45,7 +45,8 @@ O psMain(V v)
     // legacy solid_z and solid_diffuse passes both did.
     float2 uv = standardParallaxUV(material, v.uv,
                                    mul(gPerFrame.viewMat, float4(v.posW, 1.0f)).xyz,
-                                   v.normalV, v.tangentV, v.bitangentV);
+                                   v.normalV, v.tangentV, v.bitangentV,
+                                   ddx(v.uv), ddy(v.uv));
     VertexData vertexData = {};
     vertexData.posW = v.posW;
     vertexData.normalW = v.normalV;

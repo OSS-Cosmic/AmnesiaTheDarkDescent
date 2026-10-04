@@ -109,6 +109,13 @@ namespace hpl {
 		void PlayFadeTo(int alIndex,bool abLoop, float afTime);
 		void PlayFadeToName(const tString &asName,bool abLoop, float afTime);
 
+		/**
+		 * Pause/resume the active animations by fading their speed.
+		 * FadeInCurrent starts all animations paused if none is active.
+		 */
+		void FadeOutCurrent(float afTime);
+		void FadeInCurrent(float afTime, bool abLoop);
+
 		bool AnimationIsOver(const tString &asName);
 
 		void SetNormalizeAnimationWeights(bool abX){ mbNormalizeAnimationWeights = abX;}
@@ -179,6 +186,12 @@ namespace hpl {
 		void SetStatic(bool abX);
 		bool IsStatic(){ return mbStatic;}
 
+		// AMFP API. Only stored (and saved by the game): this renderer has no
+		// per-submesh culled state to skip bone updates with, so bones are
+		// always updated.
+		void SetUpdateBonesWhenCulled(bool abX) { mbUpdateBonesWhenCulled = abX; }
+		bool GetUpdateBonesWhenCulled() { return mbUpdateBonesWhenCulled; }
+
 		void SetRenderFlagBit(tRenderableFlag alFlagBit, bool abSet);
 		// Forwarded to every submesh; cMeshEntity is not itself an iRenderable.
 		void SetRendererMask(unsigned alMask);
@@ -237,6 +250,7 @@ namespace hpl {
 		int mlInvWorldMatrixTransformCount;
 
 		bool mbStatic;
+		bool mbUpdateBonesWhenCulled;
 
 		tSubMeshEntityVec mvSubMeshes;
 		tSubMeshEntityMap m_mapSubMeshes;

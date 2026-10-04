@@ -20,8 +20,8 @@ namespace hpl {
     //    PromoteLegacyLightParameters consumes); Re_Radius is the ray-traced
     //    reach. Same name, different quantity.
     //
-    // AreaLight has no legacy class, so its unprefixed attributes already are
-    // the ray-traced schema.
+    // AreaLight and DirectionalLight have no legacy class, so their unprefixed
+    // attributes already are the ray-traced schema.
     constexpr const char *kLightOverrideAttributePrefix = "Re_";
 
     enum eLightElementShape
@@ -30,6 +30,7 @@ namespace hpl {
         eLightElementShape_Spot,
         eLightElementShape_Area,
         eLightElementShape_Box,
+        eLightElementShape_Directional,
     };
 
     struct cLightElementInfo
@@ -41,8 +42,8 @@ namespace hpl {
         bool mbRayTracedOnly = false;
     };
 
-    // Maps an XML element name to its light shape and model. "AreaLight" is
-    // the ray-traced area light (there is no legacy area light).
+    // Maps an XML element name to its light shape and model. "AreaLight" and
+    // "DirectionalLight" are ray-traced only (neither has a legacy class).
     cLightElementInfo GetLightElementInfo(const char *asTag);
 
     // RendererMask used when the element has none: legacy shapes load on both

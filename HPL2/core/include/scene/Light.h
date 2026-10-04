@@ -74,6 +74,8 @@ namespace hpl {
 		eLightType_Spot,
 		eLightType_Area,
 		eLightType_Box,
+		// Ray-traced only: a sun / moon with a direction and no position or reach.
+		eLightType_Directional,
 		eLightType_LastEnum
 	};
 
@@ -181,6 +183,8 @@ namespace hpl {
 		void FadeTo(const cColor& aCol, float afIntensity, float afTime);
 		void StopFading();
 		bool IsFading();
+		// 0 at the start of the current FadeTo, 1 when done (or no fade yet).
+		float GetFadeProgress() { return mfFadeDuration > 0 ? 1.0f - mfFadeTime / mfFadeDuration : 1.0f; }
 		// Finishes an in-flight fade where it stands. The destination is held in
 		// the ACTIVE backend's units, so a backend switch calls this BEFORE the
 		// world flips -- afterwards the same number means something else.
@@ -193,6 +197,8 @@ namespace hpl {
 		//FLickering
 		void SetFlickerActive(bool abX);
 		bool GetFlickerActive(){return mbFlickering;}
+		// Whether the flicker is currently in its on phase.
+		bool GetFlickerOn(){ return mbFlickerOn; }
 
 		void SetFlicker(const cColor& aOffCol, float afOffIntensity,
 			float afOnMinLength, float afOnMaxLength,const tString &asOnSound,const tString &asOnPS,
@@ -238,6 +244,16 @@ namespace hpl {
 		// Resolved for the backend this light is driving: the authored colour of
 		// the active tuning, moved by any colour fade.
 		const cColor& GetDiffuseColor() const { return Resolved().mDiffuseColor; }
+
+		// AMFP light tuning. Brightness scales the rgb light colour; Falloff
+		// is the attenuation exponent (AMFP curve: pow(1 - d/r, Falloff*0.8)).
+		// Both default to 1 and are only loaded by the AMFP build.
+		float GetBrightness() { return mfBrightness; }
+		void SetBrightness(float afBrightness) { mfBrightness = afBrightness; }
+		float GetFalloff() { return mfFalloff; }
+		void SetFalloff(float afFalloff) { mfFalloff = afFalloff; }
+		// Diffuse colour with brightness applied to rgb.
+		cColor GetColor() const;
 		// The same resolution against one named tuning, whichever is active. For
 		// a shape that only one backend has a tuning for (box lights).
 		cColor GetDiffuseColorFor(eLightModel aModel) const;
@@ -383,6 +399,10 @@ namespace hpl {
 		cColor mDestCol;
 		float mfDestIntensity;
 		float mfFadeTime;
+		float mfFadeDuration;
+
+		float mfBrightness;
+		float mfFalloff;
 
 		///////////////////////////
 		//Flicker

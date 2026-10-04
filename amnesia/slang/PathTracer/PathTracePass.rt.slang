@@ -223,7 +223,8 @@ void rayGen()
                                       : weight / max(sd.albedo, float3(1e-4f));
 
         while (!((payload.status & kPathTraceStatusTerminated) != 0u) && payload.currStep <= kPathTraceMaxBounces)
-            traceScatterRay(payload, kPathTraceOpaqueRayFlags);
+            traceScatterRay(payload, kPathTraceOpaqueRayFlags,
+                            kRayMaskOpaque | kRayMaskTranslucent);
 
         // The traced ray IS the sampled lobe's ray, so its first-bounce distance
         // belongs to that lobe. The other lobe stays at zero this frame because

@@ -654,6 +654,9 @@ namespace hpl {
 	// Shadow-only geometry and visible geometry whose shadows it replaces.
 	#define eRenderableFlag_ShadowOnly				(0x00000010)
 	#define eRenderableFlag_ShadowReplaced			(0x00000020)
+	// Blocks shadow rays from both faces, so single-sided walls also shade
+	// light arriving from behind (e.g. the sun on a room's outer wall).
+	#define eRenderableFlag_TwoSidedShadow			(0x00000040)
 
 	//---------------------------------------
 

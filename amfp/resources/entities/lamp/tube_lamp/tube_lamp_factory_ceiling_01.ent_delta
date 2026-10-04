@@ -1,0 +1,25 @@
+<EntDelta Version="1" Target="entities/lamp/tube_lamp/tube_lamp_factory_ceiling_01.ent">
+    <Modify Category="Shapes" ID="16" Name="Shape_3">
+        <SetAttr RelativeRotation="-3.14159 -1.5708 -3.14159" Rotation="-3.14159 -1.5708 -3.14159" />
+    </Modify>
+    <Modify Category="Shapes" ID="17" Name="Shape_4">
+        <SetAttr RelativeRotation="-3.14159 1.5708 -3.14159" Rotation="-3.14159 1.5708 -3.14159" />
+    </Modify>
+    <Modify Category="Shapes" ID="18" Name="Shape_5">
+        <SetAttr RelativeRotation="2.53518e-06 -1.57011 2.53518e-06" Rotation="2.53518e-06 -1.57011 2.53518e-06" />
+    </Modify>
+    <Modify Category="Shapes" ID="19" Name="Shape_6">
+        <SetAttr RelativeRotation="2.53518e-06 1.57011 2.53518e-06" Rotation="2.53518e-06 1.57011 2.53518e-06" />
+    </Modify>
+    <Modify Category="Entities" ID="11" Name="PointLight_1">
+        <SetAttr RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="34" Name="PointLight_2">
+        <SetAttr RendererMask="1" />
+    </Modify>
+    <Add Category="Entities">
+        <PointLight Name="PointLight_Coil_1" WorldPos="-0.681 -0.92 -0.00119972" Rotation="0 -0 3.93106e-14" Scale="1 1 1" RendererMask="2" Tag="" Active="true" CastShadows="true" ShadowResolution="Low" ShadowsAffectStatic="true" ShadowsAffectDynamic="true" Radius="6" Re_Intensity="3" Re_Radius="20" Re_SourceRadius="0.06" FalloffMap="" Gobo="" GoboAnimMode="None" GoboAnimFrameTime="0" DiffuseColor="0.828 0.655 0.259 1" FlickerActive="false" FlickerOnMinLength="0" FlickerOnMaxLength="0" FlickerOnPS="" FlickerOnSound="" FlickerOffMinLength="0" FlickerOffMaxLength="0" FlickerOffPS="" FlickerOffSound="" FlickerOffColor="0 0 0 1" FlickerOffRadius="0" Re_FlickerOffIntensity="0" FlickerFade="false" FlickerOnFadeMinLength="0" FlickerOnFadeMaxLength="0" FlickerOffFadeMinLength="0" FlickerOffFadeMaxLength="0" />
+        <PointLight Name="PointLight_Coil_2" WorldPos="0.002 -0.92 -0.00119781" Rotation="0 -0 3.93106e-14" Scale="1 1 1" RendererMask="2" Tag="" Active="true" CastShadows="true" ShadowResolution="Low" ShadowsAffectStatic="true" ShadowsAffectDynamic="true" Radius="6" Re_Intensity="3" Re_Radius="20" Re_SourceRadius="0.06" FalloffMap="" Gobo="" GoboAnimMode="None" GoboAnimFrameTime="0" DiffuseColor="0.828 0.655 0.259 1" FlickerActive="false" FlickerOnMinLength="0" FlickerOnMaxLength="0" FlickerOnPS="" FlickerOnSound="" FlickerOffMinLength="0" FlickerOffMaxLength="0" FlickerOffPS="" FlickerOffSound="" FlickerOffColor="0 0 0 1" FlickerOffRadius="0" Re_FlickerOffIntensity="0" FlickerFade="false" FlickerOnFadeMinLength="0" FlickerOnFadeMaxLength="0" FlickerOffFadeMinLength="0" FlickerOffFadeMaxLength="0" />
+        <PointLight Name="PointLight_Coil_3" WorldPos="0.683 -0.92 -0.00119972" Rotation="0 -0 3.93106e-14" Scale="1 1 1" RendererMask="2" Tag="" Active="true" CastShadows="true" ShadowResolution="Low" ShadowsAffectStatic="true" ShadowsAffectDynamic="true" Radius="6" Re_Intensity="3" Re_Radius="20" Re_SourceRadius="0.06" FalloffMap="" Gobo="" GoboAnimMode="None" GoboAnimFrameTime="0" DiffuseColor="0.828 0.655 0.259 1" FlickerActive="false" FlickerOnMinLength="0" FlickerOnMaxLength="0" FlickerOnPS="" FlickerOnSound="" FlickerOffMinLength="0" FlickerOffMaxLength="0" FlickerOffPS="" FlickerOffSound="" FlickerOffColor="0 0 0 1" FlickerOffRadius="0" Re_FlickerOffIntensity="0" FlickerFade="false" FlickerOnFadeMinLength="0" FlickerOnFadeMaxLength="0" FlickerOffFadeMinLength="0" FlickerOffFadeMaxLength="0" />
+    </Add>
+</EntDelta>

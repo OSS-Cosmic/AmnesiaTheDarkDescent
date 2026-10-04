@@ -44,6 +44,8 @@ SLANG_PUBLIC struct PointLight {
     SLANG_PUBLIC float radius;                       // CPU-precomputed light-grid bin reach (world units); 0 ⇒ skip
     SLANG_PUBLIC float sourceRadius;                 // physical source radius (world units); 0 ⇒ hard shadow. Penumbra.
     SLANG_PUBLIC uint  shadowEnabled;                // 0 or 1 — gate the NEE shadow ray (GetCastShadows)
+    SLANG_PUBLIC float prevPower;                    // last frame's power (LightChange.h); 0 ⇒ was dark / hole
+    SLANG_PUBLIC float prevRadius;                   // last frame's grid reach; 0 ⇒ was skipped
 };
 
 // Scalar-layout spot light. `intensity` = luminous power (same convention as
@@ -64,6 +66,8 @@ SLANG_PUBLIC struct SpotLight {
     SLANG_PUBLIC float4x4  viewProjection;               // light-space ViewProj for gobo UVs
     SLANG_PUBLIC float radius;                       // CPU-precomputed light-grid bin reach (world units); 0 ⇒ skip
     SLANG_PUBLIC float sourceRadius;                 // physical source radius (world units); 0 ⇒ hard shadow. Penumbra.
+    SLANG_PUBLIC float prevPower;                    // last frame's power (LightChange.h); 0 ⇒ was dark / hole
+    SLANG_PUBLIC float prevRadius;                   // last frame's grid reach; 0 ⇒ was skipped
 };
 
 // Scalar-layout rectangular area light, modeled on Unreal's Rect Light. The
@@ -97,6 +101,28 @@ SLANG_PUBLIC struct RectLight {
     SLANG_PUBLIC float barnDoorAngle;                // flap tilt from normal (radians); 90° ⇒ open
     SLANG_PUBLIC float barnDoorLength;               // flap length (world units); 0 ⇒ disabled
     SLANG_PUBLIC uint  shadowEnabled;                // 0 or 1 — gate the NEE shadow ray (GetCastShadows)
+    SLANG_PUBLIC float prevPower;                    // last frame's power (LightChange.h); 0 ⇒ was dark / hole
+    SLANG_PUBLIC float prevRadius;                   // last frame's grid reach; 0 ⇒ was skipped
+};
+
+// Scalar-layout directional (sun / moon) light. Ray-traced backend only. It has
+// no position and no reach, so it never goes through the radius-binned light
+// grid: DirectionalLight.sample in ILight.slang shades it at constant radiance
+// from `-direction`, and the ReSTIR DI build / path-tracer NEE add every entry
+// as an extra candidate next to the cell's lights. `direction` is the way the
+// light travels (the element's local -Z). `cosAngularRadius` is the cosine of
+// the source disk's half-angle; the soft shadow ray aims into that cone, 1 ⇒
+// hard shadow. `radius` keeps the other types' hole convention: a large
+// constant when lit, 0 for an invisible / masked-out light or an empty slot.
+SLANG_PUBLIC struct DirectionalLight {
+    SLANG_PUBLIC float3 direction;                   // world-space travel direction (unit)
+    SLANG_PUBLIC float intensity;                    // radiance scale
+    SLANG_PUBLIC float3 color;                       // linear diffuse
+    SLANG_PUBLIC float cosAngularRadius;             // cos(source half-angle); 1 ⇒ hard shadow
+    SLANG_PUBLIC float radius;                       // kDirectionalLightReach when lit; 0 ⇒ skip
+    SLANG_PUBLIC uint  shadowEnabled;                // 0 or 1 — gate the NEE shadow ray (GetCastShadows)
+    SLANG_PUBLIC float prevPower;                    // last frame's power (LightChange.h); 0 ⇒ was dark / hole
+    SLANG_PUBLIC float prevRadius;                   // last frame's reach; 0 ⇒ was skipped
 };
 
 // Per-fog-area params for the screen-space fog iteration. One entry per
@@ -388,7 +414,7 @@ SLANG_PUBLIC struct SceneConstants {
     // changes cell every frame, its light list churns, and the ReSTIR reservoirs
     // keyed on that list churn with it.
     SLANG_PUBLIC float3 lightGridOriginW;
-    SLANG_PUBLIC float _padLightGridOrigin;           // keep the next float3 on a 16-byte row (D3D12 cbuffer packing)
+    SLANG_PUBLIC uint  directionalLightCount;         // gDirectionalLights[] SLOT CAPACITY; also keeps the next float3 on a 16-byte row (D3D12 cbuffer packing)
     SLANG_PUBLIC float materialMipBias;               // mip bias for gradient-based MATERIAL sampling when a temporal provider shades at a reduced render extent; 0 for Off/NativeAA/native-extent frames
     SLANG_PUBLIC uint _padFogAreaIndices0;            // row-align fogAreaIndices (D3D12 cbuffer arrays start on a 16-byte row)
     SLANG_PUBLIC uint _padFogAreaIndices1;

@@ -1,0 +1,22 @@
+<EntDelta Version="1" Target="entities/elevator/elevator_shaft_8m.ent">
+    <Remove Category="Mesh" ID="3" Name="polySurface286" />
+    <Remove Category="Mesh" ID="6" Name="polySurface293" />
+    <Remove Category="Mesh" ID="7" Name="polySurface294" />
+    <Remove Category="Mesh" ID="8" Name="polySurface295" />
+    <Remove Category="Mesh" ID="9" Name="polySurface296" />
+    <Modify Category="Mesh" ID="4" Name="polySurface291">
+        <SetAttr SubMeshID="3" />
+    </Modify>
+    <Modify Category="Mesh" ID="5" Name="polySurface292">
+        <SetAttr SubMeshID="4" />
+    </Modify>
+    <Modify Category="Entities" ID="16" Name="PointLight_1">
+        <SetAttr Brightness="1" Falloff="1" Re_FlickerOffIntensity="0" Re_Intensity="2" Re_SourceRadius="0.02" WorldPos="-0.0204287 4.125 1.58778" />
+    </Modify>
+    <Modify Category="Entities" ID="17" Name="PointLight_2">
+        <SetAttr Brightness="1" Falloff="1" Re_FlickerOffIntensity="0" Re_Intensity="2" Re_SourceRadius="0.02" WorldPos="0 4.125 -1.60714" />
+    </Modify>
+    <Modify Category="Entities" ID="18" Name="PointLight_3">
+        <SetAttr Brightness="1" Falloff="1" />
+    </Modify>
+</EntDelta>

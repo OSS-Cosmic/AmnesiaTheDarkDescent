@@ -30,6 +30,7 @@ import Grid;                 // gridCellPos / gridFlattenCellIndex / gridCellVal
 import Random;
 import DiffuseShading;       // shared DiffuseShading + prepareDiffuseShading
 import PathTracer.PathTraceCommon; // shared path continuation and hit shading
+import Utils.Color.ColorHelpers;   // sRGBToLinear (miss-shader sky term)
 
 // Pass-private resources (set 2). Names are resolved by host reflection.
 [vk::binding(0, 2)] Texture2D<float4>   gWaterGuideHalfPosViewZ;
@@ -65,7 +66,21 @@ bool isValidWaterGuide(float4 posViewZ, float4 normalWeight)
 [shader("miss")]
 void waterReflMiss(inout ScatterPayload payload)
 {
-    // Black environment convention.
+    // An environment sample is valid radiance at infinity, not NRD's zero
+    // distance sentinel for an untraced sample. Keep later misses from
+    // replacing the distance to the first reflected surface.
+    if (payload.currStep == 1u)
+        payload.firstRayLength = 65504.0f;
+    // Match the Standard water capture: a ray that leaves the world sees the
+    // sky tint (or the clear colour when no sky box is enabled), authored in
+    // display space, so open space reflects instead of reading black. The
+    // opaque tracer keeps its black environment; only water reflections gain
+    // this term.
+    float3 display = (gPerFrame.skyBoxEnabled != 0u)
+                   ? gPerFrame.skyBoxColor.rgb
+                   : gPerFrame.clearColor.rgb;
+    payload.radiance += payload.thp
+                      * (sRGBToLinear(saturate(display)) / kSceneExposure);
     payload.status |= kPathTraceStatusTerminated;
 }
 
@@ -183,7 +198,7 @@ void waterReflRayGen()
 
     traceScatterRay(payload, kWaterReflectionRayFlags);   // first reflected vertex
     float3 firstVertexRadiance = payload.radiance;        // emission + NEE at the reflection hit
-    float  hitDistance = payload.firstRayLength;          // FIRST reflection hit only; 0 on miss
+    float  hitDistance = payload.firstRayLength;          // first hit, or distant environment
 
     // With a one-vertex budget, pathTraceHandleHit increments currStep from 1
     // to 2 after shading the first hit; the loop's `currStep <= 1` test then

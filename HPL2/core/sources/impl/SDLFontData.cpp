@@ -82,11 +82,22 @@ bool cSDLFontData::CreateFromBitmapFile(const tWString &asFileName) {
   int lLineHeight = cString::ToInt(pCommonElem->Attribute("lineHeight"), 0);
   int lBase = cString::ToInt(pCommonElem->Attribute("base"), 0);
 
-  mfHeight = (float)lLineHeight;
+#ifdef AMFP
+  // AMFP fonts are exported with an outline; it pads every glyph cell and
+  // must be added to the line metrics.
+  tinyxml2::XMLElement *pInfoElem = pRootElem->FirstChildElement("info");
+  const int lOutline =
+      pInfoElem ? cString::ToInt(pInfoElem->Attribute("outline"), 0) * 2 : 0;
+#else
+  const int lOutline = 0;
+#endif
+
+  mfHeight = (float)(lLineHeight + lOutline);
 
   mvSizeRatio.x =
-      (float)lBase / (float)lLineHeight; // I think this is a not correct. Not
-                                         // sure what is done here :S
+      (float)(lBase + lOutline) /
+      (float)(lLineHeight + lOutline); // I think this is a not correct. Not
+                                       // sure what is done here :S
   mvSizeRatio.y = 1;
 
   int lLargestGlyphId = -1;
@@ -126,6 +137,7 @@ bool cSDLFontData::CreateFromBitmapFile(const tWString &asFileName) {
       Error("Couldn't load bitmap %s for FNT file '%s'\n",
             cString::To8Char(sFilePath).c_str(),
             cString::To8Char(asFileName).c_str());
+      fclose(pFile);
       return false;
     }
 
@@ -210,7 +222,8 @@ bool cSDLFontData::CreateFromBitmapFile(const tWString &asFileName) {
     // Create glyph and place it correctly.
     cGlyph *pGlyph =
         CreateGlyph(pImage, cVector2l(lXOffset, lYOffset), cVector2l(lW, lH),
-                    cVector2l(lBase, lLineHeight), lAdvance);
+                    cVector2l(lBase + lOutline, lLineHeight + lOutline),
+                    (lOutline + lAdvance * 2) / 2);
 
     mvGlyphs[lId] = pGlyph;
   }

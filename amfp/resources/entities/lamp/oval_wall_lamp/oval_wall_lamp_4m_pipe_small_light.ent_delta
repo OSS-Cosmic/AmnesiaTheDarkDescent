@@ -1,0 +1,5 @@
+<EntDelta Version="1" Target="entities/lamp/oval_wall_lamp/oval_wall_lamp_4m_pipe_small_light.ent">
+    <Modify Category="Entities" ID="5" Name="PointLight_1">
+        <SetAttr FalloffMap="" />
+    </Modify>
+</EntDelta>

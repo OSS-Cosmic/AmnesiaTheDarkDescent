@@ -507,7 +507,11 @@ namespace hpl {
 										cVector2f(1,0),
 										cVector2f(-1,0),
 										cVector2f(0,1),
-										cVector2f(0,-1)
+										cVector2f(0,-1),
+										cVector2f(0.5,0.5),
+										cVector2f(0.5,-0.5),
+										cVector2f(-0.5,0.5),
+										cVector2f(-0.5,-0.5)
 	};	
 	
 	bool cAINodeContainer::FreePath(const cVector3f &avStart, const cVector3f &avEnd, int alRayNum, 
@@ -517,7 +521,11 @@ namespace hpl {
 		if(pPhysicsWorld==NULL) return true;
 
 		
+#ifdef AMFP
+		if(alRayNum<0 || alRayNum>9) alRayNum =5;
+#else
 		if(alRayNum<0 || alRayNum>5) alRayNum =5;
+#endif
 		
 		/////////////////////////////
 		//Calculate the right vector
@@ -530,7 +538,11 @@ namespace hpl {
 		const cVector3f vEndCenter  = mbNodeIsAtCenter ? avEnd : avEnd + cVector3f(0,mvSize.y/2,0);
 		
 		//Get the half with and height. Make them a little smaller so that player can slide over funk on floor.
+#ifdef AMFP
+		const float fHalfWidth = mvSize.x * 0.55f;
+#else
 		const float fHalfWidth = mvSize.x * 0.4f;
+#endif
 		const float fHalfHeight = mvSize.y * 0.4f;
 		
 		//Setup ray callback
@@ -613,12 +625,22 @@ namespace hpl {
 			int alID = cString::ToInt(pNodeElem->Attribute("ID"),-1);
 
 			cAINode *pNode = GetNodeFromID(alID);
+			if(pNode==NULL)
+			{
+				Error("Could not find node with id %d in node container cache '%s'\n", alID, cString::To8Char(asFile).c_str());
+				continue;
+			}
 
 			tinyxml2::XMLElement *pEdgeElem = pNodeElem->FirstChildElement("Edge");
 			for(; pEdgeElem != NULL; pEdgeElem = pEdgeElem->NextSiblingElement("Edge"))
 			{
 				tString sNodeName = cString::ToString(pEdgeElem->Attribute("Node"),"");
 				cAINode *pEdgeNode = GetNodeFromName(sNodeName);
+				if(pEdgeNode == NULL)
+				{
+					Error("Could not find edge node in node %d with name '%s' in node container cache '%s'\n", alID, sNodeName.c_str(), cString::To8Char(asFile).c_str());
+					continue;
+				}
 
 				cAINodeEdge Edge;
 				Edge.mpNode = pEdgeNode;

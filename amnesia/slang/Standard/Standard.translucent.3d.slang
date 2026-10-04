@@ -71,7 +71,7 @@ float3 transLighting(float3 p,float3 n,float3 cameraToSurfaceW,TranslucentMateri
     s.specular=float2(0);s.specularScale=0; float3 r=float3(0);
     for(uint i=0u;i<standardLightCounts.pointCount;i++)r+=standardPointLight(s,cameraToSurfaceW,standardPointLights[i]);
     for(uint i=0u;i<standardLightCounts.spotCount;i++)r+=standardSpotLight(s,cameraToSurfaceW,standardSpotLights[i],1,dx,dy);
-    return r*max(m.litDiffuseScale,0.0f);
+    return standardLightingToScene(r*max(m.litDiffuseScale,0.0f));
 }
 
 float fresnel(float e,float bias,float power)

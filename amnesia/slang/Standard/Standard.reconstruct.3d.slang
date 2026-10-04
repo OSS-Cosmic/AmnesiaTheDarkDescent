@@ -115,7 +115,7 @@ void triangleUVGradients(float4 c0, float4 c1, float4 c2,
     // stored surface UV that the light resolve samples specular from.
     uv = standardParallaxUV(material, uv, mul(gPerFrame.viewMat, worldPosition).xyz,
                             standardSafeNormalize(shadingNormalView, float3(0, 0, 1)),
-                            viewTangent, viewBitangent);
+                            viewTangent, viewBitangent, uvDx, uvDy);
     O o;
     o.albedo = float4(sampleBindless2DGrad(material.tex[0], uv, uvDx, uvDy).rgb, 1.0f);
     o.position = float4(worldPosition.xyz, 1.0f);

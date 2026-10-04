@@ -207,6 +207,9 @@ void cLightProbeQuery::SetExcludedLights(iLight **apLights, int alCount) {
     case eLightType_Area:
       lType = 2u;
       break;
+    case eLightType_Directional:
+      lType = 3u;
+      break;
     default:
       continue; // box lights are never uploaded, so never binned
     }

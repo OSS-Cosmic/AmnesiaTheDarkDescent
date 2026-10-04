@@ -382,6 +382,16 @@ namespace hpl {
 			colorMul.b *= colorMul.a;
 		}
 
+		//Lamp flicker (AMFP); 1 unless a game sets it.
+		const float fFlickerMul = mpParentSystem->GetFlickerMultiplier();
+		if(fFlickerMul != 1.0f)
+		{
+			colorMul.r *= fFlickerMul;
+			colorMul.g *= fFlickerMul;
+			colorMul.b *= fFlickerMul;
+			colorMul.a *= fFlickerMul;
+		}
+
 		//////////////////////////////
 		// If alpha is 0, skip rendering anything
 		if(colorMul.a <= 0)

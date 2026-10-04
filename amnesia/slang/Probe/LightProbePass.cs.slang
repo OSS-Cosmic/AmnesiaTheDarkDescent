@@ -79,10 +79,13 @@ float3 directLighting(float3 posW)
     // Empty/out-of-grid cells supply no analytic light, with no full-bright
     // fallback. Surface emission is evaluated independently by the gather.
     CellLights cl = getCellLights(posW);
+    const uint nDir = getDirectionalLightCount();
 
-    for (uint k = 0u; k < cl.count; ++k)
+    // Cell lights first, then the directional lights (not in the grid).
+    for (uint k = 0u; k < cl.count + nDir; ++k)
     {
-        uint packedId = cellLightAt(cl, k);
+        uint packedId = k < cl.count ? cellLightAt(cl, k)
+                                     : directionalLightId(k - cl.count);
         if (isExcluded(packedId))
             continue;
 
@@ -126,9 +129,11 @@ float3 oneBounceRadiance(float3 posW, float3 direction)
     float3 radiance = sd.emission;
     float3 origin = sd.posW + sd.normalW * 1.0e-3f;
     CellLights cl = getCellLights(sd.posW);
-    for (uint k = 0u; k < cl.count; ++k)
+    const uint nDir = getDirectionalLightCount();
+    for (uint k = 0u; k < cl.count + nDir; ++k)
     {
-        uint packedId = cellLightAt(cl, k);
+        uint packedId = k < cl.count ? cellLightAt(cl, k)
+                                     : directionalLightId(k - cl.count);
         // Filtering must also happen at the bounce: otherwise the darkness
         // assist light would illuminate walls and cancel its own penalty.
         if (isExcluded(packedId))
