@@ -1198,6 +1198,12 @@ bool cLuxBase::InitEngine()
 	cResources::SetForceCacheLoadingAndSkipSaving(mpConfigHandler->mbForceCacheLoadingAndSkipSaving);
 	cResources::SetCreateAndLoadCompressedMaps(false);
 	//cResources::SetCreateAndLoadCompressedMaps(mbPTestActivated || mpConfigHandler->mbCreateAndLoadCompressedMaps);
+	// .map_delta / .ent_delta overlays: on for the game, off for the editors and
+	// the offline tools (they must see unpatched files to author deltas against).
+	cResources::SetDeltasEnabled(true);
+	// Deltas keep each original object for Standard and add its Redux
+	// replacement for the ray-traced backend; load only the running backend's half.
+	cResources::SetRendererMaskFilterEnabled(true);
     
 	/////////////////////////
 	// Create the engine
