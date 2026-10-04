@@ -13,7 +13,7 @@ on:
         default: ''
 
 env:
-  ITCH_TARGET: mpollind/a-machine-for-pigs-relit
+  ITCH_TARGET: mpollind/amfp-redux
 
 jobs:
   linux:
