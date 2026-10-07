@@ -196,6 +196,14 @@ private:
   // with no pending probes. See cLightProbeQuery.
   RIProgram m_lightProbe;
 
+  // GPU-only probes for flagged translucent meshes. A ring reservation per
+  // Draw keeps viewports and in-flight frames from overwriting each other.
+  RIProgram m_translucentLightProbe;
+  RISegmentAlloc<RI_NUMBER_FRAME_SEGMENTS> m_translucentProbeSegment;
+  RIBuffer m_translucentProbeRequests;
+  RIBuffer m_translucentProbeResults;
+  bool m_translucentProbeFirstUse = true;
+
 
 	// Particle (translucent) pass — port of legacy RendererDeferred's
 	// translucency_particle.{vert,frag}.fsl. Reuses the opaque object/material

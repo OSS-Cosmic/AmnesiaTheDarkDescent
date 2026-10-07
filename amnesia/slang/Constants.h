@@ -227,8 +227,8 @@ SHARED_CONST uint kMaterialFlagUseRefractionNormals     = 1u << 14;
 SHARED_CONST uint kMaterialFlagUseRefractionEdgeCheck   = 1u << 15;
 SHARED_CONST uint kMaterialFlagHasRefraction            = 1u << 16;
 // Translucent "AffectedByLightLevel" material var: the shader dims the
-// translucent/particle color by the surrounding analytic-light level
-// (gScene.lightLevelAt) instead of rendering it full-bright.
+// translucent/particle color by the surrounding light level. Ray-traced mesh
+// draws use physical object probes; particles retain the analytic estimate.
 SHARED_CONST uint kMaterialFlagAffectedByLightLevel     = 1u << 17;
 SHARED_CONST uint kMaterialFlagDiffuseIsMask            = 1u << 18;
 SHARED_CONST uint kMaterialFlagSmoothHalo               = 1u << 19;

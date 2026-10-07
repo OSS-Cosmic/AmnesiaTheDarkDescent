@@ -229,8 +229,9 @@ public float directionalLightChange()
 // maxChannel(authored color) · saturate(1 − d/authoredRadius) over the
 // lights binned to the grid cell at posW, saturated at 1. Normal-free and
 // shadow-free: billboards have no normal and the legacy heuristic never
-// had occlusion (or a spot-cone term — spots fall off radially like
-// points, matching the original).
+// had occlusion. Spots are gated by their cone (cosOuterAngle), matching the
+// player's CPU sensor, which only counts a spot whose frustum holds the
+// point; inside the cone they fall off radially like points.
 //   * `intensity` IS the authored engine radius (uploaded verbatim for
 //     both light types — Falcor LightData semantics, no scale knobs), so
 //     it is used directly. The struct's `radius` field is the grid-bin
@@ -284,6 +285,16 @@ public float lightLevelAt(float3 posW)
             lpos       = gSpotLights[slot].position;
             lcolor     = gSpotLights[slot].color;
             lintensity = gSpotLights[slot].intensity;
+            {
+                // Player sensor (cLuxMapHelper::GetLightLevelAtPos) only counts a
+                // spot when the point is inside its frustum; a radial-only falloff
+                // lights a full circle around every spot.
+                float3 toPoint = posW - lpos;
+                float  d       = length(toPoint);
+                if (d > 1e-4f &&
+                    dot(toPoint / d, gSpotLights[slot].direction) < gSpotLights[slot].cosOuterAngle)
+                    continue;
+            }
             break;
         default: // the grid only holds point / spot / area lights
             lpos       = gAreaLights[slot].position;

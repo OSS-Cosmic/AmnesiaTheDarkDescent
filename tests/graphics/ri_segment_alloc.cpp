@@ -174,3 +174,28 @@ UTEST(ri_segment_alloc, served_ranges_stay_inside_the_ring) {
     }
   }
 }
+
+// GPU-only translucent probes reserve once per viewport, with no gameplay
+// 16-probe limit. A second viewport must not overwrite the first one's upload
+// or any still-live frame, including after frames with no eligible objects.
+UTEST(ri_segment_alloc, viewport_probe_ranges_do_not_overlap_live_requests) {
+  constexpr uint32_t probesPerViewport = 33;
+  constexpr uint32_t capacity = probesPerViewport * 2 * (kFramesInFlight + 1);
+  RISegmentAlloc<kSegments> ring = MakeRing(capacity);
+  struct LiveRange { uint32_t frame, begin, end; };
+  std::vector<LiveRange> live;
+  for (uint32_t frame = 0; frame < 64; ++frame) {
+    if (frame % 7 == 3) continue;
+    for (uint32_t viewport = 0; viewport < 2; ++viewport) {
+      RISegmentReq req{};
+      ASSERT_TRUE(ring.request(frame, probesPerViewport, &req));
+      const uint32_t end = req.elementOffset + probesPerViewport;
+      ASSERT_LE(end, capacity);
+      for (const auto &other : live) {
+        if (other.frame + kFramesInFlight <= frame) continue;
+        ASSERT_TRUE(end <= other.begin || req.elementOffset >= other.end);
+      }
+      live.push_back({frame, req.elementOffset, end});
+    }
+  }
+}

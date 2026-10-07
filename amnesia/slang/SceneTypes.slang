@@ -244,7 +244,11 @@ SLANG_PUBLIC struct UniformObject {
     // Raw iRenderable render flags. Used by diagnostics (for example the
     // Shadow Flag overlay) without affecting ray masks or material data.
     SLANG_PUBLIC uint  renderFlags;
-
+    // World-space bounding-volume center in xyz, w = 1 when the host supplied
+    // it (0 = unset). AffectedByLightLevel translucents sample the surrounding
+    // light level here once per object, as the legacy CPU path did, instead of
+    // per pixel (which cuts the glass along light-grid cell edges).
+    SLANG_PUBLIC float4 boundsCenterW;
     // Per-object vertex/index stream handles, folded in from the
     // former gOpaque*Handles bindless buffers — they were always indexed by this
     // same object slot. Vulkan stores a BDA; D3D12 stores (descriptor + 1) in
@@ -283,10 +287,9 @@ SLANG_PUBLIC struct GpuDecal {
 };
 
 // -----------------------------------------------------------------------------
-// Gameplay light probe (LightProbePass.cs). Gameplay asks "how lit is this
-// world point?" and reads the answer back on the CPU a few frames later; see
-// cLightProbeQuery. Both structs are 16 bytes under scalar layout, so the host
-// mirrors them with plain float arrays.
+// Physical light probes. Gameplay (LightProbePass.cs / cLightProbeQuery) reads
+// these back asynchronously; TranslucentLightProbe.cs keeps them on the GPU.
+// Both structs are 16 bytes under scalar layout.
 // -----------------------------------------------------------------------------
 
 // One world-space probe request; padding keeps the CPU/GPU stride explicit.

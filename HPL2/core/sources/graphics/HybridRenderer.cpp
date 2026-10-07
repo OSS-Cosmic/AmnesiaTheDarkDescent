@@ -51,6 +51,9 @@ namespace hpl {
 // draws than kHybridCullMaxDraws falls back to direct draws for that family
 // rather than culling part of its list.
 static constexpr uint32_t kHybridCullMaxDraws = 4096;
+static constexpr uint32_t kHybridTranslucentProbeCapacity =
+    kObjectSlotCapacity * (RI_NUMBER_FRAMES_FLIGHT + 1);
+static_assert(sizeof(LightProbeRequest) == 16 && sizeof(LightProbeResult) == 16);
 // Opaque two-phase camera cull. Its candidates get their own ring: the
 // translucent families cap at kHybridCullMaxDraws, but the opaque set is
 // whatever the frustum keeps and is addressed through the much larger
@@ -213,6 +216,7 @@ cHybridRenderer::cHybridRenderer(cGraphics *apGraphics, cResources *apResources)
     loadSlangCompute(m_nrdPack, "NrdPack.cs", "csMain");
     // Gameplay illumination sensor — see m_lightProbe in the header.
     loadSlangCompute(m_lightProbe, "LightProbePass.cs", "csMain");
+    loadSlangCompute(m_translucentLightProbe, "TranslucentLightProbe.cs", "csMain");
     {
       // Particle pass (amnesia/slang/Particle).
       auto p_vert = RIProgram::loadShaderStage(apResources->GetFileSearcher(),
@@ -312,6 +316,16 @@ cHybridRenderer::cHybridRenderer(cGraphics *apGraphics, cResources *apResources)
                                                   stride, usage, deviceLocal,
                                                   debugName);
         };
+    m_translucentProbeRequests = makeCullBuffer(
+        &m_translucentProbeSegment, kHybridTranslucentProbeCapacity,
+        sizeof(LightProbeRequest), RI_BUFFER_USAGE_SHADER_RESOURCE,
+        "HybridRenderer.translucentProbeRequests");
+    m_translucentProbeResults = detail::CreateBindlessSlotBuffer(
+        &mpGraphics->device, kHybridTranslucentProbeCapacity,
+        sizeof(LightProbeResult),
+        RI_BUFFER_USAGE_SHADER_RESOURCE_STORAGE | RI_BUFFER_USAGE_SHADER_RESOURCE,
+        /*deviceLocalOnly=*/true, "HybridRenderer.translucentProbeResults");
+
     m_cullCandidateBuffer = makeCullBuffer(
         &m_cullCandidateSegment, kHybridCullMaxDraws,
         sizeof(StandardCullCandidate), RI_BUFFER_USAGE_SHADER_RESOURCE_STORAGE,
@@ -4023,6 +4037,29 @@ void cHybridRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
       meshes.push_back(pObj);
     }
 
+    // Match the shader's per-draw gate. A LitDiffuse alpha base draw bypasses
+    // light-level modulation, but its ADD cube-map draw can still need it.
+    const auto needsProbe = [](iRenderable *object) {
+      const cMaterial *material = object->GetMaterial();
+      const auto *data = std::get_if<MaterialTranslucent>(&material->Data());
+      if (!data || !data->m_isAffectedByLightLevel || !object->GetBoundingVolume())
+        return false;
+      const cVector3f center = object->GetBoundingVolume()->GetWorldCenter();
+      if (!std::isfinite(center.x) || !std::isfinite(center.y) ||
+          !std::isfinite(center.z))
+        return false;
+      const auto mode = material->GetBlendMode();
+      const bool litBase = data->m_litDiffuse &&
+          (mode == eMaterialBlendMode_Alpha || mode == eMaterialBlendMode_PremulAlpha);
+      return !litBase || material->GetImage(eMaterialTexture_CubeMap) != nullptr;
+    };
+    const size_t probeCapacity = std::count_if(meshes.begin(), meshes.end(), needsProbe);
+    RISegmentReq probeRange{};
+    const bool probesAvailable = probeCapacity > 0 && apWorld->GetTlas() &&
+        m_translucentProbeRequests.mappedAddress && !m_translucentProbeResults.isEmpty() &&
+        m_translucentProbeSegment.request(mpGraphics->frameIndex, probeCapacity, &probeRange);
+    uint32_t probeCount = 0;
+
     // Resolve every mesh's material and object slot BEFORE the render scope
     // opens: the occlusion cull needs each draw's command written and its
     // dispatch recorded, and a dispatch cannot be recorded inside dynamic
@@ -4035,6 +4072,7 @@ void cHybridRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
       uint32_t indexCount = 0;
       bool cubeMap = false;
       uint32_t commandSlot = 0; // first of 1 or 2 consecutive slots
+      uint32_t lightProbeIndex = UINT32_MAX;
     };
     std::vector<MeshDraw> meshDraws;
     meshDraws.reserve(meshes.size());
@@ -4054,12 +4092,17 @@ void cHybridRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
         Warning("Material Slot exhausted (translucent mesh)");
         continue;
       }
+      const bool probeObject = probesAvailable && needsProbe(pObj);
       ObjectSubmitDesc d;
       d.modelMatrix = pObj->GetModelMatrix(apFrustum);
       d.uvMatrix = pMat->GetUvMatrix();
       d.materialId = materialId;
       d.dissolveAmount = pObj->GetCoverageAmount();
       d.renderFlags = pObj->GetRenderFlags();
+      if (pObj->GetBoundingVolume()) {
+        d.boundsCenter = pObj->GetBoundingVolume()->GetWorldCenter();
+        d.boundsCenterSet = true;
+      }
       const uint32_t slot = mpGraphics->globalset->submitObject(
           pObj->GetUniqueCookie(), (uint32_t)mpGraphics->frameIndex,
           static_cast<cVertexBuffer *>(pVB), d);
@@ -4075,6 +4118,14 @@ void cHybridRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
       draw.indexCount = static_cast<uint32_t>(pVB->GetIndexNum());
       draw.cubeMap = pMat->GetImage(eMaterialTexture_CubeMap) != nullptr;
       draw.commandSlot = meshCull.commandCount;
+      if (probeObject) {
+        draw.lightProbeIndex = probeRange.elementOffset + probeCount++;
+        LightProbeRequest request{};
+        request.posW = float3{d.boundsCenter.x, d.boundsCenter.y, d.boundsCenter.z};
+        std::memcpy(static_cast<uint8_t *>(m_translucentProbeRequests.mappedAddress) +
+                        uint64_t(draw.lightProbeIndex) * sizeof(request),
+                    &request, sizeof(request));
+      }
       const uint32_t draws = draw.cubeMap ? 2u : 1u;
       if (meshCull.usable) {
         // A renderable with no bounds cannot be occlusion-tested, and leaving
@@ -4094,6 +4145,54 @@ void cHybridRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
         }
       }
       meshDraws.push_back(draw);
+    }
+
+    if (probeCount > 0) {
+      RICmd *cmd = &mpGraphics->primary.cmds[0];
+      RIGpuScope scope(&mpGraphics->profiler, cmd, "TranslucentLightProbe");
+      m_translucentProbeRequests.flushMappedRange(
+          &mpGraphics->device, uint64_t(probeRange.elementOffset) * sizeof(LightProbeRequest),
+          uint64_t(probeCount) * sizeof(LightProbeRequest));
+      cmd->vk_d3d12_bufferBarrier(RIBufferBarrier(
+          &m_translucentProbeResults,
+          m_translucentProbeFirstUse ? RI_RESOURCE_STATE_UNDEFINED : RI_RESOURCE_STATE_SHADER_RESOURCE,
+          RI_RESOURCE_STATE_STORAGE_WRITE,
+          m_translucentProbeFirstUse ? RI_STAGE_NONE : RI_STAGE_FRAGMENT, RI_STAGE_COMPUTE));
+      m_translucentProbeFirstUse = false;
+      m_translucentLightProbe.bindComputePipeline(
+          &mpGraphics->device, cmd, HASH_INITIAL_VALUE, "TranslucentLightProbe.cs");
+      m_translucentLightProbe.bindBindlessDescriptorSet(
+          cmd, &mpGraphics->globalset->m_bindlessSet, 0, VK_PIPELINE_BIND_POINT_COMPUTE);
+      std::vector<RIProgram::DescriptorBinding> bindings;
+      RIProgram::DescriptorBinding frameBinding;
+      frameBinding.handle = DescriptorBindingID::Create("gPerFrame");
+      mpGraphics->UpdateFrameUBO(&frameBinding.descriptor, &perFrame, sizeof(perFrame));
+      bindings.push_back(frameBinding);
+      bindings.emplace_back("gRtAccel", RIDescriptor::accelerationStructure(
+          &mpGraphics->device, apWorld->GetTlas()));
+      bindings.emplace_back("gProbeRequests", RIDescriptor::storageBuffer(
+          &mpGraphics->device, &m_translucentProbeRequests, 0,
+          uint64_t(kHybridTranslucentProbeCapacity) * sizeof(LightProbeRequest)));
+      bindings.emplace_back("gProbeResults", RIDescriptor::storageBuffer(
+          &mpGraphics->device, &m_translucentProbeResults, 0,
+          uint64_t(kHybridTranslucentProbeCapacity) * sizeof(LightProbeResult)));
+      appendWorldLightFog(bindings, apWorld);
+      m_translucentLightProbe.bindDescriptors(
+          &mpGraphics->device, cmd, mpGraphics->frameIndex, bindings.data(),
+          bindings.size(), VK_PIPELINE_BIND_POINT_COMPUTE);
+      // Stay within the minimum supported X dispatch limit, even across a
+      // large draw list. Each chunk addresses its own part of the reservation.
+      for (uint32_t done = 0; done < probeCount;) {
+        const uint32_t count = std::min(probeCount - done, 65535u);
+        const uint32_t push[] = {probeRange.elementOffset + done, count};
+        cmd->vk_d3d12_setPushConstants(
+            &mpGraphics->device, m_translucentLightProbe, 0, sizeof(push), push);
+        cmd->dispatch(&mpGraphics->device, count, 1u, 1u);
+        done += count;
+      }
+      cmd->vk_d3d12_bufferBarrier(RIBufferBarrier(
+          &m_translucentProbeResults, RI_RESOURCE_STATE_STORAGE_WRITE,
+          RI_RESOURCE_STATE_SHADER_RESOURCE, RI_STAGE_COMPUTE, RI_STAGE_FRAGMENT));
     }
 
     // All or nothing: the family either culls every one of its draws or none
@@ -4167,6 +4266,14 @@ void cHybridRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
       }
       appendWorldLightFog(meshBindings, apWorld);
       appendRefractionBindings(meshBindings);
+      // A valid SRV is required even when every draw takes the fallback. The
+      // object buffer is a safe descriptor placeholder; sentinel indices prevent reads.
+      RIBuffer *probeResults = m_translucentProbeResults.isEmpty()
+          ? &mpGraphics->globalset->m_objectBuffer : &m_translucentProbeResults;
+      meshBindings.emplace_back("gTranslucentProbeResults", RIDescriptor::storageBuffer(
+          &mpGraphics->device, probeResults, 0,
+          m_translucentProbeResults.isEmpty() ? sizeof(LightProbeResult)
+              : uint64_t(kHybridTranslucentProbeCapacity) * sizeof(LightProbeResult)));
       // Lit diffuse is guarded by a push flag until the first TLAS build.
       meshBindings.emplace_back("gRtAccel",
                                 RIDescriptor::accelerationStructure(
@@ -4203,7 +4310,7 @@ void cHybridRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
         uint32_t blendMode;
         float sceneAlpha;
         uint32_t options;
-        uint32_t _pad;
+        uint32_t lightProbeIndex;
       };
       constexpr uint32_t kTransOptUseIllumination = 1u << 0;
       constexpr uint32_t kTransOptHasTlas = 1u << 1;
@@ -4217,12 +4324,8 @@ void cHybridRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
         cMaterial *pMat = pObj->GetMaterial();
         // Filter above already rejected null pVB / pMat and 0-index VBs.
         const int indexCount = static_cast<int>(draw.indexCount);
-        // The material and object slots were resolved before the render scope
-        // opened, so the cull could describe this draw. AffectedByLightLevel
-        // dimming is evaluated per-pixel on the GPU (Translucent.frag.slang →
-        // lightLevelAt, gated on kMaterialFlagAffectedByLightLevel in the
-        // material config) — the legacy per-object CPU light loop that used to
-        // live here is gone.
+        // Preparation resolved the slots and one current-frame probe per
+        // eligible object; both draw variants reuse its result index.
         const uint32_t slot = draw.slot;
 
         // Per-vertex streams use fixed-function vertex fetch (the pipeline
@@ -4264,7 +4367,7 @@ void cHybridRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
         PushBlock push = {(uint32_t)mode, sceneAlpha,
                           lightingOptions |
                               (refractive ? kTransOptRefraction : 0u),
-                          0u};
+                          draw.lightProbeIndex};
         mpGraphics->primary.cmds[0].vk_d3d12_setPushConstants(
             &mpGraphics->device, m_translucentMesh, 0, sizeof(push), &push);
 
@@ -4296,7 +4399,7 @@ void cHybridRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
                   pMat->GetDepthTest()));
           PushBlock pushIllum = {
               (uint32_t)TranslucentMeshPipelineDesc::BLEND_ADD, sceneAlpha,
-              kTransOptUseIllumination | lightingOptions, 0u};
+              kTransOptUseIllumination | lightingOptions, draw.lightProbeIndex};
           mpGraphics->primary.cmds[0].vk_d3d12_setPushConstants(
               &mpGraphics->device, m_translucentMesh, 0, sizeof(pushIllum),
               &pushIllum);
@@ -4423,6 +4526,7 @@ cHybridRenderer::~cHybridRenderer() {
       &m_lightGrid,       &m_composite,
       &m_directLighting,  &m_directSpatialReuse,
       &m_nrdPack,         &m_lightProbe,
+      &m_translucentLightProbe,
       &m_particle,        &m_particleColorSpace,
       &m_translucentMesh, &m_decal,
       &m_water,           &m_pathTrace,
@@ -4458,7 +4562,8 @@ cHybridRenderer::~cHybridRenderer() {
   RIBuffer *cullBuffers[] = {&m_cullCandidateBuffer,  &m_cullTileBuffer,
                              &m_cullGroupBuffer,      &m_cullCameraBuffer,
                              &m_cullDrawCountBuffer,  &m_cullVisibilityBuffer,
-                             &m_cameraCandidateBuffer};
+                             &m_cameraCandidateBuffer,
+                             &m_translucentProbeRequests, &m_translucentProbeResults};
   for (RIBuffer *b : cullBuffers) {
     b->dispose(&mpGraphics->device);
     *b = {};

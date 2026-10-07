@@ -33,6 +33,7 @@ import DiffuseShading;
 [vk::binding(0, 2)] Texture2D<float4> sceneColorInput;
 [vk::binding(1, 2)] Texture2D<float> sceneDepthInput;
 [vk::binding(2, 2)] SamplerState sceneColorSampler;
+[vk::binding(3, 2)] StructuredBuffer<LightProbeResult> gTranslucentProbeResults;
 
 // Options bitfield mirroring TranslucencyFlags in RendererDeferred.cpp.
 // blendMode stays as a separate uint so the existing switch is cheap; this
@@ -47,7 +48,7 @@ struct TranslucentPushConstants
     uint  blendMode;
     float sceneAlpha;
     uint  options;
-    uint  _pad;
+    uint  lightProbeIndex; // UINT32_MAX when no current-frame measurement exists
 };
 
 [vk::push_constant]
@@ -223,15 +224,28 @@ float4 psMain(TranslucentVSOut psIn) : SV_TARGET
     FogResult fog = computeFog(surfacePosW, gPerFrame.posW);
     float finalAlpha = gPushConstants.sceneAlpha * fog.visibility;
 
-    // AffectedByLightLevel materials dim with the surrounding analytic light
-    // (base-game afLightLevel behavior — see lightLevelAt). Per-pixel,
-    // gated on the raw material config (not the illumination-draw-masked
-    // textureConfig) so the cube-map second draw dims its reflection too,
-    // matching the legacy shader's afLightLevel use on the reflection terms.
+    // One physical measurement per object, shared by the base/reflection draws.
+    // Keep the existing per-draw LitDiffuse bypass and material opt-in.
     float lightLevel = 1.0f;
     if (!litDiffuse && (mat.materialConfig & kMaterialFlagAffectedByLightLevel) != 0u)
     {
-        lightLevel = lightLevelAt(surfacePosW);
+        if (gPushConstants.lightProbeIndex != 0xffffffffu)
+        {
+            float3 rgb = gTranslucentProbeResults[gPushConstants.lightProbeIndex].irradiance;
+            rgb = float3(isfinite(rgb.x) ? max(rgb.x, 0.0f) : 0.0f,
+                         isfinite(rgb.y) ? max(rgb.y, 0.0f) : 0.0f,
+                         isfinite(rgb.z) ? max(rgb.z, 0.0f) : 0.0f);
+            // Base-game afLightLevel is display-space and max-channel
+            // (see lightLevelAt): re-encode the linear probe sum to match.
+            lightLevel = saturate(linearToSRGB(max(rgb.x, max(rgb.y, rgb.z))));
+        }
+        else
+        {
+            // No TLAS, valid bounds or probe allocation: use the analytic estimate.
+            float3 samplePosW = (obj.boundsCenterW.w > 0.5f) ? obj.boundsCenterW.xyz
+                                                              : surfacePosW;
+            lightLevel = lightLevelAt(samplePosW);
+        }
     }
 
     float4 finalColor = diffuseColor;

@@ -650,6 +650,9 @@ uint32_t GlobalManagedSets::submitObject(uint64_t objectCookie,
     payload.illuminationAmount = desc.illuminationAmount;
     payload.decalList = desc.decalList;
     payload.renderFlags = desc.renderFlags;
+    payload.boundsCenterW = float4{desc.boundsCenter.x, desc.boundsCenter.y,
+                                   desc.boundsCenter.z,
+                                   desc.boundsCenterSet ? 1.0f : 0.0f};
     const ml::float4x4 modelF4 = cMath::ToFloatTranspose4x4(
         desc.modelMatrix ? *desc.modelMatrix : cMatrixf::Identity);
     std::memcpy(payload.modelMat, modelF4.a, sizeof(payload.modelMat));
