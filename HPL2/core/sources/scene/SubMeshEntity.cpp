@@ -19,6 +19,8 @@
 
 #include "scene/SubMeshEntity.h"
 
+#include <tracy/Tracy.hpp>
+
 #include "scene/MeshEntity.h"
 
 #include "resources/MaterialManager.h"
@@ -183,6 +185,7 @@ namespace hpl {
 
 	void cSubMeshEntity::UpdateGraphicsForFrame(float afFrameTime)
 	{
+		ZoneScopedN("cSubMeshEntity::UpdateGraphicsForFrame");
 		////////////////////////////////////
 		//Update things in parent first.
 		mpMeshEntity->UpdateGraphicsForFrame(afFrameTime);

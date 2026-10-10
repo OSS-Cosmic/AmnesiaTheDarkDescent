@@ -1,0 +1,47 @@
+<EntDelta Version="1" Target="entities/special/barrier_machine/barrier_machine.ent">
+    <Modify Category="Shapes" ID="1" Name="Shape_1">
+        <SetAttr RelativeTranslation="0.184386 -0.603362 -0.114238" />
+    </Modify>
+    <Modify Category="Shapes" ID="3" Name="Shape_3">
+        <SetAttr RelativeTranslation="0.174534 0.664658 -0.162459" />
+    </Modify>
+    <Modify Category="Shapes" ID="4" Name="Shape_4">
+        <SetAttr RelativeTranslation="0.670637 0.831368 -0.162459" />
+    </Modify>
+    <Modify Category="Shapes" ID="6" Name="Shape_6">
+        <SetAttr RelativeTranslation="-0.670637 -0.831368 -0.0841072" />
+    </Modify>
+    <Modify Category="Shapes" ID="8" Name="Shape_8">
+        <SetAttr RelativeTranslation="-0.478644 -0.722232 -0.562739" />
+    </Modify>
+    <Modify Category="Shapes" ID="10" Name="Shape_9">
+        <SetAttr RelativeScale="1.18 0.1 1.46" RelativeTranslation="0.177464 0.125978 -0.114238" />
+    </Modify>
+    <Modify Category="Shapes" ID="11" Name="Shape_10">
+        <SetAttr RelativeScale="1.22 0.3 0.75" RelativeTranslation="0.181628 -0.07243 -0.466317" />
+    </Modify>
+    <Modify Category="Shapes" ID="12" Name="Shape_11">
+        <SetAttr RelativeScale="1.22 0.3 0.100008" RelativeTranslation="0.181628 -0.07243 0.562739" />
+    </Modify>
+    <Modify Category="Shapes" ID="13" Name="Shape_12">
+        <SetAttr RelativeTranslation="0.192739 0.299858 -0.114238" />
+    </Modify>
+    <Modify Category="Shapes" ID="14" Name="Shape_13">
+        <SetAttr RelativeScale="0.4 0.114651 1.46" RelativeTranslation="-0.214518 0.254098 -0.114238" />
+    </Modify>
+    <Modify Category="Shapes" ID="15" Name="Shape_14">
+        <SetAttr RelativeTranslation="0.562719 0.222208 -0.114238" />
+    </Modify>
+    <Modify Category="Shapes" ID="16" Name="Shape_15">
+        <SetAttr RelativeScale="1.07 0.25 0.5" RelativeTranslation="0.245181 -0.059376 0.21154" />
+    </Modify>
+    <Modify Category="Shapes" ID="18" Name="Shape_16">
+        <SetAttr RelativeTranslation="-0.478644 -0.722232 0.310536" />
+    </Modify>
+    <Modify Category="Shapes" ID="19" Name="Shape_2">
+        <SetAttr RelativeTranslation="-0.496192 -0.637479 -0.0819592" />
+    </Modify>
+    <Modify Category="Bodies" ID="20" Name="Body_1">
+        <SetAttr WorldPos="-0.181011 1.01867 0.163221" />
+    </Modify>
+</EntDelta>

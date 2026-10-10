@@ -37,6 +37,10 @@ enum ePrimitiveBool
 {
 	ePrimitiveBool_CastShadows = PrimitivePropIdStart,
 	ePrimitiveBool_Collides,
+#ifdef AMFP
+	ePrimitiveBool_IsOccluder,
+#endif
+	ePrimitiveBool_TwoSidedShadow,
 
 	ePrimitiveBool_LastEnum,
 };
@@ -78,8 +82,17 @@ public:
 	void SetCastShadows(bool abX);
 	bool GetCastShadows() { return mbCastShadows; }
 
+	void SetTwoSidedShadow(bool abX);
+	bool GetTwoSidedShadow() { return mbTwoSidedShadow; }
+
 	void SetCollides(bool abX);
 	bool GetCollides() { return mbCollides; }
+
+#ifdef AMFP
+	// AMFP occlusion-culling flag; kept for the file, unused by Redux.
+	void SetIsOccluder(bool abX) { mbIsOccluder = abX; }
+	bool IsOccluder() { return mbIsOccluder; }
+#endif
 
 	bool IsAffectedByDecal(bool abAffectsStaticObject, bool abAffectsPrimitive, bool abAffectsEntity);
 
@@ -90,7 +103,11 @@ protected:
 
 	tString msMaterial;
 	bool mbCastShadows;
+	bool mbTwoSidedShadow = false;
 	bool mbCollides;
+#ifdef AMFP
+	bool mbIsOccluder = true;
+#endif
 };
 
 //------------------------------------------------------------------------

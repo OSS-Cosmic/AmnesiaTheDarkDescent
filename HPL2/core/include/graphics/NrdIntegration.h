@@ -46,6 +46,11 @@ struct NrdDenoiseInputs {
   RITextureView *motionVectors = nullptr;
   RITextureView *diffuseRadianceHitDistance = nullptr;
   RITextureView *specularRadianceHitDistance = nullptr;
+  // Optional history confidence (R8+, 0 = drop history, 1 = keep), computed
+  // this frame for last frame's history. Enabled only when every lobe the
+  // denoiser filters has one; the same view may feed both.
+  RITextureView *diffuseConfidence = nullptr;
+  RITextureView *specularConfidence = nullptr;
 };
 
 struct NrdDenoiseOutputs {

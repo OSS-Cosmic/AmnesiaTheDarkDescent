@@ -4949,8 +4949,8 @@ void RICmd::vk_d3d12_beginRendering(struct RIDevice *device,
     if (desc.renderArea.x < 0 || desc.renderArea.y < 0 ||
         desc.renderArea.width <= 0 || desc.renderArea.height <= 0)
       return ri_d3d12_reject("render area is invalid");
-    if (d3d12.rtvCount + desc.colorCount > RI_D3D12_RTV_DESCRIPTOR_CAPACITY ||
-        d3d12.dsvCount + (desc.depthStencil ? 1u : 0u) > RI_D3D12_DSV_DESCRIPTOR_CAPACITY)
+    if (desc.colorCount > RI_D3D12_RTV_DESCRIPTOR_CAPACITY ||
+        (desc.depthStencil ? 1u : 0u) > RI_D3D12_DSV_DESCRIPTOR_CAPACITY)
       return ri_d3d12_reject("dynamic rendering descriptor arena exhausted");
     for (uint32_t i = 0; i < desc.colorCount; ++i) {
       if (!ri_d3d12_validOp(desc.colors[i].loadOp, desc.colors[i].storeOp))
@@ -5002,6 +5002,13 @@ void RICmd::vk_d3d12_beginRendering(struct RIDevice *device,
            !ri_d3d12_formatHasStencil((DXGI_FORMAT)a.view.d3d12.format)))
         return ri_d3d12_reject("invalid depth/stencil attachment view");
     }
+    // RTV/DSV descriptors are CPU-only: Clear*View and OMSetRenderTargets
+    // consume them while recording. Previous scopes no longer need these
+    // slots, even before GPU execution. Keep distinct slots within this scope.
+    // Shader-visible descriptors (including UAV-clear GPU handles) cannot use
+    // this lifetime rule.
+    d3d12.rtvCount = 0;
+    d3d12.dsvCount = 0;
     D3D12_CPU_DESCRIPTOR_HANDLE colors[RI_D3D12_MAX_COLOR_ATTACHMENTS] = {};
     for (uint32_t i = 0; i < desc.colorCount; ++i) {
       if (!ri_d3d12_makeRTV(*this, *device, desc.colors[i], colors[i]))

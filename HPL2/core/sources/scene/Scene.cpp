@@ -416,6 +416,11 @@ namespace hpl {
 
 	void cScene::DestroyWorld(cWorld* apWorld)
 	{
+		// A viewport left pointing at a destroyed world would feed it to
+		// PrepareFrame / Evaluate next frame (use-after-free). Detach first.
+		for(cViewport *pViewPort : mlstViewports)
+			if(pViewPort->GetWorld() == apWorld) pViewPort->SetWorld(NULL);
+
 		STLFindAndDelete(mlstWorlds,apWorld);
 	}
 

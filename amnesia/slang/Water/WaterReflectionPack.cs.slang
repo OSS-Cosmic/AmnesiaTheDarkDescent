@@ -83,13 +83,14 @@ void csMain(uint3 tid : SV_DispatchThreadID)
             gWaterReflectionRadianceHitDist.Load(int3(p, 0));
         float rawDist = radiance.w;
         float specularNormHitDist = 0.0f;
-        // A raw distance of zero means a miss or no data and must stay zero.
+        // A raw distance of zero means no data and must stay zero.
+        // Environment misses carry a distant positive value from the tracer.
         // Do not pass zero to GetNormHitDist: NRD reserves zero for no data,
         // while the helper deliberately replaces zero with epsilon.
         if (rawDist > 0.0f)
             specularNormHitDist = REBLUR_FrontEnd_GetNormHitDist(
                 rawDist, posViewZ.w,
-                kNrdHitDistanceParameters, 0.0f);
+                kNrdHitDistanceParameters, linearRoughness);
 
         gWaterNrdSpecularRadianceHitDist[p] =
             REBLUR_FrontEnd_PackRadianceAndNormHitDist(

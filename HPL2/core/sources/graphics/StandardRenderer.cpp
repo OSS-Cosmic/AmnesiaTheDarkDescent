@@ -618,12 +618,21 @@ static bool BuildStandardLights(
       const float radius = light->GetRadius();
       // A light carries both tunings and resolves the Standard one here; the
       // renderer mask, not the class, decides whether it contributes. Area
-      // lights have no Standard tuning at all.
+      // and directional lights have no Standard tuning at all.
       const bool enabled = light->GetLightType() != eLightType_Area &&
+                           light->GetLightType() != eLightType_Directional &&
                            light->GetVisibleVar() &&
                            light->IsLegacyRendererEnabled() &&
                            StandardFinite(radius) && radius > 0.0f;
+#ifdef AMFP
+      // AMFP: brightness scales rgb, and every point/spot light uses the
+      // pow falloff curve that replaced the ramp texture in AMFP.
+      const cColor diffuse = light->GetColor();
+      const float falloffExponent = std::max(light->GetFalloff(), 0.0f) * 0.8f;
+#else
       const cColor diffuse = light->GetDiffuseColor();
+      const float falloffExponent = 0.0f;
+#endif
       if (light->GetLightType() == eLightType_Point) {
         if (!enabled)
           continue;
@@ -637,14 +646,14 @@ static bool BuildStandardLights(
         data.color[1] = diffuse.g;
         data.color[2] = diffuse.b;
         data.specularScale = diffuse.a;
-        // Legacy ABI name: this field carries the complete authored lightWorld
-        // matrix. The deferred reference uploads all four rows, including its
-        // translation, for the homogeneous point-gobo lookup.
+        // Standard shades in world space. Retail's rotation(lightWorld *
+        // inverseView) therefore reduces to the authored light rotation.
         const ml::float4x4 lightWorld =
-            cMath::ToFloatTranspose4x4(light->GetWorldMatrix());
+            cMath::ToFloatTranspose4x4(light->GetWorldMatrix().GetRotation());
         std::memcpy(data.invViewRotation, lightWorld.a,
                     sizeof(data.invViewRotation));
         data.falloffTexture = StandardTextureSlot(light->GetFalloffImage());
+        data.falloffExponent = falloffExponent;
         data.goboTexture = StandardTextureSlot(light->GetGoboImage());
         // First of the six cube-face tiles rendered for this light this Draw.
         data.shadowIndex = kStandardInvalidShadow;
@@ -709,6 +718,7 @@ static bool BuildStandardLights(
             StandardTextureSlot(light->GetFalloffImage());
         data.coneFalloffTexture =
             StandardTextureSlot(spot->GetSpotFalloffImage());
+        data.falloffExponent = falloffExponent;
         data.goboTexture = StandardTextureSlot(light->GetGoboImage());
         data.shadowIndex = kStandardInvalidShadow;
         const float authoredBias = spot->GetShadowMapBiasMul();
@@ -2011,6 +2021,7 @@ void cStandardRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
     int renderedLights = 0;
     for (iLight *light : *apWorld->GetLightList()) {
       if (light && light->GetLightType() != eLightType_Area &&
+          light->GetLightType() != eLightType_Directional &&
           light->GetVisibleVar() && light->IsLegacyRendererEnabled() &&
           (!apFrustum || apFrustum->CollideBoundingVolume(
                              light->GetBoundingVolume()) != eCollision_Outside))
@@ -2040,6 +2051,7 @@ void cStandardRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
       const bool point = light->GetLightType() == eLightType_Point;
       const float radius = light->GetRadius();
       if (light->GetLightType() == eLightType_Area ||
+          light->GetLightType() == eLightType_Directional ||
           !light->GetVisibleVar() || !light->IsLegacyRendererEnabled() ||
           !light->GetCastShadows() || light->GetShadowCastersAffected() == 0 ||
           !StandardFinite(radius) || radius <= 0.0f)

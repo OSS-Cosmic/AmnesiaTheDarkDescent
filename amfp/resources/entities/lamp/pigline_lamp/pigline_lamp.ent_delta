@@ -1,0 +1,5 @@
+<EntDelta Version="1" Target="entities/lamp/pigline_lamp/pigline_lamp.ent">
+    <Modify Category="Entities" ID="2" Name="PointLight_1">
+        <SetAttr Brightness="1" Falloff="1" Re_FlickerOffIntensity="0" Re_Intensity="4" Re_SourceRadius="0.02" />
+    </Modify>
+</EntDelta>

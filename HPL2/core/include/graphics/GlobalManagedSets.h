@@ -128,6 +128,9 @@ struct ObjectSubmitDesc {
   float           illuminationAmount = 0.0f;
   uint32_t        decalList   = 0;
   uint32_t        renderFlags = 0;
+  // World-space bounding-volume center; boundsCenterSet gates UniformObject.boundsCenterW.w.
+  cVector3f       boundsCenter = cVector3f(0.0f);
+  bool            boundsCenterSet = false;
 
   // Explicit per-stream vertex/index buffer references, folded into the
   // UniformObject. When `set`, submitObject uses these verbatim instead of

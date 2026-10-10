@@ -1,0 +1,11 @@
+<EntDelta Version="1" Target="entities/lamp/cellar_gaslamp01/cellar_gaslamp01_long.ent">
+    <Modify Category="Entities" ID="14" Name="PointLight_1">
+        <SetAttr FalloffMap="" RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="15" Name="SpotLight_1">
+        <SetAttr FalloffMap="" />
+    </Modify>
+    <Add Category="Entities">
+        <SpotLight Name="SpotLight_2" WorldPos="0 -2.62293 0" Rotation="-1.5708 0 0" Scale="1 1 1" RendererMask="2" Tag="" Active="true" CastShadows="true" ShadowResolution="Low" ShadowsAffectStatic="true" ShadowsAffectDynamic="true" Radius="10" Brightness="1" Falloff="1" Re_Intensity="5" Re_Radius="15" Re_SourceRadius="0.03" FalloffMap="" Gobo="" GoboAnimMode="None" GoboAnimFrameTime="0" DiffuseColor="0.534 0.35 0.15 1" FlickerActive="false" FlickerOnMinLength="0" FlickerOnMaxLength="0" FlickerOnPS="" FlickerOnSound="" FlickerOffMinLength="0" FlickerOffMaxLength="0" FlickerOffPS="" FlickerOffSound="" FlickerOffColor="0 0 0 1" FlickerOffRadius="0" FlickerFade="false" FlickerOnFadeMinLength="0" FlickerOnFadeMaxLength="0" FlickerOffFadeMinLength="0" FlickerOffFadeMaxLength="0" FOV="2.2" Aspect="1" NearClipPlane="0.05" SpotFalloffMap="" />
+    </Add>
+</EntDelta>

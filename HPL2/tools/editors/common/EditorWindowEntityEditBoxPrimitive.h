@@ -78,6 +78,7 @@ protected:
 
     cEditorInputBool* mpInpAlignToWorld;	
 	cEditorInputBool* mpInpCastShadows;
+	cEditorInputBool* mpInpTwoSidedShadow;
 	cEditorInputBool* mpInpCollides;
 
 	tWStringVec mvLoadedFiles;

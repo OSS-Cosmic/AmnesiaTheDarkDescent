@@ -9,11 +9,10 @@
 // Rationale: only refractive translucents live in the TLAS (World.cpp
 // admits them as kRayMaskTranslucent and skips every other translucent), and
 // that TLAS slot is the only consumer of the per-translucent vertex BDAs in
-// gOpaque*Handles[]. Note the original reason for that membership — letting an
-// RT V-buffer ray-bend the primary ray through glass — is gone with that pass;
-// no ray path traces kRayMaskTranslucent today, since the shadow, reflection
-// and path-trace rays (Material.slang, PathTracePass.rt) all trace against
-// kRayMaskOpaque / kRayMaskShadow. The raster path here is low-traffic — it
+// gOpaque*Handles[]. The path tracer's scatter rays trace kRayMaskTranslucent
+// and continue through these surfaces with a specular transmission lobe
+// (PathTracer/Transmission.slang); shadow and reflection queries still trace
+// only kRayMaskOpaque / kRayMaskShadow. The raster path here is low-traffic — it
 // draws every translucent mesh once per frame and doesn't need the bindless slot
 // machinery just to fetch its own vertex data. Fixed-function vertex
 // fetch via vkCmdBindVertexBuffers + vkCmdBindIndexBuffer is simpler and

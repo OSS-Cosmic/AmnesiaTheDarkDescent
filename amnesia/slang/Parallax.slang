@@ -48,6 +48,13 @@ public float2 parallaxOcclusionUV(
 {
     if (heightTexIdx == kInvalidTextureIndex)
         return baseUv;
+    // Legacy GetNormalizedDepth yields 0 for a collapsed or inverted depth
+    // range, so a zero or negative HeightMapScale never parallaxes (Standard
+    // skips it the same way in standardParallaxUV). Running it reversed slides
+    // the shading point off the rasterized sample, which the velocity buffer
+    // never sees, and smears the denoised lighting. NaN also bails here.
+    if (!(heightMapScale > 0.0001f))
+        return baseUv;
 
     // Tangent-space eye vector, matching legacy gvTangentEyePos
     // (deferred_base_vtx.glsl): the lateral (xy) march follows the

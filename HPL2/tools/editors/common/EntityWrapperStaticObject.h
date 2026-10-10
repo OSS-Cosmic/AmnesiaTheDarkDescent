@@ -45,6 +45,10 @@ enum eStaticObjectBool
 {
 	eStaticObjectBool_Collides = StaticObjectPropIdStart,
 	eStaticObjectBool_CastShadows,
+#ifdef AMFP
+	eStaticObjectBool_IsOccluder,
+#endif
+	eStaticObjectBool_TwoSidedShadow,
 
 	eStaticObjectBool_LastEnum,
 };
@@ -78,6 +82,12 @@ public:
 
 		AddBool(eStaticObjectBool_Collides, "Collides");
 		AddBool(eStaticObjectBool_CastShadows, "CastShadows");
+		AddBool(eStaticObjectBool_TwoSidedShadow, "TwoSidedShadow", false);
+#ifdef AMFP
+		// AMFP occlusion-culling flag. Redux has no occluder path, so the
+		// editor only has to keep the authored value.
+		AddBool(eStaticObjectBool_IsOccluder, "IsOccluder");
+#endif
 
 		AddInt(eStaticObjectInt_FileIndex, "FileIndex", -1, ePropCopyStep_PreEnt);
 		AddString(eStaticObjectStr_Filename, "Filename", "", ePropCopyStep_PreEnt, false);
@@ -108,6 +118,14 @@ public:
 	void SetCastShadows(bool abX);
 	bool GetCastShadows() { return mbCastShadows; }
 
+	void SetTwoSidedShadow(bool abX);
+	bool GetTwoSidedShadow() { return mbTwoSidedShadow; }
+
+#ifdef AMFP
+	void SetIsOccluder(bool abX) { mbIsOccluder = abX; }
+	bool IsOccluder() { return mbIsOccluder; }
+#endif
+
 	void SetFileIndex(int alIdx) { mlFileIndex = alIdx; }
 	int GetFileIndex() { return mlFileIndex; }
 
@@ -126,6 +144,10 @@ protected:
 
 	bool mbCollides;
 	bool mbCastShadows;
+	bool mbTwoSidedShadow = false;
+#ifdef AMFP
+	bool mbIsOccluder = true;
+#endif
 
 	int mlFileIndex;
 };

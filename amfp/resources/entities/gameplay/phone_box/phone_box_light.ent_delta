@@ -1,0 +1,5 @@
+<EntDelta Version="1" Target="entities/gameplay/phone_box/phone_box_light.ent">
+    <Modify Category="Entities" ID="3" Name="PointLight_1">
+        <SetAttr Brightness="1" Falloff="1" />
+    </Modify>
+</EntDelta>

@@ -55,7 +55,8 @@ namespace hpl {
 	// buzer: set it to some arbitrary large number so it won't interfere with other source mods
 	// Rebuild caches containing unnormalized, scaled normals/tangents whose
 	// signed-byte encoding could overflow (notably the Transept floor emblem).
-	#define MAP_CACHE_FORMAT_VERSION			219676931
+	// 219676932: per static mesh TwoSidedShadow bool after CastShadows.
+	#define MAP_CACHE_FORMAT_VERSION			219676932
 	
 	//----------------------------------------
 	

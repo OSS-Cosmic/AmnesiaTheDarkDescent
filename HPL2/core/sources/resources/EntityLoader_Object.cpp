@@ -988,6 +988,7 @@ namespace hpl {
 
 		apBody->SetBlocksSound(GetAttributeBool(apElem, "BlocksSound",false));
 		apBody->SetCollideCharacter(GetAttributeBool(apElem, "CollideCharacter",true));
+		apBody->SetBlocksPathfinding(GetAttributeBool(apElem, "BlocksPathfinding",false));
 		apBody->SetCollide(GetAttributeBool(apElem, "CollideNonCharacter",true));
 
 		apBody->SetGravity(GetAttributeBool(apElem, "HasGravity",true));

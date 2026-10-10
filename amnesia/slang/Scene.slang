@@ -25,6 +25,7 @@
 
 #include "HostDefinitions.h"
 #include "Constants.h"          // kLightGrid* / kLightsPerCellMax (lightLevelAt)
+#include "LightChange.h"        // gLightGridCount packing (getCellLights); public to importers
 
 import SceneTypes;
 import bindless;
@@ -56,6 +57,7 @@ public struct Ray
 public static const uint kLightTypePoint = 0u;
 public static const uint kLightTypeSpot  = 1u;
 public static const uint kLightTypeArea  = 2u;
+public static const uint kLightTypeDirectional = 3u; // last free 2-bit type
 static const uint kLightSlotBits   = 30u;
 static const uint kLightSlotMask   = (1u << kLightSlotBits) - 1u;
 
@@ -75,7 +77,8 @@ public ILight getLight(uint ID)
     {
         case kLightTypePoint: return gPointLights[slot];
         case kLightTypeSpot:  return gSpotLights[slot];
-        default:              return gAreaLights[slot];
+        case kLightTypeArea:  return gAreaLights[slot];
+        default:              return gDirectionalLights[slot];
     }
 }
 
@@ -128,6 +131,7 @@ public struct CellLights
 {
     public uint flat;   // flattened cell index into gLightGridCount / gLightGridList
     public uint count;  // lights in the cell, clamped to kLightsPerCellMax
+    public float change; // fraction of the cell's lighting that changed since last frame (LightChange.h)
     public bool valid;  // false ⇒ no lights / out-of-grid; count is then 0
 };
 
@@ -158,10 +162,13 @@ public CellLights getCellLights(float3 posW)
     {
         c.flat  = 0u;
         c.count = 0u;
+        c.change = 0.0f;
         return c;
     }
     c.flat  = gridFlattenCellIndex(cell, kLightGridDim);
-    c.count = min(gLightGridCount[c.flat], kLightsPerCellMax);
+    uint packed = gLightGridCount[c.flat];
+    c.count  = min(lightGridUnpackCount(packed), kLightsPerCellMax);
+    c.change = lightGridUnpackChange(packed);
     return c;
 }
 
@@ -169,6 +176,44 @@ public CellLights getCellLights(float3 posW)
 public uint cellLightAt(CellLights c, uint k)
 {
     return gLightGridList[c.flat * kLightsPerCellMax + k];
+}
+
+// --- Directional lights ----------------------------------------------------
+// Directional lights reach everywhere, so they are not in the light grid; every
+// grid walker that samples lights adds these after the cell's list. The count
+// is a slot capacity like the others, so empty slots (radius 0) are skipped.
+public uint getDirectionalLightCount()
+{
+    return gPerFrame.directionalLightCount;
+}
+
+public uint directionalLightId(uint slot)
+{
+    return packLightId(kLightTypeDirectional, slot);
+}
+
+public bool directionalLightLit(uint slot)
+{
+    return gDirectionalLights[slot].radius > 0.0f;
+}
+
+// Fraction of the directional lighting that changed since last frame, the
+// global counterpart of CellLights.change (LightChange.h). A sun that fades or
+// switches changes every pixel at once, which the per-cell grid never sees.
+public float directionalLightChange()
+{
+    float sumDelta = 0.0f, sumCur = 0.0f, sumPrev = 0.0f;
+    for (uint i = 0u; i < gPerFrame.directionalLightCount; ++i)
+    {
+        DirectionalLight dl = gDirectionalLights[i];
+        float maxC = max(dl.color.x, max(dl.color.y, dl.color.z));
+        float cur  = lightChangePower(maxC, dl.intensity, dl.radius);
+        float prev = dl.prevPower; // already 0 for a light that was skipped
+        sumDelta += abs(cur - prev);
+        sumCur   += cur;
+        sumPrev  += prev;
+    }
+    return lightChangeFraction(sumDelta, sumCur, sumPrev);
 }
 
 // The per-light diffuse shade helpers — shadeAnalyticLight (hard),
@@ -184,8 +229,9 @@ public uint cellLightAt(CellLights c, uint k)
 // maxChannel(authored color) · saturate(1 − d/authoredRadius) over the
 // lights binned to the grid cell at posW, saturated at 1. Normal-free and
 // shadow-free: billboards have no normal and the legacy heuristic never
-// had occlusion (or a spot-cone term — spots fall off radially like
-// points, matching the original).
+// had occlusion. Spots are gated by their cone (cosOuterAngle), matching the
+// player's CPU sensor, which only counts a spot whose frustum holds the
+// point; inside the cone they fall off radially like points.
 //   * `intensity` IS the authored engine radius (uploaded verbatim for
 //     both light types — Falcor LightData semantics, no scale knobs), so
 //     it is used directly. The struct's `radius` field is the grid-bin
@@ -196,13 +242,24 @@ public uint cellLightAt(CellLights c, uint k)
 //     curve.
 //   * Out-of-grid points return 1.0 (don't darken) — distant geometry
 //     beyond the camera-centered grid shouldn't fade to black.
+//   * A directional light counts at its brightest channel everywhere (no
+//     distance term); like the rest, it ignores occlusion.
 public float lightLevelAt(float3 posW)
 {
+    float sum = 0.0f;
+    for (uint i = 0u; i < getDirectionalLightCount(); ++i)
+    {
+        DirectionalLight dl = gDirectionalLights[i];
+        if (dl.radius <= 0.0f || dl.intensity <= 0.0f) continue;
+        sum += linearToSRGB(max(dl.color.x, max(dl.color.y, dl.color.z)));
+    }
+    if (sum >= 1.0f) return 1.0f;
+
     // No lights is darkness, not the out-of-grid full-bright fallback.
     // getCellLights also marks an empty light set invalid, so distinguish it
     // before applying the distant-geometry policy below.
     if (getLightCount() == 0u)
-        return 0.0f;
+        return sum;
 
     // Out-of-grid points return 1.0 (don't darken) — note this differs from
     // the shaded walkers, which treat an invalid cell as no contribution.
@@ -210,7 +267,6 @@ public float lightLevelAt(float3 posW)
     if (!cl.valid)
         return 1.0f;
 
-    float sum = 0.0f;
     for (uint k = 0u; k < cl.count; ++k)
     {
         uint li   = cellLightAt(cl, k);   // packed type|slot
@@ -229,8 +285,18 @@ public float lightLevelAt(float3 posW)
             lpos       = gSpotLights[slot].position;
             lcolor     = gSpotLights[slot].color;
             lintensity = gSpotLights[slot].intensity;
+            {
+                // Player sensor (cLuxMapHelper::GetLightLevelAtPos) only counts a
+                // spot when the point is inside its frustum; a radial-only falloff
+                // lights a full circle around every spot.
+                float3 toPoint = posW - lpos;
+                float  d       = length(toPoint);
+                if (d > 1e-4f &&
+                    dot(toPoint / d, gSpotLights[slot].direction) < gSpotLights[slot].cosOuterAngle)
+                    continue;
+            }
             break;
-        default:
+        default: // the grid only holds point / spot / area lights
             lpos       = gAreaLights[slot].position;
             lcolor     = gAreaLights[slot].color;
             lintensity = gAreaLights[slot].intensity;
@@ -292,7 +358,9 @@ public VertexData getVertexDataAndTri(TriangleHit hit, out BindlessTriangleVtx v
     v.posW     = mul(modelMat, float4(posL, 1.0f)).xyz;
     v.normalW  = normalize(mul(nrmMat, normalL));
     v.tangentW = normalize(mul(nrmMat, tanL));
-    v.texC     = uv;
+    // Material UV animation (scroll/rotate), the same transform the raster
+    // passes apply in their vertex shaders (VBufferRaster.3d.slang).
+    v.texC     = mul(obj.uvMat, float4(uv, 0.0f, 1.0f)).xy;
     return v;
 }
 

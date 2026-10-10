@@ -1,0 +1,11 @@
+<EntDelta Version="1" Target="entities/lamp/gas_lamp_wall/gas_lamp_wall_mansion.ent">
+    <Modify Category="Entities" ID="2" Name="PointLight_1">
+        <SetAttr FalloffMap="" RendererMask="1" />
+    </Modify>
+    <Modify Category="Entities" ID="5" Name="SpotLight_1">
+        <SetAttr FalloffMap="" RendererMask="1" />
+    </Modify>
+    <Add Category="Entities">
+        <PointLight Name="PointLight_2" WorldPos="-0.183214 0.39631 -0.00798035" Rotation="-3.14159 2.9126e-06 -3.14159" Scale="1 1 1" RendererMask="2" Tag="" Active="true" CastShadows="false" ShadowResolution="High" ShadowsAffectStatic="true" ShadowsAffectDynamic="true" Radius="1" Brightness="1" Falloff="1" Re_Intensity="1" Re_SourceRadius="0.02" FalloffMap="" Gobo="" GoboAnimMode="None" GoboAnimFrameTime="0" DiffuseColor="0.533333 0.34902 0.14902 0.901961" FlickerActive="false" FlickerOnMinLength="0" FlickerOnMaxLength="0" FlickerOnPS="" FlickerOnSound="" FlickerOffMinLength="0" FlickerOffMaxLength="0" FlickerOffPS="" FlickerOffSound="" FlickerOffColor="0 0 0 1" FlickerOffRadius="0" Re_FlickerOffIntensity="0" FlickerFade="false" FlickerOnFadeMinLength="0" FlickerOnFadeMaxLength="0" FlickerOffFadeMinLength="0" FlickerOffFadeMaxLength="0" />
+    </Add>
+</EntDelta>

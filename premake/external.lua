@@ -12,10 +12,6 @@
 -- no SDL2/OpenAL DLLs need to be deployed next to the executable.
 
 EXT_ROOT = ROOT .. "/build-premake/external"
-local RUNTIME_LIBS = ROOT .. "/build-premake/amnesia/%{cfg.buildcfg}/libs"
--- Kept for any future Windows shared-library externals; SDL2/openal-soft are
--- static on Windows and therefore do not use this path.
-local RUNTIME_EXE  = ROOT .. "/build-premake/amnesia/%{cfg.buildcfg}"
 local function winpath(p) return (p:gsub("/", "\\")) end
 local SDL2_PROJECT = "SDL2"
 local OPENAL_PROJECT = "OpenALSoft"
@@ -24,6 +20,153 @@ local NRD_PROJECT = "NRD"
 -- Otherwise links { "NRD" } is resolved as a project dependency and gmake2
 -- omits -lNRD from final executable link lines.
 local NRD_BUILD_PROJECT = "NRDExternal"
+
+-- Runtime deployment is normally owned by Amnesia. Product projects can opt
+-- into another output tree by calling external_use_product() before declaring
+-- their project. Keep the context here, rather than in helpers.lua, because
+-- all of the files that are copied by these projects are external artifacts.
+-- The default deliberately mirrors runtime_dir("") and the old absolute paths.
+local DEFAULT_RUNTIME = runtime_dir("")
+local DEFAULT_CONTEXT = {
+    product = "amnesia",
+    key = "amnesia",
+    runtime = DEFAULT_RUNTIME,
+    libs = runtime_dir("libs"),
+    licenses = runtime_dir("licenses"),
+    staging = {},
+}
+-- Legacy aliases are intentionally kept for the module-export test's stable
+-- absolute path and for the default test RPATH.
+local RUNTIME_LIBS = DEFAULT_CONTEXT.libs
+local RUNTIME_EXE = DEFAULT_CONTEXT.runtime
+local ACTIVE_CONTEXT = DEFAULT_CONTEXT
+local CONTEXTS = { amnesia = DEFAULT_CONTEXT }
+local CONTEXT_KEYS = { amnesia = "amnesia" }
+
+local function context_key(product)
+    local key = product:lower():gsub("[^%w]", "_")
+    if key == "" then key = "product" end
+    return key
+end
+
+-- Make a deployment context for a product. runtime_root, when supplied, is a
+-- per-configuration directory and may contain Premake tokens. Without it the
+-- result is build-premake/<product>/<Config>, just like the default Amnesia
+-- output is build-premake/amnesia/<Config>.
+function external_runtime_context(product, runtime_root)
+    if type(product) == "table" then
+        local supplied = product
+        product = supplied.product or supplied.name
+        runtime_root = supplied.runtime or supplied.runtime_root
+    end
+    if type(product) ~= "string" or product == "" then
+        error("external_runtime_context: product must be a non-empty name")
+    end
+    if not product:match("^[%w_%-]+$") then
+        error("external_runtime_context: product must contain only letters, numbers, '_' or '-': " .. product)
+    end
+
+    local key = context_key(product)
+    local existing_key_product = CONTEXT_KEYS[key]
+    if existing_key_product and existing_key_product ~= product then
+        error("external_runtime_context: product names collide after staging-name normalization: "
+            .. existing_key_product .. " and " .. product)
+    end
+
+    local runtime = runtime_root or (BUILD_OUT .. "/" .. product .. "/%{cfg.buildcfg}")
+    local existing = CONTEXTS[product]
+    if existing then
+        if existing.runtime ~= runtime then
+            error("external_runtime_context: product already has a different runtime root: " .. product)
+        end
+        return existing
+    end
+
+    for other_product, other in pairs(CONTEXTS) do
+        if other.runtime == runtime then
+            error("external_runtime_context: " .. product .. " and " .. other_product
+                .. " would stage into the same runtime tree: " .. runtime)
+        end
+    end
+
+    local context = {
+        product = product,
+        key = key,
+        runtime = runtime,
+        libs = runtime .. "/libs",
+        licenses = runtime .. "/licenses",
+        staging = {},
+    }
+    CONTEXTS[product] = context
+    CONTEXT_KEYS[key] = product
+    return context
+end
+
+-- Product projects should call this before project(). It declares the
+-- product-specific Makefile wrappers, then makes the context implicit for the
+-- existing link_* helpers. The explicit form is also accepted by link_nrd,
+-- link_fsr, link_xess, link_sdl2 and link_openal for callers that prefer it.
+function external_use_product(product_or_context)
+    local context = product_or_context
+    if type(context) ~= "table" then
+        context = external_runtime_context(context or "amnesia")
+    end
+    if not context.product or not context.runtime then
+        error("external_use_product: expected external_runtime_context() result")
+    end
+    if context ~= DEFAULT_CONTEXT then
+        if not external_declare_product_staging then
+            error("external_use_product: staging declarations are not ready")
+        end
+        external_declare_product_staging(context)
+    end
+    ACTIVE_CONTEXT = context
+    return context
+end
+
+local function external_context(value)
+    if value == nil then return ACTIVE_CONTEXT end
+    if type(value) == "table" then return value end
+    return external_runtime_context(value)
+end
+
+local function stage_project_name(context, dependency)
+    return "ExternalStage_" .. context.key .. "_" .. dependency
+end
+
+local function stage_mutex_name(context, dependency)
+    return "Redux-" .. context.key .. "-ExternalStage-" .. dependency .. "-%{cfg.buildcfg}"
+end
+
+local windows_serialized_commands
+
+local function declare_stage_project(context, dependency, depends, posix_commands, windows_commands)
+    local name = stage_project_name(context, dependency)
+    if context.staging[dependency] then return context.staging[dependency] end
+
+    project(name)
+        kind "Makefile"
+        location (ROOT .. "/build-premake/projects")
+        dependson(depends)
+        if posix_commands then
+            filter "system:not windows"
+                buildcommands(posix_commands)
+                rebuildcommands(posix_commands)
+        end
+        if windows_commands then
+            filter "system:windows"
+                buildcommands {
+                    windows_serialized_commands(windows_commands, stage_mutex_name(context, dependency)),
+                }
+                rebuildcommands {
+                    windows_serialized_commands(windows_commands, stage_mutex_name(context, dependency)),
+                }
+        end
+        filter {}
+
+    context.staging[dependency] = name
+    return name
+end
 
 -- unix_args / win_args: platform-specific CMake configure arguments.
 -- copy_glob: optional posix shared-lib glob copied next to the game (Linux, into libs/).
@@ -35,22 +178,31 @@ local NRD_BUILD_PROJECT = "NRDExternal"
 -- allowing unrelated configurations (and unrelated externals) to build in
 -- parallel. The commands are passed through cmd.exe so their existing quoting
 -- and generator-specific arguments remain unchanged.
-local function windows_serialized_commands(commands, mutex_name)
+windows_serialized_commands = function(commands, mutex_name)
     local body = {}
     for _, command in ipairs(commands) do
         table.insert(body, string.format("& cmd.exe /D /C '%s'; if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }", command))
     end
     -- The generated command is itself parsed by cmd.exe. Escape the quotes
     -- belonging to the nested CMake commands so quoted executable/path names
-    -- survive both cmd.exe and powershell.exe argument parsing.
+    -- survive both cmd.exe and powershell.exe argument parsing. Backslashes
+    -- directly before a quote (e.g. a "dir\" copy destination) must be doubled
+    -- too: powershell.exe reads \\" as one backslash plus a bare quote, so the
+    -- destination would lose its closing quote.
     local script = string.format(
         "& {$mutex = [System.Threading.Mutex]::new($false, 'Local\\%s'); $acquired = $false; try {try {$mutex.WaitOne(); $acquired = $true} catch [System.Threading.AbandonedMutexException] {$acquired = $true}; %s} finally {if ($acquired) {$mutex.ReleaseMutex()}; $mutex.Dispose()}}",
         mutex_name, table.concat(body, " "))
-    script = script:gsub('"', '\\"')
+    script = script:gsub('(\\*)"', function(slashes) return slashes .. slashes .. '\\"' end)
     return "powershell -NoProfile -ExecutionPolicy Bypass -Command \"" .. script .. "\""
 end
 
-local function cmake_makefile(name, srcdir, unix_args, win_args, copy_glob, win_glob, copy_dir, serialize_name)
+local function cmake_makefile(name, srcdir, unix_args, win_args, copy_glob, win_glob, copy_dir, serialize_name,
+                              runtime_context)
+    local context = runtime_context or DEFAULT_CONTEXT
+    local build_mutex = serialize_name
+    if runtime_context and runtime_context ~= DEFAULT_CONTEXT then
+        build_mutex = "Redux-" .. context.key .. "-" .. name .. "-%{cfg.buildcfg}"
+    end
     local bdir = EXT_ROOT .. "/" .. name .. "/%{cfg.buildcfg}"
     local unix_configure = string.format('"%s" -Wno-deprecated -S "%s" -B "%s" -DCMAKE_BUILD_TYPE=%%{cfg.buildcfg} %s',
         CMAKE, srcdir, bdir, unix_args)
@@ -74,9 +226,9 @@ local function cmake_makefile(name, srcdir, unix_args, win_args, copy_glob, win_
             -- multi-config libdirs below regardless of whether ninja is on PATH.
             -- Without this, CMake picks Ninja when available and writes .lib into
             -- <bdir>/ instead of <bdir>/<config>/, breaking the link stage.
-            if serialize_name then
+            if build_mutex then
                 buildcommands {
-                    windows_serialized_commands({ windows_configure, build }, serialize_name),
+                    windows_serialized_commands({ windows_configure, build }, build_mutex),
                 }
             else
                 buildcommands { windows_configure, build }
@@ -86,7 +238,7 @@ local function cmake_makefile(name, srcdir, unix_args, win_args, copy_glob, win_
             rebuildcommands { build }
         filter "system:windows"
             rebuildcommands {
-                serialize_name and windows_serialized_commands({ build }, serialize_name) or build,
+                build_mutex and windows_serialized_commands({ build }, build_mutex) or build,
             }
         filter {}
         cleancommands {
@@ -95,19 +247,19 @@ local function cmake_makefile(name, srcdir, unix_args, win_args, copy_glob, win_
         if copy_glob then
             filter "system:not windows"
                 buildcommands {
-                    string.format('mkdir -p "%s"', RUNTIME_LIBS),
-                    string.format('cp -P %s "%s"/ 2>/dev/null || true', bdir .. "/" .. copy_glob, RUNTIME_LIBS),
+                    string.format('mkdir -p "%s"', context.libs),
+                    string.format('cp -P %s "%s"/ 2>/dev/null || true', bdir .. "/" .. copy_glob, context.libs),
                 }
         end
         if win_glob then
             filter "system:windows"
                 buildcommands {
-                    string.format('if not exist "%s" mkdir "%s"', winpath(RUNTIME_EXE), winpath(RUNTIME_EXE)),
-                    string.format('copy /Y "%s" "%s\\"', winpath(bdir .. "/%{cfg.buildcfg}/" .. win_glob), winpath(RUNTIME_EXE)),
+                    string.format('if not exist "%s" mkdir "%s"', winpath(context.runtime), winpath(context.runtime)),
+                    string.format('copy /Y "%s" "%s\\"', winpath(bdir .. "/%{cfg.buildcfg}/" .. win_glob), winpath(context.runtime)),
                 }
         end
         if copy_dir then
-            local runtime_copy_dir = runtime_dir(copy_dir)
+            local runtime_copy_dir = context.runtime .. "/" .. copy_dir
             filter "system:not windows"
                 buildcommands {
                     string.format('mkdir -p "%s"', runtime_copy_dir),
@@ -139,8 +291,29 @@ cmake_makefile(SDL2_PROJECT,
         .. "-DCMAKE_C_FLAGS=\"/FS\" -DCMAKE_CXX_FLAGS=\"/FS\"",
     "libSDL2*.so*", nil, nil, "Redux-Amnesia-SDL2-%{cfg.buildcfg}")
 
-function link_sdl2()
+-- SDL2 and openal-soft are static on Windows, so their product-specific
+-- wrappers only need to exist on POSIX. The CMake build itself remains
+-- shared by all products; only the copy into each product's libs/ directory
+-- is split.
+local function declare_sdl_openal_staging(context)
+    if context == DEFAULT_CONTEXT or os.target() == "windows" then return end
+
+    declare_stage_project(context, "SDL2", { SDL2_PROJECT }, {
+        string.format('mkdir -p "%s"', context.libs),
+        string.format('cp -P %s "%s"/ 2>/dev/null || true',
+            EXT_ROOT .. "/" .. SDL2_PROJECT .. "/%{cfg.buildcfg}/libSDL2*.so*", context.libs),
+    })
+    declare_stage_project(context, "OpenAL", { OPENAL_PROJECT }, {
+        string.format('mkdir -p "%s"', context.libs),
+        string.format('cp -P %s "%s"/ 2>/dev/null || true',
+            EXT_ROOT .. "/" .. OPENAL_PROJECT .. "/%{cfg.buildcfg}/libopenal.so*", context.libs),
+    })
+end
+
+function link_sdl2(runtime_context)
+    local context = external_context(runtime_context)
     dependson { SDL2_PROJECT }
+    if context.staging.SDL2 then dependson { context.staging.SDL2 } end
     -- ORDER MATTERS: the generated SDL_config.h (which #defines the X11/Wayland
     -- video drivers) must be found before the submodule's committed
     -- include/SDL_config.h, whose Linux fallback is SDL_config_minimal.h (no
@@ -184,9 +357,10 @@ end
 -- Test executables live in build-premake/tests/<cfg>, not next to libs/, so
 -- $ORIGIN/libs cannot find the staged SDL2/OpenAL shared libs. Point the
 -- runtime search path at the staged copy by absolute path instead.
-function link_test_runtime_rpath()
+function link_test_runtime_rpath(runtime_context)
+    local context = external_context(runtime_context)
     filter "system:linux"
-        linkoptions { "-Wl,-rpath,'" .. RUNTIME_LIBS .. "'" }
+        linkoptions { "-Wl,-rpath,'" .. context.libs .. "'" }
     filter {}
 end
 
@@ -207,8 +381,10 @@ cmake_makefile(OPENAL_PROJECT,
         .. "-DCMAKE_C_FLAGS=\"/FS\" -DCMAKE_CXX_FLAGS=\"/FS /EHsc /wd4267 /wd4875\"",
     "libopenal.so*", nil, nil, "Redux-Amnesia-OpenAL-%{cfg.buildcfg}")
 
-function link_openal()
+function link_openal(runtime_context)
+    local context = external_context(runtime_context)
     dependson { OPENAL_PROJECT }
+    if context.staging.OpenAL then dependson { context.staging.OpenAL } end
     includedirs {
         DEPS_EXTERN .. "/openal-soft/include",
         DEPS_EXTERN .. "/openal-soft/include/AL",
@@ -338,14 +514,38 @@ do
         filter {}
 end
 
-function link_nrd(target_layout)
+DEFAULT_CONTEXT.staging.NRD = NRD_RUNTIME_PROJECT
+
+local function declare_nrd_staging(context)
+    if context == DEFAULT_CONTEXT then return end
+
+    local license_dir = context.licenses .. "/nrd"
+    local license_src = DEPS_EXTERN .. "/NRD/LICENSE.txt"
+    local windows_commands = {
+        string.format('if not exist "%s" mkdir "%s"', winpath(context.runtime), winpath(context.runtime)),
+        string.format('copy /Y "%s" "%s\\"',
+            winpath(NRD_BUILD .. "/_Bin/%{cfg.buildcfg}/NRD.dll"), winpath(context.runtime)),
+        string.format('if not exist "%s" mkdir "%s"', winpath(license_dir), winpath(license_dir)),
+        string.format('copy /Y "%s" "%s\\"', winpath(license_src), winpath(license_dir)),
+    }
+    local posix_commands = {
+        string.format('mkdir -p "%s"', context.libs),
+        string.format('cp -P %s "%s"/', NRD_BUILD .. "/_Bin/libNRD.so*", context.libs),
+        string.format('mkdir -p "%s"', license_dir),
+        string.format('cp -f "%s" "%s"/', license_src, license_dir),
+    }
+    declare_stage_project(context, "NRD", { NRD_BUILD_PROJECT }, posix_commands, windows_commands)
+end
+
+function link_nrd(target_layout, runtime_context)
+    local context = external_context(runtime_context)
     nrd_use()
     -- Test executables never construct a denoiser, and nothing links NRD, so
     -- they need no staged runtime. Same reasoning as link_xess below.
     if target_layout == "tests" then
         return
     end
-    dependson { NRD_RUNTIME_PROJECT }
+    dependson { context.staging.NRD or NRD_RUNTIME_PROJECT }
 end
 
 -- ---- FidelityFX Super Resolution ------------------------------------------
@@ -536,6 +736,41 @@ if FSR_ENABLED then
     end
 end
 
+if FSR_ENABLED then
+    DEFAULT_CONTEXT.staging.FSR = FSR_RUNTIME_PROJECT
+end
+
+local function declare_fsr_staging(context)
+    if context == DEFAULT_CONTEXT or not FSR_ENABLED then return end
+
+    local modules = { "ffx_fsr3upscaler_api_vk" }
+    if FSR_HLSL_ENABLED then
+        table.insert(modules, "ffx_fsr3upscaler_api_dx12")
+    end
+    local windows_commands = {
+        string.format('if not exist "%s" mkdir "%s"', winpath(context.runtime), winpath(context.runtime)),
+    }
+    local posix_commands = {
+        string.format('mkdir -p "%s"', context.libs),
+    }
+    for _, name in ipairs(modules) do
+        table.insert(windows_commands, string.format('copy /Y "%s" "%s\\"',
+            winpath(FSR_BIN .. "/" .. name .. ".dll"), winpath(context.runtime)))
+        table.insert(posix_commands, string.format('cp -f "%s" "%s"/',
+            FSR_BIN .. "/lib" .. name .. ".so", context.libs))
+    end
+
+    local license_dir = context.runtime .. "/licenses"
+    table.insert(windows_commands, string.format('if not exist "%s" mkdir "%s"',
+        winpath(license_dir), winpath(license_dir)))
+    table.insert(windows_commands, string.format('xcopy /E /I /Y /R "%s\\*" "%s\\" >nul',
+        winpath(FSR_BUILD .. "/licenses"), winpath(license_dir)))
+    table.insert(posix_commands, string.format('mkdir -p "%s"', license_dir))
+    table.insert(posix_commands, string.format('cp -Rf "%s"/. "%s"/', FSR_BUILD .. "/licenses", license_dir))
+
+    declare_stage_project(context, "FSR", { FSR_BUILD_PROJECT }, posix_commands, windows_commands)
+end
+
 -- Headers and availability defines only. HPL2 is a static library and needs no
 -- staged runtime, so it takes this; final executables take link_fsr(), which
 -- adds the staging order on top.
@@ -570,7 +805,8 @@ function fsr_use()
     }
 end
 
-function link_fsr(target_layout)
+function link_fsr(target_layout, runtime_context)
+    local context = external_context(runtime_context)
     fsr_use()
     if not FSR_ENABLED then
         return
@@ -587,7 +823,7 @@ function link_fsr(target_layout)
     if target_layout == "tests" then
         return
     end
-    dependson { FSR_RUNTIME_PROJECT }
+    dependson { context.staging.FSR or FSR_RUNTIME_PROJECT }
 end
 
 -- The FSR regression tests link the static Vulkan archive directly: they reach
@@ -630,12 +866,13 @@ end
 -- deploys them to. Pointing it at the deployed copy rather than the CMake
 -- binary dir is deliberate -- it makes one test cover the export macro, the
 -- module build and the staging step together.
-function fsr_module_test_use()
+function fsr_module_test_use(runtime_context)
     if not FSR_ENABLED then
         return false
     end
 
-    dependson { FSR_BUILD_PROJECT, FSR_RUNTIME_PROJECT }
+    local context = external_context(runtime_context)
+    dependson { FSR_BUILD_PROJECT, context.staging.FSR or FSR_RUNTIME_PROJECT }
     includedirs { FSR_BUILD .. "/fsr_sdk_staged/ffx-api/include" }
     -- Windows stages next to the executable, where the default search order
     -- looks first; elsewhere they go to libs/, which $ORIGIN/libs covers.
@@ -644,7 +881,7 @@ function fsr_module_test_use()
     -- rooted at ROOT while runtime_dir() is rooted at %{wks.location} and
     -- expands to a path relative to the solution. The test would then only
     -- resolve its modules when launched from that one directory.
-    local module_dir = (os.target() == "windows") and RUNTIME_EXE or RUNTIME_LIBS
+    local module_dir = (os.target() == "windows") and context.runtime or context.libs
     defines {
         'HPL2_FSR_MODULE_DIR="' .. module_dir .. '"',
         FSR_HLSL_ENABLED and "HPL2_FSR_D3D12_MODULE_AVAILABLE=1"
@@ -758,8 +995,34 @@ end
 -- Attaching these copies to every final executable makes a parallel solution
 -- build overwrite libxess.dll from several post-build events at once, which can
 -- intermittently fail with "Access is denied".
-function xess_declare_staging_projects()
+function xess_declare_staging_projects(runtime_context)
     if not XESS_ENABLED then return end
+
+    local context = external_context(runtime_context)
+    if context ~= DEFAULT_CONTEXT then
+        local license_dir = context.licenses .. "/xess"
+        local commands = {
+            string.format('if not exist "%s" mkdir "%s"', winpath(context.runtime), winpath(context.runtime)),
+            string.format('if exist "%s" (copy /Y "%s" "%s\\" >nul) else (echo XeSS: missing runtime DLL "%s")',
+                winpath(XESS_SDK_ROOT .. "/bin/libxess.dll"),
+                winpath(XESS_SDK_ROOT .. "/bin/libxess.dll"), winpath(context.runtime),
+                winpath(XESS_SDK_ROOT .. "/bin/libxess.dll")),
+            string.format('if not exist "%s" mkdir "%s"', winpath(license_dir), winpath(license_dir)),
+        }
+        for _, item in ipairs({
+            { filename = "LICENSE.txt", description = "license file" },
+            { filename = "third-party-programs.txt", description = "third-party notices" },
+        }) do
+            local source = winpath(XESS_SDK_ROOT .. "/" .. item.filename)
+            local destination = winpath(license_dir .. "/" .. item.filename)
+            table.insert(commands, string.format('if exist "%s" attrib -R "%s" >nul 2>&1',
+                destination, destination))
+            table.insert(commands, string.format('if exist "%s" (copy /Y "%s" "%s\\" >nul) else (echo XeSS: missing %s "%s")',
+                source, source, winpath(license_dir), item.description, source))
+        end
+        declare_stage_project(context, "XeSS", {}, nil, commands)
+        return
+    end
 
     local runtime = runtime_dir("")
     local license_dir = runtime_dir("licenses/xess")
@@ -792,7 +1055,12 @@ function xess_declare_staging_projects()
         filter {}
 end
 
-function link_xess(target_layout)
+if XESS_ENABLED then
+    DEFAULT_CONTEXT.staging.XeSS = "XeSSRuntimeGame"
+end
+
+function link_xess(target_layout, runtime_context)
+    local context = external_context(runtime_context)
     xess_use()
     if not XESS_ENABLED then
         return
@@ -802,5 +1070,22 @@ function link_xess(target_layout)
     if target_layout == "tests" then
         return
     end
-    dependson { "XeSSRuntimeGame" }
+    dependson { context.staging.XeSS or "XeSSRuntimeGame" }
+end
+
+-- Declare every wrapper for a non-default product in one place. Keeping this
+-- as an explicit pre-project step is important: calling project() while a
+-- product's link_* helper is configuring a real target would apply the rest
+-- of that target's settings to the staging wrapper instead.
+function external_declare_product_staging(context)
+    context = external_context(context)
+    if context == DEFAULT_CONTEXT then return context end
+    if context.staging.declared then return context end
+
+    declare_sdl_openal_staging(context)
+    declare_nrd_staging(context)
+    declare_fsr_staging(context)
+    xess_declare_staging_projects(context)
+    context.staging.declared = true
+    return context
 end

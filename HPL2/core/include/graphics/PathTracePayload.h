@@ -23,11 +23,12 @@ namespace hpl {
 //
 //   float3 radiance, thp, origin, direction   12 floats
 //   float  firstRayLength, coneWidth, coneSpreadAngle
-//   uint   currStep, status, rngHi, rngLo
+//   uint   currStep, transmitCount, status, rngHi, rngLo
 //
-// 19 4-byte scalars. Keep in step with that struct; a field added there and
-// not here is a silent corruption, not a build break.
-constexpr uint32_t kScatterPayloadSize = 19u * 4u;
+// 20 4-byte scalars. Keep in step with that struct; a field added there and
+// not here is not a build break -- DXR rejects the state object at runtime
+// (CreateStateObject E_INVALIDARG) or the trace corrupts.
+constexpr uint32_t kScatterPayloadSize = 20u * 4u;
 
 // BuiltInTriangleIntersectionAttributes: the two barycentrics every triangle
 // hit group reports. None of the engine's ray-tracing shaders declare an

@@ -349,3 +349,36 @@ public extension RectLight : ILight
         return true;
     }
 };
+
+// Directional (sun / moon) light: constant radiance from -direction, no falloff
+// and no reach. Shadow rays run kDirectionalLightReach toward it, so a miss
+// (open sky) counts as lit. `getPosition` returns a point that far up-light of
+// the origin purely so position-keyed callers get something finite; nothing
+// that shades a directional light should use it.
+public extension DirectionalLight : ILight
+{
+    public float3 getColor()    { return color; }
+    public float3 getPosition() { return -direction * kDirectionalLightReach; }
+    public float getRadius()    { return radius; }
+    public bool castsShadow()   { return shadowEnabled != 0u; }
+
+    // Soft shadows aim into the source cone: a disk kDirectionalLightReach away
+    // whose radius subtends the angular radius. cosAngularRadius 1 ⇒ hard ray.
+    public float3 sampleSourcePoint(float3 shadingPosW, float3 dirToLight, float2 u)
+    {
+        float  c         = clamp(cosAngularRadius, 1.0e-3, 1.0);
+        float  tanRadius = sqrt(max(1.0 - c * c, 0.0)) / c;
+        float3 center    = shadingPosW + dirToLight * kDirectionalLightReach;
+        return diskSourcePoint(center, kDirectionalLightReach * tanRadius, dirToLight, u);
+    }
+
+    public bool sample(float3 shadingPosW, float surfaceFootprintW, out LightSample ls)
+    {
+        ls.Li = float3(0.0); ls.pdf = 1.0; ls.dir = float3(0,0,1); ls.distance = 0.0;
+        if (radius <= 0.0 || intensity <= 0.0) return false;
+        ls.Li       = color * intensity;
+        ls.dir      = -direction;
+        ls.distance = kDirectionalLightReach;
+        return true;
+    }
+};

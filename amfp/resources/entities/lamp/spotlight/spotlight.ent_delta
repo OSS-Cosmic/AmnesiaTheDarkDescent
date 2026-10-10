@@ -1,0 +1,11 @@
+<EntDelta Version="1" Target="entities/lamp/spotlight/spotlight.ent">
+    <Modify Category="Joints" ID="21" Name="JointHinge_1">
+        <SetAttr Rotation="-1.57079 -3.65579e-06 3.14159" />
+    </Modify>
+    <Modify Category="Entities" ID="4" Name="SpotLight_2">
+        <SetAttr FalloffMap="" Re_FlickerOffIntensity="0" Re_Intensity="500" Re_SourceRadius="0.01" Rotation="-2.53517e-06 -1.5708 -2.53518e-06" />
+    </Modify>
+    <Modify Category="Entities" ID="5" Name="SpotLight_3">
+        <SetAttr FalloffMap="" Re_FlickerOffIntensity="0" Re_Intensity="150" Re_SourceRadius="0" Rotation="-2.53517e-06 -1.5708 -2.53518e-06" />
+    </Modify>
+</EntDelta>

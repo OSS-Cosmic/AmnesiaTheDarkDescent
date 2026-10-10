@@ -71,7 +71,7 @@ namespace hpl {
 		apHandler->AddLoader(pLoaderMSH);
 		apHandler->AddLoader(hplNew( cMeshLoaderCollada,(pLoaderMSH, true)));
 		apHandler->AddLoader(hplNew( cMeshLoaderGLTF,(pLoaderMSH, true)));
-		//apHandler->AddLoader(hplNew( cMeshLoaderFBX,(pLoaderMSH, true)));
+		apHandler->AddLoader(hplNew( cMeshLoaderFBX,()));
 	}
 
 	//-----------------------------------------------------------------------

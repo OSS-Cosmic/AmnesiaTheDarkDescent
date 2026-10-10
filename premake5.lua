@@ -17,6 +17,7 @@
 ROOT = _MAIN_SCRIPT_DIR
 
 dofile "premake/options.lua"
+dofile "premake/product.lua"
 
 if _OPTIONS["with-d3d12"] == "yes" and os.target() ~= "windows" then
     premake.error("--with-d3d12=yes is only supported on Windows")
@@ -112,6 +113,10 @@ xess_declare_staging_projects()
 -- Declared here so project() sees the workspace scope, matching external.lua.
 agility_declare_staging_projects()
 
+-- The selected non-default product gets isolated staging projects, but the
+-- existing Amnesia/tools/tests declarations keep the legacy implicit context.
+product_declare_staging_projects()
+
 -- Hand-written from-source third-party dependency projects.
 dofile "premake/deps/d3d12ma.lua"
 dofile "premake/deps/zlib.lua"
@@ -132,6 +137,7 @@ dofile "premake/deps/oalwrapper.lua"
 -- Engine, game and tools.
 dofile "premake/hpl2.lua"
 dofile "premake/amnesia.lua"
+dofile "premake/amfp.lua"
 if _OPTIONS["with-tools"] ~= "no" then
     dofile "premake/tools.lua"
 end

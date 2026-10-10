@@ -74,16 +74,18 @@ namespace hpl {
 		return amtxA;
 	}
 
+	// AMFP reads node translate/scale raw even for Z_UP files and fixes the axis
+	// later on the node hierarchy (CreateHierarchyNodes). AMFP content relies on
+	// it: plane_black's (2,2,1) node scale bakes to a 4x2 quad, not 4x4.
 	cVector3f cMeshLoaderCollada::GetVectorPosFromPtr(float *apVec)
 	{
+#ifndef AMFP
 		if(mbZToY)
 		{
 			return cVector3f(apVec[0],apVec[2],apVec[1]);
 		}
-		else
-		{
-			return cVector3f(apVec[0],apVec[1],apVec[2]);
-		}
+#endif
+		return cVector3f(apVec[0],apVec[1],apVec[2]);
 	}
 
 	cVector3f cMeshLoaderCollada::GetVectorRotationFromPtr(float *apVec)
@@ -93,14 +95,13 @@ namespace hpl {
 
 	cVector3f cMeshLoaderCollada::GetVectorScaleFromPtr(float *apVec)
 	{
+#ifndef AMFP
 		if(mbZToY)
 		{
 			return cVector3f(apVec[0],apVec[2],apVec[1]);
 		}
-		else
-		{
-			return cVector3f(apVec[0],apVec[1],apVec[2]);
-		}
+#endif
+		return cVector3f(apVec[0],apVec[1],apVec[2]);
 	}
 
 	//-----------------------------------------------------------------------
@@ -960,13 +961,15 @@ namespace hpl {
 		pNode->msSid = cString::ToString(apRootElem->Attribute("sid"),pNode->msId);
 		pNode->msType = cString::ToString(apRootElem->Attribute("type"),"");
 
-		// XXX
-		// Removed as it introduces backwards compatibility issues!!
-		//if(pNode->msName.empty())
-		//{
-		//	pNode->msName = pNode->msId;
-		//	Warning("Scene node with id '%s' has empty name! Setting id as name\n", pNode->msId.c_str());
-		//}
+		// Removed for TDD as it introduces backwards compatibility issues!!
+		// AMFP content relies on it.
+#ifdef AMFP
+		if(pNode->msName.empty())
+		{
+			pNode->msName = pNode->msId;
+			Warning("Scene node with id '%s' has empty name! Setting id as name\n", pNode->msId.c_str());
+		}
+#endif
 
 		/////////////////////////////////////////////
 		//Get source, if there is any.
@@ -1666,6 +1669,7 @@ namespace hpl {
 				Warning("No tex coords for geometry '%s'\n",Geometry.msName.c_str());
 				continue;
 			}
+			if(Geometry.mlTexIdxNum < 0) Geometry.mlTexIdxNum = 0;
 
 			//////////////////////////////
 			// If Z is up axis or the unit scale is not 1, go through all the geometry and convert

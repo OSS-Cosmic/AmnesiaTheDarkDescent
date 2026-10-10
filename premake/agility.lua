@@ -134,14 +134,46 @@ end
 -- Staging project declarations run AFTER the workspace exists (project() must be
 -- called inside a workspace scope). premake5.lua calls this after the workspace
 -- block and after external.lua's own project declarations.
-function agility_declare_staging_projects()
+local function agility_context_label(product)
+    local context = runtime_context(product)
+    if context == 'amnesia' then return 'Amnesia' end
+    if context == 'tests' then return 'Tests' end
+    return (context:gsub('(^%l)', string.upper):gsub('[^%w]', ''))
+end
+
+local function agility_staging_project_name(product)
+    local context = runtime_context(product)
+    if context == 'amnesia' then return 'AgilityRuntimeGame' end
+    if context == 'tests' then return 'AgilityRuntimeTests' end
+    return 'AgilityRuntime' .. agility_context_label(context)
+end
+
+local DECLARED_CONTEXTS = {}
+
+function agility_declare_staging_projects(product)
     if not AGILITY_ENABLED then return end
 
-    local function add_staging_project(name, runtime_dir, license_dir)
+    local contexts
+    if product == nil then
+        -- The default generation includes both products. The game shares its
+        -- amnesia runtime and all tests remain under build-premake/tests.
+        contexts = { 'amnesia', 'tests', 'amfp' }
+    else
+        if type(product) == 'table' then product = product.product or product.context end
+        contexts = { runtime_context(product) }
+    end
+
+    local function add_staging_project(context)
+        context = runtime_context(context)
+        if DECLARED_CONTEXTS[context] then return end
+
+        local name = agility_staging_project_name(context)
+        local runtime = runtime_dir(context, 'D3D12')
+        local license_dir = runtime_dir(context, 'licenses/agility')
         local build_commands = {
-            string.format('if not exist "%s" mkdir "%s"', winpath(runtime_dir), winpath(runtime_dir)),
-            string.format('copy /Y "%s" "%s\\"', winpath(AGILITY_X64_BIN_DIR .. '/D3D12Core.dll'), winpath(runtime_dir)),
-            string.format('copy /Y "%s" "%s\\"', winpath(AGILITY_X64_BIN_DIR .. '/d3d12SDKLayers.dll'), winpath(runtime_dir)),
+            string.format('if not exist "%s" mkdir "%s"', winpath(runtime), winpath(runtime)),
+            string.format('copy /Y "%s" "%s\\"', winpath(AGILITY_X64_BIN_DIR .. '/D3D12Core.dll'), winpath(runtime)),
+            string.format('copy /Y "%s" "%s\\"', winpath(AGILITY_X64_BIN_DIR .. '/d3d12SDKLayers.dll'), winpath(runtime)),
             string.format('if not exist "%s" mkdir "%s"', winpath(license_dir), winpath(license_dir)),
         }
         for _, license in ipairs(AGILITY_LICENSE_FILES) do
@@ -156,30 +188,32 @@ function agility_declare_staging_projects()
                 buildcommands {
                     windows_serialized_commands(
                         build_commands,
-                        'Redux-Amnesia-' .. name .. '-%{cfg.buildcfg}'),
+                        'Redux-' .. agility_context_label(context) .. '-' .. name .. '-%{cfg.buildcfg}'),
                 }
                 rebuildcommands {
                     windows_serialized_commands(
                         build_commands,
-                        'Redux-Amnesia-' .. name .. '-%{cfg.buildcfg}'),
+                        'Redux-' .. agility_context_label(context) .. '-' .. name .. '-%{cfg.buildcfg}'),
                 }
                 cleancommands {
-                    string.format('{RMDIR} "%s"', winpath(runtime_dir)),
+                    string.format('{RMDIR} "%s"', winpath(runtime)),
                     string.format('{RMDIR} "%s"', winpath(license_dir)),
                 }
             filter {}
+        DECLARED_CONTEXTS[context] = true
     end
 
-    add_staging_project('AgilityRuntimeGame',
-        '%{wks.location}/amnesia/%{cfg.buildcfg}/D3D12',
-        '%{wks.location}/amnesia/%{cfg.buildcfg}/licenses/agility')
-    add_staging_project('AgilityRuntimeTests',
-        '%{wks.location}/tests/%{cfg.buildcfg}/D3D12',
-        '%{wks.location}/tests/%{cfg.buildcfg}/licenses/agility')
+    for _, context in ipairs(contexts) do add_staging_project(context) end
 end
 
-function link_agility_runtime(target_layout)
+function link_agility_runtime(target_layout, product)
     if not AGILITY_ENABLED then return end
+    if type(target_layout) == 'table' then
+        product = target_layout.product or target_layout.context
+        target_layout = target_layout.target_layout or target_layout.layout
+    end
+    target_layout = target_layout or 'game'
+    product = runtime_context(product, target_layout)
     files { ROOT .. '/premake/runtime/D3D12AgilityExports.cpp' }
-    dependson { target_layout == 'tests' and 'AgilityRuntimeTests' or 'AgilityRuntimeGame' }
+    dependson { agility_staging_project_name(product) }
 end

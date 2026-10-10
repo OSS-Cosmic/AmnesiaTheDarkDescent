@@ -1,0 +1,8 @@
+<EntDelta Version="1" Target="entities/lamp/streetlight_wall/streetlight_wall_fog.ent">
+    <Modify Category="Entities" ID="4" Name="PointLight_1">
+        <SetAttr Brightness="1" Falloff="1" RendererMask="1" />
+    </Modify>
+    <Add Category="Entities">
+        <SpotLight Name="SpotLight_1" WorldPos="-1.83391 0.0238352 0.00593185" Rotation="-1.5708 -3.6637e-06 -3.82139e-15" Scale="1 1 1" RendererMask="2" Tag="" Active="true" CastShadows="true" ShadowResolution="Low" ShadowsAffectStatic="true" ShadowsAffectDynamic="true" Radius="10" Brightness="1" Falloff="1" Re_Intensity="8" Re_Radius="20" Re_SourceRadius="0.03" FalloffMap="" Gobo="" GoboAnimMode="None" GoboAnimFrameTime="0" DiffuseColor="0.534 0.35 0.15 1" FlickerActive="false" FlickerOnMinLength="0" FlickerOnMaxLength="0" FlickerOnPS="" FlickerOnSound="" FlickerOffMinLength="0" FlickerOffMaxLength="0" FlickerOffPS="" FlickerOffSound="" FlickerOffColor="0 0 0 1" FlickerOffRadius="0" FlickerFade="false" FlickerOnFadeMinLength="0" FlickerOnFadeMaxLength="0" FlickerOffFadeMinLength="0" FlickerOffFadeMaxLength="0" FOV="2.2" Aspect="1" NearClipPlane="0.05" SpotFalloffMap="" />
+    </Add>
+</EntDelta>

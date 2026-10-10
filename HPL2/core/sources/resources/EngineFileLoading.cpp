@@ -34,6 +34,7 @@
 #include "scene/LightPoint.h"
 #include "scene/LightSpot.h"
 #include "scene/LightArea.h"
+#include "scene/LightDirectional.h"
 #include "scene/LightBox.h"
 #include "scene/LightParameters.h"
 #include "scene/MeshEntity.h"
@@ -50,6 +51,8 @@
 #include "graphics/VertexBuffer.h"
 #include "graphics/Mesh.h"
 #include "graphics/SubMesh.h"
+
+#include "Constants.h" // kDirectionalLightReach
 
 
 namespace hpl {
@@ -249,6 +252,10 @@ namespace hpl {
 			pPS->SetMinFadeDistanceEnd(GetAttributeFloat(apElement, "MinFadeDistanceEnd"));
 			pPS->SetMaxFadeDistanceStart(GetAttributeFloat(apElement, "MaxFadeDistanceStart"));
 			pPS->SetMaxFadeDistanceEnd(GetAttributeFloat(apElement, "MaxFadeDistanceEnd"));
+#ifdef AMFP
+			// TDD maps also carry Active="false", but TDD never honoured it.
+			pPS->SetActive(GetAttributeBool(apElement, "Active", true));
+#endif
 		}
 		
 		kEndWorldEntityLoad(pPS);
@@ -398,6 +405,15 @@ namespace hpl {
 			}
 		}
 		//////////////////////////
+		// Directional Light
+		else if(info.mShape == eLightElementShape_Directional)
+		{
+			cLightDirectional *pLightDirectional = apWorld->CreateLightDirectional(asNamePrefix+sName, bStatic);
+			pLight = pLightDirectional;
+
+			pLightDirectional->SetAngularRadius(attr.GetFloat("AngularRadius", pLightDirectional->GetAngularRadius()));
+		}
+		//////////////////////////
 		// Box Light
 		else if(info.mShape == eLightElementShape_Box)
 		{
@@ -406,6 +422,9 @@ namespace hpl {
 
 			pLightBox->SetSize(attr.GetVec3("Size", cVector3f(1,1,1)));
 			pLightBox->SetBlendFunc((eLightBoxBlendFunc)attr.GetInt("BlendFunc", (int)eLightBoxBlendFunc_Add));
+#ifdef AMFP
+			pLightBox->SetBoxLightPrio(attr.GetInt("Priority", 0));
+#endif
 		}
 		//////////////////////////
 		// Spotlightt
@@ -539,7 +558,19 @@ namespace hpl {
 		// Shared with the retail half: the ray-traced backend has no cast-shadow
 		// override of its own.
 		rayTraced.mbCastShadows = legacyAttr.GetBool("CastShadows", false);
-		if(rayTraced.mbPresent)
+		if(rayTraced.mbPresent && info.mShape == eLightElementShape_Directional)
+		{
+			// No reach to derive: the intensity is the radiance everywhere, and
+			// reach only has to be non-zero for the light to count as lit.
+			rayTraced.mbAuthored = true;
+			rayTraced.mfIntensity = GetPhotometry("Intensity", 1.0f);
+			rayTraced.mfOnValue = rayTraced.mfIntensity;
+			rayTraced.mfOffValue = GetPhotometry("FlickerOffIntensity", 0.0f);
+			rayTraced.mfReach = kDirectionalLightReach;
+			rayTraced.mfSourceRadius = 0.0f;
+			rayTraced.mbReachFollowsIntensity = false;
+		}
+		else if(rayTraced.mbPresent)
 		{
 			const bool bAuthored =
 				HasPhotometry("Intensity") || HasPhotometry("Radius") ||
@@ -599,6 +630,13 @@ namespace hpl {
 		if(bShadowsAffectDynamic)	lFlags |= eObjectVariabilityFlag_Dynamic;
 		if(bShadowsAffectStatic)	lFlags |= eObjectVariabilityFlag_Static;
 		pLight->SetShadowCastersAffected(lFlags);
+
+#ifdef AMFP
+		pLight->SetBrightness(attr.GetFloat("Brightness", 1));
+		pLight->SetFalloff(attr.GetFloat("Falloff", 1));
+		// Inactive lights still render; this stops their flicker/fade logic.
+		pLight->SetActive(attr.GetBool("Active", true));
+#endif
 
 		//////////////////////
 		// Backwards compitabilty:

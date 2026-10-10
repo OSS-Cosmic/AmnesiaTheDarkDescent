@@ -1155,7 +1155,11 @@ namespace hpl {
 		{
 			if(mbZToY)
 			{
-				//(*it)->m_mtxTransform = cMath::MatrixMul(m_mtxZToY, (*it)->m_mtxTransform);
+				// AMFP applies the axis fix here, after the raw node transforms
+				// (see GetVectorPosFromPtr). TDD swizzles at read time instead.
+#ifdef AMFP
+				(*it)->m_mtxTransform = cMath::MatrixMul(m_mtxZToY, (*it)->m_mtxTransform);
+#endif
 			}
 
 			CreateHierarchyNodes(apMesh, pNode,*it,avColladaGeom);

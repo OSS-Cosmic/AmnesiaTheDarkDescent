@@ -1,0 +1,17 @@
+<EntDelta Version="1" Target="entities/lamp/bonfire/bonfire.ent">
+    <Modify Category="Shapes" ID="4" Name="Shape_2">
+        <SetAttr RelativeScale="0.5 0.11 0.5" Scale="0.5 0.11 0.5" />
+    </Modify>
+    <Modify Category="Shapes" ID="5" Name="Shape_3">
+        <SetAttr RelativeScale="0.415 0.11 0.415" Scale="0.415 0.11 0.415" />
+    </Modify>
+    <Modify Category="Shapes" ID="6" Name="Shape_4">
+        <SetAttr RelativeScale="0.3 0.2 0.3" Scale="0.3 0.2 0.3" />
+    </Modify>
+    <Modify Category="Entities" ID="11" Name="PointLight_1">
+        <SetAttr FalloffMap="" WorldPos="0.030591 0.561034 -0.00191402" />
+    </Modify>
+    <Modify Category="Entities" ID="14" Name="SpotLight_1">
+        <SetAttr FalloffMap="" Rotation="2.85354 -1.5708 2.90969" />
+    </Modify>
+</EntDelta>

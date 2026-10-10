@@ -20,6 +20,7 @@
 #include "EntityWrapperLight.h"
 
 #include "scene/LightParameters.h"
+#include "scene/LightDirectional.h"
 
 #include "EditorWorld.h"
 #include "EditorClipPlane.h"
@@ -325,6 +326,10 @@ iEntityWrapperLight::iEntityWrapperLight(iEntityWrapperData* apData) : iEntityWr
 	mfFlickerOffRadius = 0.0f;
 	mfFlickerOffIntensity = 0.0f;
 	mcolDiffuseColor = cColor(1);
+#ifdef AMFP
+	mfBrightness = 1.0f;
+	mfFalloff = 1.0f;
+#endif
 }
 
 //------------------------------------------------------------------------------
@@ -655,6 +660,14 @@ bool iEntityWrapperLight::GetProperty(int alPropID, float& afX)
 	case eLightFloat_FlickerOffFadeMaxLength:
 		afX = GetFlickerOffFadeMaxLength();
 		break;
+#ifdef AMFP
+	case eLightFloat_Brightness:
+		afX = GetBrightness();
+		break;
+	case eLightFloat_Falloff:
+		afX = GetFalloff();
+		break;
+#endif
 	default:
 		return false;
 	}
@@ -803,6 +816,14 @@ bool iEntityWrapperLight::SetProperty(int alPropID, const float& afX)
 	case eLightFloat_FlickerOffFadeMaxLength:
 		SetFlickerOffFadeMaxLength(afX);
 		break;
+#ifdef AMFP
+	case eLightFloat_Brightness:
+		SetBrightness(afX);
+		break;
+	case eLightFloat_Falloff:
+		SetFalloff(afX);
+		break;
+#endif
 	default:
 		return iEntityWrapper::SetProperty(alPropID, afX);
 	}
@@ -964,6 +985,13 @@ void iEntityWrapperLight::ApplyLightValues()
 		rayTraced.mfReach = mfRadius;
 		rayTraced.mfSourceRadius = mfSourceRadius;
 		rayTraced.mbReachFollowsIntensity = mbRadiusDerived;
+		// A directional light reaches everywhere; its radius means nothing.
+		if(GetLightType()==eEditorEntityLightType_Directional)
+		{
+			rayTraced.mfReach = hpl::cLightDirectional::GetReach();
+			rayTraced.mfSourceRadius = 0.0f;
+			rayTraced.mbReachFollowsIntensity = false;
+		}
 		rayTraced.mfOffValue = mfFlickerOffIntensity;
 		rayTraced.mDiffuseColor = mcolDiffuseColor;
 		rayTraced.mDefaultDiffuseColor = mcolDiffuseColor;
@@ -988,6 +1016,10 @@ void iEntityWrapperLight::ApplyLightValues()
 	standard.mbCastShadows = mbCastShadows;
 	standard.mbAuthored = true;
 	pLight->SetTuning(hpl::eLightModel_Legacy, standard);
+#ifdef AMFP
+	pLight->SetBrightness(mfBrightness);
+	pLight->SetFalloff(mfFalloff);
+#endif
 
 	if(static_cast<iEntityWrapperTypeLight*>(mpType)->IsStandardOnly())
 	{
@@ -1125,6 +1157,20 @@ void iEntityWrapperLight::SetFlickerOffRadius(float afX)
 
 	mbFlickerUpdated = true;
 }
+
+#ifdef AMFP
+void iEntityWrapperLight::SetBrightness(float afX)
+{
+	mfBrightness = afX;
+	((iLight*)mpEngineEntity->GetEntity())->SetBrightness(afX);
+}
+
+void iEntityWrapperLight::SetFalloff(float afX)
+{
+	mfFalloff = afX;
+	((iLight*)mpEngineEntity->GetEntity())->SetFalloff(afX);
+}
+#endif
 
 void iEntityWrapperLight::SetFlickerOffIntensity(float afX)
 {

@@ -89,8 +89,8 @@ float directTargetPdf(DiffuseShading sd, uint lightIndex)
                kReservoirLum);
 }
 
-// Build a light-selection reservoir: streaming RIS over the cell's lights with
-// the unshadowed-luminance target. No shadow ray — visibility is resolved later
+// Build a light-selection reservoir: streaming RIS over the cell's lights plus
+// the directional lights, with the unshadowed-luminance target. No shadow ray — visibility is resolved later
 // with a single ray. Empty cells return an empty reservoir.
 Reservoir buildDirectReservoir(DiffuseShading sd, inout RNG rng)
 {
@@ -103,6 +103,18 @@ Reservoir buildDirectReservoir(DiffuseShading sd, inout RNG rng)
         uint li = cellLightAt(cl, k);
         if (isDirectGoboLight(li))
             continue;
+        float pHat = dot(unshadowedAnalyticLight(sd.posW, sd.normalW, V,
+                                                        sd.surfaceFootprintW,
+                                                        sd.rough, li),
+                         kReservoirLum);
+        r.streamCandidate(li, pHat, rng);
+    }
+    // Directional lights reach every point but are not in the grid.
+    for (uint d = 0u; d < getDirectionalLightCount(); ++d)
+    {
+        if (!directionalLightLit(d))
+            continue;
+        uint li = directionalLightId(d);
         float pHat = dot(unshadowedAnalyticLight(sd.posW, sd.normalW, V,
                                                         sd.surfaceFootprintW,
                                                         sd.rough, li),

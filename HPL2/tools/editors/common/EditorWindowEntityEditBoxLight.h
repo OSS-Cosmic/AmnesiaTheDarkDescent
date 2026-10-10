@@ -59,6 +59,7 @@ protected:
 	void AddPropertySetSpot(cWidgetTab* apParentTab);
 	void AddPropertySetArea(cWidgetTab* apParentTab);
 	void AddPropertySetBox(cWidgetTab* apParentTab);
+	void AddPropertySetDirectional(cWidgetTab* apParentTab);
 
 	
 	bool InputCallback(iWidget* apWidget, const cGuiMessageData& aData);
@@ -173,6 +174,10 @@ protected:
 	cEditorInputNumber* mpInpAreaBarnDoorAngle;
 	cEditorInputNumber* mpInpAreaBarnDoorLength;
 	cEditorInputFile* mpInpAreaSourceTex;
+
+	///////////////////////////////////
+	// Directional Light specific
+	cEditorInputNumber* mpInpDirectionalAngularRadius;
 };
 
 

@@ -119,6 +119,7 @@ public:
 
 	// Own funcs
 	void SetCastShadows(bool abX);
+	void SetTwoSidedShadow(bool abX);
 	void SetCoverage(float afX);
 	bool SetMaterial(const tString&);
 	bool SetCustomMaterial(const tString&, bool abDelete=true);

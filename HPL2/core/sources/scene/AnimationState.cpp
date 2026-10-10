@@ -59,8 +59,11 @@ namespace hpl {
 		mfSpecialEventTime =0;
 
 		mfFadeStep=0;
+		mfFadeSpeed=0;
+
+		mbCanBlend = true;
 	}
-	
+
 	//-----------------------------------------------------------------------
 
 	cAnimationState::~cAnimationState()
@@ -104,6 +107,23 @@ namespace hpl {
 				mfFadeStep =0;
 			}
 		}
+
+		//Speed fading (only set by FadeInSpeed/FadeOutSpeed)
+		if(mfFadeSpeed!=0)
+		{
+			mfSpeed += mfFadeSpeed * afTimeStep;
+
+			if(mfSpeed<0)
+			{
+				mfSpeed =0;
+				mfFadeSpeed =0;
+			}
+			else if(mfSpeed>1.0f)
+			{
+				mfSpeed =1;
+				mfFadeSpeed =0;
+			}
+		}
 	}
 
 	//-----------------------------------------------------------------------
@@ -133,6 +153,34 @@ namespace hpl {
 	void cAnimationState::FadeOut(float afTime)
 	{
 		mfFadeStep = -1.0f / std::abs(afTime);
+	}
+
+	//-----------------------------------------------------------------------
+
+	void cAnimationState::FadeInSpeed(float afTime)
+	{
+		if(afTime == 0.0f)
+		{
+			mfSpeed = 1;
+			mfFadeSpeed = 0;
+		}
+		else
+		{
+			mfFadeSpeed = 1.0f / std::abs(afTime);
+		}
+	}
+
+	void cAnimationState::FadeOutSpeed(float afTime)
+	{
+		if(afTime == 0.0f)
+		{
+			mfSpeed = 0;
+			mfFadeSpeed = 0;
+		}
+		else
+		{
+			mfFadeSpeed = -1.0f / std::abs(afTime);
+		}
 	}
 	
 	//-----------------------------------------------------------------------
@@ -193,6 +241,10 @@ namespace hpl {
 		{
 			mfTimePos = cMath::Clamp(afPosition, 0, mfLength);
 		}
+#ifdef AMFP
+		// A jump must not make the event check fire every event in between.
+		mfPrevTimePos = mfTimePos;
+#endif
 	}
 
 	float cAnimationState::GetTimePosition()
@@ -279,7 +331,15 @@ namespace hpl {
 
 		mfTimePos += afAdd*mfSpeed*mfBaseSpeed;
 
+#ifdef AMFP
+		// SetTimePosition would overwrite mfPrevTimePos.
+		if(mbLoop)
+			mfTimePos = cMath::Wrap(mfTimePos,0,mfLength);
+		else
+			mfTimePos = cMath::Clamp(mfTimePos, 0, mfLength);
+#else
 		SetTimePosition(mfTimePos);
+#endif
 	}
 	
 	//-----------------------------------------------------------------------
@@ -311,6 +371,47 @@ namespace hpl {
 	{
 		return (int)mvEvents.size();
 	}
-	
+
+	//-----------------------------------------------------------------------
+
+	void cAnimationState::AddTransition(int alAnimId, int alPreviousAnimId, float afMinTime, float afMaxTime)
+	{
+		mvTransitions.push_back(cAnimationTransition(alAnimId,alPreviousAnimId, afMinTime, afMaxTime));
+	}
+
+	cAnimationTransition* cAnimationState::GetTransitionFromPrevAnim(int alPreviousAnimId, float afPreviousTimePos)
+	{
+		cAnimationTransition *pTransOut = NULL;
+
+		for(size_t i=0; i<mvTransitions.size(); ++i)
+		{
+			cAnimationTransition &trans = mvTransitions[i];
+
+			if(trans.mlPreviousAnimId == alPreviousAnimId || trans.mlPreviousAnimId<0)
+			{
+				//Check if within time limits
+				if(trans.mfMinTime>=0 && trans.mfMaxTime>=0 && afPreviousTimePos>=0)
+				{
+					if(afPreviousTimePos < trans.mfMinTime || afPreviousTimePos > trans.mfMaxTime) continue;
+				}
+
+				pTransOut = &trans;
+				if(trans.mlPreviousAnimId>=0 || alPreviousAnimId<0) break; //if not a default transition, we know we got the right one.
+			}
+		}
+
+		return pTransOut;
+	}
+
+	cAnimationTransition* cAnimationState::GetTransition(int alIdx)
+	{
+		return &mvTransitions[alIdx];
+	}
+
+	int cAnimationState::GetTransitionNum()
+	{
+		return (int)mvTransitions.size();
+	}
+
 	//-----------------------------------------------------------------------
 }

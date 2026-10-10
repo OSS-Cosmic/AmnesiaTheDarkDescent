@@ -13,15 +13,9 @@
 // shader applies the matching per-pixel color-space transform so the
 // output going into the blender is in the right space.
 //
-// Aligned with the reference translucency.frag.fsl — the one deliberate
-// deviation is refraction, which is NOT implemented in this port. The legacy
-// bend-behind distortion (screen-color copy + per-fragment UV offset) was
-// dropped, and the RT V-buffer that was meant to supply the refracted
-// background by bending the primary ray was retired without ever being wired
-// up. So the background behind a refractive pixel is unrefracted and this
-// pass simply alpha-blends over it — no screen-color sample, no refraction
-// block here.
-// Reflection stays the material's static cube map, exactly as the reference.
+// Refraction samples a copy of the preceding scene, matching Standard's
+// distance-scaled distortion and optional depth edge check. Reflections are
+// added by the separate cube-map draw after composing the copied background.
 
 
 #include "Constants.h"
@@ -36,19 +30,25 @@ import BlendModes;
 import Utils.Color.ColorHelpers;
 import DiffuseShading;
 
+[vk::binding(0, 2)] Texture2D<float4> sceneColorInput;
+[vk::binding(1, 2)] Texture2D<float> sceneDepthInput;
+[vk::binding(2, 2)] SamplerState sceneColorSampler;
+[vk::binding(3, 2)] StructuredBuffer<LightProbeResult> gTranslucentProbeResults;
+
 // Options bitfield mirroring TranslucencyFlags in RendererDeferred.cpp.
 // blendMode stays as a separate uint so the existing switch is cheap; this
 // field carries the *behaviour* flags the reference packs into the same
 // root constant.
 #define TRANS_OPT_USE_ILLUMINATION (1u << 0)
 #define TRANS_OPT_HAS_TLAS (1u << 1)
+#define TRANS_OPT_REFRACTION (1u << 2)
 
 struct TranslucentPushConstants
 {
     uint  blendMode;
     float sceneAlpha;
     uint  options;
-    uint  _pad;
+    uint  lightProbeIndex; // UINT32_MAX when no current-frame measurement exists
 };
 
 [vk::push_constant]
@@ -112,13 +112,49 @@ float3 translucentDiffuseLighting(TranslucentVSOut psIn, TranslucentMaterial mat
     for (uint k = 0u; k < cell.count; ++k)
         irradiance += shadeAnalyticLight(posW, N, V, footprintW,
             kDefaultDiffuseRoughness, cellLightAt(cell, k), origin);
+    for (uint d = 0u; d < getDirectionalLightCount(); ++d)
+        irradiance += shadeAnalyticLight(posW, N, V, footprintW,
+            kDefaultDiffuseRoughness, directionalLightId(d), origin);
     return irradiance;
+}
+
+// Same blend rules as Standard's refractive translucent pass. The source is
+// already prepared for fixed-function blending (including premultiplied alpha).
+float3 composeRefraction(uint mode, float4 source, float3 background)
+{
+    if (mode == kBlendModeAdd) return source.rgb + background;
+    if (mode == kBlendModeMul) return source.rgb * background;
+    if (mode == kBlendModeMulX2) return 2.0f * source.rgb * background;
+    if (mode == kBlendModeAlpha || mode == kBlendModePremulAlpha)
+        return source.rgb + background * (1.0f - source.a);
+    return background;
+}
+
+float2 refractionDirection(TranslucentVSOut v, TranslucentMaterial m)
+{
+    float3 n = translucentSafeNormal(v.normal, float3(0, 0, 1));
+    if ((m.materialConfig & kMaterialFlagEnableNormal) != 0u &&
+        m.tex[1] != kInvalidTextureIndex)
+    {
+        float3 mapN = sampleBindless2D(m.tex[1], v.uv).xyz * 2.0f - 1.0f;
+        if ((m.materialConfig & kMaterialFlagUseRefractionNormals) == 0u)
+            return mapN.xy;
+        float3 t = translucentSafeNormal(v.tangent - n * dot(n, v.tangent), float3(0));
+        float3 b = translucentSafeNormal(v.bitangent - n * dot(n, v.bitangent), float3(0));
+        n = translucentSafeNormal(mapN.x * t + mapN.y * b + mapN.z * n, n);
+    }
+    // Hybrid's vertex shader already supplies the tangent frame in view space.
+    return n.xy;
 }
 
 [shader("fragment")]
 float4 psMain(TranslucentVSOut psIn) : SV_TARGET
 {
     UniformObject       obj = gSceneObjects[psIn.objectId];
+    // Entity coverage (prop fade-in / life-length fade-out): fully faded
+    // objects draw nothing, matching Standard.translucent.3d.slang.
+    if (obj.dissolveAmount <= 0.0f)
+        discard;
     TranslucentMaterial mat = loadTranslucentMaterial(obj.materialID);
     bool litDiffuse = (mat.materialConfig & kMaterialFlagLitDiffuse) != 0u &&
         (gPushConstants.blendMode == kBlendModeAlpha || gPushConstants.blendMode == kBlendModePremulAlpha);
@@ -151,6 +187,27 @@ float4 psMain(TranslucentVSOut psIn) : SV_TARGET
                 (mat.materialConfig & kMaterialFlagDiffuseIsMask) != 0u);
     }
 
+    // Partial coverage dissolves through the shared noise map, the same test
+    // as Standard.translucent.3d.slang (keep the two in sync).
+    uint cfg = mat.materialConfig;
+    if (obj.dissolveAmount < 1.0f ||
+        (cfg & (kMaterialFlagEnableDissolveAlpha | kMaterialFlagUseDissolveFilter)) != 0u)
+    {
+        float d = gDissolveMap.SampleLevel(gMaterialSampler, psIn.uv, 0).r;
+        if ((cfg & kMaterialFlagEnableDissolveAlpha) != 0u)
+        {
+            d = d * 0.25f + 0.75f;
+            float da = 1.0f;
+            if (mat.tex[6] != kInvalidTextureIndex)
+                da = sampleBindless2DLevel(mat.tex[6], psIn.uv, 0).r;
+            d -= 0.25f - da * 0.25f;
+        }
+        else
+            d = d * 0.5f + 0.5f;
+        if (d - (1.0f - obj.dissolveAmount * diffuseColor.a) * 0.5f < 0.5f)
+            discard;
+    }
+
     // Per-pixel fog (world + per-area). The shared Fog helper returns a
     // visibility scalar — translucents multiply it into the per-pixel alpha
     // so glass/decals fade behind fog without painting the fog colour.
@@ -167,27 +224,36 @@ float4 psMain(TranslucentVSOut psIn) : SV_TARGET
     FogResult fog = computeFog(surfacePosW, gPerFrame.posW);
     float finalAlpha = gPushConstants.sceneAlpha * fog.visibility;
 
-    // AffectedByLightLevel materials dim with the surrounding analytic light
-    // (base-game afLightLevel behavior — see lightLevelAt). Per-pixel,
-    // gated on the raw material config (not the illumination-draw-masked
-    // textureConfig) so the cube-map second draw dims its reflection too,
-    // matching the legacy shader's afLightLevel use on the reflection terms.
+    // One physical measurement per object, shared by the base/reflection draws.
+    // Keep the existing per-draw LitDiffuse bypass and material opt-in.
     float lightLevel = 1.0f;
     if (!litDiffuse && (mat.materialConfig & kMaterialFlagAffectedByLightLevel) != 0u)
     {
-        lightLevel = lightLevelAt(surfacePosW);
+        if (gPushConstants.lightProbeIndex != 0xffffffffu)
+        {
+            float3 rgb = gTranslucentProbeResults[gPushConstants.lightProbeIndex].irradiance;
+            rgb = float3(isfinite(rgb.x) ? max(rgb.x, 0.0f) : 0.0f,
+                         isfinite(rgb.y) ? max(rgb.y, 0.0f) : 0.0f,
+                         isfinite(rgb.z) ? max(rgb.z, 0.0f) : 0.0f);
+            // Base-game afLightLevel is display-space and max-channel
+            // (see lightLevelAt): re-encode the linear probe sum to match.
+            lightLevel = saturate(linearToSRGB(max(rgb.x, max(rgb.y, rgb.z))));
+        }
+        else
+        {
+            // No TLAS, valid bounds or probe allocation: use the analytic estimate.
+            float3 samplePosW = (obj.boundsCenterW.w > 0.5f) ? obj.boundsCenterW.xyz
+                                                              : surfacePosW;
+            lightLevel = lightLevelAt(samplePosW);
+        }
     }
 
     float4 finalColor = diffuseColor;
 
-    // Fresnel reflection. Gated on the material carrying a reflection cube map
-    // (the "reflective" signal — same gate the legacy used), but the
-    // reflection *source* is now the live ray-traced reflection buffer
-    // (gReflectionResolve) instead of the static cube sample. The Fresnel /
-    // rim weighting is unchanged.
+    // Refractive base draws defer cube reflection to the additive second draw.
     bool hasCubeMap = (textureConfig & kMaterialFlagEnableCubeMap) != 0u
                       && mat.cubeMapTextureIndex != kInvalidTextureIndex;
-    if (hasCubeMap)
+    if (hasCubeMap && (gPushConstants.options & TRANS_OPT_REFRACTION) == 0u)
     {
         // Reconstruct view-space surface normal. If a normal map is bound,
         // sample it and rotate into view space via the tangent frame the VS
@@ -267,12 +333,36 @@ float4 psMain(TranslucentVSOut psIn) : SV_TARGET
         }
     }
 
-    // Lit surfaces retain authored coverage; preserve existing unlit tuning.
     // Opacity modulation keeps additive fades and multiplicative neutrals.
-    float translucentStrength = litDiffuse ? 1.0f : 0.5f;
     finalColor = applyBlendModulation(gPushConstants.blendMode, finalColor,
-                                     finalAlpha * translucentStrength, lightLevel);
+                                     finalAlpha, lightLevel);
     if (finalColor.a <= 0.0f)
         discard;
-    return encodeBlendOutputLinear(gPushConstants.blendMode, finalColor);
+    // The target holds sRGBToLinear(display) / kSceneExposure during this pass
+    // (the particle colour-space bracket restores that scale). Unlit authored
+    // colour is display-referred, so encode it exactly like Standard; lit
+    // radiance is already on the scene scale.
+    if (!litDiffuse)
+        finalColor = encodeStandardBlendSource(gPushConstants.blendMode, finalColor);
+    float4 source = encodeBlendOutputLinear(gPushConstants.blendMode, finalColor);
+    if ((gPushConstants.options & TRANS_OPT_REFRACTION) != 0u)
+    {
+        float2 uv = psIn.posH.xy * gPerFrame.viewTexel;
+        float2 dir = refractionDirection(psIn, mat);
+        float invDist = min(1.0f / max(-psIn.viewPos.z, 1.0e-3f), 10.0f);
+        float2 distorted = uv + float2(dir.x, -dir.y) * mat.refractionScale * invDist;
+        if (!all(isfinite(distorted)) || any(distorted < 0.0f) || any(distorted > 1.0f))
+            distorted = uv;
+        else if ((mat.materialConfig & kMaterialFlagUseRefractionEdgeCheck) != 0u)
+        {
+            float sceneZ = sceneDepthInput.SampleLevel(sceneColorSampler, distorted, 0);
+            if (!isfinite(sceneZ) || sceneZ < psIn.posH.z - 1.0e-3f)
+                distorted = uv;
+        }
+        float3 background = sceneColorInput.SampleLevel(sceneColorSampler, distorted, 0).rgb;
+        float3 composed = composeRefraction(gPushConstants.blendMode, source, background);
+        if (!all(isfinite(composed))) discard;
+        return float4(composed, 1.0f);
+    }
+    return source;
 }

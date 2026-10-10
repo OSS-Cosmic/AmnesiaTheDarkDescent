@@ -117,6 +117,8 @@ namespace hpl {
             // Area lights never had a legacy class, so their unprefixed
             // attributes are the ray-traced schema.
             {"AreaLight", eLightElementShape_Area, true},
+            // Sun / moon for outdoor scenes; the retail games had none.
+            {"DirectionalLight", eLightElementShape_Directional, true},
         };
         cLightElementInfo info;
         if(asTag == nullptr) return info;

@@ -156,8 +156,6 @@ private:
   // Copies visibilityTexture (raw raster hit) → packedHitInfoTexture and
   // perturbs barycentrics on height-mapped diffuse surfaces so downstream
   // getVertexData() reconstructs the parallax-occluded point.
-  // There is no refraction pass: water/glass pixels keep the rasterized
-  // front-surface hit, so nothing behind them is bent.
   RIProgram m_vBufferPomBary;
 
   // Clustered light-grid build (LightGridBuildPass.cs). Bins the frame's
@@ -198,6 +196,14 @@ private:
   // with no pending probes. See cLightProbeQuery.
   RIProgram m_lightProbe;
 
+  // GPU-only probes for flagged translucent meshes. A ring reservation per
+  // Draw keeps viewports and in-flight frames from overwriting each other.
+  RIProgram m_translucentLightProbe;
+  RISegmentAlloc<RI_NUMBER_FRAME_SEGMENTS> m_translucentProbeSegment;
+  RIBuffer m_translucentProbeRequests;
+  RIBuffer m_translucentProbeResults;
+  bool m_translucentProbeFirstUse = true;
+
 
 	// Particle (translucent) pass — port of legacy RendererDeferred's
 	// translucency_particle.{vert,frag}.fsl. Reuses the opaque object/material
@@ -213,10 +219,8 @@ private:
 	// translucent, etc.). Renders in its own pass after the particle pass into
 	// the same pogo "read" half, depth read-only. One pipeline per
 	// eMaterialBlendMode (Add/Mul/MulX2/Alpha/PremulAlpha) is stamped on demand
-	// via the program's PipelineSlot cache, mirroring m_particle. Refraction
-	// and cube-map reflection materials are filtered out at the call site —
-	// those need a screen-color copy + cube-map binding the renderer doesn't
-	// have yet.
+	// via the program's PipelineSlot cache, mirroring m_particle. Refractive
+	// draws compose against a per-draw scene copy with hardware blending disabled.
 	RIProgram m_translucentMesh;
 
 	// Decal overlay pass. Thin clipped meshes (blood / scorch / impact marks,

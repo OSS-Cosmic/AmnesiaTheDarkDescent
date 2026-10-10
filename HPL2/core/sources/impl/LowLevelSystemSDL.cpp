@@ -24,7 +24,6 @@
 
 #include <cassert>
 #ifdef _WIN32
-#pragma comment(lib, "angelscript.lib")
 #define UNICODE
 #include <shlobj.h>
 #include <windows.h>
@@ -52,7 +51,12 @@
 #include "SDL/SDL.h"
 #endif
 
+#ifdef AMFP
+#include "impl/scriptstdstring.h"
+#include "impl/scriptarray.h"
+#else
 #include "impl/scriptstring.h"
+#endif
 
 #include "system/String.h"
 
@@ -356,7 +360,12 @@ cLowLevelSystemSDL::cLowLevelSystemSDL() {
   mpScriptEngine->SetMessageCallback(asMETHOD(cScriptOutput, AddMessage),
                                      mpScriptOutput, asCALL_THISCALL);
 
+#ifdef AMFP
+  RegisterStdString(mpScriptEngine);
+  RegisterScriptArray(mpScriptEngine, true);
+#else
   RegisterScriptString(mpScriptEngine);
+#endif
 
   mlHandleCount = 0;
 
