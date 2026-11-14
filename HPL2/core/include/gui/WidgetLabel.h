@@ -60,6 +60,11 @@ namespace hpl {
 		void SetScrollSpeedMul(float afX) { mfScrollSpeedMul = afX; }
 		float GetScrollSpeedMul() { return mfScrollSpeedMul; }
 
+		/** Word wrapped text that does not fit scrolls up and down by itself (default). Turn it off
+		 * when the label is sized to fit its text. */
+		void SetAutoScroll(bool abX) { mbAutoScroll = abX; if(abX==false) mfWordWrapOffset = 0; }
+		bool GetAutoScroll() { return mbAutoScroll; }
+
 	protected:
 		/////////////////////////
 		// Own Funcs
@@ -92,6 +97,7 @@ namespace hpl {
 		float mfScrollTimer;
 		float mfWaitToScrollTime;
 		bool mbScrollingDown;
+		bool mbAutoScroll;
 
 		float mfBackgroundZ;
 		cGuiGfxElement *mpGfxBackground;
