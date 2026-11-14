@@ -37,6 +37,7 @@ cLuxMainMenu_CustomStory::cLuxMainMenu_CustomStory(cGuiSet* apGuiSet, cGuiSkin* 
 	mvWindowSize = cVector2f(600,440);
 
 	mpStory = NULL;
+	mpCBHardMode = NULL;
 }
 
 //-----------------------------------------------------------------------
@@ -67,9 +68,15 @@ void cLuxMainMenu_CustomStory::CreateGui()
 	mpIPicture->SetColorMul(cColor(1,0.65f));
 	
 	mpLAuthor = mpGuiSet->CreateWidgetLabel(vPos+cVector3f(50,-50,0), 0, _W(" "), mpWindow);
-	cWidgetFrame* pFDescription = mpGuiSet->CreateWidgetFrame(vPos + cVector3f(0,10,0), cVector2f(420,345), false, mpWindow, false, true);
+	cWidgetFrame* pFDescription = mpGuiSet->CreateWidgetFrame(vPos + cVector3f(0,10,0), cVector2f(420,315), false, mpWindow, false, true);
 	mpLDesc = mpGuiSet->CreateWidgetLabel(0, pFDescription->GetSize()-cVector2f(20,10), _W(""), pFDescription);
 	mpLDesc->SetWordWrap(true);
+
+	//////////////////////////
+	//Hard mode (unticked for every story, warns before starting)
+	mpCBHardMode = mpGuiSet->CreateWidgetCheckBox(vPos + cVector3f(0, 10 + 315 + 8, 0), cVector2f(300,20),
+		kTranslateOr("CustomStory", "EnableHardMode", _W("Enable Hard Mode")), mpWindow);
+	mpCBHardMode->SetChecked(false, false);
 
 	mvButtons.clear();
 
@@ -193,6 +200,8 @@ void cLuxMainMenu_CustomStory::SetCurrentStory(cLuxCustomStorySettings* apStory)
 		sDescription = kTranslate("CustomStory", "NoDescription");
 
 	// Create picture
+	if(mpCBHardMode) mpCBHardMode->SetChecked(false, false);
+
 	// Always clear the previous story's picture, even if this story has none
 	{
 		cGuiGfxElement* pGfx = mpIPicture->GetImage();
@@ -297,6 +306,38 @@ kGuiCallbackDeclaredFuncEnd(cLuxMainMenu_CustomStory, PressContinue);
 bool cLuxMainMenu_CustomStory::PressStart(iWidget* apWidget, const cGuiMessageData& aData)
 {
 	//////////////////////////////////////////////////////
+	// Warn first before starting a custom story in hard mode
+	if(mpCBHardMode && mpCBHardMode->IsChecked())
+	{
+		tWString sText = kTranslateOr("CustomStory", "HardModeWarning",
+			_W("This custom story was not made for hard mode. Scripted events may break and it may not play the way it was meant to. Start it in hard mode anyway?"));
+		cGuiPopUpMessageBox *pPopUp = mpGuiSet->CreatePopUpMessageBox(kTranslate("MainMenu", "HardMode"), sText,
+			kTranslate("MainMenu", "Yes"), kTranslate("MainMenu", "No"),
+			this, kGuiCallback(HardModeWarningCallback));
+		pPopUp->GetGuiSet()->SetDrawFocus(mpGuiSet->GetDrawFocus());
+		return true;
+	}
+
+	StartStory(false);
+	return true;
+}
+kGuiCallbackDeclaredFuncEnd(cLuxMainMenu_CustomStory, PressStart);
+
+//-----------------------------------------------------------------------
+
+bool cLuxMainMenu_CustomStory::HardModeWarningCallback(iWidget* apWidget, const cGuiMessageData& aData)
+{
+	// Button 0 = Yes
+	if(aData.mlVal == 0) StartStory(true);
+	return true;
+}
+kGuiCallbackDeclaredFuncEnd(cLuxMainMenu_CustomStory, HardModeWarningCallback);
+
+//-----------------------------------------------------------------------
+
+void cLuxMainMenu_CustomStory::StartStory(bool abHardMode)
+{
+	//////////////////////////////////////////////////////
 	// Create save folder if not already present
 	tWString sProfileCustomSaveFolder = gpBase->msMainProfileSavePath + _W("custom");
 	if(cPlatform::FolderExists(sProfileCustomSaveFolder)==false)
@@ -307,11 +348,8 @@ bool cLuxMainMenu_CustomStory::PressStart(iWidget* apWidget, const cGuiMessageDa
 			cPlatform::CreateFolder(gpBase->msProfileSavePath);
 	}
 
-	gpBase->StartCustomStory();
-
-	return true;
+	gpBase->StartCustomStory(abHardMode);
 }
-kGuiCallbackDeclaredFuncEnd(cLuxMainMenu_CustomStory, PressStart);
 
 //-----------------------------------------------------------------------
 

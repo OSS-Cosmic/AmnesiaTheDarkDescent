@@ -277,10 +277,11 @@ void cLuxCustomStorySettings::SetActive()
 
 //-----------------------------------------------------------------------
 
-bool cLuxCustomStorySettings::StartGame()
+bool cLuxCustomStorySettings::StartGame(bool abHardMode)
 {
-	// Custom stories are not made for hard mode; never inherit it from an earlier session
-	gpBase->mbHardMode = false;
+	// Custom stories are not made for hard mode: never inherit it from an earlier session,
+	// only use it when the player ticked it in the custom story window.
+	gpBase->mbHardMode = abHardMode;
 
 	gpBase->mpMainMenu->SetWindowActive(eLuxMainMenuWindow_LastEnum);
 
@@ -625,10 +626,10 @@ bool cLuxBase::StartGame(const tString& asFile, const tString& asFolder, const t
 
 //-----------------------------------------------------------------------
 
-bool cLuxBase::StartCustomStory()
+bool cLuxBase::StartCustomStory(bool abHardMode)
 {
 	if(mpCustomStory)
-		return mpCustomStory->StartGame();
+		return mpCustomStory->StartGame(abHardMode);
 
 	return false;
 }

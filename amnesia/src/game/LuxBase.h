@@ -107,7 +107,8 @@ public:
 	 * Starts a new game using the custom settings. 
 	 * NOTE: Should be called from a copied object, NEVER from one in the Custom Story List window!!
 	 */
-	bool StartGame();
+	/** abHardMode: only when the player asked for it in the custom story window (stories are not made for it). */
+	bool StartGame(bool abHardMode=false);
 
 	tWString msName;
 	tWString msAuthor;
@@ -146,7 +147,7 @@ public:
 	void OnScreenSizeChange(const cVector2l& avSize);
 
 	bool StartGame(const tString& asFile, const tString& asFolder, const tString& asStartPos);
-	bool StartCustomStory();
+	bool StartCustomStory(bool abHardMode=false);
 
 	void SaveConfig();
 
