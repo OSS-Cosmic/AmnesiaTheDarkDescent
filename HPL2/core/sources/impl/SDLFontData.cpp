@@ -82,15 +82,12 @@ bool cSDLFontData::CreateFromBitmapFile(const tWString &asFileName) {
   int lLineHeight = cString::ToInt(pCommonElem->Attribute("lineHeight"), 0);
   int lBase = cString::ToInt(pCommonElem->Attribute("base"), 0);
 
-#ifdef AMFP
-  // AMFP fonts are exported with an outline; it pads every glyph cell and
-  // must be added to the line metrics.
+  // Fonts exported with an outline (AMFP, and some mod fonts) pad every glyph
+  // cell; the outline must be added to the line metrics. TDD's stock fonts have
+  // outline=0, so this is a no-op for them.
   tinyxml2::XMLElement *pInfoElem = pRootElem->FirstChildElement("info");
   const int lOutline =
       pInfoElem ? cString::ToInt(pInfoElem->Attribute("outline"), 0) * 2 : 0;
-#else
-  const int lOutline = 0;
-#endif
 
   mfHeight = (float)(lLineHeight + lOutline);
 
