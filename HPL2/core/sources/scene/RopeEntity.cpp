@@ -247,7 +247,8 @@ namespace hpl {
 			cVector3f vPos = pPart->GetSmoothPosition();
 			cVector3f vDelta = vPos - vPrevPos;
 			float fLength = vDelta.Length();
-			cVector3f vUp = vDelta / fLength;
+			// Coincident particles: pick an arbitrary up axis instead of dividing by zero
+			cVector3f vUp = fLength > kEpsilonf ? vDelta / fLength : cVector3f(0, 1, 0);
 			// Fall back to other axes when the segment is parallel to the view direction,
 			// otherwise a zero vector is normalized into NaN geometry.
 			cVector3f vTempCross = cMath::Vector3Cross(vUp, apFrustum->GetForward());
