@@ -64,8 +64,8 @@ project(name)
     -- AngelScript add-ons are written against one AngelScript version, so each
     -- engine build compiles only the set matching the AngelScript it links.
     local script_addons = amfp_script
-        and { "scripthelper.cpp", "scriptarray.cpp", "scriptstdstring.cpp", "scriptstdstring_utils.cpp" }
-        or  { "scripthelper.cpp", "scriptstring.cpp", "scriptstring_utils.cpp" }
+        and { "scripthelper.cpp", "scriptarray.cpp", "scriptstdstring.cpp", "scriptstdstring_utils.cpp", "scriptbuilder.cpp" }
+        or  { "scripthelper.cpp", "scriptstring.cpp", "scriptstring_utils.cpp", "scriptbuilder.cpp" }
     for _, p in ipairs(script_addons) do table.insert(patterns, IMPL .. p) end
     table.insert(patterns, CORE .. "/sources/platform/sdl2/*.cpp")
     local file_list = glob(patterns)

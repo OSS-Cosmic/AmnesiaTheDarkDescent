@@ -24,6 +24,7 @@
 #include "math/Math.h"
 #include <stdio.h>
 #include "impl/scripthelper.h"
+#include "impl/scriptbuilder.h"
 #ifndef AMFP
 #include "impl/scriptstring.h"
 #endif
@@ -151,15 +152,30 @@ namespace hpl {
 		
 		/////////////////////////////////////////
 		// Create module
-		mpModule = mpScriptEngine->GetModule(msModuleName.c_str(), asGM_ALWAYS_CREATE);
-		if(mpModule->AddScriptSection("main", pCharBuffer, lLength)<0)
+		// CScriptBuilder adds support for '#include "file.hps"' (relative to this script's
+		// folder), used by version 1.5 mods. Scripts without directives are unchanged.
+		CScriptBuilder builder;
+		if(builder.StartNewModule(mpScriptEngine, msModuleName.c_str()) < 0)
 		{
-			Error("Couldn't add script '%s'!\n",asFileName.c_str());
+			Error("Couldn't start script module '%s'!\n", msModuleName.c_str());
+			hplDeleteArray(pCharBuffer);
+			return false;
+		}
+		mpModule = mpScriptEngine->GetModule(msModuleName.c_str());
+
+		tString sSectionName = cString::To8Char(asFileName);
+		tString sScriptData(pCharBuffer, lLength);
+		if(builder.AddSectionFromMemory(sScriptData.c_str(), sSectionName.c_str()) < 0)
+		{
+			Error("Couldn't add script '%s'!\n", sSectionName.c_str());
+			if(apCompileMessages) *apCompileMessages = mpScriptOutput->GetMessage();
+			mpScriptOutput->Display();
+			mpScriptOutput->Clear();
 			hplDeleteArray(pCharBuffer);
 			return false;
 		}
 
-		int lBuildOutput = mpModule->Build();
+		int lBuildOutput = builder.BuildModule();
 		if(apCompileMessages) *apCompileMessages = mpScriptOutput->GetMessage();
 
 		if(lBuildOutput<0)
