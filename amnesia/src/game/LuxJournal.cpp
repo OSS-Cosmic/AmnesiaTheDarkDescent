@@ -490,7 +490,8 @@ void cLuxJournal::Update(float afTimeStep)
 
 	////////////////////////
 	//Update extra effects
-	gpBase->mpEffectHandler->GetSanityGainFlash()->Update(afTimeStep);
+	if(gpBase->mpEffectHandler->GetSanityGainFlash()->IsActive())
+		gpBase->mpEffectHandler->GetSanityGainFlash()->Update(afTimeStep);
 }
 
 //-----------------------------------------------------------------------
@@ -610,7 +611,8 @@ void cLuxJournal::OnDraw(float afFrameTime)
 
 	////////////////////////
 	//Draw extra effects
-	gpBase->mpEffectHandler->GetSanityGainFlash()->DrawFlash(mpGuiSet, afFrameTime);
+	if(gpBase->mpEffectHandler->GetSanityGainFlash()->IsActive())
+		gpBase->mpEffectHandler->GetSanityGainFlash()->DrawFlash(mpGuiSet, afFrameTime);
 }
 
 //-----------------------------------------------------------------------
