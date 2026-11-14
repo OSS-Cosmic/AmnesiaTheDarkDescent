@@ -1153,7 +1153,7 @@ bool cLuxPlayer::CanDrawCrossHair()
 	{
 		if(mpEntityInFocus)
 		{
-			if(mpEntityInFocus->CanInteract(mpBodyInFocus) && mfCurrentFocusDistance <= mpEntityInFocus->GetMaxFocusDistance()) 
+			if(mpEntityInFocus->CanInteract(mpBodyInFocus) && mpEntityInFocus->GetInteractionDisabled()==false && mfCurrentFocusDistance <= mpEntityInFocus->GetMaxFocusDistance()) 
 				return true;
 			else
 				return false;
