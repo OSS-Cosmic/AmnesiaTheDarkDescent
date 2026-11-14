@@ -355,6 +355,7 @@ public:
 	bool mbJumpDisabled;
 	bool mbCrouchDisabled;
 	bool mbSanityDrainDisabled;
+	bool mbGlobalSanityDrainDisabled = false; // default for saves made before this field existed
 
 	float mfInteractionMoveSpeedMul;
 	float mfEventMoveSpeedMul;

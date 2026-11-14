@@ -221,6 +221,7 @@ private:
 	static void __stdcall SetPlayerPermaDeathSound(std::string& asSound);
 
 	static void __stdcall SetSanityDrainDisabled(bool abX);
+	static void __stdcall SetGlobalSanityDrainDisabled(bool abX);
 	static void __stdcall GiveSanityBoost();
 	static void __stdcall GiveSanityBoostSmall();
 	static void __stdcall GiveSanityDamage(float afAmount, bool abUseEffect);

@@ -211,6 +211,9 @@ public:
 
 	void SetSanityDrainDisabled(bool abX){ mbSanityDrainDisabled = abX;}
 	bool GetSanityDrainDisabled(){ return mbSanityDrainDisabled;}
+	/** Blocks every sanity loss (darkness, enemies, script damage), unlike SetSanityDrainDisabled which only stops the darkness drain. */
+	void SetGlobalSanityDrainDisabled(bool abX){ mbGlobalSanityDrainDisabled = abX;}
+	bool GetGlobalSanityDrainDisabled(){ return mbGlobalSanityDrainDisabled;}
 
 	float GetInteractionMoveSpeedMul(){ return mfInteractionMoveSpeedMul;}
 	void SetInteractionMoveSpeedMul(float afX){ mfInteractionMoveSpeedMul = afX;}
@@ -349,6 +352,7 @@ private:
 	bool mbJumpDisabled;
 	bool mbCrouchDisabled;
 	bool mbSanityDrainDisabled;
+	bool mbGlobalSanityDrainDisabled;
 
 	float mfEventMoveSpeedMul;
 	float mfEventRunSpeedMul;

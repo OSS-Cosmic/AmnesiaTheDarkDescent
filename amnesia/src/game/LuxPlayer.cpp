@@ -238,6 +238,7 @@ void cLuxPlayer::Reset()
 	mbJumpDisabled = false;
 	mbCrouchDisabled = false;
 	mbSanityDrainDisabled = false;
+	mbGlobalSanityDrainDisabled = false;
 
 	mbIsInWater = false;
 	msWaterStepSound = "";
@@ -614,6 +615,8 @@ void cLuxPlayer::GiveDamage(float afAmount, int alStrength, eLuxDamageType aType
 
 void cLuxPlayer::GiveSanityDamage(float afAmount)
 {
+	if(mbGlobalSanityDrainDisabled) return;
+
 	gpBase->mpHintHandler->Add("SanityHit", kTranslate("Hints", "SanityHit"), 0);
 
 	LowerSanity(afAmount, true);
@@ -624,6 +627,7 @@ void cLuxPlayer::GiveSanityDamage(float afAmount)
 
 void cLuxPlayer::LowerSanity(float afAmount, bool abUseEffect)
 {
+	if(mbGlobalSanityDrainDisabled) return;
 	if(mfHealth <=0) return;
 
 	mfSanity -= afAmount;

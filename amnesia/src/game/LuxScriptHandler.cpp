@@ -499,6 +499,10 @@ void cLuxScriptHandler::InitScriptFunctions()
 	AddFunc("void SetPlayerPermaDeathSound(string &in asSound)",(void *)SetPlayerPermaDeathSound);
 
 	AddFunc("void SetSanityDrainDisabled(bool abX)",(void *)SetSanityDrainDisabled);
+	// Same as SetSanityDrainDisabled (darkness drain only), with a clearer name
+	AddFunc("void SetPlayerSanityDrainDisabled(bool abX)",(void *)SetSanityDrainDisabled);
+	// Stops every sanity loss: darkness, enemies, script damage
+	AddFunc("void SetGlobalSanityDrainDisabled(bool abX)",(void *)SetGlobalSanityDrainDisabled);
 	AddFunc("void GiveSanityBoost()",(void *)GiveSanityBoost);
 	AddFunc("void GiveSanityBoostSmall()", (void *)GiveSanityBoostSmall);
 	AddFunc("void GiveSanityDamage(float afAmount, bool abUseEffect)",(void *)GiveSanityDamage);
@@ -1542,6 +1546,11 @@ void __stdcall cLuxScriptHandler::SetPlayerPermaDeathSound(std::string& asSound)
 void __stdcall cLuxScriptHandler::SetSanityDrainDisabled(bool abX)
 {
 	gpBase->mpPlayer->SetSanityDrainDisabled(abX);
+}
+
+void __stdcall cLuxScriptHandler::SetGlobalSanityDrainDisabled(bool abX)
+{
+	gpBase->mpPlayer->SetGlobalSanityDrainDisabled(abX);
 }
 
 //-----------------------------------------------------------------------
