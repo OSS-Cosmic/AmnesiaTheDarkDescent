@@ -18,6 +18,7 @@
  */
 
 #include "LuxPlayer.h"
+#include "LuxGlobalDataHandler.h"
 
 #include "LuxMap.h"
 #include "LuxInventory.h"
@@ -1372,6 +1373,16 @@ void cLuxPlayer::UpdateTerror(float afTimeStep)
 
 
 	cSoundHandler *pSoundHandler = gpBase->mpEngine->GetSound()->GetSoundHandler();
+
+	// Terror sound turned off in Options > Sound
+	if(gpBase->mpGlobalDataHandler->GetTerrorSoundEnabled()==false)
+	{
+		if(mpTerrorSound && pSoundHandler->IsValid(mpTerrorSound, mlTerrorSoundID))
+			mpTerrorSound->GetChannel()->Stop();
+		mpTerrorSound = NULL;
+		mlTerrorSoundID = -1;
+		return;
+	}
 
 	if(mfTerror > 0)
 	{

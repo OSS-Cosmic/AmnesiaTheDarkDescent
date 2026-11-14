@@ -241,6 +241,9 @@ private:
 	cWidgetLabel  *mpLVolume;
 	cWidgetSlider *mpSVolume;
 	cWidgetCheckBox *mpChBHRTF;
+	cWidgetCheckBox *mpChBEnemyActivateSound;
+	cWidgetCheckBox *mpChBInsanityRingSound;
+	cWidgetCheckBox *mpChBTerrorSound;
 
 	cWidgetLabel  *mpLSndDevice;
 	cWidgetComboBox *mpCBSndDevice;

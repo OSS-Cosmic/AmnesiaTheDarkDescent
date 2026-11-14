@@ -19,6 +19,7 @@
 
 #include "LuxMainMenu_Options.h"
 #include "LuxEffectHandler.h"
+#include "LuxGlobalDataHandler.h"
 
 #include "LuxMap.h"
 #include "LuxMapHandler.h"
@@ -1263,14 +1264,38 @@ void cLuxMainMenu_Options::AddSoundOptions(cWidgetTab* apTab)
 		sHRTFTip = _W("WARNING: This feature is known to cause audio problems in this game. It is recommended to keep this disabled."); // English default
 
 	SetUpInput(NULL, mpChBHRTF, true, sHRTFTip);
+	vPos.y += mpChBHRTF->GetSize().y + 15;
+
+	/////////////////////////////
+	// Optional sounds
+	mpChBEnemyActivateSound = mpGuiSet->CreateWidgetCheckBox(vPos, 0, kTranslateOr("OptionsMenu", "EnemyActivateSound", _W("Enemy activation sounds")), apTab);
+	SetUpInput(NULL, mpChBEnemyActivateSound, false, kTranslateOr("OptionsMenu", "EnemyActivateSoundTip",
+		_W("Play the sting when an enemy appears.")));
+	vPos.y += mpChBEnemyActivateSound->GetSize().y + 10;
+
+	mpChBInsanityRingSound = mpGuiSet->CreateWidgetCheckBox(vPos, 0, kTranslateOr("OptionsMenu", "InsanityRingSound", _W("Insanity ear ringing")), apTab);
+	SetUpInput(NULL, mpChBInsanityRingSound, false, kTranslateOr("OptionsMenu", "InsanityRingSoundTip",
+		_W("Play the ear ringing sound when the player collapses from insanity.")));
+	vPos.y += mpChBInsanityRingSound->GetSize().y + 10;
+
+	mpChBTerrorSound = mpGuiSet->CreateWidgetCheckBox(vPos, 0, kTranslateOr("OptionsMenu", "TerrorSound", _W("Terror sound")), apTab);
+	SetUpInput(NULL, mpChBTerrorSound, false, kTranslateOr("OptionsMenu", "TerrorSoundTip",
+		_W("Play the terror sound while an enemy is hunting the player.")));
+	vPos.y += mpChBTerrorSound->GetSize().y + 10;
 
 	mpCBSndDevice->SetFocusNavigation(eUIArrow_Down, mpSVolume);
 	mpSVolume->SetFocusNavigation(eUIArrow_Up, mpCBSndDevice);
 	mpSVolume->SetFocusNavigation(eUIArrow_Down, mpChBHRTF);
 	mpChBHRTF->SetFocusNavigation(eUIArrow_Up, mpSVolume);
-	mpChBHRTF->SetFocusNavigation(eUIArrow_Down, mpBOK);
+	mpChBHRTF->SetFocusNavigation(eUIArrow_Down, mpChBEnemyActivateSound);
+	mpChBEnemyActivateSound->SetFocusNavigation(eUIArrow_Up, mpChBHRTF);
+	mpChBEnemyActivateSound->SetFocusNavigation(eUIArrow_Down, mpChBInsanityRingSound);
+	mpChBInsanityRingSound->SetFocusNavigation(eUIArrow_Up, mpChBEnemyActivateSound);
+	mpChBInsanityRingSound->SetFocusNavigation(eUIArrow_Down, mpChBTerrorSound);
+	mpChBTerrorSound->SetFocusNavigation(eUIArrow_Up, mpChBInsanityRingSound);
+	mpChBTerrorSound->SetFocusNavigation(eUIArrow_Down, mpBOK);
 
-	apTab->SetUserData(mpChBHRTF);
+	apTab->SetUserData(mpChBTerrorSound);
 	apTab->GetTabLabel()->SetUserData(mpCBSndDevice);
 
 	PopulateSoundDevices();
@@ -1655,6 +1680,10 @@ void cLuxMainMenu_Options::SetInputValues(cResourceVarsObject& aObj)
 
 	mpChBHRTF->SetChecked(aObj.GetVarBool("HRTFActive"), false);
 	#endif
+
+	mpChBEnemyActivateSound->SetChecked(aObj.GetVarBool("EnemyActivateSound", true), false);
+	mpChBInsanityRingSound->SetChecked(aObj.GetVarBool("InsanityRingSound", true), false);
+	mpChBTerrorSound->SetChecked(aObj.GetVarBool("TerrorSound", true), false);
 
 	RefreshRenderScaleControl();
 	RefreshRendererBackendControl();
@@ -2134,6 +2163,10 @@ void cLuxMainMenu_Options::ApplyChanges()
     // Sound
 	pCfgHdr->mbHRTFActive = mpChBHRTF->IsChecked();
 
+	gpBase->mpGlobalDataHandler->SetEnemyActivateSoundEnabled(mpChBEnemyActivateSound->IsChecked());
+	gpBase->mpGlobalDataHandler->SetInsanityRingSoundEnabled(mpChBInsanityRingSound->IsChecked());
+	gpBase->mpGlobalDataHandler->SetTerrorSoundEnabled(mpChBTerrorSound->IsChecked());
+
 	/* gpBase->mpEngine->GetSound()->GetLowLevel()->SetVolume(GetVolume());
 	cWidgetItem* pItem = mpCBSndDevice->GetItem(mpCBSndDevice->GetSelectedItem());
 	if(pItem)
@@ -2444,6 +2477,9 @@ void cLuxMainMenu_Options::DumpInitialValues(cResourceVarsObject &aObj)
 	aObj.AddVarFloat("SoundVolume", gpBase->mpEngine->GetSound()->GetLowLevel()->GetVolume());
 	aObj.AddVarInt("SoundDeviceID", gpBase->mpConfigHandler->mlSoundDevID);
 	aObj.AddVarBool("HRTFActive", gpBase->mpConfigHandler->mbHRTFActive);
+	aObj.AddVarBool("EnemyActivateSound", gpBase->mpGlobalDataHandler->GetEnemyActivateSoundEnabled());
+	aObj.AddVarBool("InsanityRingSound", gpBase->mpGlobalDataHandler->GetInsanityRingSoundEnabled());
+	aObj.AddVarBool("TerrorSound", gpBase->mpGlobalDataHandler->GetTerrorSoundEnabled());
 }
 
 //-----------------------------------------------------------------------
@@ -2545,6 +2581,9 @@ void cLuxMainMenu_Options::DumpCurrentValues(cResourceVarsObject &aObj)
 
 	aObj.AddVarInt("SoundDeviceID", lDevID);
 	aObj.AddVarBool("HRTFActive", mpChBHRTF->IsChecked());
+	aObj.AddVarBool("EnemyActivateSound", mpChBEnemyActivateSound->IsChecked());
+	aObj.AddVarBool("InsanityRingSound", mpChBInsanityRingSound->IsChecked());
+	aObj.AddVarBool("TerrorSound", mpChBTerrorSound->IsChecked());
 }
 
 
