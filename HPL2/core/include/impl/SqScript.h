@@ -41,7 +41,13 @@ namespace hpl {
 		bool Run(const tString& asFuncLine);
 		bool Run(int alHandle);
 
+		bool RunFuncString(const tString& asFuncName, const tString& asArg0);
+		bool RunFuncFloat(const tString& asFuncName, float afArg0);
+
 	private:
+		bool PrepareSingleArgFunc(const tString& asFuncName, int alArgTypeId);
+		bool ExecutePrepared(const tString& asFuncName);
+
 		asIScriptEngine *mpScriptEngine;
 		cScriptOutput *mpScriptOutput;
         

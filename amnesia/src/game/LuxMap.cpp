@@ -399,6 +399,32 @@ void cLuxMap::Update(float afTimeStep)
 	UpdateToBeDesotroyedEntities(true);
 
 	UpdateLampLightConnections(afTimeStep);
+
+	RunUpdateCallback(afTimeStep);
+}
+
+//-----------------------------------------------------------------------
+
+void cLuxMap::RunTimer(const tString& asTimerFunc, const tString& asTimerName)
+{
+	if(!mpScript) return;
+	if(this != gpBase->mpMapHandler->GetCurrentMap()) return;
+
+	// Call the function directly instead of compiling a line of script for every timer.
+	// Fall back to the old way for anything that is not a plain void Func(string) callback.
+	if(mpScript->RunFuncString(asTimerFunc, asTimerName)==false)
+		mpScript->Run(asTimerFunc+"(\""+asTimerName+"\")");
+}
+
+//-----------------------------------------------------------------------
+
+void cLuxMap::RunUpdateCallback(float afTimeStep)
+{
+	if(!mpScript) return;
+	if(this != gpBase->mpMapHandler->GetCurrentMap()) return;
+
+	// Optional per-frame map script callback: void OnUpdate(float afStep)
+	mpScript->RunFuncFloat("OnUpdate", afTimeStep);
 }
 
 //-----------------------------------------------------------------------
@@ -1383,7 +1409,7 @@ void cLuxMap::UpdateTimers(float afTimeStep)
 
 		if(pTimer->mfCount <=0 && pTimer->mbDestroyMe==false)
 		{
-			RunScript(pTimer->msFunction+"(\""+pTimer->msName+"\")");
+			RunTimer(pTimer->msFunction, pTimer->msName);
 			it = mlstTimers.erase(it);
 			hplDelete(pTimer);
 			

@@ -24,6 +24,9 @@
 #include "math/Math.h"
 #include <stdio.h>
 #include "impl/scripthelper.h"
+#ifndef AMFP
+#include "impl/scriptstring.h"
+#endif
 #include "resources/BinaryBuffer.h"
 #include "resources/Resources.h"
 
@@ -224,9 +227,83 @@ namespace hpl {
 
 	//-----------------------------------------------------------------------
 
+	bool cSqScript::RunFuncString(const tString& asFuncName, const tString& asArg0)
+	{
+		if(PrepareSingleArgFunc(asFuncName, mpScriptEngine->GetTypeIdByDecl("string"))==false)
+			return false;
+
+#ifdef AMFP
+		// AMFP registers std::string as the script string type
+		tString sArg = asArg0;
+		mpContext->SetArgObject(0, &sArg);
+		return ExecutePrepared(asFuncName);
+#else
+		// TDD registers the ref counted CScriptString as the script string type
+		CScriptString *pArg = new CScriptString(asArg0);
+		mpContext->SetArgObject(0, pArg);
+		bool bRet = ExecutePrepared(asFuncName);
+		pArg->Release();
+		return bRet;
+#endif
+	}
+
+	//-----------------------------------------------------------------------
+
+	bool cSqScript::RunFuncFloat(const tString& asFuncName, float afArg0)
+	{
+		if(PrepareSingleArgFunc(asFuncName, asTYPEID_FLOAT)==false)
+			return false;
+
+		mpContext->SetArgFloat(0, afArg0);
+		return ExecutePrepared(asFuncName);
+	}
+
+	//-----------------------------------------------------------------------
+
 	//////////////////////////////////////////////////////////////////////////
 	// PRIVATE METHODS
 	//////////////////////////////////////////////////////////////////////////
+
+	//-----------------------------------------------------------------------
+
+	bool cSqScript::PrepareSingleArgFunc(const tString& asFuncName, int alArgTypeId)
+	{
+		if(mpModule==NULL || mpContext==NULL || alArgTypeId < 0) return false;
+
+		// Nested call (a script is already running on this context): let the caller fall back
+		if(mpContext->GetState() == asEXECUTION_ACTIVE) return false;
+
+#ifdef AMFP
+		// Returns NULL when there is no function or several overloads with this name
+		asIScriptFunction *pFunc = mpModule->GetFunctionByName(asFuncName.c_str());
+#else
+		int lFuncId = mpModule->GetFunctionIdByName(asFuncName.c_str());
+		asIScriptFunction *pFunc = lFuncId >= 0 ? mpScriptEngine->GetFunctionDescriptorById(lFuncId) : NULL;
+#endif
+		if(pFunc==NULL) return false;
+		if(pFunc->GetParamCount() != 1) return false;
+		if(pFunc->GetParamTypeId(0) != alArgTypeId) return false;
+
+#ifdef AMFP
+		return mpContext->Prepare(pFunc) >= 0;
+#else
+		return mpContext->Prepare(lFuncId) >= 0;
+#endif
+	}
+
+	//-----------------------------------------------------------------------
+
+	bool cSqScript::ExecutePrepared(const tString& asFuncName)
+	{
+		int lRet = mpContext->Execute();
+		if(lRet == asEXECUTION_EXCEPTION)
+		{
+			Error("Script exception in '%s' (%s): %s\n", asFuncName.c_str(), msModuleName.c_str(),
+				  mpContext->GetExceptionString() ? mpContext->GetExceptionString() : "");
+		}
+		// The function was found and run, even if it threw, so callers must not run it again.
+		return true;
+	}
 
 	//-----------------------------------------------------------------------
 
