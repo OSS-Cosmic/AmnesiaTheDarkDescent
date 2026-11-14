@@ -366,6 +366,7 @@ namespace hpl {
 			if(pFile==NULL)
 			{
 				Error("Unable to open serialized file '%s' as rb! Invalid filepointer returned!\n", cString::To8Char(asFile).c_str());
+				hplDelete(pXmlDoc);
 				return false;
 			}
 			if(pXmlDoc->LoadFile(pFile)!=tinyxml2::XML_SUCCESS)
@@ -420,9 +421,21 @@ namespace hpl {
 
 		//Get root
 		tinyxml2::XMLElement* pRootElem = pXmlDoc->RootElement();
+		if(pRootElem == NULL)
+		{
+			Error("Serialized file '%s' has no root element!\n", cString::To8Char(asFile).c_str());
+			hplDelete(pXmlDoc);
+			return false;
+		}
 
 		//Get first, there should only be ONE class at the root.
 		tinyxml2::XMLElement* pClassElem = pRootElem->FirstChildElement("class");
+		if(pClassElem == NULL)
+		{
+			Error("Serialized file '%s' has no class element!\n", cString::To8Char(asFile).c_str());
+			hplDelete(pXmlDoc);
+			return false;
+		}
 
 		LoadFromElement(apData,pClassElem);
 
@@ -436,6 +449,9 @@ namespace hpl {
 											bool abIsPointer)
 	{
 		SetUpData();
+
+		if(apData == NULL || apElement == NULL)
+			return;
 
 		cSerializeSavedClass *pClass = GetClass(apData->Serialize_GetTopClass());
 		if(pClass==NULL) return;
@@ -647,6 +663,9 @@ namespace hpl {
 	void cSerializeClass::StringToValue(void* apData, size_t alOffset, eSerializeType aType,
 										const char* asVal)
 	{
+		if(asVal == NULL)
+			asVal = "";
+
 		void *pVal = ValuePointer(apData,alOffset);
 
 		switch(aType)
@@ -682,6 +701,8 @@ namespace hpl {
 			{
 				tIntVec vVals; vVals.reserve(2);
 				cString::GetIntVec(asVal,vVals,NULL);
+				// Pad short or empty values so FromVec never reads past the end
+				while(vVals.size() < 2) vVals.push_back(0);
 
 				PointerValue(pVal,cVector2l).FromVec(&vVals[0]);
 
@@ -693,6 +714,8 @@ namespace hpl {
 			{
 				tFloatVec vVals; vVals.reserve(2);
 				cString::GetFloatVec(asVal,vVals,NULL);
+				// Pad short or empty values so FromVec never reads past the end
+				while(vVals.size() < 2) vVals.push_back(0);
 
 				PointerValue(pVal,cVector2f).FromVec(&vVals[0]);
 
@@ -704,6 +727,8 @@ namespace hpl {
 			{
 				tIntVec vVals; vVals.reserve(3);
 				cString::GetIntVec(asVal,vVals,NULL);
+				// Pad short or empty values so FromVec never reads past the end
+				while(vVals.size() < 3) vVals.push_back(0);
 
 				PointerValue(pVal,cVector3l).FromVec(&vVals[0]);
 
@@ -715,6 +740,8 @@ namespace hpl {
 			{
 				tFloatVec vVals; vVals.reserve(3);
 				cString::GetFloatVec(asVal,vVals,NULL);
+				// Pad short or empty values so FromVec never reads past the end
+				while(vVals.size() < 3) vVals.push_back(0);
 
 				PointerValue(pVal,cVector3f).FromVec(&vVals[0]);
 
@@ -726,6 +753,8 @@ namespace hpl {
 			{
 				tFloatVec vVals; vVals.reserve(16);
 				cString::GetFloatVec(asVal,vVals,NULL);
+				// Pad short or empty values so FromVec never reads past the end
+				while(vVals.size() < 16) vVals.push_back(0);
 
 				PointerValue(pVal,cMatrixf).FromVec(&vVals[0]);
 
@@ -737,6 +766,8 @@ namespace hpl {
 			{
 				tFloatVec vVals; vVals.reserve(4);
 				cString::GetFloatVec(asVal,vVals,NULL);
+				// Pad short or empty values so FromVec never reads past the end
+				while(vVals.size() < 4) vVals.push_back(0);
 
 				PointerValue(pVal,cColor).FromVec(&vVals[0]);
 
@@ -748,6 +779,8 @@ namespace hpl {
 			{
 				tIntVec vVals; vVals.reserve(4);
 				cString::GetIntVec(asVal,vVals,NULL);
+				// Pad short or empty values so FromVec never reads past the end
+				while(vVals.size() < 4) vVals.push_back(0);
 
 				PointerValue(pVal,cRect2l).FromVec(&vVals[0]);
 
@@ -759,6 +792,8 @@ namespace hpl {
 			{
 				tFloatVec vVals; vVals.reserve(4);
 				cString::GetFloatVec(asVal,vVals,NULL);
+				// Pad short or empty values so FromVec never reads past the end
+				while(vVals.size() < 4) vVals.push_back(0);
 
 				PointerValue(pVal,cRect2f).FromVec(&vVals[0]);
 
@@ -770,6 +805,8 @@ namespace hpl {
 			{
 				tFloatVec vVals; vVals.reserve(4);
 				cString::GetFloatVec(asVal,vVals,NULL);
+				// Pad short or empty values so FromVec never reads past the end
+				while(vVals.size() < 4) vVals.push_back(0);
 
 				PointerValue(pVal,cPlanef).FromVec(&vVals[0]);
 
