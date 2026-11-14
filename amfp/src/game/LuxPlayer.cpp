@@ -1493,7 +1493,9 @@ void cLuxPlayer::UpdateAvgSpeed(float afTimeStep)
 {
 	float fSpeed = mpCharBody->GetVelocity(afTimeStep).Length();
 	mlstPrevSpeeds.push_back(fSpeed);
-	if((int)mlstPrevSpeeds.size() > mlMaxPrevSpeeds) mlstPrevSpeeds.pop_front();
+	// A missing/zero MaxPrevSpeedsSaved emptied the list and made the average divide by zero
+	int lMaxPrevSpeeds = mlMaxPrevSpeeds > 0 ? mlMaxPrevSpeeds : 1;
+	while((int)mlstPrevSpeeds.size() > lMaxPrevSpeeds) mlstPrevSpeeds.pop_front();
 
 	mfAvgSpeed = 0;
 	std::list<float>::iterator it = mlstPrevSpeeds.begin();
