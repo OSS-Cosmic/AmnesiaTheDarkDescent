@@ -475,8 +475,12 @@ void cLuxProp_Object::BeforePropDestruction()
 {
 	//////////////////////////////
 	// Check if break should happen and init stuff
-	if(mbBroken == false || mBreakData.mbActive==false || mvBodies.empty() || mbDisableBreakable)
+	// mbDisableBreakable is not checked here: if the prop was broken anyway (e.g. by a
+	// script), skipping the broken version made the object vanish.
+	if(mbBroken == false || mBreakData.mbActive==false || mvBodies.empty())
 	{
+		if(mbBroken && mBreakData.mbActive && mvBodies.empty())
+			Warning("Object '%s' broke but has no bodies, no broken version created\n", msName.c_str());
 		return;
 	}
 
