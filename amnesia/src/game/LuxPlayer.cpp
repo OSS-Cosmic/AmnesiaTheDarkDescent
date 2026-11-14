@@ -680,7 +680,7 @@ void cLuxPlayer::AddYaw(float afAmount)
 {
 	if (mbFreeCameraActive)
 	{
-		mpCamera->AddYaw(mpCamDirEffects->AddAndGetPitchAdd(afAmount * 2.0f));
+		mpCamera->AddYaw(mpCamDirEffects->AddAndGetYawAdd(afAmount * 2.0f));
 		return;
 	}
 
