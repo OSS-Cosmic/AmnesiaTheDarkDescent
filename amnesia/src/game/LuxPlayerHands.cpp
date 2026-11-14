@@ -417,8 +417,13 @@ void cLuxPlayerHands::SetCurrentHandObject(iLuxHandObject *apObject)
 	else if(apObject)
 	{
 		CreateAndAttachHandObject(pMap, apObject);
-		PlayAnim(apObject->GetAnimDraw(),false);
+
+		// Start the draw animation at full weight (no fade from the previous pose) and pose
+		// the hands right away, otherwise they are shown in the old pose for a frame and jerk.
+		mpHandsEntity->PlayName(apObject->GetAnimDraw(), false, true);
+		msCurrentAnim = apObject->GetAnimDraw();
 		mpHandsEntity->SetVisible(true);
+		mpHandsEntity->UpdateLogic(0);
 
 		mHandState = eLuxHandsState_Draw;
 	}
