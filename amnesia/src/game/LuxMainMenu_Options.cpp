@@ -18,6 +18,7 @@
  */
 
 #include "LuxMainMenu_Options.h"
+#include "LuxEffectHandler.h"
 
 #include "LuxMap.h"
 #include "LuxMapHandler.h"
@@ -196,6 +197,10 @@ cLuxMainMenu_Options::cLuxMainMenu_Options(cGuiSet *apGuiSet, cGuiSkin *apGuiSki
 	mfMouseSensitivityMin = 0.2f;
 	mfMouseSensitivityStep = 0.1f;
 	mfMouseSensitivityMax = 5.0f;
+
+	mfFlashMin = 0.0f;
+	mfFlashStep = 0.05f;
+	mfFlashMax = 1.0f;
 
 	mfFOVMin = cLuxPlayer::kfMinFOVDegrees;
 	mfFOVStep = 1.0f;
@@ -451,6 +456,15 @@ void cLuxMainMenu_Options::AddGameOptions(cWidgetTab* apTab)
 	SetUpSlider(mpSFOV, mfFOVMin, mfFOVMax, mfFOVStep, kGuiCallback(FOVSlider_OnMove), &mpLFOV);
 	vPos.y += pLabel->GetSize().y + 15;
 
+	///////////////////////////////////////////////
+	// Flashback / screen flash intensity
+	pLabel = mpGuiSet->CreateWidgetLabel(vPos, -1, kTranslateOr("OptionsMenu", "FlashIntensity", _W("Flash intensity")), apTab);
+	mpSFlash = mpGuiSet->CreateWidgetSlider(eWidgetSliderOrientation_Horizontal, cVector3f(pLabel->GetSize().x + 5, -1, 0), cVector2f(150, 20), 0, pLabel);
+	SetUpInput(pLabel, mpSFlash, false, kTranslateOr("OptionsMenu", "FlashIntensityTip",
+		_W("Brightness of the white screen flashes during flashbacks and similar events.")));
+	SetUpSlider(mpSFlash, mfFlashMin, mfFlashMax, mfFlashStep, kGuiCallback(FlashSlider_OnMove), &mpLFlash);
+	vPos.y += pLabel->GetSize().y + 15;
+
 	//////////////////////////////////
 	// Commentary
 	if(mbShowCommentary)
@@ -477,18 +491,19 @@ void cLuxMainMenu_Options::AddGameOptions(cWidgetTab* apTab)
 	mpChBShowDeathHints->SetFocusNavigation(eUIArrow_Down, mpChBShowCrosshair);
 	mpChBShowCrosshair->SetFocusNavigation(eUIArrow_Down, mpCBFocusIconStyle);
 	mpCBFocusIconStyle->SetFocusNavigation(eUIArrow_Down, mpSFOV);
+	mpSFOV->SetFocusNavigation(eUIArrow_Down, mpSFlash);
 	if(mbShowCommentary)
 	{
-		mpSFOV->SetFocusNavigation(eUIArrow_Down, mpChBShowCommentary);
+		mpSFlash->SetFocusNavigation(eUIArrow_Down, mpChBShowCommentary);
 		mpChBShowCommentary->SetFocusNavigation(eUIArrow_Down, mpBOK);
 
 		pLastWidget = mpChBShowCommentary;
 	}
 	else
 	{
-		mpSFOV->SetFocusNavigation(eUIArrow_Down, mpBOK);
+		mpSFlash->SetFocusNavigation(eUIArrow_Down, mpBOK);
 
-		pLastWidget = mpSFOV;
+		pLastWidget = mpSFlash;
 	}
 
 	apTab->SetUserData(pLastWidget);
@@ -503,8 +518,9 @@ void cLuxMainMenu_Options::AddGameOptions(cWidgetTab* apTab)
 	mpChBShowCrosshair->SetFocusNavigation(eUIArrow_Up, mpChBShowDeathHints);
 	mpCBFocusIconStyle->SetFocusNavigation(eUIArrow_Up, mpChBShowCrosshair);
 	mpSFOV->SetFocusNavigation(eUIArrow_Up, mpCBFocusIconStyle);
+	mpSFlash->SetFocusNavigation(eUIArrow_Up, mpSFOV);
 	if(mbShowCommentary)
-		mpChBShowCommentary->SetFocusNavigation(eUIArrow_Up, mpSFOV);
+		mpChBShowCommentary->SetFocusNavigation(eUIArrow_Up, mpSFlash);
 
 	// Left/Right
 	mpChBShowSubtitles->SetFocusNavigation(eUIArrow_Right, mpChBShowEffectSubtitles);
@@ -1284,6 +1300,10 @@ void cLuxMainMenu_Options::SetInputValues(cResourceVarsObject& aObj)
 		SetSliderValue(mpSFOV, fFOV, false, mfFOVMin, mfFOVMax);
 		SetFOVLabelString(fFOV);
 
+		float fFlash = aObj.GetVarFloat("FlashIntensity", 1.0f);
+		SetSliderValue(mpSFlash, fFlash, false, mfFlashMin, mfFlashMax);
+		SetFlashLabelString(fFlash);
+
 		if(mbShowCommentary)
 		{
 			mpChBShowCommentary->SetChecked(aObj.GetVarBool("ShowCommentary"), false);
@@ -1998,6 +2018,7 @@ void cLuxMainMenu_Options::ApplyChanges()
 		gpBase->mpPlayer->SetFocusIconStyle((eLuxFocusIconStyle)mpCBFocusIconStyle->GetSelectedItem());
 
 		gpBase->mpPlayer->SetFOVDegrees(GetFOV());
+		gpBase->mpEffectHandler->SetFlashIntensity(GetFlash());
 	}
 
 
@@ -2134,6 +2155,13 @@ void cLuxMainMenu_Options::ApplyChanges()
 void cLuxMainMenu_Options::SetGammaLabelString(float afX)
 {
 	SetSliderLabelString(mpLGamma, afX, mfGammaMin, mfGammaMax);
+}
+
+//-----------------------------------------------------------------------
+
+void cLuxMainMenu_Options::SetFlashLabelString(float afX)
+{
+	SetSliderLabelString(mpLFlash, afX, mfFlashMin, mfFlashMax);
 }
 
 //-----------------------------------------------------------------------
@@ -2335,6 +2363,7 @@ void cLuxMainMenu_Options::DumpInitialValues(cResourceVarsObject &aObj)
 		aObj.AddVarBool("ShowCrosshair", gpBase->mpPlayer->GetShowCrosshair());
 		aObj.AddVarInt("FocusIconStyle", gpBase->mpPlayer->GetFocusIconStyle());
 		aObj.AddVarFloat("FOV", (float)cMath::RoundToInt(gpBase->mpPlayer->GetFOVDegrees()));
+		aObj.AddVarFloat("FlashIntensity", gpBase->mpEffectHandler->GetFlashIntensity());
 		aObj.AddVarBool("ShowCommentary", gpBase->mpMapHandler->GetShowCommentary());
 
 		// Language
@@ -2432,6 +2461,7 @@ void cLuxMainMenu_Options::DumpCurrentValues(cResourceVarsObject &aObj)
 		aObj.AddVarBool("ShowCrosshair",	mpChBShowCrosshair->IsChecked());
 		aObj.AddVarInt("FocusIconStyle",	mpCBFocusIconStyle->GetSelectedItem());
 		aObj.AddVarFloat("FOV",				GetFOV());
+		aObj.AddVarFloat("FlashIntensity",	GetFlash());
 
 		aObj.AddVarString("Language",		cString::To8Char(mvLangFiles[mpCBLanguage->GetSelectedItem()]));
 	}
@@ -2742,6 +2772,15 @@ bool cLuxMainMenu_Options::GammaSlider_OnMove(iWidget* apWidget, const cGuiMessa
 	return true;
 }
 kGuiCallbackDeclaredFuncEnd(cLuxMainMenu_Options, GammaSlider_OnMove);
+
+//-----------------------------------------------------------------------
+
+bool cLuxMainMenu_Options::FlashSlider_OnMove(iWidget* apWidget, const cGuiMessageData& aData)
+{
+	SetFlashLabelString(GetFlash());
+	return true;
+}
+kGuiCallbackDeclaredFuncEnd(cLuxMainMenu_Options, FlashSlider_OnMove);
 
 //-----------------------------------------------------------------------
 

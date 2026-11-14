@@ -82,11 +82,13 @@ private:
 	float GetGamepadLookSensitivity() { return GetSliderValue(mpSGamepadLookSensitivity, mfGamepadLookSensitivityMin, mfGamepadLookSensitivityMax); }
 #endif
 	float GetVolume() { return GetSliderValue(mpSVolume, mfVolumeMin, mfVolumeMax); }
+	float GetFlash() { return GetSliderValue(mpSFlash, mfFlashMin, mfFlashMax); }
 	float GetFOV() { return (float)cMath::RoundToInt(GetSliderValue(mpSFOV, mfFOVMin, mfFOVMax)); }
 
 	void SetGammaLabelString(float afX);
 	void SetSensitivityLabelString(float afX);
 	void SetFOVLabelString(float afX);
+	void SetFlashLabelString(float afX);
 	void SetGamepadLookSensitivityLabelString(float afX);
 	void SetVolumeLabelString(float afX);
 
@@ -151,6 +153,11 @@ private:
 	cWidgetCheckBox *mpChBShowDeathHints;
 	cWidgetCheckBox *mpChBShowCrosshair;
 	cWidgetComboBox *mpCBFocusIconStyle;
+	cWidgetLabel	*mpLFlash;
+	cWidgetSlider	*mpSFlash;
+	float mfFlashMin;
+	float mfFlashMax;
+	float mfFlashStep;
 	cWidgetLabel	*mpLFOV;
 	cWidgetSlider	*mpSFOV;
 	float mfFOVMin;
@@ -302,6 +309,8 @@ private:
 
 	bool GammaSlider_OnMove(iWidget* apWidget, const cGuiMessageData& aData);
 	kGuiCallbackDeclarationEnd(GammaSlider_OnMove);
+	bool FlashSlider_OnMove(iWidget* apWidget, const cGuiMessageData& aData);
+	kGuiCallbackDeclarationEnd(FlashSlider_OnMove);
 	bool FOVSlider_OnMove(iWidget* apWidget, const cGuiMessageData& aData);
 	kGuiCallbackDeclarationEnd(FOVSlider_OnMove);
 

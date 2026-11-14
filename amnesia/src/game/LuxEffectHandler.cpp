@@ -35,6 +35,8 @@
 
 cLuxEffectHandler::cLuxEffectHandler() : iLuxUpdateable("LuxEffectHandler")
 {
+	mfFlashIntensity = 1.0f;
+
 	mpFade = hplNew( cLuxEffect_Fade, () );
 	mvEffects.push_back(mpFade);
 
@@ -320,7 +322,8 @@ void cLuxEffect_EmotionFlash::Update(float afTimeStep)
 
 void cLuxEffect_EmotionFlash::OnDraw(float afFrameTime)
 {
-	gpBase->mpGameHudSet->DrawGfx(mpWhiteGfx,gpBase->mvHudVirtualStartPos + cVector3f(0,0,3.2f),gpBase->mvHudVirtualSize,cColor(mfAlpha, 1));
+	float fIntensity = gpBase->mpEffectHandler->GetFlashIntensity();
+	gpBase->mpGameHudSet->DrawGfx(mpWhiteGfx,gpBase->mvHudVirtualStartPos + cVector3f(0,0,3.2f),gpBase->mvHudVirtualSize,cColor(mfAlpha * fIntensity, 1));
 
 	if(mfTextAlpha > 0)
 	{
@@ -1092,7 +1095,8 @@ void cLuxEffect_Flash::Update(float afTimeStep)
 
 void cLuxEffect_Flash::OnDraw(float afFrameTime)
 {
-	gpBase->mpGameHudSet->DrawGfx(mpWhiteGfx,gpBase->mvHudVirtualStartPos+cVector3f(0,0,3.2f),gpBase->mvHudVirtualSize,cColor(mfAlpha, 1));
+	float fIntensity = gpBase->mpEffectHandler->GetFlashIntensity();
+	gpBase->mpGameHudSet->DrawGfx(mpWhiteGfx,gpBase->mvHudVirtualStartPos+cVector3f(0,0,3.2f),gpBase->mvHudVirtualSize,cColor(mfAlpha * fIntensity, 1));
 }	
 
 
@@ -1453,6 +1457,18 @@ void cLuxEffectHandler::DoAction(eLuxPlayerAction aAction, bool abPressed)
 		iLuxEffect *pEffect = mvEffects[i];
 		if(pEffect->IsActive()) pEffect->DoAction(aAction, abPressed);
 	}
+}
+
+//-----------------------------------------------------------------------
+
+void cLuxEffectHandler::LoadUserConfig()
+{
+	SetFlashIntensity(gpBase->mpUserConfig->GetFloat("Game", "FlashIntensity", 1.0f));
+}
+
+void cLuxEffectHandler::SaveUserConfig()
+{
+	gpBase->mpUserConfig->SetFloat("Game", "FlashIntensity", mfFlashIntensity);
 }
 
 //-----------------------------------------------------------------------

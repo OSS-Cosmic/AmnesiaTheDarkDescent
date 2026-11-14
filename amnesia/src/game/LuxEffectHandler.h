@@ -419,6 +419,13 @@ public:
 	bool GetPlayerIsPaused(){ return mbPlayerIsPaused;}
 	void SetPlayerIsPaused(bool abX);
 
+	/** Strength (0-1) of the white screen flashes used by flashbacks and emotion flashes. */
+	float GetFlashIntensity(){ return mfFlashIntensity;}
+	void SetFlashIntensity(float afX){ mfFlashIntensity = cMath::Clamp(afX, 0.0f, 1.0f);}
+
+	void LoadUserConfig();
+	void SaveUserConfig();
+
 	///////////////////////////
 	// Effects
 	cLuxEffect_Fade *GetFade(){ return mpFade;}
@@ -449,6 +456,7 @@ private:
 	std::vector<iLuxEffect*> mvEffects;	
 
 	bool mbPlayerIsPaused;
+	float mfFlashIntensity;
 };
 
 //----------------------------------------------
