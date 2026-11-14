@@ -1220,7 +1220,8 @@ void __stdcall cLuxScriptHandler::StartPlayerSpawnPS(std::string& asSPSFile)
 
 void __stdcall cLuxScriptHandler::StopPlayerSpawnPS()
 {
-	gpBase->mpPlayer->GetHelperSpawnPS()->Stop();
+	// Reset (not Stop) so the spawned particle systems are destroyed as well
+	gpBase->mpPlayer->GetHelperSpawnPS()->Reset();
 }
 
 //-----------------------------------------------------------------------
