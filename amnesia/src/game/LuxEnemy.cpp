@@ -1522,6 +1522,38 @@ void iLuxEnemy::UpdatePlayerInRange(float afTimeStep)
 
 //-----------------------------------------------------------------------
 
+bool iLuxEnemy::PlayerIsInAttackContact()
+{
+	cLuxPlayer *pPlayer = gpBase->mpPlayer;
+	if(pPlayer->IsDead() || TriggersDisabled()) return false;
+
+	iCharacterBody *pPlayerBody = pPlayer->GetCharacterBody();
+
+	// Touching (with a little margin, the bodies push each other apart)
+	float fContactDist = mpCharBody->GetSize().x * 0.5f + pPlayerBody->GetSize().x * 0.5f + 0.25f;
+	if(DistToPlayer2D() > fContactDist) return false;
+
+	// Same floor (not on a ledge above / below)
+	if(AbsHeightDistToPlayer() > mpCharBody->GetSize().y * 0.5f) return false;
+
+	// Nothing in between (thin wall, closed door). Characters are skipped by the test.
+	return gpBase->mpMapHelper->CheckLineOfSight(mpCharBody->GetPosition(), pPlayerBody->GetPosition(), false);
+}
+
+//-----------------------------------------------------------------------
+
+void iLuxEnemy::TurnToPlayerBeforeAttackHit()
+{
+	// When the player is pressed against the enemy they are often to its side (the bodies slide
+	// along each other) and the attack shape is in front of the enemy, so the swing would miss.
+	if(mpCurrentAnimation==NULL || mpCurrentAnimation->IsBeforeSpecialEvent()==false) return;
+	if(gpBase->mpPlayer->IsDead()) return;
+
+	mpMover->TurnToPos(gpBase->mpPlayer->GetCharacterBody()->GetFeetPosition());
+}
+
+//-----------------------------------------------------------------------
+
 bool iLuxEnemy::StuckDoorIsCleared()
 {
 	iLuxEntity *pEntity = mpMap->GetEntityByID(mlStuckDoorID);

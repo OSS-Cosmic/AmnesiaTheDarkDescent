@@ -1359,7 +1359,7 @@ bool cLuxEnemy_ManPig::StateEventImplement(int alState, eLuxEnemyStateEvent aEve
 			//////////////////////////
 			//Short attack
 			float fDistToPlayer = DistToPlayer();
-			if(CanSeePlayer() && fDistToPlayer < mfNormalAttackDistance)
+			if((CanSeePlayer() || PlayerIsInAttackContact()) && fDistToPlayer < mfNormalAttackDistance)
 			{
 				if(mbForceChargeAttack)
 				{
@@ -1669,6 +1669,9 @@ bool cLuxEnemy_ManPig::StateEventImplement(int alState, eLuxEnemyStateEvent aEve
 
 		kLuxOnLeave
 			mfFOVMul = 1.0f;
+
+		kLuxOnUpdate
+			TurnToPlayerBeforeAttackHit();
 
 		//------------------------------
 

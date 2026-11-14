@@ -600,6 +600,15 @@ protected:
 	 * closed. A hit on an unbreakable, unlocked but still closed door opens it (unlocking a door
 	 * does not open it, so it could never break and the enemy kept bashing it forever).
 	 */
+	/**
+	 * True if the player is pressed against the enemy (bodies touching, same floor and no
+	 * wall/door between the centers). Allows melee attacks even if the regular line of sight
+	 * test (several checks in a row plus darkness/crouch range handicaps) has not caught up.
+	 */
+	bool PlayerIsInAttackContact();
+	/** Keeps facing the player until the attack's hit event, so the swing does not miss. */
+	void TurnToPlayerBeforeAttackHit();
+
 	bool StuckDoorIsCleared();
 	void OnBreakDoorHit();
 	void OnStuckDoorCleared();
