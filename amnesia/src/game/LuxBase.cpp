@@ -277,6 +277,9 @@ void cLuxCustomStorySettings::SetActive()
 
 bool cLuxCustomStorySettings::StartGame()
 {
+	// Custom stories are not made for hard mode; never inherit it from an earlier session
+	gpBase->mbHardMode = false;
+
 	gpBase->mpMainMenu->SetWindowActive(eLuxMainMenuWindow_LastEnum);
 
 	gpBase->mpInputHandler->ChangeState(eLuxInputState_Game);
