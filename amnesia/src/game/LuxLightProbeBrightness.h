@@ -5,15 +5,15 @@
 #include <algorithm>
 #include <cmath>
 
-#include "Constants.h" // kRayTracedGammaBias, kLightProbeGammaBias
+#include "Constants.h" // kLightProbeBaseGammaBias, kLightProbeGammaBias
 
 // Shared brightness state for CPU Legacy sensing and asynchronous physical
 // probes. Keep the environment separate so the lantern bonus never feeds back.
 //
-// The physical probe level goes through the same display-gamma lift the
-// ray-traced tonemap applies (kRayTracedGammaBias), so gameplay darkness agrees
-// with what the screen shows, plus kLightProbeGammaBias to make darkness a
-// little more forgiving. The player's own gamma slider is deliberately
+// The physical probe level goes through the display-gamma lift the ray-traced
+// tonemap used to apply on screen (kLightProbeBaseGammaBias), so the darkness thresholds
+// stay as tuned, plus kLightProbeGammaBias to make darkness a little more
+// forgiving. The player's own gamma slider is deliberately
 // excluded: a display preference must not change gameplay.
 class cLuxLightProbeBrightness {
 public:
@@ -32,7 +32,7 @@ public:
         mfLuminance = static_cast<float>(brightest);
         const double level = std::min(brightest * gain, 1.0);
         mfEnvironment = static_cast<float>(
-            std::pow(level, 1.0 / (1.0 + hpl::kRayTracedGammaBias +
+            std::pow(level, 1.0 / (1.0 + hpl::kLightProbeBaseGammaBias +
                                   hpl::kLightProbeGammaBias)));
     }
 

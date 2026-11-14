@@ -24,7 +24,7 @@ FROM ubuntu:24.04
 ENV DEBIAN_FRONTEND=noninteractive
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
-        build-essential clang ninja-build cmake python3 glslang-tools spirv-tools \
+        build-essential clang ninja-build python3 glslang-tools spirv-tools \
         git ca-certificates curl \
         libx11-dev libxext-dev libxi-dev libxcursor-dev libxrandr-dev libxss-dev \
         libgl-dev libglu1-mesa-dev libegl1-mesa-dev \
@@ -33,6 +33,17 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         libudev-dev \
         liblcms2-dev \
     && rm -rf /var/lib/apt/lists/*
+
+# cmake: Ubuntu 24.04's apt package is 3.28, but NRD fetches MathLib v11, whose
+# CMakeLists.txt requires 3.30. Install a pinned Kitware release instead.
+ARG CMAKE_VERSION=3.31.6
+RUN curl -fsSL -o /tmp/cmake.tar.gz \
+        "https://github.com/Kitware/CMake/releases/download/v${CMAKE_VERSION}/cmake-${CMAKE_VERSION}-linux-$(uname -m).tar.gz" \
+    && mkdir -p /opt/cmake \
+    && tar -xzf /tmp/cmake.tar.gz -C /opt/cmake --strip-components=1 \
+    && ln -sf /opt/cmake/bin/cmake /opt/cmake/bin/ctest /opt/cmake/bin/cpack /usr/local/bin/ \
+    && rm /tmp/cmake.tar.gz \
+    && cmake --version
 
 # premake5: prebuilt Linux binary from the project's GitHub releases. The asset
 # is named premake-<ver>-linux.tar.gz and contains a single `premake5` binary.

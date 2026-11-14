@@ -377,39 +377,41 @@ SHARED_CONST float kWaterRefractionExposure = 1.0f; // Neutral water preserves b
 // LuxMainMenu, iEditorViewport, cLevelEditorCameraCapture).
 SHARED_CONST float kSceneExposure = 2.5f;
 
-// Additive display-gamma bias applied to the RAY-TRACED backend ONLY, on top of
-// the player's Graphics/Gamma setting, in PostEffect_ToneMap.cpp -- not in the
-// shader, which still sees a single gamma scalar and knows nothing about
-// backends.
-//
-// The two backends author radiance differently and the ray-traced one lands
-// darker. Standard emits sRGBToLinear(display) / kSceneExposure so the tonemap's
-// multiply is its exact inverse and the base game's look comes back bit-for-bit;
-// the ray-traced path composites physically (color * intensity / (d^2 +
-// sourceRadiusSq)) with only that same x2.5 to lift it, and its highlight
-// shoulder compresses the display peak above 0.8 rather than clipping.
-//
-// This closes the gap at the display encode. It deliberately does NOT touch
+// Extra scene-linear exposure for the RAY-TRACED backend ONLY, on top of
+// kSceneExposure, applied in PostEffect_ToneMap.cpp (ToneMapBackendParams).
+// 1.0 = same exposure as Standard. It deliberately does NOT touch
 // kSceneExposure: the Standard blend paths (BlendModes.slang
 // encodeStandardBlendSource, StandardLighting.slang, Standard.environment.3d)
-// divide by that exact value and would break as a pair. Additive rather than
-// scaling so the player's own gamma slider keeps moving the result by the amount
-// they chose -- it just starts higher. 0 = no bias, and reverting is that edit.
+// divide by that exact value.
+SHARED_CONST float kRayTracedExposure = 1.0f;
+
+// Display-gamma boost for the RAY-TRACED backend ONLY, multiplied with the
+// player's gamma slider in ToneMapBackendParams (slider 1.0 -> gamma 1.6).
 //
-// A display-side compensation, not a diagnosis: if the backends drift again
-// after a lighting change, the cause is upstream in the light model, not here.
-SHARED_CONST float kRayTracedGammaBias = 0.2f;
+// The ray-traced path composites physical radiance (color * intensity / (d^2 +
+// sourceRadiusSq)), which lands darker than Standard, mostly in the shadows.
+// A gamma lift raises those far more than the highlights (a 0.01 scene level
+// goes from ~0.17 to ~0.33 display; display white stays white), where an
+// exposure boost clipped lit areas to white. Multiplicative so the slider
+// keeps scaling relative to it. 1.0 = no boost. HybridRenderer's particle
+// gamma ratio compensates forward particles for this boost.
+SHARED_CONST float kRayTracedGammaBoost = 1.6f;
+
+// Display-gamma lift the ray-traced tonemap used to apply on screen.
+// The gameplay light probe (LuxLightProbeBrightness.h) keeps applying it so the
+// darkness / sanity thresholds stay exactly as tuned; it no longer affects the
+// screen.
+SHARED_CONST float kLightProbeBaseGammaBias = 0.2f;
 
 // Extra display-gamma bias for the gameplay light probe ONLY, on top of
-// kRayTracedGammaBias (LuxLightProbeBrightness.h). The probe level goes through
-// the ray-traced display curve so darkness agrees with the screen; this extra
+// kLightProbeBaseGammaBias (LuxLightProbeBrightness.h); this extra
 // makes darkness a little more forgiving without brightening the screen.
 // 0 = probe matches the screen exactly.
 SHARED_CONST float kLightProbeGammaBias = 2.0f;
 
-// Optional RT display-space chroma grading. Keep identity for light authoring:
-// the peak-based shoulder/gamma preserves encoded RGB ratios, so a blanket
-// desaturation would unnecessarily change both light and material colors.
+// Optional RT display-space chroma grading, applied after the encode. Keep
+// identity for light authoring: a blanket desaturation would unnecessarily
+// change both light and material colors.
 // Standard always uses 1.0.
 SHARED_CONST float kRayTracedSaturation = 1.0f;
 

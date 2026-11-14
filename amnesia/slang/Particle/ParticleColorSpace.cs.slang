@@ -18,7 +18,7 @@ struct ParticleColorSpacePush
 {
     uint toLinear;
     uint linearBlend;
-    float gammaRatio; // userGamma / (userGamma + backendBias), or 1 without tone map
+    float gammaRatio; // userGamma / backend tone map gamma (1 / kRayTracedGammaBoost on RT), or 1 without tone map
 };
 [vk::push_constant]
 ConstantBuffer<ParticleColorSpacePush> gPushConstants HPL_PUSH_CONSTANT_REGISTER;
