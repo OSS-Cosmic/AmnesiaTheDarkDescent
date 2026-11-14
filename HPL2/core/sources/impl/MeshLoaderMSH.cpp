@@ -261,7 +261,19 @@ namespace hpl {
 					
 					//Get and fill the array data
 					void *pData = GetVertexBufferWithFormat(pVtxBuff, arrayType, elementFormat);
-					GetBinaryBufferDataWithFormat(&binBuff, pData, (size_t)(lVtxNum * lElementNum), elementFormat);
+					size_t lDataCount = (size_t)(lVtxNum * lElementNum);
+					if(pData == NULL || lDataCount == 0)
+					{
+						Error("Vertex array for element %d is empty or invalid while loading '%s' - skipping data\n",
+							  arrayType, cString::To8Char(asFile).c_str());
+						// Skip the bytes so the rest of the stream stays in sync
+						size_t lElementSize = elementFormat == eVertexBufferElementFormat_Byte ? 1 : 4;
+						binBuff.AddPos(lDataCount * lElementSize);
+					}
+					else
+					{
+						GetBinaryBufferDataWithFormat(&binBuff, pData, lDataCount, elementFormat);
+					}
 				}
 			}
 
@@ -272,8 +284,15 @@ namespace hpl {
 
 				if(gbLogMSHLoad) Log("Indices: %d\n", lIdxNum);
 
-				pVtxBuff->ResizeIndices(lIdxNum);
-				binBuff.GetInt32Array((int*)pVtxBuff->GetIndices(), lIdxNum);
+				if(lIdxNum > 0)
+				{
+					pVtxBuff->ResizeIndices(lIdxNum);
+					unsigned int *pIndices = pVtxBuff->GetIndices();
+					if(pIndices)
+						binBuff.GetInt32Array((int*)pIndices, lIdxNum);
+					else
+						binBuff.AddPos((size_t)lIdxNum * sizeof(int));
+				}
 			}
 
 			
