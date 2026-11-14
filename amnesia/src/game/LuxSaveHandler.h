@@ -65,7 +65,9 @@ public:
 	void Reset();
 
 	void SaveGameToFile(const tWString& asFile, bool abSaveSnapshot=false);
-	void LoadGameFromFile(const tWString& asFile);
+	bool LoadGameFromFile(const tWString& asFile);
+	/** Goes back to the main menu after a load from the menu failed (game containers were already reset). */
+	void ReturnToMainMenuAfterFailedLoad();
 
 	bool AutoSave();
 	bool AutoLoad(bool abResetProgressLogger);

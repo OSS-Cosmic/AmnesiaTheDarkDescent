@@ -261,7 +261,8 @@ bool cLuxMainMenu_CustomStory::PressContinue(iWidget* apWidget, const cGuiMessag
 	gpBase->mpEngine->GetUpdater()->SetContainer("Default");
 	gpBase->mpEngine->GetUpdater()->BroadcastMessageToAll(eUpdateableMessage_Reset);
 
-	gpBase->mpSaveHandler->AutoLoad(true);
+	if(gpBase->mpSaveHandler->AutoLoad(true)==false)
+		gpBase->mpSaveHandler->ReturnToMainMenuAfterFailedLoad();
 
 	return true; 
 }
