@@ -804,7 +804,7 @@ void iLuxProp::StopMove()
 void iLuxProp::FadeInMeshEntity(float afTime)
 {
 	mfFadeInAlpha =0;
-	mfFadeInSpeed = 1.0f/ afTime;
+	mfFadeInSpeed = 1.0f/ cMath::Max(afTime, 0.001f);
 	if(mpMeshEntity) mpMeshEntity->SetCoverageAmount(0);
 }
 
@@ -1355,7 +1355,7 @@ void iLuxProp::UpdateMeshFading(float afTimeStep)
 {
 	if(mfFadeInAlpha >= 1 || mpMeshEntity==NULL) return;
 
-    mfFadeInAlpha += mfFadeInSpeed * afTimeStep;
+    mfFadeInAlpha = cMath::Min(mfFadeInAlpha + mfFadeInSpeed * afTimeStep, 1.0f);
 	mpMeshEntity->SetCoverageAmount(mfFadeInAlpha);
 }
 

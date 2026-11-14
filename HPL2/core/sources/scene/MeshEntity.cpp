@@ -1453,6 +1453,8 @@ namespace hpl {
 
 	void cMeshEntity::SetCoverageAmount(float afX)
 	{
+		afX = cMath::Clamp(afX, 0.0f, 1.0f);
+
 		if(mfCoverageAmount == afX) return;
 
 		mfCoverageAmount = afX;
