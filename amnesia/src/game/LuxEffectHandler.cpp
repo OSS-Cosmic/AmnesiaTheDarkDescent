@@ -44,6 +44,9 @@ cLuxEffectHandler::cLuxEffectHandler() : iLuxUpdateable("LuxEffectHandler")
 	mpSanityGainFlash = hplNew( cLuxEffect_SanityGainFlash, () );
 	mvEffects.push_back(mpSanityGainFlash);
 
+	mpScreenImage = hplNew( cLuxEffect_ScreenImage, () );
+	mvEffects.push_back(mpScreenImage);
+
 	mpPlayVoice = hplNew( cLuxEffect_PlayVoice, () );
 	mvEffects.push_back(mpPlayVoice);
 
@@ -757,6 +760,156 @@ void cLuxEffect_Fade::Reset()
 	mfGoalAlpha =0;
 	mfAlpha =0;
 	mfFadeSpeed = 1;
+}
+
+//-----------------------------------------------------------------------
+
+//////////////////////////////////////////////////////////////////////////
+// SCREEN IMAGE
+//////////////////////////////////////////////////////////////////////////
+
+//-----------------------------------------------------------------------
+
+
+cLuxEffect_ScreenImage::cLuxEffect_ScreenImage()
+{
+	cGui * pGui = gpBase->mpEngine->GetGui();
+	mpGuiSet = pGui->CreateSet( "Effect_ScreenImage", NULL );
+	mpGuiSet->SetRendersBeforePostEffects( false );
+	mpGuiSet->SetDrawMouse( false );
+	mpGuiSet->SetDrawPriority(3);
+	gpBase->mpMapHandler->GetViewport()->AddGuiSet( mpGuiSet );
+    mpTextureGfx = NULL;
+	mbActive = false;
+
+    mfCurrentFade = 0.0f;
+
+    mfFadeInDuration = 1.0f;
+    mfShowDuration = 1.0f;
+    mfFadeOutDuration = 1.0f;
+    mfFadeTimer = 1.0f;
+}
+
+//-----------------------------------------------------------------------
+cLuxEffect_ScreenImage::~cLuxEffect_ScreenImage()
+{
+    if ( mpTextureGfx != NULL )
+    {
+        gpBase->mpEngine->GetGui()->DestroyGfx(mpTextureGfx);
+        mpTextureGfx = NULL;
+    }
+
+    if ( mpGuiSet != NULL )
+    {
+        gpBase->mpEngine->GetGui()->DestroySet(mpGuiSet);
+        mpGuiSet = NULL;
+    }
+}
+
+//-----------------------------------------------------------------------
+void cLuxEffect_ScreenImage::ShowImage(const tString & asImageName, float afX, float afY, float afScale, bool abUseRelativeCoordinates, float afDuration, float afFadeIn, float afFadeOut)
+{
+    if ( mpTextureGfx != NULL )
+    {
+        gpBase->mpEngine->GetGui()->DestroyGfx(mpTextureGfx);
+        mpTextureGfx = NULL;
+    }
+
+    mpTextureGfx = gpBase->mpEngine->GetGui()->CreateGfxTexture(asImageName,eGuiMaterial_Alpha);
+
+    // coordinates are centered around origin, if relative in terms of screen size
+
+    cVector2f screen_size = gpBase->mpEngine->GetGraphics()->GetWindow()->GetSizeF();
+    
+    if ( abUseRelativeCoordinates )
+    {
+        afX = afX * screen_size.x;
+        afY = afY * screen_size.y;
+    }
+
+    afX += screen_size.x / 2;
+    afY += screen_size.y / 2;
+
+    mfFadeInDuration = afFadeIn;
+    mfShowDuration = afDuration;
+    mfFadeOutDuration = afFadeOut;
+    mfFadeTimer = 0.0f;
+
+    if ( mfFadeInDuration > 0 )
+    {
+        mfCurrentFade = 1.0f;
+    }
+    else
+    {
+        mfCurrentFade = 0.0f;
+    }
+
+	mbActive = true;
+	mvPosition = cVector3f(afX, afY, gpBase->mvHudVirtualStartPos.z + 10.0f);
+	mfScale = afScale;
+
+}
+
+//-----------------------------------------------------------------------
+void cLuxEffect_ScreenImage::HideImmediately()
+{
+	mbActive = false;
+
+    if ( mpTextureGfx != NULL )
+    {
+        gpBase->mpEngine->GetGui()->DestroyGfx(mpTextureGfx);
+        mpTextureGfx = NULL;
+    }
+}
+
+//-----------------------------------------------------------------------
+void cLuxEffect_ScreenImage::HideWithFade(float afFadeOut)
+{
+    if ( mfCurrentFade > 0.0f )
+    {
+        mfFadeInDuration = 0.0f;
+        mfShowDuration = 1.0f;
+        mfFadeOutDuration = afFadeOut;
+    }
+}
+
+//-----------------------------------------------------------------------
+
+void cLuxEffect_ScreenImage::Update(float afTimeStep)
+{
+    mfFadeTimer += afTimeStep;
+
+    if ( mfFadeTimer > ( mfFadeInDuration + mfShowDuration + mfFadeOutDuration ) )
+    {
+        mfCurrentFade = 0.0f;
+	    mbActive = false;
+    }
+    else if ( mfFadeOutDuration > 0 && mfFadeTimer > mfFadeInDuration + mfShowDuration )
+    {
+        // fading out
+        float mfFadeFactor = ( mfFadeTimer - (mfFadeInDuration + mfShowDuration) ) / mfFadeOutDuration;    // 0 when starting to fade out, 1 when faded out
+        mfCurrentFade = 1.0f - mfFadeFactor;
+    }
+    else if ( mfFadeTimer > mfFadeInDuration )
+    {
+        mfCurrentFade = 1.0f;
+    }
+    else if ( mfFadeInDuration > 0.0f )
+    {
+        // fading in
+        float mfFadeFactor = ( mfFadeTimer ) / mfFadeInDuration;    // 0 when starting to fade in, 1 when faded in
+        mfCurrentFade = mfFadeFactor;
+    }
+}
+
+//-----------------------------------------------------------------------
+
+void cLuxEffect_ScreenImage::OnDraw(float afFrameTime)
+{
+    if ( gpBase->mpGameHudSet && mpTextureGfx )
+    {
+        mpGuiSet->DrawGfx(mpTextureGfx, mvPosition, mfScale, cColor(1.0f,mfCurrentFade));
+    }
 }
 
 //-----------------------------------------------------------------------

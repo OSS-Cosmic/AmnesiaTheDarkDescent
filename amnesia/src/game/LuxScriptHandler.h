@@ -172,6 +172,9 @@ private:
 	static void __stdcall PlayGuiSound(std::string& asSoundFile, float afVolume);
 
 	static void __stdcall StartScreenShake(float afAmount, float afTime, float afFadeInTime,float afFadeOutTime);
+	static void __stdcall ShowScreenImage(std::string & asImageName, float afX, float afY, float afScale, bool abUseRelativeCoordinates, float afDuration, float afFadeIn, float afFadeOut);
+	static void __stdcall HideScreenImageImmediately();
+	static void __stdcall HideScreenImageWithFade(float afFadeOut);
 	
 
 	// Insanity

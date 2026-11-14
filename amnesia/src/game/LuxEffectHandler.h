@@ -239,6 +239,44 @@ private:
 
 //----------------------------------------------
 
+class cLuxEffect_ScreenImage : public iLuxEffect
+{
+public:
+	cLuxEffect_ScreenImage();
+	~cLuxEffect_ScreenImage();
+
+    void ShowImage(const tString & asImageName, float afX, float afY, float afScale, bool abUseRelativeCoordinates, float afDuration, float afFadeIn, float afFadeOut);
+	void HideImmediately();
+	void HideWithFade(float afFadeOut);
+
+	void Update(float afTimeStep);
+	void OnDraw(float afFrameTime);
+    void Reset() {};
+
+private:
+	
+    //////////////////////
+	//Data
+	cGuiSet * mpGuiSet;
+	
+	tString msTextureName;
+
+    cGuiGfxElement * mpTextureGfx;
+
+    cVector3f
+        mvPosition;
+
+    float
+        mfFadeInDuration,
+        mfShowDuration,
+        mfFadeOutDuration,
+        mfFadeTimer,
+		mfScale,
+        mfCurrentFade;
+};
+
+//----------------------------------------------
+
 class cLuxEffect_SanityGainFlash : public iLuxEffect
 {
 public:
@@ -386,6 +424,7 @@ public:
 	cLuxEffect_Fade *GetFade(){ return mpFade;}
 	cLuxEffect_Flash *GetFlash(){ return mpFlash;}
 	cLuxEffect_SanityGainFlash *GetSanityGainFlash(){ return mpSanityGainFlash;}
+	cLuxEffect_ScreenImage *GetScreenImage(){ return mpScreenImage;}
 	cLuxEffect_PlayVoice *GetPlayVoice(){ return mpPlayVoice;}
 	cLuxEffect_ImageTrail *GetImageTrail(){ return mpImageTrail;}
 	cLuxEffect_ShakeScreen *GetScreenShake(){ return mpScreenShake;}
@@ -398,6 +437,7 @@ private:
 	cLuxEffect_Fade *mpFade;
 	cLuxEffect_Flash *mpFlash;
 	cLuxEffect_SanityGainFlash *mpSanityGainFlash;
+	cLuxEffect_ScreenImage *mpScreenImage;
 	cLuxEffect_PlayVoice *mpPlayVoice;
 	cLuxEffect_ImageTrail *mpImageTrail;
 	cLuxEffect_ShakeScreen *mpScreenShake;
