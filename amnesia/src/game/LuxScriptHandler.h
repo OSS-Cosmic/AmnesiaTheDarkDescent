@@ -211,6 +211,11 @@ private:
 	static float __stdcall GetPlayerSpeed();
 	static float __stdcall GetPlayerYSpeed();
 
+	static float __stdcall GetPlayerBodyPitch();
+	static float __stdcall GetPlayerBodyYaw();
+	static float __stdcall GetPlayerCameraPitch();
+	static float __stdcall GetPlayerCameraYaw();
+
 	static void __stdcall MovePlayerForward(float afAmount);
 
 	static void __stdcall SetPlayerPermaDeathSound(std::string& asSound);
