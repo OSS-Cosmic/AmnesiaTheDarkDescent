@@ -506,7 +506,7 @@ void cLuxScriptHandler::InitScriptFunctions()
 //	AddFunc("void InsanityEventIsActive()", (void *)InsanityEventIsActive);
 
 	AddFunc("void StartPlayerSpawnPS(string &in asSPSFile)", (void *)StartPlayerSpawnPS);
-	AddFunc("void StopPlayerSpawnPS()", (void *)StartPlayerSpawnPS);
+	AddFunc("void StopPlayerSpawnPS()", (void *)StopPlayerSpawnPS);
 
 	AddFunc("void PlayGuiSound(string &in asSoundFile, float afVolume)",(void *)PlayGuiSound);
 
