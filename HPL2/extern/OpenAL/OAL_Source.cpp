@@ -911,11 +911,11 @@ void cOAL_Source::Log( eOAL_LogVerbose aVerboseLevelReq, eOAL_LogMsg aMessageTyp
 	char text[2048];
 	va_list ap;
 	va_start(ap, asMessage);
-	vsprintf(text, asMessage, ap);
+	vsnprintf(text, sizeof(text), asMessage, ap);
 	va_end(ap);
 	char sourceId[20];
 
-	sprintf(sourceId, "Source no. %d - ",mlId);
+	snprintf(sourceId, sizeof(sourceId), "Source no. %d - ",mlId);
 
 	
 	switch(aMessageType)

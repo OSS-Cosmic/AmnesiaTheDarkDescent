@@ -156,7 +156,7 @@ namespace hpl {
 	tString cColor::ToString() const
 	{
 		char buf[512];
-		sprintf(buf,"%f : %f : %f : %f",r,g,b,a);
+		snprintf(buf, sizeof(buf),"%f : %f : %f : %f",r,g,b,a);
 		tString str = buf;
 		return str;
 	}
@@ -167,7 +167,7 @@ namespace hpl {
 	tString cColor::ToFileString() const
 	{
 		char buf[512];
-		sprintf(buf,"%g %g %g %g",r,g,b,a);
+		snprintf(buf, sizeof(buf),"%g %g %g %g",r,g,b,a);
 		tString str = buf;
 		return str;
 	}

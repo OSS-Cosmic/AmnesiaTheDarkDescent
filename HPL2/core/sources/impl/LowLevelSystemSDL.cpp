@@ -175,7 +175,7 @@ void FatalError(const char *fmt, ...) {
   if (fmt == NULL)
     return;
   va_start(ap, fmt);
-  vsprintf(text, fmt, ap);
+  vsnprintf(text, sizeof(text), fmt, ap);
   va_end(ap);
 
   tString sMess = "FATAL ERROR: ";
@@ -206,7 +206,7 @@ void Error(const char *fmt, ...) {
   if (fmt == NULL)
     return;
   va_start(ap, fmt);
-  vsprintf(text, fmt, ap);
+  vsnprintf(text, sizeof(text), fmt, ap);
   va_end(ap);
 
   tString sMess = "ERROR: ";
@@ -225,7 +225,7 @@ void Warning(const char *fmt, ...) {
   if (fmt == NULL)
     return;
   va_start(ap, fmt);
-  vsprintf(text, fmt, ap);
+  vsnprintf(text, sizeof(text), fmt, ap);
   va_end(ap);
 
   tString sMess = "WARNING: ";
@@ -288,7 +288,7 @@ void LogUpdate(const char *fmt, ...) {
   if (fmt == NULL)
     return;
   va_start(ap, fmt);
-  vsprintf(text, fmt, ap);
+  vsnprintf(text, sizeof(text), fmt, ap);
   va_end(ap);
 
   tString sMess = "";
@@ -319,7 +319,7 @@ void cScriptOutput::AddMessage(const asSMessageInfo *msg) {
   else if (msg->type == asMSGTYPE_INFORMATION)
     type = "INFO";
 
-  sprintf(sMess, "%s (%d, %d) : %s : %s\n", msg->section, msg->row, msg->col,
+  snprintf(sMess, sizeof(sMess), "%s (%d, %d) : %s : %s\n", msg->section, msg->row, msg->col,
           type.c_str(), msg->message);
 
   msMessage += sMess;

@@ -944,7 +944,7 @@ namespace hpl {
 	{
 		char buff[256];
 		
-        sprintf(buff, "%0*d" , alPaddingZeros, alX);
+        snprintf(buff, sizeof(buff), "%0*d" , alPaddingZeros, alX);
 
 		return buff;
 	}
@@ -953,7 +953,7 @@ namespace hpl {
 	{
 		char buff[256];
 
-		sprintf(buff, "%0*u" , alPaddingZeros, alX);
+		snprintf(buff, sizeof(buff), "%0*u" , alPaddingZeros, alX);
 
 		return buff;
 	}
@@ -962,7 +962,7 @@ namespace hpl {
 	{
 		char buff[256];
 
-		sprintf(buff, "%0*lu", alPaddingZeros, alX);
+		snprintf(buff, sizeof(buff), "%0*lu", alPaddingZeros, alX);
 
 		return buff;
 	}
@@ -974,7 +974,7 @@ namespace hpl {
 
 		////////////////////////////////////////////////////////////
 		// Print the float into a string, using a given precision
-		sprintf(buff, "%.*f", alNumDecimals, afX);
+		snprintf(buff, sizeof(buff), "%.*f", alNumDecimals, afX);
 		
 		//////////////////////////////////////////
 		// Clean up decimal part
