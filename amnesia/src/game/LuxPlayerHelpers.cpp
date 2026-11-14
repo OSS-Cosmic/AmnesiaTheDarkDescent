@@ -1470,7 +1470,9 @@ void cLuxPlayerSanity::UpdateCheckEnemySeen(float afTimeStep)
 	// If seen, lower sanity and increase seen count
 	if(bSeenEnemy)
 	{
-      	mpPlayer->LowerSanity(mfNearEnemyDecrease, true);
+		// SetSanityDrainDisabled must also stop the enemy-seen sanity loss
+		if(mpPlayer->GetSanityDrainDisabled()==false)
+			mpPlayer->LowerSanity(mfNearEnemyDecrease, true);
 		
 		//do this in update instead!
 		//gpBase->mpEffectHandler->GetRadialBlur()->SetBlurStartDist(0.3f);
