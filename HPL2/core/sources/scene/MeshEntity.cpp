@@ -765,6 +765,12 @@ namespace hpl {
 
 	cAnimationState* cMeshEntity::AddAnimation(cAnimation *apAnimation,const tString &asName, float afBaseSpeed)
 	{
+		if(apAnimation == NULL)
+		{
+			Error("Cannot add NULL animation '%s'!\n", asName.c_str());
+			return NULL;
+		}
+
 		/////////////////////////////
 		// Create nodes. Will only be done once
 		CreateNodes();
