@@ -1324,12 +1324,15 @@ namespace hpl {
 		int lArrayCount=0;
 		int lStringCount =0;
 
+		if(apString == NULL)
+			return;
+
 		while(lArrayCount < alSize)
 		{
 			char c= apString[lStringCount];
 
 			//if a space is found, convert the previous characters to a float.
-			if(c == ' ' || c == 0)
+			if(c == ' ' || c == '\t' || c == '\n' || c == '\r' || c == 0)
 			{
 				if(lTempCharCount>0)
 				{
@@ -1339,9 +1342,13 @@ namespace hpl {
 					lTempCharCount=0;
 					lArrayCount++;
 				}
+
+				//End of string: stop instead of reading past it when there are too few values.
+				if(c == 0)
+					break;
 			}
 			//If character is not a space, add to temp char.
-			else
+			else if(lTempCharCount < (int)sizeof(vTempChar) - 1)
 			{
 				vTempChar[lTempCharCount] = c;
 				lTempCharCount++;
@@ -1361,11 +1368,14 @@ namespace hpl {
 		int lArrayCount=0;
 		int lStringCount =0;
 
+		if(apString == NULL)
+			return;
+
 		while(lArrayCount < alSize)
 		{
 			char c= apString[lStringCount];
 			//if a space is found, convert the previous characters to a float.
-			if(c == ' ' || c == 0)
+			if(c == ' ' || c == '\t' || c == '\n' || c == '\r' || c == 0)
 			{
 				if(lTempCharCount>0)
 				{
@@ -1375,9 +1385,13 @@ namespace hpl {
 					lTempCharCount=0;
 					lArrayCount++;
 				}
+
+				//End of string: stop instead of reading past it when there are too few values.
+				if(c == 0)
+					break;
 			}
 			//If character is not a space, add to temp char.
-			else
+			else if(lTempCharCount < (int)sizeof(vTempChar) - 1)
 			{
 				vTempChar[lTempCharCount] = apString[lStringCount];
 				lTempCharCount++;
