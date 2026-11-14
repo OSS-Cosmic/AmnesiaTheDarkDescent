@@ -84,7 +84,7 @@ cLuxPlayer::cLuxPlayer() : iLuxUpdateable("LuxPlayer"), iLuxCollideCallbackConta
 	mpCamera->SetAspect(GetScreenAspect());
 	mpCamera->SetFarClipPlane(gpBase->mpGameCfg->GetFloat("Player_General","FarClipPlane",0));
 	mpCamera->SetNearClipPlane(gpBase->mpGameCfg->GetFloat("Player_General","NearClipPlane",0));
-	mpCamera->SetPitchLimits(-cMath::ToRad(70), cMath::ToRad(70) );
+	mpCamera->SetPitchLimits(-cMath::ToRad(90), cMath::ToRad(90) );
 
 	//////////////////////////////////
 	// Init General properties
