@@ -382,6 +382,14 @@ namespace hpl {
 		}
 	}
 
+	tWString cResources::TranslateOr(const tString& asCat, const tString& asName, const tWString& asFallback)
+	{
+		const tWString* pText = mpLanguageFile ? mpLanguageFile->FindTranslation(asCat, asName) : NULL;
+		return pText ? *pText : asFallback;
+	}
+
+	//-----------------------------------------------------------------------
+
 	const tWString& cResources::Translate(const tString& asCat, const tString& asName)
 	{
 		if(mpLanguageFile)

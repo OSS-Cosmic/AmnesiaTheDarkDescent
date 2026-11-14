@@ -199,6 +199,8 @@ namespace hpl {
 		bool AddLanguageFile(const tString &asFilePath, bool abAddResourceDirs, const tWString &asAltPath = _W(""), const tString &asResourceScope = "");
 		void ClearTranslations();
 		const tWString& Translate(const tString& asCat, const tString& asName);
+		/** Like Translate, but returns asFallback (without a warning) if the entry is missing. */
+		tWString TranslateOr(const tString& asCat, const tString& asName, const tWString& asFallback);
 
 		void AddEntityLoader(iEntityLoader* apLoader, bool abSetAsDefault=false);
 		iEntityLoader* GetEntityLoader(const tString& asName);

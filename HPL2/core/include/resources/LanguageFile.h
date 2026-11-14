@@ -64,6 +64,8 @@ namespace hpl {
 		bool AddFromFile(const tWString& asFile, bool abAddResourceDirs, const tWString& asAltPath = _W(""), const tString& asResourceScope = "");
 		
 		const tWString& Translate(const tString& asCat, const tString& asName);
+		/** Returns NULL (and logs nothing) if the entry does not exist. */
+		const tWString* FindTranslation(const tString& asCat, const tString& asName);
 
 		tLanguageCategoryMap* GetCategoryMap(){ return &m_mapCategories;}
         
