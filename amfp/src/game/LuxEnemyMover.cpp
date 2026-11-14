@@ -615,7 +615,7 @@ void cLuxEnemyMover::UpdateMoveAnimation(float afTimeStep)
 		//Walking
 		else if(mMoveState == eLuxEnemyMoveState_Walking)
 		{
-			bool bSync = prevMoveState == eLuxEnemyMoveState_Running || eLuxEnemyMoveState_Jogging ? true : false;
+			bool bSync = (prevMoveState == eLuxEnemyMoveState_Running || prevMoveState == eLuxEnemyMoveState_Jogging);
 			//Log(" To Walk. Synch: %d\n", bSync);
 
 			mpEnemy->PlayAnim(mpEnemy->GetWalkAnimationName(),true,fFadeSpeed, true, mpEnemy->mfMoveSpeedAnimMul, bSync, false);
@@ -623,7 +623,7 @@ void cLuxEnemyMover::UpdateMoveAnimation(float afTimeStep)
 		//Jogging
 		else if(mMoveState == eLuxEnemyMoveState_Jogging)
 		{
-			bool bSync = prevMoveState == eLuxEnemyMoveState_Running || eLuxEnemyMoveState_Walking ? true : false;
+			bool bSync = (prevMoveState == eLuxEnemyMoveState_Running || prevMoveState == eLuxEnemyMoveState_Walking);
 			//Log(" To Walk. Synch: %d\n", bSync);
 
 			mpEnemy->PlayAnim(mpEnemy->GetJogAnimationName(),true,fFadeSpeed, true, mpEnemy->mfMoveSpeedAnimMul, bSync, false);
@@ -631,7 +631,7 @@ void cLuxEnemyMover::UpdateMoveAnimation(float afTimeStep)
 		//Running
 		else if(mMoveState == eLuxEnemyMoveState_Running)
 		{
-			bool bSync = prevMoveState == eLuxEnemyMoveState_Walking || eLuxEnemyMoveState_Jogging ? true : false;
+			bool bSync = (prevMoveState == eLuxEnemyMoveState_Walking || prevMoveState == eLuxEnemyMoveState_Jogging);
 			//Log(" To Run. Synch: %d\n", bSync);
 			
 			mpEnemy->PlayAnim(mpEnemy->GetRunAnimationName(),true, fFadeSpeed, true, mpEnemy->mfMoveSpeedAnimMul, bSync, false);
