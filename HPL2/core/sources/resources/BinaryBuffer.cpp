@@ -534,11 +534,11 @@ namespace hpl {
 
 	void cBinaryBuffer::AddFloat32(float afX)
 	{
-#ifdef SDL_BIG_ENDIAN
+#if SDL_BYTEORDER == SDL_BIG_ENDIAN
         int i = SwabFloat32(afX);
 		AddData(&i, sizeof(float));
 #else
-        AddData(afX, sizeof(float));
+        AddData(&afX, sizeof(float));
 #endif
 	}
 
@@ -546,11 +546,11 @@ namespace hpl {
 
 	void cBinaryBuffer::AddVector2f(const cVector2f& avX)
 	{
-#ifdef SDL_BIG_ENDIAN
+#if SDL_BYTEORDER == SDL_BIG_ENDIAN
         AddFloat32(avX.x);
         AddFloat32(avX.y);
 #else
-		AddData(t, sizeof(float)*2);
+		AddData(avX.v, sizeof(float)*2);
 #endif
 	}
 	
@@ -558,12 +558,12 @@ namespace hpl {
 
 	void cBinaryBuffer::AddVector3f(const cVector3f& avX)
 	{
-#ifdef SDL_BIG_ENDIAN
+#if SDL_BYTEORDER == SDL_BIG_ENDIAN
         AddFloat32(avX.x);
         AddFloat32(avX.y);
         AddFloat32(avX.z);
 #else
-		AddData(t, sizeof(float)*3);
+		AddData(avX.v, sizeof(float)*3);
 #endif
 	}
 
@@ -587,7 +587,7 @@ namespace hpl {
 
 	void cBinaryBuffer::AddMatrixf(const cMatrixf& a_mtxX)
 	{
-#ifdef SDL_BIG_ENDIAN
+#if SDL_BYTEORDER == SDL_BIG_ENDIAN
         AddFloat32Array(a_mtxX.v, 16);
 #else
 		AddData(a_mtxX.v, sizeof(float)*16);
@@ -606,7 +606,7 @@ namespace hpl {
 
 	void cBinaryBuffer::AddColor(const cColor& avX)
 	{
-#ifdef SDL_BIG_ENDIAN
+#if SDL_BYTEORDER == SDL_BIG_ENDIAN
         AddFloat32(avX.v[0]);
         AddFloat32(avX.v[1]);
         AddFloat32(avX.v[2]);
@@ -646,7 +646,7 @@ namespace hpl {
 
 	void cBinaryBuffer::AddShort16Array(const short* apData, size_t alSize)
 	{
-#ifdef SDL_BIG_ENDIAN
+#if SDL_BYTEORDER == SDL_BIG_ENDIAN
         for(size_t i=0; i<alSize; ++i) AddShort16(apData[i]);
 #else
         AddData(apData, sizeof(short) * alSize);
@@ -657,7 +657,7 @@ namespace hpl {
 
 	void cBinaryBuffer::AddInt32Array(const int* apData, size_t alSize)
 	{
-#ifdef SDL_BIG_ENDIAN
+#if SDL_BYTEORDER == SDL_BIG_ENDIAN
         for(size_t i=0; i<alSize; ++i) AddInt32(apData[i]);
 #else
         AddData(apData, sizeof(int) * alSize);
@@ -668,7 +668,7 @@ namespace hpl {
 
 	void cBinaryBuffer::AddFloat32Array(const float* apData, size_t alSize)
 	{
-#ifdef SDL_BIG_ENDIAN
+#if SDL_BYTEORDER == SDL_BIG_ENDIAN
         for (size_t i=0; i<alSize; ++i) AddFloat32(apData[i]);
 #else
 		AddData(apData, sizeof(float) * alSize);
@@ -740,7 +740,7 @@ namespace hpl {
 
 	float cBinaryBuffer::GetFloat32()
 	{
-#ifdef SDL_BIG_ENDIAN
+#if SDL_BYTEORDER == SDL_BIG_ENDIAN
         int i;
         GetData(&i, sizeof(float));
         return UnSwabFloat32(i);
@@ -755,7 +755,7 @@ namespace hpl {
 
 	void cBinaryBuffer::GetVector2f(cVector2f *apX)
 	{
-#ifdef SDL_BIG_ENDIAN
+#if SDL_BYTEORDER == SDL_BIG_ENDIAN
         apX->x = GetFloat32();
         apX->y = GetFloat32();
 #else
@@ -767,7 +767,7 @@ namespace hpl {
 
 	void cBinaryBuffer::GetVector3f(cVector3f *apX)
 	{
-#ifdef SDL_BIG_ENDIAN
+#if SDL_BYTEORDER == SDL_BIG_ENDIAN
         apX->x = GetFloat32();
         apX->y = GetFloat32();
         apX->z = GetFloat32();
@@ -781,7 +781,7 @@ namespace hpl {
 	void cBinaryBuffer::GetVector2l(cVector2l *apX)
 	{
 		GetData(apX->v, sizeof(int)*2);
-#ifdef SDL_BIG_ENDIAN
+#if SDL_BYTEORDER == SDL_BIG_ENDIAN
         apX->x = SDL_SwapLE32(apX->x);
         apX->y = SDL_SwapLE32(apX->y);
 #endif
@@ -792,7 +792,7 @@ namespace hpl {
 	void cBinaryBuffer::GetVector3l(cVector3l *apX)
 	{
         GetData(apX->v, sizeof(int)*3);
-#ifdef SDL_BIG_ENDIAN
+#if SDL_BYTEORDER == SDL_BIG_ENDIAN
         apX->x = SDL_SwapLE32(apX->x);
         apX->y = SDL_SwapLE32(apX->y);
         apX->z = SDL_SwapLE32(apX->z);
@@ -818,7 +818,7 @@ namespace hpl {
 
 	void cBinaryBuffer::GetColor(cColor *apX)
 	{
-#ifdef SDL_BIG_ENDIAN
+#if SDL_BYTEORDER == SDL_BIG_ENDIAN
         apX->v[0] = GetFloat32();
         apX->v[1] = GetFloat32();
         apX->v[2] = GetFloat32();
@@ -875,7 +875,7 @@ namespace hpl {
 
 	void cBinaryBuffer::GetShort16Array(short* apData, size_t alSize)
 	{
-#ifdef SDL_BIG_ENDIAN
+#if SDL_BYTEORDER == SDL_BIG_ENDIAN
         for(size_t i=0; i<alSize; ++i) apData[i] = GetShort16();
 #else
         GetData(apData, sizeof(short) * alSize);
@@ -886,7 +886,7 @@ namespace hpl {
 
 	void cBinaryBuffer::GetInt32Array(int* apData, size_t alSize)
 	{
-#ifdef SDL_BIG_ENDIAN
+#if SDL_BYTEORDER == SDL_BIG_ENDIAN
         for(size_t i=0; i<alSize; ++i) apData[i] = GetInt32();
 #else
         GetData(apData, sizeof(int) * alSize);
@@ -897,7 +897,7 @@ namespace hpl {
 
 	void cBinaryBuffer::GetFloat32Array(float* apData, size_t alSize)
 	{
-#ifdef SDL_BIG_ENDIAN
+#if SDL_BYTEORDER == SDL_BIG_ENDIAN
         for(size_t i=0; i<alSize; ++i) apData[i] = GetFloat32();
 #else
 		GetData(apData, sizeof(float) * alSize);
