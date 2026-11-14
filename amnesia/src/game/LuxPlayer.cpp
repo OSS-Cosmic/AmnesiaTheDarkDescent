@@ -78,7 +78,11 @@ cLuxPlayer::cLuxPlayer() : iLuxUpdateable("LuxPlayer"), iLuxCollideCallbackConta
 	mfFreeCameraSpeed = 0.1f;
 
 	//TODO: More setup?
-	mfFOV = cMath::ToRad(gpBase->mpGameCfg->GetFloat("Player_General","FOV", 0));
+	// game.cfg's FOV is the default; the options menu can override it per profile (LoadUserConfig)
+	mfDefaultFOVDegrees = gpBase->mpGameCfg->GetFloat("Player_General","FOV", 0);
+	if(mfDefaultFOVDegrees <= 0) mfDefaultFOVDegrees = 70.0f;
+	mfFOV = cMath::ToRad(mfDefaultFOVDegrees);
+	mfFOVMul = 1.0f; // Reset() sets it again, but LoadUserConfig() may run first
 
 	mpCamera->SetFOV(mfFOV);
 	mpCamera->SetAspect(GetScreenAspect());
@@ -436,6 +440,10 @@ void cLuxPlayer::LoadUserConfig()
 	mbShowCrossHair = gpBase->mpUserConfig->GetBool("Game", "ShowCrossHair", true);
 	mFocusIconStyle = StringToFocusIconStyle(gpBase->mpUserConfig->GetString("Game", "FocusIconStyle", "Default"));
 
+	// 0 (or missing) = use the game's default FOV
+	float fFOV = gpBase->mpUserConfig->GetFloat("Game", "FOV", 0);
+	SetFOVDegrees(fFOV > 0 ? fFOV : mfDefaultFOVDegrees);
+
 	RunHelperLuxMessage(eLuxUpdateableMessage_LoadUserConfig,0);
 }
 
@@ -444,7 +452,30 @@ void cLuxPlayer::SaveUserConfig()
 	gpBase->mpUserConfig->SetBool("Game", "ShowCrossHair", mbShowCrossHair);
 	gpBase->mpUserConfig->SetString("Game", "FocusIconStyle", FocusIconStyleToString(mFocusIconStyle));
 
+	// Only store an FOV the player picked, so a mod with its own game.cfg FOV still gets it
+	float fFOV = GetFOVDegrees();
+	gpBase->mpUserConfig->SetFloat("Game", "FOV", cMath::Abs(fFOV - mfDefaultFOVDegrees) < 0.5f ? 0.0f : (float)cMath::RoundToInt(fFOV));
+
 	RunHelperLuxMessage(eLuxUpdateableMessage_SaveUserConfig,0);
+}
+
+//-----------------------------------------------------------------------
+
+const float cLuxPlayer::kfMinFOVDegrees = 40.0f;
+const float cLuxPlayer::kfMaxFOVDegrees = 100.0f;
+
+void cLuxPlayer::SetFOVDegrees(float afDegrees)
+{
+	afDegrees = cMath::Clamp(afDegrees, kfMinFOVDegrees, kfMaxFOVDegrees);
+	mfFOV = cMath::ToRad(afDegrees);
+
+	// Keep the current multiplier (zoom effects, flashbacks, ...)
+	if(mpCamera) mpCamera->SetFOV(mfFOV * mfFOVMul);
+}
+
+float cLuxPlayer::GetFOVDegrees()
+{
+	return cMath::ToDeg(mfFOV);
 }
 
 //-----------------------------------------------------------------------

@@ -197,6 +197,10 @@ cLuxMainMenu_Options::cLuxMainMenu_Options(cGuiSet *apGuiSet, cGuiSkin *apGuiSki
 	mfMouseSensitivityStep = 0.1f;
 	mfMouseSensitivityMax = 5.0f;
 
+	mfFOVMin = cLuxPlayer::kfMinFOVDegrees;
+	mfFOVStep = 1.0f;
+	mfFOVMax = cLuxPlayer::kfMaxFOVDegrees;
+
 #ifdef USE_GAMEPAD
 	mfGamepadLookSensitivityMin = 0.5f;
 	mfGamepadLookSensitivityStep = 0.05f;
@@ -438,6 +442,15 @@ void cLuxMainMenu_Options::AddGameOptions(cWidgetTab* apTab)
 	mpCBFocusIconStyle->AddItem(kTranslate("OptionsMenu", "FocusIconStyleSimple"));
 	vPos.y += pLabel->GetSize().y + 15;
 
+	///////////////////////////////////////////////
+	// Field of view (per profile, in game only; menu cameras keep theirs)
+	pLabel = mpGuiSet->CreateWidgetLabel(vPos, -1, kTranslateOr("OptionsMenu", "FieldOfView", _W("Field of view")), apTab);
+	mpSFOV = mpGuiSet->CreateWidgetSlider(eWidgetSliderOrientation_Horizontal, cVector3f(pLabel->GetSize().x + 5, -1, 0), cVector2f(150, 20), 0, pLabel);
+	SetUpInput(pLabel, mpSFOV, false, kTranslateOr("OptionsMenu", "FieldOfViewTip",
+		_W("Vertical field of view in degrees. Higher values show more around you, lower values zoom in.")));
+	SetUpSlider(mpSFOV, mfFOVMin, mfFOVMax, mfFOVStep, kGuiCallback(FOVSlider_OnMove), &mpLFOV);
+	vPos.y += pLabel->GetSize().y + 15;
+
 	//////////////////////////////////
 	// Commentary
 	if(mbShowCommentary)
@@ -463,18 +476,19 @@ void cLuxMainMenu_Options::AddGameOptions(cWidgetTab* apTab)
 	mpChBShowHints->SetFocusNavigation(eUIArrow_Down, mpChBShowDeathHints);
 	mpChBShowDeathHints->SetFocusNavigation(eUIArrow_Down, mpChBShowCrosshair);
 	mpChBShowCrosshair->SetFocusNavigation(eUIArrow_Down, mpCBFocusIconStyle);
+	mpCBFocusIconStyle->SetFocusNavigation(eUIArrow_Down, mpSFOV);
 	if(mbShowCommentary)
 	{
-		mpCBFocusIconStyle->SetFocusNavigation(eUIArrow_Down, mpChBShowCommentary);
+		mpSFOV->SetFocusNavigation(eUIArrow_Down, mpChBShowCommentary);
 		mpChBShowCommentary->SetFocusNavigation(eUIArrow_Down, mpBOK);
 
 		pLastWidget = mpChBShowCommentary;
 	}
 	else
 	{
-		mpCBFocusIconStyle->SetFocusNavigation(eUIArrow_Down, mpBOK);
+		mpSFOV->SetFocusNavigation(eUIArrow_Down, mpBOK);
 
-		pLastWidget = mpCBFocusIconStyle;
+		pLastWidget = mpSFOV;
 	}
 
 	apTab->SetUserData(pLastWidget);
@@ -488,8 +502,9 @@ void cLuxMainMenu_Options::AddGameOptions(cWidgetTab* apTab)
 	mpChBShowDeathHints->SetFocusNavigation(eUIArrow_Up, mpChBShowHints);
 	mpChBShowCrosshair->SetFocusNavigation(eUIArrow_Up, mpChBShowDeathHints);
 	mpCBFocusIconStyle->SetFocusNavigation(eUIArrow_Up, mpChBShowCrosshair);
+	mpSFOV->SetFocusNavigation(eUIArrow_Up, mpCBFocusIconStyle);
 	if(mbShowCommentary)
-		mpChBShowCommentary->SetFocusNavigation(eUIArrow_Up, mpCBFocusIconStyle);
+		mpChBShowCommentary->SetFocusNavigation(eUIArrow_Up, mpSFOV);
 
 	// Left/Right
 	mpChBShowSubtitles->SetFocusNavigation(eUIArrow_Right, mpChBShowEffectSubtitles);
@@ -1265,6 +1280,10 @@ void cLuxMainMenu_Options::SetInputValues(cResourceVarsObject& aObj)
 		if(mpCBFocusIconStyle->GetSelectedItem()==-1)
 			mpCBFocusIconStyle->SetSelectedItem(0, false, true);
 
+		float fFOV = aObj.GetVarFloat("FOV", gpBase->mpPlayer->GetDefaultFOVDegrees());
+		SetSliderValue(mpSFOV, fFOV, false, mfFOVMin, mfFOVMax);
+		SetFOVLabelString(fFOV);
+
 		if(mbShowCommentary)
 		{
 			mpChBShowCommentary->SetChecked(aObj.GetVarBool("ShowCommentary"), false);
@@ -1977,6 +1996,8 @@ void cLuxMainMenu_Options::ApplyChanges()
 		gpBase->mpPlayer->SetShowCrosshair(mpChBShowCrosshair->IsChecked());
 
 		gpBase->mpPlayer->SetFocusIconStyle((eLuxFocusIconStyle)mpCBFocusIconStyle->GetSelectedItem());
+
+		gpBase->mpPlayer->SetFOVDegrees(GetFOV());
 	}
 
 
@@ -2113,6 +2134,13 @@ void cLuxMainMenu_Options::ApplyChanges()
 void cLuxMainMenu_Options::SetGammaLabelString(float afX)
 {
 	SetSliderLabelString(mpLGamma, afX, mfGammaMin, mfGammaMax);
+}
+
+//-----------------------------------------------------------------------
+
+void cLuxMainMenu_Options::SetFOVLabelString(float afX)
+{
+	SetSliderLabelString(mpLFOV, (float)cMath::RoundToInt(afX), mfFOVMin, mfFOVMax);
 }
 
 //-----------------------------------------------------------------------
@@ -2306,6 +2334,7 @@ void cLuxMainMenu_Options::DumpInitialValues(cResourceVarsObject &aObj)
 
 		aObj.AddVarBool("ShowCrosshair", gpBase->mpPlayer->GetShowCrosshair());
 		aObj.AddVarInt("FocusIconStyle", gpBase->mpPlayer->GetFocusIconStyle());
+		aObj.AddVarFloat("FOV", (float)cMath::RoundToInt(gpBase->mpPlayer->GetFOVDegrees()));
 		aObj.AddVarBool("ShowCommentary", gpBase->mpMapHandler->GetShowCommentary());
 
 		// Language
@@ -2402,6 +2431,7 @@ void cLuxMainMenu_Options::DumpCurrentValues(cResourceVarsObject &aObj)
 
 		aObj.AddVarBool("ShowCrosshair",	mpChBShowCrosshair->IsChecked());
 		aObj.AddVarInt("FocusIconStyle",	mpCBFocusIconStyle->GetSelectedItem());
+		aObj.AddVarFloat("FOV",				GetFOV());
 
 		aObj.AddVarString("Language",		cString::To8Char(mvLangFiles[mpCBLanguage->GetSelectedItem()]));
 	}
@@ -2712,6 +2742,15 @@ bool cLuxMainMenu_Options::GammaSlider_OnMove(iWidget* apWidget, const cGuiMessa
 	return true;
 }
 kGuiCallbackDeclaredFuncEnd(cLuxMainMenu_Options, GammaSlider_OnMove);
+
+//-----------------------------------------------------------------------
+
+bool cLuxMainMenu_Options::FOVSlider_OnMove(iWidget* apWidget, const cGuiMessageData& aData)
+{
+	SetFOVLabelString(GetFOV());
+	return true;
+}
+kGuiCallbackDeclaredFuncEnd(cLuxMainMenu_Options, FOVSlider_OnMove);
 
 //-----------------------------------------------------------------------
 
