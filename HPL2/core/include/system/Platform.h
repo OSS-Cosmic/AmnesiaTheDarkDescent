@@ -91,6 +91,8 @@ namespace hpl {
 		//////////////////////////////////////////////////////
 
 		static unsigned long GetApplicationTime();
+		/** Seconds since the first call, from the high resolution performance counter. */
+		static double GetApplicationTimeX();
 		static void Sleep (unsigned int alMilliSecs);
 
 		//////////////////////////////////////////////////////

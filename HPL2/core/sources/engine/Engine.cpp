@@ -73,20 +73,19 @@ cFPSCounter::cFPSCounter(iLowLevelSystem *apLowLevelSystem) {
 
   mpLowLevelSystem = apLowLevelSystem;
 
-  mfFrametimestart = ((float)cPlatform::GetApplicationTime()) / 1000.0f;
+  mfFrametimestart = (float)cPlatform::GetApplicationTimeX();
 }
 
 void cFPSCounter::AddFrame() {
   mlFramecounter++;
 
-  mfFrametime =
-      (((float)cPlatform::GetApplicationTime()) / 1000.0f) - mfFrametimestart;
+  mfFrametime = (float)cPlatform::GetApplicationTimeX() - mfFrametimestart;
 
   // update the timer
   if (mfFrametime >= mfUpdateRate) {
     mfFPS = ((float)mlFramecounter) / mfFrametime;
     mlFramecounter = 0;
-    mfFrametimestart = ((float)cPlatform::GetApplicationTime()) / 1000.0f;
+    mfFrametimestart = (float)cPlatform::GetApplicationTimeX();
   }
 }
 
@@ -439,7 +438,7 @@ void cEngine::Run() {
   mpLogicTimer->Reset();
 
   // Loop the game... fix the var...
-  unsigned long lTempTime = cPlatform::GetApplicationTime();
+  double fTempTime = cPlatform::GetApplicationTimeX();
 
   Log("Game Running\n");
   Log("--------------------------------------------------------\n");
@@ -594,8 +593,8 @@ void cEngine::Run() {
   Log("Statistics\n");
   Log("--------------------------------------------------------\n");
 
-  unsigned long lTime = cPlatform::GetApplicationTime() - lTempTime;
-  fMediumTime = fNumOfTimes / (((double)lTime) / 1000);
+  double fTime = cPlatform::GetApplicationTimeX() - fTempTime;
+  fMediumTime = fNumOfTimes / fTime;
 
   Log(" Medium framerate: %f\n", fMediumTime);
   Log("--------------------------------------------------------\n\n");
