@@ -257,6 +257,9 @@ namespace hpl {
 
 		mpCallback = NULL;
 
+		// Must be set before the body is created below, which reads it
+		mlCollideFlags = eFlagBit_All;
+
 		/////////////////////////////
 		// Create Shape
 		float fRadius = cMath::Max(avSize.x, avSize.z)*0.5f;
@@ -308,8 +311,6 @@ namespace hpl {
 
 		mfYaw =0;
 		mfPitch =0;
-
-		mlCollideFlags = eFlagBit_All;
 
 		//The maximum angle of a slope (compare to gravity direction) where no sliding occurs
 		mfMaxNoSlideSlopeAngleCos = cos(cMath::ToRad(45.0f));
