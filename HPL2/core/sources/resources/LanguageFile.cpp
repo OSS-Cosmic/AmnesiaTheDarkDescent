@@ -223,17 +223,40 @@ namespace hpl {
 								}
 							}
 							//Decode UTF-8!
+							//Handles 1-4 byte sequences; previously only 2 byte sequences
+							//were handled, so 3 byte chars (e.g. U+201E) ate the next letter.
 							else if(c >= 128)
 							{
-								unsigned char c2 = sString[i+1];
+								int lExtraBytes = 0;
+								int lNum = 0;
+								if((c & 0xE0) == 0xC0)		{ lExtraBytes = 1; lNum = c & 0x1f; } // 110xxxxx
+								else if((c & 0xF0) == 0xE0)	{ lExtraBytes = 2; lNum = c & 0x0f; } // 1110xxxx
+								else if((c & 0xF8) == 0xF0)	{ lExtraBytes = 3; lNum = c & 0x07; } // 11110xxx
 
-								int lNum = c & 0x1f; // c AND 0001 1111
-								lNum = lNum << 6;
-								lNum = lNum | (c2 & 0x3f);// c AND 0011 1111
+								//Make sure the continuation bytes are really there
+								bool bValid = lExtraBytes > 0 && i + lExtraBytes < sString.length();
+								for(int j = 1; bValid && j <= lExtraBytes; ++j)
+								{
+									unsigned char cNext = sString[i + j];
+									if((cNext & 0xC0) != 0x80)
+										bValid = false;
+									else
+										lNum = (lNum << 6) | (cNext & 0x3f);
+								}
 
-								pEntry->mwsText += (wchar_t)lNum;
-								++i;
-								//Log(" %d: (%x %x) -> %d\n",i,c,c2,(wchar_t)lNum);
+								if(bValid)
+								{
+									//A 16 bit wchar_t (Windows) can not hold chars outside the BMP.
+									if(sizeof(wchar_t) < 4 && lNum > 0xFFFF)
+										lNum = '?';
+									pEntry->mwsText += (wchar_t)lNum;
+									i += lExtraBytes;
+								}
+								else
+								{
+									//Not valid UTF-8, treat it as a Latin-1 char.
+									pEntry->mwsText += (wchar_t)c;
+								}
 							}
 							else
 							{
