@@ -86,7 +86,7 @@ void cLuxAreaLoader_Examine::SetupArea(iLuxArea *apArea, cWorld *apWorld)
 cLuxArea_Examine::cLuxArea_Examine(const tString &asName, int alID, cLuxMap *apMap)  : iLuxArea(asName,alID,apMap, eLuxAreaType_Examine)
 {
 	mfMaxFocusDistance = gpBase->mpGameCfg->GetFloat("Player_Interaction","Examine_MaxFocusDist",0);
-	mfInsaneLimit = gpBase->mpGameCfg->GetFloat("Player_Interaction","MaxExamineSanity",0);
+	mfInsaneLimit = gpBase->mpGameCfg->GetFloat("Insanity","MaxExamineSanity",0);
 
 	mfPlaySoundCount =0;
 
