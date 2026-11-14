@@ -193,7 +193,11 @@ cGuiGfxElement* iLuxPlayerState_DefaultBase::GetCrosshair()
 		else
 		{
 			if(mpPlayer->GetFocusIconStyle()==eLuxFocusIconStyle_Default)
-				return mvFocusCrosshairGfx[crossHair];
+			{
+				//Some crosshair images do not exist in every mod's resources.
+				cGuiGfxElement *pCrosshair = mvFocusCrosshairGfx[crossHair];
+				return pCrosshair ? pCrosshair : mpDefaultCrosshairGfx;
+			}
 			else
 				return mpSimpleInteractCrosshairGfx;
 		}
