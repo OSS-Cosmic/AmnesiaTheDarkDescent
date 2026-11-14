@@ -165,9 +165,11 @@ namespace hpl {
 				cVerletParticle *pPart = it.Next();
 				
 				cMath::ExpandAABB(vMin,vMax, pPart->GetPosition(), pPart->GetPosition());
+				// The rope is drawn from the smooth positions, so they must be inside the bounds too
+				cMath::ExpandAABB(vMin,vMax, pPart->GetSmoothPosition(), pPart->GetSmoothPosition());
 			}
 			
-			mBoundingVolume.SetLocalMinMax(vMin-cVector3f(mfRadius),vMax+cVector3f(mfRadius));
+			mBoundingVolume.SetLocalMinMax(vMin-cVector3f(mfRadius + 2.0f),vMax+cVector3f(mfRadius + 2.0f));
 
 			mlLastUpdateCount = mpRope->GetUpdateCount();
 		}
@@ -236,7 +238,7 @@ namespace hpl {
 			cVerletParticle *pPart = it.Next();
 
 			if(lCount == 1){
-				vPrevPos = pPart->GetPosition();
+				vPrevPos = pPart->GetSmoothPosition();
 				continue; 
 			}
 
@@ -246,7 +248,16 @@ namespace hpl {
 			cVector3f vDelta = vPos - vPrevPos;
 			float fLength = vDelta.Length();
 			cVector3f vUp = vDelta / fLength;
-			cVector3f vRight = cMath::Vector3Normalize(cMath::Vector3Cross(vUp, apFrustum->GetForward()));
+			// Fall back to other axes when the segment is parallel to the view direction,
+			// otherwise a zero vector is normalized into NaN geometry.
+			cVector3f vTempCross = cMath::Vector3Cross(vUp, apFrustum->GetForward());
+			if(vTempCross.SqrLength() < 0.00001f)
+			{
+				vTempCross = cMath::Vector3Cross(vUp, cVector3f(0, 1, 0));
+				if(vTempCross.SqrLength() < 0.00001f)
+					vTempCross = cMath::Vector3Cross(vUp, cVector3f(1, 0, 0));
+			}
+			cVector3f vRight = cMath::Vector3Normalize(vTempCross);
 			cVector3f vFwd = cMath::Vector3Cross(vRight, vUp);
 
 			/////////////////////////
