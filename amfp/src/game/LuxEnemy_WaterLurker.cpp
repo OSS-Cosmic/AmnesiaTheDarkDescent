@@ -444,8 +444,16 @@ bool cLuxEnemy_WaterLurker::StateEventImplement(int alState, eLuxEnemyStateEvent
 			else if(mbStuckAtDoor)// && mpMap->DoorIsClosed(mlStuckDoorID))
 			{
 				iLuxEntity *pDoorEnt = mpMap->GetEntityByID(mlStuckDoorID);
-				mvTempPos = pDoorEnt->GetAttachEntity()->GetWorldPosition();
-				ChangeState(eLuxEnemyState_BreakDoor);
+				//The door can have been removed since the stuck check, do not crash on it.
+				if(pDoorEnt && pDoorEnt->GetAttachEntity())
+				{
+					mvTempPos = pDoorEnt->GetAttachEntity()->GetWorldPosition();
+					ChangeState(eLuxEnemyState_BreakDoor);
+				}
+				else
+				{
+					mbStuckAtDoor = false;
+				}
 			}
 			
 		////////////////////////

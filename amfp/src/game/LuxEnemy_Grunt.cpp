@@ -280,8 +280,16 @@ bool cLuxEnemy_Grunt::StateEventImplement(int alState, eLuxEnemyStateEvent aEven
 			if(mbStuckAtDoor)// && mpMap->DoorIsClosed(mlStuckDoorID))
 			{
 				iLuxEntity *pDoorEnt = mpMap->GetEntityByID(mlStuckDoorID);
-				mvTempPos = pDoorEnt->GetAttachEntity()->GetWorldPosition();
-				ChangeState(eLuxEnemyState_BreakDoor);
+				//The door can have been removed since the stuck check, do not crash on it.
+				if(pDoorEnt && pDoorEnt->GetAttachEntity())
+				{
+					mvTempPos = pDoorEnt->GetAttachEntity()->GetWorldPosition();
+					ChangeState(eLuxEnemyState_BreakDoor);
+				}
+				else
+				{
+					mbStuckAtDoor = false;
+				}
 			}
 		
 		kLuxOnMessage(eLuxEnemyMessage_EndOfPath)
@@ -340,8 +348,16 @@ bool cLuxEnemy_Grunt::StateEventImplement(int alState, eLuxEnemyStateEvent aEven
 			if(mbStuckAtDoor)// && mpMap->DoorIsClosed(mlStuckDoorID))
 			{
 				iLuxEntity *pDoorEnt = mpMap->GetEntityByID(mlStuckDoorID);
-				mvTempPos = pDoorEnt->GetAttachEntity()->GetWorldPosition();
-				ChangeState(eLuxEnemyState_BreakDoor);
+				//The door can have been removed since the stuck check, do not crash on it.
+				if(pDoorEnt && pDoorEnt->GetAttachEntity())
+				{
+					mvTempPos = pDoorEnt->GetAttachEntity()->GetWorldPosition();
+					ChangeState(eLuxEnemyState_BreakDoor);
+				}
+				else
+				{
+					mbStuckAtDoor = false;
+				}
 			}
 
 		kLuxOnLeave
@@ -419,8 +435,16 @@ bool cLuxEnemy_Grunt::StateEventImplement(int alState, eLuxEnemyStateEvent aEven
 			if(gpBase->mpPlayer->GetTerror() >= 1 && mbStuckAtDoor)// && mpMap->DoorIsClosed(mlStuckDoorID))
 			{
 				iLuxEntity *pDoorEnt = mpMap->GetEntityByID(mlStuckDoorID);
-				mvTempPos = pDoorEnt->GetAttachEntity()->GetWorldPosition();
-				ChangeState(eLuxEnemyState_BreakDoor);
+				//The door can have been removed since the stuck check, do not crash on it.
+				if(pDoorEnt && pDoorEnt->GetAttachEntity())
+				{
+					mvTempPos = pDoorEnt->GetAttachEntity()->GetWorldPosition();
+					ChangeState(eLuxEnemyState_BreakDoor);
+				}
+				else
+				{
+					mbStuckAtDoor = false;
+				}
 			}
 			//Player is no longer seen, see if time to search
 			else if(PlayerIsDetected()==false)
@@ -489,8 +513,16 @@ bool cLuxEnemy_Grunt::StateEventImplement(int alState, eLuxEnemyStateEvent aEven
 			if(mbStuckAtDoor)// && mpMap->DoorIsClosed(mlStuckDoorID))
 			{
 				iLuxEntity *pDoorEnt = mpMap->GetEntityByID(mlStuckDoorID);
-				mvTempPos = pDoorEnt->GetAttachEntity()->GetWorldPosition();
-				ChangeState(eLuxEnemyState_BreakDoor);
+				//The door can have been removed since the stuck check, do not crash on it.
+				if(pDoorEnt && pDoorEnt->GetAttachEntity())
+				{
+					mvTempPos = pDoorEnt->GetAttachEntity()->GetWorldPosition();
+					ChangeState(eLuxEnemyState_BreakDoor);
+				}
+				else
+				{
+					mbStuckAtDoor = false;
+				}
 			}
 
 		//At node
@@ -572,8 +604,16 @@ bool cLuxEnemy_Grunt::StateEventImplement(int alState, eLuxEnemyStateEvent aEven
 			else if(mbStuckAtDoor)// && mpMap->DoorIsClosed(mlStuckDoorID))
 			{
 				iLuxEntity *pDoorEnt = mpMap->GetEntityByID(mlStuckDoorID);
-				mvTempPos = pDoorEnt->GetAttachEntity()->GetWorldPosition();
-				ChangeState(eLuxEnemyState_BreakDoor);
+				//The door can have been removed since the stuck check, do not crash on it.
+				if(pDoorEnt && pDoorEnt->GetAttachEntity())
+				{
+					mvTempPos = pDoorEnt->GetAttachEntity()->GetWorldPosition();
+					ChangeState(eLuxEnemyState_BreakDoor);
+				}
+				else
+				{
+					mbStuckAtDoor = false;
+				}
 			}
 		
 		/////////////////////////////
