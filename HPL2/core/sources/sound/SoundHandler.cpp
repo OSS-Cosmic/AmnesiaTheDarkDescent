@@ -542,6 +542,7 @@ namespace hpl {
 										bool ab3D,int alPriorityModifier, bool abStream, bool *apNotEnoughChannels)
 	{
 		if(asName == "") return NULL;
+		if(mvBlockedSoundNames.empty()==false && IsSoundBlocked(asName)) return NULL;
 
 		/////////////////////////////////
 		//Calculate priority
@@ -704,6 +705,34 @@ namespace hpl {
 		}
 	}
 	
+	//-----------------------------------------------------------------------
+
+	void cSoundHandler::SetSoundBlocked(const tString& asName, bool abBlocked)
+	{
+		tString sPart = cString::ToLowerCase(asName);
+		for(size_t i=0; i<mvBlockedSoundNames.size(); ++i)
+		{
+			if(mvBlockedSoundNames[i] == sPart)
+			{
+				if(abBlocked==false) mvBlockedSoundNames.erase(mvBlockedSoundNames.begin() + i);
+				return;
+			}
+		}
+		if(abBlocked && sPart != "") mvBlockedSoundNames.push_back(sPart);
+	}
+
+	bool cSoundHandler::IsSoundBlocked(const tString& asName)
+	{
+		if(mvBlockedSoundNames.empty()) return false;
+
+		tString sLowName = cString::ToLowerCase(cString::GetFileName(asName));
+		for(size_t i=0; i<mvBlockedSoundNames.size(); ++i)
+		{
+			if(sLowName.find(mvBlockedSoundNames[i]) != tString::npos) return true;
+		}
+		return false;
+	}
+
 	//-----------------------------------------------------------------------
 
 	bool cSoundHandler::Stop(const tString& asName)
