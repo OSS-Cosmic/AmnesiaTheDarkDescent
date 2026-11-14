@@ -595,6 +595,15 @@ protected:
 	bool InFOV(const cVector3f &avPos);
 	bool PlayerInFOV();
 
+	/**
+	 * Break door helpers. The door counts as cleared when it is gone, broken or no longer
+	 * closed. A hit on an unbreakable, unlocked but still closed door opens it (unlocking a door
+	 * does not open it, so it could never break and the enemy kept bashing it forever).
+	 */
+	bool StuckDoorIsCleared();
+	void OnBreakDoorHit();
+	void OnStuckDoorCleared();
+
 	void OnSetActive(bool abX);
 	
 	

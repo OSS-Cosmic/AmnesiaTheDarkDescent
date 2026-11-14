@@ -787,8 +787,9 @@ bool cLuxEnemy_Grunt::StateEventImplement(int alState, eLuxEnemyStateEvent aEven
 			{
 				ChangeState(eLuxEnemyState_Alert);
 			}
-			else if(mpMap->DoorIsBroken(mlStuckDoorID))
+			else if(StuckDoorIsCleared())
 			{
+				OnStuckDoorCleared();
 				if(mPreviousState == eLuxEnemyState_Hurt)
 					ChangeState(eLuxEnemyState_Hunt);
 				else 
@@ -803,6 +804,7 @@ bool cLuxEnemy_Grunt::StateEventImplement(int alState, eLuxEnemyStateEvent aEven
 		
 		kLuxOnMessage(eLuxEnemyMessage_AnimationSpecialEvent)
 			Attack(mNormalAttackSize, mBreakDoorAttackDamage, 1.0f);
+			OnBreakDoorHit();
 			
 
 		////////////////////////

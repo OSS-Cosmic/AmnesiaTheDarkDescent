@@ -489,11 +489,14 @@ bool cLuxEnemy_WaterLurker::StateEventImplement(int alState, eLuxEnemyStateEvent
 		kLuxOnMessage(eLuxEnemyMessage_TimeOut)
 			//SplashWater(eWaterLurkerSplash_Attack);
 			Attack(mNormalAttackSize, mBreakDoorAttackDamage, 1.0f);
+			OnBreakDoorHit();
 			SendMessage(eLuxEnemyMessage_TimeOut_2, cMath::RandRectf(0.5,1.5f), true);
 
 		///////////////////
 		//Check if door is destroyed
 		kLuxOnMessage(eLuxEnemyMessage_TimeOut_2)
+			if(StuckDoorIsCleared())
+				OnStuckDoorCleared();
 			ChangeState(eLuxEnemyState_Hunt);	
 			/*if(mpMap->DoorIsBroken(mlStuckDoorID))
 			{
