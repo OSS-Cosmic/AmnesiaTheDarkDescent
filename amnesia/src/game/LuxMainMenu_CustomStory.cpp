@@ -140,6 +140,26 @@ void cLuxMainMenu_CustomStory::CreateGui()
 
 //-----------------------------------------------------------------------
 
+// The image is looked up by file name in all resource folders, so a file with the same
+// name in another story could be picked. If the file is in this story's folder, ask for
+// it with the full path instead.
+static tString GetStoryImageFile(cLuxCustomStorySettings* apStory)
+{
+	tString sImgFile = cString::ReplaceCharTo(apStory->msImgFile, "\\", "/");
+	while(sImgFile != "" && sImgFile[0] == '/')
+		sImgFile = cString::Sub(sImgFile, 1);
+	if(sImgFile == "")
+		return apStory->msImgFile;
+
+	tWString sStoryFile = cString::AddSlashAtEndW(apStory->msStoryRootFolder) + cString::To16Char(sImgFile);
+	if(cPlatform::FileExists(sStoryFile) == false)
+		return apStory->msImgFile;
+
+	return cString::To8Char(cString::ReplaceCharToW(sStoryFile, _W("\\"), _W("/")));
+}
+
+//-----------------------------------------------------------------------
+
 void cLuxMainMenu_CustomStory::SetCurrentStory(cLuxCustomStorySettings* apStory)
 {
 	if(mpStory==apStory)
@@ -173,16 +193,20 @@ void cLuxMainMenu_CustomStory::SetCurrentStory(cLuxCustomStorySettings* apStory)
 		sDescription = kTranslate("CustomStory", "NoDescription");
 
 	// Create picture
-	if(mpStory->msImgFile!="")
+	// Always clear the previous story's picture, even if this story has none
 	{
 		cGuiGfxElement* pGfx = mpIPicture->GetImage();
 		if(pGfx)
 		{
+			mpIPicture->SetImage(NULL);
 			mpGui->DestroyGfx(pGfx);
-			pGfx = NULL;
 		}
+	}
+	if(mpStory->msImgFile!="")
+	{
+		cGuiGfxElement* pGfx = NULL;
 
-		Image* pTex = gpBase->mpEngine->GetResources()->GetTextureManager()->Create2DImage(mpStory->msImgFile, false, eTextureType_Rect).Release();
+		Image* pTex = gpBase->mpEngine->GetResources()->GetTextureManager()->Create2DImage(GetStoryImageFile(mpStory), false, eTextureType_Rect).Release();
 		if(pTex)
 			pGfx = mpGui->CreateGfxTexture(pTex, true, eGuiMaterial_Alpha);
 
