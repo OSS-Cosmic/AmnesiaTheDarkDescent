@@ -401,8 +401,9 @@ cLuxItemType_Tinderbox::cLuxItemType_Tinderbox()  : iLuxItemType("Tinderbox", eL
 
 bool cLuxItemType_Tinderbox::GetHasMaxAmount()
 {
-	//if(gpBase->mpPlayer->GetTinderboxes()>=10) return true;
-	return false;
+	// Tinderboxes are counted on the player, not on an inventory item, so the
+	// generic per-item count check in AddItem never applied to them.
+	return gpBase->mpPlayer->GetTinderboxes() >= GetMaxCount();
 }
 
 bool cLuxItemType_Tinderbox::BeforeAddItem(cLuxInventory_Item *apItem)
