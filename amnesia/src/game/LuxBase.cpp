@@ -136,7 +136,9 @@ void LuxCalcGuiSetOffset(const cVector2f &avVirtualSizeIn, const cVector2f& avSc
 
 	if(fScreenRatio >= (4.0f / 3.0f)-0.001f)
 	{
-		float fAddX = avVirtualSizeIn.x * (fScreenRatio-fWantedRatio); //The "left overs" on both sides
+		// The "left overs" on both sides. Width at the screen ratio is y*fScreenRatio, so the
+		// extra width is y*(fScreenRatio-fWantedRatio), not x*(...).
+		float fAddX = avVirtualSizeIn.y * (fScreenRatio-fWantedRatio);
 	//avOutSize.y = avVirtualSizeIn.y + fAddY;
 
 		avOutSize.x = avVirtualSizeIn.x + fAddX;
