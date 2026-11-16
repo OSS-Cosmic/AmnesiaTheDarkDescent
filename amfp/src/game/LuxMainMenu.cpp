@@ -726,7 +726,8 @@ void cLuxMainMenu::OnMenuExit()
 			gpBase->mpEngine->GetUpdater()->SetContainer("Default");
 			gpBase->mpEngine->GetUpdater()->BroadcastMessageToAll(eUpdateableMessage_Reset);
 
-			gpBase->mpSaveHandler->AutoLoad(true);
+			if(gpBase->mpSaveHandler->AutoLoad(true)==false)
+				gpBase->mpSaveHandler->ReturnToMainMenuAfterFailedLoad();
 		}
 		break;
 	////////////////

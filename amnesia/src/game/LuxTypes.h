@@ -33,6 +33,8 @@ using namespace hpl;
 //----------------------------------------------
 
 #define kTranslate(sCategory, sEntry) gpBase->mpEngine->GetResources()->Translate(sCategory, sEntry)
+// For strings added by this port that the retail .lang files do not have
+#define kTranslateOr(sCategory, sEntry, sFallback) gpBase->mpEngine->GetResources()->TranslateOr(sCategory, sEntry, sFallback)
 
 #define kCopyToVar(aVar, aVal)	(aVar->aVal = aVal)
 #define kCopyFromVar(aVar, aVal)(aVal = aVar->aVal)

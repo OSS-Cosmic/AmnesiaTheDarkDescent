@@ -172,6 +172,9 @@ private:
 	static void __stdcall PlayGuiSound(std::string& asSoundFile, float afVolume);
 
 	static void __stdcall StartScreenShake(float afAmount, float afTime, float afFadeInTime,float afFadeOutTime);
+	static void __stdcall ShowScreenImage(std::string & asImageName, float afX, float afY, float afScale, bool abUseRelativeCoordinates, float afDuration, float afFadeIn, float afFadeOut);
+	static void __stdcall HideScreenImageImmediately();
+	static void __stdcall HideScreenImageWithFade(float afFadeOut);
 	
 
 	// Insanity
@@ -211,11 +214,17 @@ private:
 	static float __stdcall GetPlayerSpeed();
 	static float __stdcall GetPlayerYSpeed();
 
+	static float __stdcall GetPlayerBodyPitch();
+	static float __stdcall GetPlayerBodyYaw();
+	static float __stdcall GetPlayerCameraPitch();
+	static float __stdcall GetPlayerCameraYaw();
+
 	static void __stdcall MovePlayerForward(float afAmount);
 
 	static void __stdcall SetPlayerPermaDeathSound(std::string& asSound);
 
 	static void __stdcall SetSanityDrainDisabled(bool abX);
+	static void __stdcall SetGlobalSanityDrainDisabled(bool abX);
 	static void __stdcall GiveSanityBoost();
 	static void __stdcall GiveSanityBoostSmall();
 	static void __stdcall GiveSanityDamage(float afAmount, bool abUseEffect);

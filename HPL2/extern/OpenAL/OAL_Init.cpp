@@ -201,7 +201,7 @@ void OAL_SetupLogging ( bool abLogSounds, eOAL_LogOutput aeOutput, eOAL_LogVerbo
 	{
 		char buffer[100];
 
-		sprintf(buffer, "./OAL/OAL_Source_%d.log", i);
+		snprintf(buffer, sizeof(buffer), "./OAL/OAL_Source_%d.log", i);
 		pTempFile = fopen(buffer,"r");
 		if (pTempFile)
 		{
@@ -229,7 +229,7 @@ void OAL_Log( eOAL_LogVerbose aeVerboseLevelReq, eOAL_LogMsg aeMessageType,  con
 	char text[2048];
 	va_list ap;
 	va_start(ap, asMessage);
-	vsprintf(text, asMessage, ap);
+	vsnprintf(text, sizeof(text), asMessage, ap);
 	va_end(ap);
 
 	

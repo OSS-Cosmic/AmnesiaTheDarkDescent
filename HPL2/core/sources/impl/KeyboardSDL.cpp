@@ -236,7 +236,7 @@ namespace hpl {
 			case 	SDLK_RIGHTBRACKET: return eKey_RightBracket;
 			case 	SDLK_CARET: return eKey_Caret;
 			case 	SDLK_UNDERSCORE: return eKey_Underscore;
-			case 	SDLK_BACKQUOTE: return eKey_BackSlash;
+			case 	SDLK_BACKQUOTE: return eKey_BackQuote;
 			case 	SDLK_a: return eKey_A;
 			case 	SDLK_b: return eKey_B;
 			case 	SDLK_c: return eKey_C;

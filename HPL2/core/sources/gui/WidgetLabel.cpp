@@ -49,6 +49,7 @@ namespace hpl {
 		mfWordWrapOffset = 0.0f;
 		mfWordWrapRowsHeight = 0.0f;
 		mbScrollingDown = true;
+		mbAutoScroll = true;
 
 		mTextAlign = eFontAlign_Left;
 
@@ -193,7 +194,7 @@ namespace hpl {
 
 	void cWidgetLabel::OnUpdate(float afTimeStep)
 	{
-		if(mbWordWrap==false)
+		if(mbWordWrap==false || mbAutoScroll==false)
 			return;
 
 		////////////////////////////////////

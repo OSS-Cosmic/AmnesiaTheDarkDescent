@@ -18,6 +18,7 @@
  */
 
 #include "LuxPlayer.h"
+#include "LuxGlobalDataHandler.h"
 
 #include "LuxMap.h"
 #include "LuxInventory.h"
@@ -78,13 +79,17 @@ cLuxPlayer::cLuxPlayer() : iLuxUpdateable("LuxPlayer"), iLuxCollideCallbackConta
 	mfFreeCameraSpeed = 0.1f;
 
 	//TODO: More setup?
-	mfFOV = cMath::ToRad(gpBase->mpGameCfg->GetFloat("Player_General","FOV", 0));
+	// game.cfg's FOV is the default; the options menu can override it per profile (LoadUserConfig)
+	mfDefaultFOVDegrees = gpBase->mpGameCfg->GetFloat("Player_General","FOV", 0);
+	if(mfDefaultFOVDegrees <= 0) mfDefaultFOVDegrees = 70.0f;
+	mfFOV = cMath::ToRad(mfDefaultFOVDegrees);
+	mfFOVMul = 1.0f; // Reset() sets it again, but LoadUserConfig() may run first
 
 	mpCamera->SetFOV(mfFOV);
 	mpCamera->SetAspect(GetScreenAspect());
 	mpCamera->SetFarClipPlane(gpBase->mpGameCfg->GetFloat("Player_General","FarClipPlane",0));
 	mpCamera->SetNearClipPlane(gpBase->mpGameCfg->GetFloat("Player_General","NearClipPlane",0));
-	mpCamera->SetPitchLimits(-cMath::ToRad(70), cMath::ToRad(70) );
+	mpCamera->SetPitchLimits(-cMath::ToRad(90), cMath::ToRad(90) );
 
 	//////////////////////////////////
 	// Init General properties
@@ -238,6 +243,7 @@ void cLuxPlayer::Reset()
 	mbJumpDisabled = false;
 	mbCrouchDisabled = false;
 	mbSanityDrainDisabled = false;
+	mbGlobalSanityDrainDisabled = false;
 
 	mbIsInWater = false;
 	msWaterStepSound = "";
@@ -435,6 +441,10 @@ void cLuxPlayer::LoadUserConfig()
 	mbShowCrossHair = gpBase->mpUserConfig->GetBool("Game", "ShowCrossHair", true);
 	mFocusIconStyle = StringToFocusIconStyle(gpBase->mpUserConfig->GetString("Game", "FocusIconStyle", "Default"));
 
+	// 0 (or missing) = use the game's default FOV
+	float fFOV = gpBase->mpUserConfig->GetFloat("Game", "FOV", 0);
+	SetFOVDegrees(fFOV > 0 ? fFOV : mfDefaultFOVDegrees);
+
 	RunHelperLuxMessage(eLuxUpdateableMessage_LoadUserConfig,0);
 }
 
@@ -443,7 +453,30 @@ void cLuxPlayer::SaveUserConfig()
 	gpBase->mpUserConfig->SetBool("Game", "ShowCrossHair", mbShowCrossHair);
 	gpBase->mpUserConfig->SetString("Game", "FocusIconStyle", FocusIconStyleToString(mFocusIconStyle));
 
+	// Only store an FOV the player picked, so a mod with its own game.cfg FOV still gets it
+	float fFOV = GetFOVDegrees();
+	gpBase->mpUserConfig->SetFloat("Game", "FOV", cMath::Abs(fFOV - mfDefaultFOVDegrees) < 0.5f ? 0.0f : (float)cMath::RoundToInt(fFOV));
+
 	RunHelperLuxMessage(eLuxUpdateableMessage_SaveUserConfig,0);
+}
+
+//-----------------------------------------------------------------------
+
+const float cLuxPlayer::kfMinFOVDegrees = 40.0f;
+const float cLuxPlayer::kfMaxFOVDegrees = 100.0f;
+
+void cLuxPlayer::SetFOVDegrees(float afDegrees)
+{
+	afDegrees = cMath::Clamp(afDegrees, kfMinFOVDegrees, kfMaxFOVDegrees);
+	mfFOV = cMath::ToRad(afDegrees);
+
+	// Keep the current multiplier (zoom effects, flashbacks, ...)
+	if(mpCamera) mpCamera->SetFOV(mfFOV * mfFOVMul);
+}
+
+float cLuxPlayer::GetFOVDegrees()
+{
+	return cMath::ToDeg(mfFOV);
 }
 
 //-----------------------------------------------------------------------
@@ -614,6 +647,8 @@ void cLuxPlayer::GiveDamage(float afAmount, int alStrength, eLuxDamageType aType
 
 void cLuxPlayer::GiveSanityDamage(float afAmount)
 {
+	if(mbGlobalSanityDrainDisabled) return;
+
 	gpBase->mpHintHandler->Add("SanityHit", kTranslate("Hints", "SanityHit"), 0);
 
 	LowerSanity(afAmount, true);
@@ -624,6 +659,7 @@ void cLuxPlayer::GiveSanityDamage(float afAmount)
 
 void cLuxPlayer::LowerSanity(float afAmount, bool abUseEffect)
 {
+	if(mbGlobalSanityDrainDisabled) return;
 	if(mfHealth <=0) return;
 
 	mfSanity -= afAmount;
@@ -680,7 +716,7 @@ void cLuxPlayer::AddYaw(float afAmount)
 {
 	if (mbFreeCameraActive)
 	{
-		mpCamera->AddYaw(mpCamDirEffects->AddAndGetPitchAdd(afAmount * 2.0f));
+		mpCamera->AddYaw(mpCamDirEffects->AddAndGetYawAdd(afAmount * 2.0f));
 		return;
 	}
 
@@ -1113,7 +1149,7 @@ bool cLuxPlayer::CanDrawCrossHair()
 	{
 		if(mpEntityInFocus)
 		{
-			if(mpEntityInFocus->CanInteract(mpBodyInFocus) && mfCurrentFocusDistance <= mpEntityInFocus->GetMaxFocusDistance()) 
+			if(mpEntityInFocus->CanInteract(mpBodyInFocus) && mpEntityInFocus->GetInteractionDisabled()==false && mfCurrentFocusDistance <= mpEntityInFocus->GetMaxFocusDistance()) 
 				return true;
 			else
 				return false;
@@ -1338,6 +1374,16 @@ void cLuxPlayer::UpdateTerror(float afTimeStep)
 
 	cSoundHandler *pSoundHandler = gpBase->mpEngine->GetSound()->GetSoundHandler();
 
+	// Terror sound turned off in Options > Sound
+	if(gpBase->mpGlobalDataHandler->GetTerrorSoundEnabled()==false)
+	{
+		if(mpTerrorSound && pSoundHandler->IsValid(mpTerrorSound, mlTerrorSoundID))
+			mpTerrorSound->GetChannel()->Stop();
+		mpTerrorSound = NULL;
+		mlTerrorSoundID = -1;
+		return;
+	}
+
 	if(mfTerror > 0)
 	{
 		if(mpTerrorSound == NULL)
@@ -1420,7 +1466,9 @@ void cLuxPlayer::UpdateAvgSpeed(float afTimeStep)
 {
 	float fSpeed = mpCharBody->GetVelocity(afTimeStep).Length();
 	mlstPrevSpeeds.push_back(fSpeed);
-	if((int)mlstPrevSpeeds.size() > mlMaxPrevSpeeds) mlstPrevSpeeds.pop_front();
+	// A missing/zero MaxPrevSpeedsSaved emptied the list and made the average divide by zero
+	int lMaxPrevSpeeds = mlMaxPrevSpeeds > 0 ? mlMaxPrevSpeeds : 1;
+	while((int)mlstPrevSpeeds.size() > lMaxPrevSpeeds) mlstPrevSpeeds.pop_front();
 
 	mfAvgSpeed = 0;
 	std::list<float>::iterator it = mlstPrevSpeeds.begin();

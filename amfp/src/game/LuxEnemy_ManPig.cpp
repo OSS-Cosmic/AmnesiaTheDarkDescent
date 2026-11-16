@@ -1359,7 +1359,7 @@ bool cLuxEnemy_ManPig::StateEventImplement(int alState, eLuxEnemyStateEvent aEve
 			//////////////////////////
 			//Short attack
 			float fDistToPlayer = DistToPlayer();
-			if(CanSeePlayer() && fDistToPlayer < mfNormalAttackDistance)
+			if((CanSeePlayer() || PlayerIsInAttackContact()) && fDistToPlayer < mfNormalAttackDistance)
 			{
 				if(mbForceChargeAttack)
 				{
@@ -1619,8 +1619,9 @@ bool cLuxEnemy_ManPig::StateEventImplement(int alState, eLuxEnemyStateEvent aEve
 			{
 				ChangeState(eLuxEnemyState_Alert);
 			}
-			else if(mpMap->DoorIsBroken(mlStuckDoorID))
+			else if(StuckDoorIsCleared())
 			{
+				OnStuckDoorCleared();
 				if(mPreviousState == eLuxEnemyState_Hurt)
 					ChangeState(eLuxEnemyState_Hunt);
 				else 
@@ -1635,6 +1636,7 @@ bool cLuxEnemy_ManPig::StateEventImplement(int alState, eLuxEnemyStateEvent aEve
 		
 		kLuxOnMessage(eLuxEnemyMessage_AnimationSpecialEvent)
 			Attack(mNormalAttackSize, mBreakDoorAttackDamage,20.0f);
+			OnBreakDoorHit();
 			
 
 		////////////////////////
@@ -1667,6 +1669,9 @@ bool cLuxEnemy_ManPig::StateEventImplement(int alState, eLuxEnemyStateEvent aEve
 
 		kLuxOnLeave
 			mfFOVMul = 1.0f;
+
+		kLuxOnUpdate
+			TurnToPlayerBeforeAttackHit();
 
 		//------------------------------
 

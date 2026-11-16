@@ -136,7 +136,9 @@ void LuxCalcGuiSetOffset(const cVector2f &avVirtualSizeIn, const cVector2f& avSc
 
 	if(fScreenRatio >= (4.0f / 3.0f)-0.001f)
 	{
-		float fAddX = avVirtualSizeIn.x * (fScreenRatio-fWantedRatio); //The "left overs" on both sides
+		// The "left overs" on both sides. Width at the screen ratio is y*fScreenRatio, so the
+		// extra width is y*(fScreenRatio-fWantedRatio), not x*(...).
+		float fAddX = avVirtualSizeIn.y * (fScreenRatio-fWantedRatio);
 	//avOutSize.y = avVirtualSizeIn.y + fAddY;
 
 		avOutSize.x = avVirtualSizeIn.x + fAddX;
@@ -275,8 +277,12 @@ void cLuxCustomStorySettings::SetActive()
 
 //-----------------------------------------------------------------------
 
-bool cLuxCustomStorySettings::StartGame()
+bool cLuxCustomStorySettings::StartGame(bool abHardMode)
 {
+	// Custom stories are not made for hard mode: never inherit it from an earlier session,
+	// only use it when the player ticked it in the custom story window.
+	gpBase->mbHardMode = abHardMode;
+
 	gpBase->mpMainMenu->SetWindowActive(eLuxMainMenuWindow_LastEnum);
 
 	gpBase->mpInputHandler->ChangeState(eLuxInputState_Game);
@@ -620,10 +626,10 @@ bool cLuxBase::StartGame(const tString& asFile, const tString& asFolder, const t
 
 //-----------------------------------------------------------------------
 
-bool cLuxBase::StartCustomStory()
+bool cLuxBase::StartCustomStory(bool abHardMode)
 {
 	if(mpCustomStory)
-		return mpCustomStory->StartGame();
+		return mpCustomStory->StartGame(abHardMode);
 
 	return false;
 }

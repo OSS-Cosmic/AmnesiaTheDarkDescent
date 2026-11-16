@@ -155,11 +155,11 @@ void cOAL_Stream::Log( eOAL_LogVerbose aVerboseLevelReq, eOAL_LogMsg aMessageTyp
 	char text[2048];
 	va_list ap;
 	va_start(ap, asMessage);
-	vsprintf(text, asMessage, ap);
+	vsnprintf(text, sizeof(text), asMessage, ap);
 	va_end(ap);
 	char streamId[20];
 
-	sprintf(streamId, "Stream %s - ", msFilename.c_str());
+	snprintf(streamId, sizeof(streamId), "Stream %s - ", msFilename.c_str());
 
 	switch(aMessageType)
 	{

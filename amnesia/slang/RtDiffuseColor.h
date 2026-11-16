@@ -32,8 +32,8 @@ SLANG_PUBLIC inline float rtDiffuseDecode(float value)
 // Presentation-only compatibility for legacy diffuse textures. Work AFTER
 // denoising and decals, never on bounce albedo or the light transport buffers.
 // Preserve RT's encoded peak, but take RGB proportions from display-space
-// albedo * illumination. The RT peak-based tone map then preserves these
-// proportions through its gamma/shoulder. This preserves peak brightness,
+// albedo * illumination. The RT tone map (exposure + sRGB encode) keeps these
+// proportions until display white. This preserves peak brightness,
 // not luminance; weaker channels may become brighter. No HDR clipping.
 // exposure <= 0 (or non-finite) disables the correction.
 SLANG_PUBLIC inline float3 rtDiffuseColor(float3 albedo, float3 lighting, float exposure)

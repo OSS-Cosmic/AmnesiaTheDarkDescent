@@ -14,17 +14,17 @@ namespace hpl {
     // Standard is the identity case on every field: it emits
     // sRGBToLinear(display) / kSceneExposure and relies on the tonemap being
     // its exact inverse, so the base game's look returns bit-for-bit. The
-    // ray-traced backend composites physical radiance and uses a peak-based
-    // shoulder/gamma with identity saturation. See kRayTracedGammaBias / kRayTracedSaturation in
-    // amnesia/slang/Constants.h for the reasoning behind each value.
+    // ray-traced backend composites physical radiance and differs by a gamma
+    // boost, an extra exposure and an optional chroma scale. See kRayTracedExposure / kRayTracedSaturation
+    // in amnesia/slang/Constants.h for the reasoning behind each value.
 
     struct cToneMapBackendParams
     {
-        // User display-gamma, plus kRayTracedGammaBias on the ray-traced path.
+        // User display-gamma; times kRayTracedGammaBoost on the ray-traced path.
         float mfGamma = 1.0f;
-        // 1 = roll highlights off above the 0.8 display knee, 0 = clip at display
-        // white like the base game's 8-bit buffer.
-        float mfShoulder = 0.0f;
+        // Multiplies the tone map's scene exposure. kRayTracedExposure on the
+        // ray-traced path, 1 (identity) on Standard.
+        float mfExposureMul = 1.0f;
         // Chroma scale toward Rec.709 luma. 1 = exact no-op.
         float mfSaturation = 1.0f;
     };

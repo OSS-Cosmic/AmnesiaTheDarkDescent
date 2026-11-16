@@ -1470,7 +1470,9 @@ void cLuxPlayerSanity::UpdateCheckEnemySeen(float afTimeStep)
 	// If seen, lower sanity and increase seen count
 	if(bSeenEnemy)
 	{
-      	mpPlayer->LowerSanity(mfNearEnemyDecrease, true);
+		// SetSanityDrainDisabled only stops the darkness drain; SetGlobalSanityDrainDisabled stops this too
+		if(mpPlayer->GetGlobalSanityDrainDisabled()==false)
+			mpPlayer->LowerSanity(mfNearEnemyDecrease, true);
 		
 		//do this in update instead!
 		//gpBase->mpEffectHandler->GetRadialBlur()->SetBlurStartDist(0.3f);
@@ -1533,7 +1535,8 @@ void cLuxPlayerSanity::UpdateEnemySeenEffect(float afTimeStep)
 			if(mfSeenEnemyCount>1)
 			{
 				mfSeenEnemyCount =1;
-				gpBase->mpHintHandler->Add("EnemySeen", kTranslate("Hints", "EnemySeen"), 0);
+				if(mpPlayer->GetGlobalSanityDrainDisabled()==false)
+					gpBase->mpHintHandler->Add("EnemySeen", kTranslate("Hints", "EnemySeen"), 0);
 			}
 		}
 		
@@ -3037,7 +3040,7 @@ void cLuxPlayerInDarkness::Update(float afTimeStep)
 
 		////////////////////////////
 		//Lower sanity
-		if(	mpPlayer->GetHelperFlashback()->IsActive()==false && mpPlayer->GetSanityDrainDisabled()==false && 
+		if(	mpPlayer->GetHelperFlashback()->IsActive()==false && mpPlayer->GetSanityDrainDisabled()==false && mpPlayer->GetGlobalSanityDrainDisabled()==false &&
 			gpBase->mpEffectHandler->GetEmotionFlash()->IsActive()==false)
 		{
 			mpPlayer->LowerSanity(mfSanityLossPerSecond*afTimeStep*mfSanityLossMul, true);

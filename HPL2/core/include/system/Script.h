@@ -56,6 +56,14 @@ namespace hpl {
 		virtual bool Run(const tString& asFuncLine)=0;
 		
 		virtual bool Run(int alHandle)=0;
+
+		/**
+		 * Calls a script function with a single string / float argument without compiling a
+		 * line of script text. Returns false (without running anything) if there is no single
+		 * function with that name taking exactly that argument, so callers can fall back to Run().
+		 */
+		virtual bool RunFuncString(const tString& asFuncName, const tString& asArg0)=0;
+		virtual bool RunFuncFloat(const tString& asFuncName, float afArg0)=0;
 	};
 };
 #endif // HPL_SCRIPT_H

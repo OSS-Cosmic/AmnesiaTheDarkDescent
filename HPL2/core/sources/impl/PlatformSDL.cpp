@@ -50,6 +50,15 @@ namespace hpl {
 
 	//-----------------------------------------------------------------------
 
+	double cPlatform::GetApplicationTimeX()
+	{
+		static const Uint64 lStart = SDL_GetPerformanceCounter();
+		static const double fInvFreq = 1.0 / (double)SDL_GetPerformanceFrequency();
+		return (double)(SDL_GetPerformanceCounter() - lStart) * fInvFreq;
+	}
+
+	//-----------------------------------------------------------------------
+
 	void cPlatform::Sleep ( const unsigned int alMillisecs )
 	{
 		SDL_Delay ( alMillisecs );

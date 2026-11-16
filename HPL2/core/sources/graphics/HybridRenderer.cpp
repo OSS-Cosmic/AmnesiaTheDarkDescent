@@ -3611,6 +3611,8 @@ void cHybridRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
 
   // --------------------------------------------------------------------
   // Remove only the backend's extra peak gamma from forward contributions.
+  // The ray-traced tone map multiplies the user gamma by kRayTracedGammaBoost,
+  // so this ratio is 1 / kRayTracedGammaBoost.
   // The ratio depends on this viewport's active tone map, not saved settings;
   // editors/menus without an active tone map need no compensation.
   float particleGammaRatio = 1.0f;

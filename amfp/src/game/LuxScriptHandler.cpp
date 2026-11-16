@@ -506,7 +506,7 @@ void cLuxScriptHandler::InitScriptFunctions()
 //	AddFunc("void InsanityEventIsActive()", (void *)InsanityEventIsActive);
 
 	AddFunc("void StartPlayerSpawnPS(string &in asSPSFile)", (void *)StartPlayerSpawnPS);
-	AddFunc("void StopPlayerSpawnPS()", (void *)StartPlayerSpawnPS);
+	AddFunc("void StopPlayerSpawnPS()", (void *)StopPlayerSpawnPS);
 
 	AddFunc("void PlayGuiSound(string &in asSoundFile, float afVolume)",(void *)PlayGuiSound);
 
@@ -526,6 +526,11 @@ void cLuxScriptHandler::InitScriptFunctions()
 	
 	AddFunc("float GetPlayerSpeed()",(void *)GetPlayerSpeed);
 	AddFunc("float GetPlayerYSpeed()",(void *)GetPlayerYSpeed);
+
+	AddFunc("float GetPlayerBodyPitch()",(void *)GetPlayerBodyPitch);
+	AddFunc("float GetPlayerBodyYaw()",(void *)GetPlayerBodyYaw);
+	AddFunc("float GetPlayerCameraPitch()",(void *)GetPlayerCameraPitch);
+	AddFunc("float GetPlayerCameraYaw()",(void *)GetPlayerCameraYaw);
 	AddFunc("void MovePlayerForward(float afAmount)",(void *)MovePlayerForward);
 	AddFunc("void SetPlayerPermaDeathSound(string &in asSound)",(void *)SetPlayerPermaDeathSound);
 
@@ -1548,7 +1553,8 @@ void __stdcall cLuxScriptHandler::StartPlayerSpawnPS(string& asSPSFile)
 
 void __stdcall cLuxScriptHandler::StopPlayerSpawnPS()
 {
-	gpBase->mpPlayer->GetHelperSpawnPS()->Stop();
+	// Reset (not Stop) so the spawned particle systems are destroyed as well
+	gpBase->mpPlayer->GetHelperSpawnPS()->Reset();
 }
 
 //-----------------------------------------------------------------------
@@ -1716,6 +1722,28 @@ float __stdcall cLuxScriptHandler::GetPlayerSpeed()
 float __stdcall cLuxScriptHandler::GetPlayerYSpeed()
 {
 	return gpBase->mpPlayer->GetCharacterBody()->GetVelocity(1.0f/60.0f).y;
+}
+
+//-----------------------------------------------------------------------
+
+float __stdcall cLuxScriptHandler::GetPlayerBodyPitch()
+{
+	return gpBase->mpPlayer->GetCharacterBody()->GetPitch();
+}
+
+float __stdcall cLuxScriptHandler::GetPlayerBodyYaw()
+{
+	return gpBase->mpPlayer->GetCharacterBody()->GetYaw();
+}
+
+float __stdcall cLuxScriptHandler::GetPlayerCameraPitch()
+{
+	return gpBase->mpPlayer->GetCamera()->GetPitch();
+}
+
+float __stdcall cLuxScriptHandler::GetPlayerCameraYaw()
+{
+	return gpBase->mpPlayer->GetCamera()->GetYaw();
 }
 
 //-----------------------------------------------------------------------

@@ -947,6 +947,8 @@ namespace hpl {
 							float afRotationAngle, 
 							bool abUseCustomPivot, const cVector3f& avCustomPivot)
 	{
+		//Missing image (e.g. file not found in a mod's resources), nothing to draw.
+		if(apGfx==NULL) return;
 		if(mpCurrentClipRegion==NULL) return;
 		if(mpCurrentClipRegion->mRect.w ==0 || mpCurrentClipRegion->mRect.h==0) return;
 

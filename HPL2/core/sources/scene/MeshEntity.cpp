@@ -651,13 +651,18 @@ namespace hpl {
 							{
 								cAnimationTrack *pTrack = pAnim->GetTrack(i);
 
-								if(pTrack->GetNodeIndex()<0)
+								// -1 = not resolved yet, -2 = no matching node
+								if(pTrack->GetNodeIndex()==-1)
 								{
-									pTrack->SetNodeIndex(GetNodeStateIndex(pTrack->GetName()));
+									int lIdx = GetNodeStateIndex(pTrack->GetName());
+									pTrack->SetNodeIndex(lIdx >= 0 ? lIdx : -2);
 								}
+								if(pTrack->GetNodeIndex()<0)
+									continue;
+
 								cNode3D* pNodeState = GetNodeState(pTrack->GetNodeIndex());
 
-								if(pNodeState->IsActive()) 
+								if(pNodeState && pNodeState->IsActive()) 
 									pTrack->ApplyToNode(pNodeState,pAnimState->GetTimePosition(),pAnimState->GetWeight() * fAnimationWeightMul);
 							}
 
@@ -760,6 +765,12 @@ namespace hpl {
 
 	cAnimationState* cMeshEntity::AddAnimation(cAnimation *apAnimation,const tString &asName, float afBaseSpeed)
 	{
+		if(apAnimation == NULL)
+		{
+			Error("Cannot add NULL animation '%s'!\n", asName.c_str());
+			return NULL;
+		}
+
 		/////////////////////////////
 		// Create nodes. Will only be done once
 		CreateNodes();
@@ -1234,6 +1245,8 @@ namespace hpl {
 
 	cNode3D* cMeshEntity::GetNodeState(int alIndex)
 	{
+		if(alIndex < 0 || alIndex >= static_cast<int>(mvNodeStates.size()))
+			return NULL;
 		return mvNodeStates[alIndex];
 	}
 
@@ -1440,6 +1453,8 @@ namespace hpl {
 
 	void cMeshEntity::SetCoverageAmount(float afX)
 	{
+		afX = cMath::Clamp(afX, 0.0f, 1.0f);
+
 		if(mfCoverageAmount == afX) return;
 
 		mfCoverageAmount = afX;

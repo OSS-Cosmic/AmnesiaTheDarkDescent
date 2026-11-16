@@ -68,7 +68,7 @@ string cOAL_Sample::GetDebugInfo()
 {
 	char temp[200];
 		
-	sprintf(temp, "Sample %s, Time %f, channels: %d\n", msFileName.c_str(), mfTotalTime, mlChannels);
+	snprintf(temp, sizeof(temp), "Sample %s, Time %f, channels: %d\n", msFileName.c_str(), mfTotalTime, mlChannels);
 	return string(temp);
 }
 */
@@ -90,11 +90,11 @@ void cOAL_Sample::Log( eOAL_LogVerbose aVerboseLevelReq, eOAL_LogMsg aMessageTyp
 	char text[2048];
 	va_list ap;
 	va_start(ap, asMessage);
-	vsprintf(text, asMessage, ap);
+	vsnprintf(text, sizeof(text), asMessage, ap);
 	va_end(ap);
 	char sampleId[20];
 
-	sprintf(sampleId, "Sample %s - ", msFilename.c_str());
+	snprintf(sampleId, sizeof(sampleId), "Sample %s - ", msFilename.c_str());
 
 	
 	switch(aMessageType)

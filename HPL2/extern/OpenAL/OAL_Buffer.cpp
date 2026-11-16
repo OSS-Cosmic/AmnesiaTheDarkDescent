@@ -109,7 +109,7 @@ string cOAL_Sample::GetDebugInfo()
 {
 	char temp[200];
 		
-	sprintf(temp, "Sample %s, Time %f, channels: %d\n", msFileName.c_str(), mfTotalTime, mlChannels);
+	snprintf(temp, sizeof(temp), "Sample %s, Time %f, channels: %d\n", msFileName.c_str(), mfTotalTime, mlChannels);
 	return string(temp);
 }
 */

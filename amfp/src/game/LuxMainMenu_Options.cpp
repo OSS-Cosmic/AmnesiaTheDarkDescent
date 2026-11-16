@@ -248,6 +248,10 @@ cLuxMainMenu_Options::~cLuxMainMenu_Options()
 
 void cLuxMainMenu_Options::CreateGui()
 {
+	// These are static; reset them so values from a previous profile are not reused
+	mInitialValues = cResourceVarsObject();
+	mCurrentValues = cResourceVarsObject();
+
 	CreateMainGui();
 }
 

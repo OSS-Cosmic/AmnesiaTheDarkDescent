@@ -454,14 +454,18 @@ void cLuxScriptHandler::InitScriptFunctions()
 	AddFunc("void StartScreenShake(float afAmount, float afTime, float afFadeInTime,float afFadeOutTime)",(void *)StartScreenShake);
 	AddFunc("bool GetFlashbackIsActive()", (void *)GetFlashbackIsActive);
 
+	AddFunc("void ShowScreenImage(string &in asImageName, float afX, float afY, float afScale, bool abUseRelativeCoordinates, float afDuration, float afFadeIn, float afFadeOut)", (void *)ShowScreenImage);
+	AddFunc("void HideScreenImageImmediately()", (void *)HideScreenImageImmediately);
+	AddFunc("void HideScreenImageWithFade(float afFadeOut)", (void *)HideScreenImageWithFade);
+
 	AddFunc("void SetInsanitySetEnabled(string &in asSet, bool abX)", (void *)SetInsanitySetEnabled);
 	AddFunc("void StartRandomInsanityEvent()", (void *)StartRandomInsanityEvent);
 	AddFunc("void StartInsanityEvent(string &in asEventName)", (void *)StartInsanityEvent);
 	AddFunc("void StopCurrentInsanityEvent()", (void *)StopCurrentInsanityEvent);
-	AddFunc("void InsanityEventIsActive()", (void *)InsanityEventIsActive);
+	AddFunc("bool InsanityEventIsActive()", (void *)InsanityEventIsActive);
 
 	AddFunc("void StartPlayerSpawnPS(string &in asSPSFile)", (void *)StartPlayerSpawnPS);
-	AddFunc("void StopPlayerSpawnPS()", (void *)StartPlayerSpawnPS);
+	AddFunc("void StopPlayerSpawnPS()", (void *)StopPlayerSpawnPS);
 
 	AddFunc("void PlayGuiSound(string &in asSoundFile, float afVolume)",(void *)PlayGuiSound);
 
@@ -490,10 +494,19 @@ void cLuxScriptHandler::InitScriptFunctions()
 
 	AddFunc("float GetPlayerSpeed()",(void *)GetPlayerSpeed);
 	AddFunc("float GetPlayerYSpeed()",(void *)GetPlayerYSpeed);
+
+	AddFunc("float GetPlayerBodyPitch()",(void *)GetPlayerBodyPitch);
+	AddFunc("float GetPlayerBodyYaw()",(void *)GetPlayerBodyYaw);
+	AddFunc("float GetPlayerCameraPitch()",(void *)GetPlayerCameraPitch);
+	AddFunc("float GetPlayerCameraYaw()",(void *)GetPlayerCameraYaw);
 	AddFunc("void MovePlayerForward(float afAmount)",(void *)MovePlayerForward);
 	AddFunc("void SetPlayerPermaDeathSound(string &in asSound)",(void *)SetPlayerPermaDeathSound);
 
 	AddFunc("void SetSanityDrainDisabled(bool abX)",(void *)SetSanityDrainDisabled);
+	// Same as SetSanityDrainDisabled (darkness drain only), with a clearer name
+	AddFunc("void SetPlayerSanityDrainDisabled(bool abX)",(void *)SetSanityDrainDisabled);
+	// Stops every sanity loss: darkness, enemies, script damage
+	AddFunc("void SetGlobalSanityDrainDisabled(bool abX)",(void *)SetGlobalSanityDrainDisabled);
 	AddFunc("void GiveSanityBoost()",(void *)GiveSanityBoost);
 	AddFunc("void GiveSanityBoostSmall()", (void *)GiveSanityBoostSmall);
 	AddFunc("void GiveSanityDamage(float afAmount, bool abUseEffect)",(void *)GiveSanityDamage);
@@ -1220,7 +1233,8 @@ void __stdcall cLuxScriptHandler::StartPlayerSpawnPS(std::string& asSPSFile)
 
 void __stdcall cLuxScriptHandler::StopPlayerSpawnPS()
 {
-	gpBase->mpPlayer->GetHelperSpawnPS()->Stop();
+	// Reset (not Stop) so the spawned particle systems are destroyed as well
+	gpBase->mpPlayer->GetHelperSpawnPS()->Reset();
 }
 
 //-----------------------------------------------------------------------
@@ -1228,6 +1242,23 @@ void __stdcall cLuxScriptHandler::StopPlayerSpawnPS()
 void __stdcall cLuxScriptHandler::SetEffectVoiceOverCallback(std::string& asFunc)
 {
 	gpBase->mpEffectHandler->GetPlayVoice()->SetOverCallback(asFunc);
+}
+
+//-----------------------------------------------------------------------
+
+void __stdcall cLuxScriptHandler::ShowScreenImage(std::string & asImageName, float afX, float afY, float afScale, bool abUseRelativeCoordinates, float afDuration, float afFadeIn, float afFadeOut)
+{
+	gpBase->mpEffectHandler->GetScreenImage()->ShowImage(asImageName, afX, afY, afScale, abUseRelativeCoordinates, afDuration, afFadeIn, afFadeOut);
+}
+
+void __stdcall cLuxScriptHandler::HideScreenImageImmediately()
+{
+	gpBase->mpEffectHandler->GetScreenImage()->HideImmediately();
+}
+
+void __stdcall cLuxScriptHandler::HideScreenImageWithFade(float afFadeOut)
+{
+	gpBase->mpEffectHandler->GetScreenImage()->HideWithFade(afFadeOut);
 }
 
 //-----------------------------------------------------------------------
@@ -1499,6 +1530,28 @@ float __stdcall cLuxScriptHandler::GetPlayerYSpeed()
 
 //-----------------------------------------------------------------------
 
+float __stdcall cLuxScriptHandler::GetPlayerBodyPitch()
+{
+	return gpBase->mpPlayer->GetCharacterBody()->GetPitch();
+}
+
+float __stdcall cLuxScriptHandler::GetPlayerBodyYaw()
+{
+	return gpBase->mpPlayer->GetCharacterBody()->GetYaw();
+}
+
+float __stdcall cLuxScriptHandler::GetPlayerCameraPitch()
+{
+	return gpBase->mpPlayer->GetCamera()->GetPitch();
+}
+
+float __stdcall cLuxScriptHandler::GetPlayerCameraYaw()
+{
+	return gpBase->mpPlayer->GetCamera()->GetYaw();
+}
+
+//-----------------------------------------------------------------------
+
 void __stdcall cLuxScriptHandler::MovePlayerForward(float afAmount)
 {
 	gpBase->mpPlayer->GetCharacterBody()->Move(eCharDir_Forward, afAmount);
@@ -1514,6 +1567,11 @@ void __stdcall cLuxScriptHandler::SetPlayerPermaDeathSound(std::string& asSound)
 void __stdcall cLuxScriptHandler::SetSanityDrainDisabled(bool abX)
 {
 	gpBase->mpPlayer->SetSanityDrainDisabled(abX);
+}
+
+void __stdcall cLuxScriptHandler::SetGlobalSanityDrainDisabled(bool abX)
+{
+	gpBase->mpPlayer->SetGlobalSanityDrainDisabled(abX);
 }
 
 //-----------------------------------------------------------------------

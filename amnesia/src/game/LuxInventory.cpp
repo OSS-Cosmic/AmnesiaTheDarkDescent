@@ -349,7 +349,6 @@ bool cLuxInventory_Slot::OnMouseUp(iWidget* apWidget, const cGuiMessageData& aDa
 		////////////////////////////////
 		// Set back the normal description,
 		// Need to get item again in case there have been changes.
-		iLuxItemType *pItemType = mpInventory->GetItemTypeData(pItem->GetType());
 		pItem = GetItem();
 		mpInventory->SetDescTextFromItem(pItem);
 	}
@@ -746,7 +745,8 @@ void cLuxInventory::Update(float afTimeStep)
 	////////////////////////
 	//Update hints and effects
 	gpBase->mpHintHandler->UpdateHintText(afTimeStep);
-	gpBase->mpEffectHandler->GetSanityGainFlash()->Update(afTimeStep);
+	if(gpBase->mpEffectHandler->GetSanityGainFlash()->IsActive())
+		gpBase->mpEffectHandler->GetSanityGainFlash()->Update(afTimeStep);
 }
 
 
@@ -976,7 +976,8 @@ void cLuxInventory::OnDraw(float afFrameTime)
 	////////////////////////
 	//Draw extra effects and hints
 	gpBase->mpHintHandler->DrawHintText(afFrameTime, mpGuiSet);
-	gpBase->mpEffectHandler->GetSanityGainFlash()->DrawFlash(mpGuiSet, afFrameTime);
+	if(gpBase->mpEffectHandler->GetSanityGainFlash()->IsActive())
+		gpBase->mpEffectHandler->GetSanityGainFlash()->DrawFlash(mpGuiSet, afFrameTime);
 }
 
 //-----------------------------------------------------------------------

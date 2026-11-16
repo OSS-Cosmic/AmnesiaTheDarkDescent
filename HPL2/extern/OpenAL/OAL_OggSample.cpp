@@ -34,17 +34,17 @@ bool cOAL_OggSample::CreateFromFile(const std::wstring &asFilename)
 		return false;
 
 	Reset();
-	
-	char *pPCMBuffer;
+
+	char *pPCMBuffer = NULL;
 	bool bEOF = false;
 	int lOpenResult;
-	int lCurrent_section;
+	int lCurrent_section = 0;
 	long lDataSize = 0;
 
 	msFilename = asFilename;
 
 	FILE *fileHandle = hpl::cPlatform::OpenFile(asFilename, L"rb");
-	
+
 	// If no file is present, set the error status and return
 	if(!fileHandle)
 	{
@@ -54,32 +54,67 @@ bool cOAL_OggSample::CreateFromFile(const std::wstring &asFilename)
 
 	// If not an Ogg file, set status and exit
 	OggVorbis_File ovFileHandle;
-	if(lOpenResult = ov_open_callbacks(fileHandle, &ovFileHandle, NULL, 0, gCallbacks)<0)	
+	memset(&ovFileHandle, 0, sizeof(ovFileHandle));
+	if((lOpenResult = ov_open_callbacks(fileHandle, &ovFileHandle, NULL, 0, gCallbacks)) < 0)
 	{
 		fclose ( fileHandle );
 		mbStatus = false;
 		return false;
 	}
 
-	// Get file info
+	// Get file info, rejecting anything we cannot represent as 16-bit mono/stereo
 	vorbis_info *viFileInfo = ov_info ( &ovFileHandle, -1 );
+	if(viFileInfo == NULL || viFileInfo->channels < 1 || viFileInfo->channels > 2 || viFileInfo->rate <= 0)
+	{
+		ov_clear(&ovFileHandle);
+		mbStatus = false;
+		return false;
+	}
 	mlChannels = viFileInfo->channels;
 	mFormat = (mlChannels == 2)?AL_FORMAT_STEREO16:AL_FORMAT_MONO16;
 	mlFrequency = viFileInfo->rate;
 	mlSamples = (long) ov_pcm_total ( &ovFileHandle, -1 );
 	mfTotalTime = ov_time_total( &ovFileHandle, -1 );
 
-	// Reserve memory for 'mlChannels' channels of 'mlSamples' * 2 bytes of data each
-	int lSizeInBytes = mlSamples * mlChannels * GetBytesPerSample();
-	pPCMBuffer = (char *) hplMalloc (lSizeInBytes);																
+	if(mlSamples < 0)
+	{
+		ov_clear(&ovFileHandle);
+		mbStatus = false;
+		return false;
+	}
+
+	// Reserve memory for 'mlChannels' channels of 'mlSamples' * 2 bytes of data each.
+	// ov_pcm_total can under-report on damaged files, so keep a safety margin and
+	// never let ov_read write past the end of the buffer.
+	const long long kSafetyMargin = STREAMING_BLOCK_SIZE * 8;
+	const long long lSizeInBytes64 = (long long)(mlSamples > 0 ? mlSamples : 1) * mlChannels * GetBytesPerSample() + kSafetyMargin;
+	if(lSizeInBytes64 <= 0 || lSizeInBytes64 > 0x7FFFFFFF)
+	{
+		ov_clear(&ovFileHandle);
+		mbStatus = false;
+		return false;
+	}
+	const long lSizeInBytes = (long)lSizeInBytes64;
+
+	pPCMBuffer = (char *) hplMalloc (lSizeInBytes);
+	if(pPCMBuffer == NULL)
+	{
+		ov_clear(&ovFileHandle);
+		mbStatus = false;
+		return false;
+	}
 	memset (pPCMBuffer, 0, lSizeInBytes);
 
 	// Loop which loads chunks of decoded data into a buffer
 	while(!bEOF)
 	{
-		long lChunkSize = ov_read ( &ovFileHandle			,										
-									pPCMBuffer + lDataSize	, 
-									STREAMING_BLOCK_SIZE	, 
+		long lRemaining = lSizeInBytes - lDataSize;
+		if(lRemaining <= 0)
+			break;
+
+		long lChunkSize = ov_read ( &ovFileHandle			,
+									pPCMBuffer + lDataSize	,
+									(lRemaining < STREAMING_BLOCK_SIZE) ? (int)lRemaining : STREAMING_BLOCK_SIZE,
 									SYS_ENDIANNESS			,
 									2, 1, &lCurrent_section );
 
@@ -94,20 +129,24 @@ bool cOAL_OggSample::CreateFromFile(const std::wstring &asFilename)
 			mbStatus = false;
 			return false;
 		}
-		else 
+		else
 			lDataSize += lChunkSize;
 	}
 
 	cOAL_Buffer* pBuffer = mvBuffers[0];
-	if(lDataSize)
+	if(lDataSize > 0)
 	{
 		// If something went wrong, set error status. Clean up afterwards.
 		mbStatus = pBuffer->Feed((ALvoid*)pPCMBuffer, lDataSize);
 	}
-	hplFree(pPCMBuffer);																				
+	else
+	{
+		mbStatus = false;
+	}
+	hplFree(pPCMBuffer);
 	ov_clear(&ovFileHandle);
 	// ov_clear closes the file handle for us
 
-	return true;
+	return mbStatus;
 }
 

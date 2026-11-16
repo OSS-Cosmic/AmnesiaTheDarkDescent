@@ -29,6 +29,12 @@ RIGraphicsPipelineDesc MakeDecalPipelineDesc(RI_Format_e colorFormat,
   // while culling is off, but kept consistent if it is later tightened).
   desc.raster.cullMode = RI_CULL_MODE_NONE;
   desc.raster.frontFace = RI_FRONT_FACE_CLOCKWISE;
+  // Pull decal polygons slightly towards the camera (standard Z, LESS_EQUAL) so
+  // they do not z-fight with the surface they were projected onto. Same values
+  // as the GL glPolygonOffset(-2, -1) used by atrim.
+  desc.raster.depthBiasEnable = true;
+  desc.raster.depthBiasConstant = -1.0f;
+  desc.raster.depthBiasSlope = -2.0f;
 
   desc.depthStencil.depthTest = true;
   desc.depthStencil.depthWrite = false;

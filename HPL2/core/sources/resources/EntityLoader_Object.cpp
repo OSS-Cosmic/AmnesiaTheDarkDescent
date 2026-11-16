@@ -1049,7 +1049,7 @@ namespace hpl {
 		pJoint->GetMinLimit()->msSound = GetAttributeString(apJointElem, "MinLimitSound","");
 		pJoint->GetMinLimit()->mfMaxSpeed = GetAttributeFloat(apJointElem, "MinLimitMaxSpeed",10.0f);
 		pJoint->GetMinLimit()->mfMinSpeed = GetAttributeFloat(apJointElem, "MinLimitMinSpeed",20.0f);
-		if(pJoint->GetMinLimit()->mfMaxSpeed <=0) pJoint->GetMaxLimit()->mfMaxSpeed = 0.01f;
+		if(pJoint->GetMinLimit()->mfMaxSpeed <=0) pJoint->GetMinLimit()->mfMaxSpeed = 0.01f;
 
 		pJoint->SetUniqueID(GetAttributeInt(apJointElem, "ID",-1));
 

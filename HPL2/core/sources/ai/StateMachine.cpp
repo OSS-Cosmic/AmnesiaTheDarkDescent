@@ -110,7 +110,7 @@ namespace hpl {
 
 	void cStateMachine::ChangeState(int alId)
 	{
-		if(alId == mpCurrentState->GetId()) return;
+		if(mpCurrentState && alId == mpCurrentState->GetId()) return;
 		
 		iAIState *pState = GetState(alId);
 		if(pState==NULL){

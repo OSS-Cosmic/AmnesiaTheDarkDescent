@@ -780,7 +780,19 @@ namespace hpl {
 					if(lCompressionType ==0)
 					{
 						void *pData = GetVertexBufferWithFormat(pVtxBuff, arrayType, elementFormat);
-						GetBinaryBufferDataWithFormat(&binBuff, pData, (size_t)(lVtxNum * lElementNum), elementFormat);
+						size_t lDataCount = (size_t)(lVtxNum * lElementNum);
+						if(pData == NULL)
+						{
+							Error("Vertex array for element %d is empty or invalid in '%s' - skipping data\n",
+								arrayType, cString::To8Char(asFile).c_str());
+							// Skip the bytes so the rest of the cache stays in sync
+							size_t lElementSize = elementFormat == eVertexBufferElementFormat_Byte ? 1 : 4;
+							binBuff.AddPos(lDataCount * lElementSize);
+						}
+						else
+						{
+							GetBinaryBufferDataWithFormat(&binBuff, pData, lDataCount, elementFormat);
+						}
 					}
 					/////////////////////////
 					// Compressed Get Data
@@ -838,8 +850,15 @@ namespace hpl {
 
 				if(gbLogCacheLoad) Log("Indices: %d\n", lIdxNum);
 
-				pVtxBuff->ResizeIndices(lIdxNum);
-				binBuff.GetInt32Array((int*)pVtxBuff->GetIndices(), lIdxNum);
+				if(lIdxNum > 0)
+				{
+					pVtxBuff->ResizeIndices(lIdxNum);
+					unsigned int *pIndices = pVtxBuff->GetIndices();
+					if(pIndices)
+						binBuff.GetInt32Array((int*)pIndices, lIdxNum);
+					else
+						binBuff.AddPos((size_t)lIdxNum * sizeof(int));
+				}
 			}
 			
 			///////////////////
@@ -1002,7 +1021,21 @@ namespace hpl {
 					if(lCompressionType ==0)
 					{
 						void *pData = GetVertexBufferWithFormat(pVtxBuff, arrayType, elementFormat);
-						AddBinaryBufferDataWithFormat(&binBuff, pData, (size_t)(lVtxNum * lElementNum), elementFormat);
+						size_t lDataCount = (size_t)(lVtxNum * lElementNum);
+						if(pData == NULL)
+						{
+							Error("Vertex array for element %d is empty or invalid in '%s' - writing zeros\n",
+								arrayType, cString::To8Char(asFile).c_str());
+							// Write placeholder bytes so the header written above still matches the data
+							size_t lElementSize = elementFormat == eVertexBufferElementFormat_Byte ? 1 : 4;
+							std::vector<char> vZeros(lDataCount * lElementSize, 0);
+							if(!vZeros.empty())
+								binBuff.AddCharArray(vZeros.data(), vZeros.size());
+						}
+						else
+						{
+							AddBinaryBufferDataWithFormat(&binBuff, pData, lDataCount, elementFormat);
+						}
 					}
 					////////////////////////////////////
 					//Add Compressed data

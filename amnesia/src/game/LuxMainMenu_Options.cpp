@@ -18,6 +18,8 @@
  */
 
 #include "LuxMainMenu_Options.h"
+#include "LuxEffectHandler.h"
+#include "LuxGlobalDataHandler.h"
 
 #include "LuxMap.h"
 #include "LuxMapHandler.h"
@@ -197,6 +199,14 @@ cLuxMainMenu_Options::cLuxMainMenu_Options(cGuiSet *apGuiSet, cGuiSkin *apGuiSki
 	mfMouseSensitivityStep = 0.1f;
 	mfMouseSensitivityMax = 5.0f;
 
+	mfFlashMin = 0.0f;
+	mfFlashStep = 0.05f;
+	mfFlashMax = 1.0f;
+
+	mfFOVMin = cLuxPlayer::kfMinFOVDegrees;
+	mfFOVStep = 1.0f;
+	mfFOVMax = cLuxPlayer::kfMaxFOVDegrees;
+
 #ifdef USE_GAMEPAD
 	mfGamepadLookSensitivityMin = 0.5f;
 	mfGamepadLookSensitivityStep = 0.05f;
@@ -249,6 +259,10 @@ cLuxMainMenu_Options::~cLuxMainMenu_Options()
 
 void cLuxMainMenu_Options::CreateGui()
 {
+	// These are static; reset them so values from a previous profile are not reused
+	mInitialValues = cResourceVarsObject();
+	mCurrentValues = cResourceVarsObject();
+
 	CreateMainGui();
 }
 
@@ -434,6 +448,24 @@ void cLuxMainMenu_Options::AddGameOptions(cWidgetTab* apTab)
 	mpCBFocusIconStyle->AddItem(kTranslate("OptionsMenu", "FocusIconStyleSimple"));
 	vPos.y += pLabel->GetSize().y + 15;
 
+	///////////////////////////////////////////////
+	// Field of view (per profile, in game only; menu cameras keep theirs)
+	pLabel = mpGuiSet->CreateWidgetLabel(vPos, -1, kTranslateOr("OptionsMenu", "FieldOfView", _W("Field of view")), apTab);
+	mpSFOV = mpGuiSet->CreateWidgetSlider(eWidgetSliderOrientation_Horizontal, cVector3f(pLabel->GetSize().x + 5, -1, 0), cVector2f(150, 20), 0, pLabel);
+	SetUpInput(pLabel, mpSFOV, false, kTranslateOr("OptionsMenu", "FieldOfViewTip",
+		_W("Vertical field of view in degrees. Higher values show more around you, lower values zoom in.")));
+	SetUpSlider(mpSFOV, mfFOVMin, mfFOVMax, mfFOVStep, kGuiCallback(FOVSlider_OnMove), &mpLFOV);
+	vPos.y += pLabel->GetSize().y + 15;
+
+	///////////////////////////////////////////////
+	// Flashback / screen flash intensity
+	pLabel = mpGuiSet->CreateWidgetLabel(vPos, -1, kTranslateOr("OptionsMenu", "FlashIntensity", _W("Flash intensity")), apTab);
+	mpSFlash = mpGuiSet->CreateWidgetSlider(eWidgetSliderOrientation_Horizontal, cVector3f(pLabel->GetSize().x + 5, -1, 0), cVector2f(150, 20), 0, pLabel);
+	SetUpInput(pLabel, mpSFlash, false, kTranslateOr("OptionsMenu", "FlashIntensityTip",
+		_W("Brightness of the white screen flashes during flashbacks and similar events.")));
+	SetUpSlider(mpSFlash, mfFlashMin, mfFlashMax, mfFlashStep, kGuiCallback(FlashSlider_OnMove), &mpLFlash);
+	vPos.y += pLabel->GetSize().y + 15;
+
 	//////////////////////////////////
 	// Commentary
 	if(mbShowCommentary)
@@ -459,18 +491,20 @@ void cLuxMainMenu_Options::AddGameOptions(cWidgetTab* apTab)
 	mpChBShowHints->SetFocusNavigation(eUIArrow_Down, mpChBShowDeathHints);
 	mpChBShowDeathHints->SetFocusNavigation(eUIArrow_Down, mpChBShowCrosshair);
 	mpChBShowCrosshair->SetFocusNavigation(eUIArrow_Down, mpCBFocusIconStyle);
+	mpCBFocusIconStyle->SetFocusNavigation(eUIArrow_Down, mpSFOV);
+	mpSFOV->SetFocusNavigation(eUIArrow_Down, mpSFlash);
 	if(mbShowCommentary)
 	{
-		mpCBFocusIconStyle->SetFocusNavigation(eUIArrow_Down, mpChBShowCommentary);
+		mpSFlash->SetFocusNavigation(eUIArrow_Down, mpChBShowCommentary);
 		mpChBShowCommentary->SetFocusNavigation(eUIArrow_Down, mpBOK);
 
 		pLastWidget = mpChBShowCommentary;
 	}
 	else
 	{
-		mpCBFocusIconStyle->SetFocusNavigation(eUIArrow_Down, mpBOK);
+		mpSFlash->SetFocusNavigation(eUIArrow_Down, mpBOK);
 
-		pLastWidget = mpCBFocusIconStyle;
+		pLastWidget = mpSFlash;
 	}
 
 	apTab->SetUserData(pLastWidget);
@@ -484,8 +518,10 @@ void cLuxMainMenu_Options::AddGameOptions(cWidgetTab* apTab)
 	mpChBShowDeathHints->SetFocusNavigation(eUIArrow_Up, mpChBShowHints);
 	mpChBShowCrosshair->SetFocusNavigation(eUIArrow_Up, mpChBShowDeathHints);
 	mpCBFocusIconStyle->SetFocusNavigation(eUIArrow_Up, mpChBShowCrosshair);
+	mpSFOV->SetFocusNavigation(eUIArrow_Up, mpCBFocusIconStyle);
+	mpSFlash->SetFocusNavigation(eUIArrow_Up, mpSFOV);
 	if(mbShowCommentary)
-		mpChBShowCommentary->SetFocusNavigation(eUIArrow_Up, mpCBFocusIconStyle);
+		mpChBShowCommentary->SetFocusNavigation(eUIArrow_Up, mpSFlash);
 
 	// Left/Right
 	mpChBShowSubtitles->SetFocusNavigation(eUIArrow_Right, mpChBShowEffectSubtitles);
@@ -1228,14 +1264,38 @@ void cLuxMainMenu_Options::AddSoundOptions(cWidgetTab* apTab)
 		sHRTFTip = _W("WARNING: This feature is known to cause audio problems in this game. It is recommended to keep this disabled."); // English default
 
 	SetUpInput(NULL, mpChBHRTF, true, sHRTFTip);
+	vPos.y += mpChBHRTF->GetSize().y + 15;
+
+	/////////////////////////////
+	// Optional sounds
+	mpChBEnemyActivateSound = mpGuiSet->CreateWidgetCheckBox(vPos, 0, kTranslateOr("OptionsMenu", "EnemyActivateSound", _W("Enemy activation sounds")), apTab);
+	SetUpInput(NULL, mpChBEnemyActivateSound, false, kTranslateOr("OptionsMenu", "EnemyActivateSoundTip",
+		_W("Play the sting when an enemy appears.")));
+	vPos.y += mpChBEnemyActivateSound->GetSize().y + 10;
+
+	mpChBInsanityRingSound = mpGuiSet->CreateWidgetCheckBox(vPos, 0, kTranslateOr("OptionsMenu", "InsanityRingSound", _W("Insanity ear ringing")), apTab);
+	SetUpInput(NULL, mpChBInsanityRingSound, false, kTranslateOr("OptionsMenu", "InsanityRingSoundTip",
+		_W("Play the ear ringing sound when the player collapses from insanity.")));
+	vPos.y += mpChBInsanityRingSound->GetSize().y + 10;
+
+	mpChBTerrorSound = mpGuiSet->CreateWidgetCheckBox(vPos, 0, kTranslateOr("OptionsMenu", "TerrorSound", _W("Terror sound")), apTab);
+	SetUpInput(NULL, mpChBTerrorSound, false, kTranslateOr("OptionsMenu", "TerrorSoundTip",
+		_W("Play the terror sound while an enemy is hunting the player.")));
+	vPos.y += mpChBTerrorSound->GetSize().y + 10;
 
 	mpCBSndDevice->SetFocusNavigation(eUIArrow_Down, mpSVolume);
 	mpSVolume->SetFocusNavigation(eUIArrow_Up, mpCBSndDevice);
 	mpSVolume->SetFocusNavigation(eUIArrow_Down, mpChBHRTF);
 	mpChBHRTF->SetFocusNavigation(eUIArrow_Up, mpSVolume);
-	mpChBHRTF->SetFocusNavigation(eUIArrow_Down, mpBOK);
+	mpChBHRTF->SetFocusNavigation(eUIArrow_Down, mpChBEnemyActivateSound);
+	mpChBEnemyActivateSound->SetFocusNavigation(eUIArrow_Up, mpChBHRTF);
+	mpChBEnemyActivateSound->SetFocusNavigation(eUIArrow_Down, mpChBInsanityRingSound);
+	mpChBInsanityRingSound->SetFocusNavigation(eUIArrow_Up, mpChBEnemyActivateSound);
+	mpChBInsanityRingSound->SetFocusNavigation(eUIArrow_Down, mpChBTerrorSound);
+	mpChBTerrorSound->SetFocusNavigation(eUIArrow_Up, mpChBInsanityRingSound);
+	mpChBTerrorSound->SetFocusNavigation(eUIArrow_Down, mpBOK);
 
-	apTab->SetUserData(mpChBHRTF);
+	apTab->SetUserData(mpChBTerrorSound);
 	apTab->GetTabLabel()->SetUserData(mpCBSndDevice);
 
 	PopulateSoundDevices();
@@ -1260,6 +1320,14 @@ void cLuxMainMenu_Options::SetInputValues(cResourceVarsObject& aObj)
 		mpCBFocusIconStyle->SetSelectedItem(aObj.GetVarInt("FocusIconStyle"), false, false);
 		if(mpCBFocusIconStyle->GetSelectedItem()==-1)
 			mpCBFocusIconStyle->SetSelectedItem(0, false, true);
+
+		float fFOV = aObj.GetVarFloat("FOV", gpBase->mpPlayer->GetDefaultFOVDegrees());
+		SetSliderValue(mpSFOV, fFOV, false, mfFOVMin, mfFOVMax);
+		SetFOVLabelString(fFOV);
+
+		float fFlash = aObj.GetVarFloat("FlashIntensity", 1.0f);
+		SetSliderValue(mpSFlash, fFlash, false, mfFlashMin, mfFlashMax);
+		SetFlashLabelString(fFlash);
 
 		if(mbShowCommentary)
 		{
@@ -1612,6 +1680,10 @@ void cLuxMainMenu_Options::SetInputValues(cResourceVarsObject& aObj)
 
 	mpChBHRTF->SetChecked(aObj.GetVarBool("HRTFActive"), false);
 	#endif
+
+	mpChBEnemyActivateSound->SetChecked(aObj.GetVarBool("EnemyActivateSound", true), false);
+	mpChBInsanityRingSound->SetChecked(aObj.GetVarBool("InsanityRingSound", true), false);
+	mpChBTerrorSound->SetChecked(aObj.GetVarBool("TerrorSound", true), false);
 
 	RefreshRenderScaleControl();
 	RefreshRendererBackendControl();
@@ -1973,6 +2045,9 @@ void cLuxMainMenu_Options::ApplyChanges()
 		gpBase->mpPlayer->SetShowCrosshair(mpChBShowCrosshair->IsChecked());
 
 		gpBase->mpPlayer->SetFocusIconStyle((eLuxFocusIconStyle)mpCBFocusIconStyle->GetSelectedItem());
+
+		gpBase->mpPlayer->SetFOVDegrees(GetFOV());
+		gpBase->mpEffectHandler->SetFlashIntensity(GetFlash());
 	}
 
 
@@ -2088,6 +2163,10 @@ void cLuxMainMenu_Options::ApplyChanges()
     // Sound
 	pCfgHdr->mbHRTFActive = mpChBHRTF->IsChecked();
 
+	gpBase->mpGlobalDataHandler->SetEnemyActivateSoundEnabled(mpChBEnemyActivateSound->IsChecked());
+	gpBase->mpGlobalDataHandler->SetInsanityRingSoundEnabled(mpChBInsanityRingSound->IsChecked());
+	gpBase->mpGlobalDataHandler->SetTerrorSoundEnabled(mpChBTerrorSound->IsChecked());
+
 	/* gpBase->mpEngine->GetSound()->GetLowLevel()->SetVolume(GetVolume());
 	cWidgetItem* pItem = mpCBSndDevice->GetItem(mpCBSndDevice->GetSelectedItem());
 	if(pItem)
@@ -2109,6 +2188,20 @@ void cLuxMainMenu_Options::ApplyChanges()
 void cLuxMainMenu_Options::SetGammaLabelString(float afX)
 {
 	SetSliderLabelString(mpLGamma, afX, mfGammaMin, mfGammaMax);
+}
+
+//-----------------------------------------------------------------------
+
+void cLuxMainMenu_Options::SetFlashLabelString(float afX)
+{
+	SetSliderLabelString(mpLFlash, afX, mfFlashMin, mfFlashMax);
+}
+
+//-----------------------------------------------------------------------
+
+void cLuxMainMenu_Options::SetFOVLabelString(float afX)
+{
+	SetSliderLabelString(mpLFOV, (float)cMath::RoundToInt(afX), mfFOVMin, mfFOVMax);
 }
 
 //-----------------------------------------------------------------------
@@ -2302,6 +2395,8 @@ void cLuxMainMenu_Options::DumpInitialValues(cResourceVarsObject &aObj)
 
 		aObj.AddVarBool("ShowCrosshair", gpBase->mpPlayer->GetShowCrosshair());
 		aObj.AddVarInt("FocusIconStyle", gpBase->mpPlayer->GetFocusIconStyle());
+		aObj.AddVarFloat("FOV", (float)cMath::RoundToInt(gpBase->mpPlayer->GetFOVDegrees()));
+		aObj.AddVarFloat("FlashIntensity", gpBase->mpEffectHandler->GetFlashIntensity());
 		aObj.AddVarBool("ShowCommentary", gpBase->mpMapHandler->GetShowCommentary());
 
 		// Language
@@ -2382,6 +2477,9 @@ void cLuxMainMenu_Options::DumpInitialValues(cResourceVarsObject &aObj)
 	aObj.AddVarFloat("SoundVolume", gpBase->mpEngine->GetSound()->GetLowLevel()->GetVolume());
 	aObj.AddVarInt("SoundDeviceID", gpBase->mpConfigHandler->mlSoundDevID);
 	aObj.AddVarBool("HRTFActive", gpBase->mpConfigHandler->mbHRTFActive);
+	aObj.AddVarBool("EnemyActivateSound", gpBase->mpGlobalDataHandler->GetEnemyActivateSoundEnabled());
+	aObj.AddVarBool("InsanityRingSound", gpBase->mpGlobalDataHandler->GetInsanityRingSoundEnabled());
+	aObj.AddVarBool("TerrorSound", gpBase->mpGlobalDataHandler->GetTerrorSoundEnabled());
 }
 
 //-----------------------------------------------------------------------
@@ -2398,6 +2496,8 @@ void cLuxMainMenu_Options::DumpCurrentValues(cResourceVarsObject &aObj)
 
 		aObj.AddVarBool("ShowCrosshair",	mpChBShowCrosshair->IsChecked());
 		aObj.AddVarInt("FocusIconStyle",	mpCBFocusIconStyle->GetSelectedItem());
+		aObj.AddVarFloat("FOV",				GetFOV());
+		aObj.AddVarFloat("FlashIntensity",	GetFlash());
 
 		aObj.AddVarString("Language",		cString::To8Char(mvLangFiles[mpCBLanguage->GetSelectedItem()]));
 	}
@@ -2481,6 +2581,9 @@ void cLuxMainMenu_Options::DumpCurrentValues(cResourceVarsObject &aObj)
 
 	aObj.AddVarInt("SoundDeviceID", lDevID);
 	aObj.AddVarBool("HRTFActive", mpChBHRTF->IsChecked());
+	aObj.AddVarBool("EnemyActivateSound", mpChBEnemyActivateSound->IsChecked());
+	aObj.AddVarBool("InsanityRingSound", mpChBInsanityRingSound->IsChecked());
+	aObj.AddVarBool("TerrorSound", mpChBTerrorSound->IsChecked());
 }
 
 
@@ -2708,6 +2811,24 @@ bool cLuxMainMenu_Options::GammaSlider_OnMove(iWidget* apWidget, const cGuiMessa
 	return true;
 }
 kGuiCallbackDeclaredFuncEnd(cLuxMainMenu_Options, GammaSlider_OnMove);
+
+//-----------------------------------------------------------------------
+
+bool cLuxMainMenu_Options::FlashSlider_OnMove(iWidget* apWidget, const cGuiMessageData& aData)
+{
+	SetFlashLabelString(GetFlash());
+	return true;
+}
+kGuiCallbackDeclaredFuncEnd(cLuxMainMenu_Options, FlashSlider_OnMove);
+
+//-----------------------------------------------------------------------
+
+bool cLuxMainMenu_Options::FOVSlider_OnMove(iWidget* apWidget, const cGuiMessageData& aData)
+{
+	SetFOVLabelString(GetFOV());
+	return true;
+}
+kGuiCallbackDeclaredFuncEnd(cLuxMainMenu_Options, FOVSlider_OnMove);
 
 //-----------------------------------------------------------------------
 

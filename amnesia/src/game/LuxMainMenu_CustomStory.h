@@ -51,6 +51,11 @@ private:
 	bool PressStart(iWidget* apWidget, const cGuiMessageData& aData);
 	kGuiCallbackDeclarationEnd(PressStart);
 
+	bool HardModeWarningCallback(iWidget* apWidget, const cGuiMessageData& aData);
+	kGuiCallbackDeclarationEnd(HardModeWarningCallback);
+
+	void StartStory(bool abHardMode);
+
 	bool PressLoadGame(iWidget* apWidget, const cGuiMessageData& aData);
 	kGuiCallbackDeclarationEnd(PressLoadGame);
 
@@ -67,6 +72,7 @@ private:
 
 	cWidgetLabel* mpLAuthor;
 	cWidgetLabel* mpLDesc;
+	cWidgetCheckBox* mpCBHardMode;
 
 	std::vector<cWidgetButton*> mvButtons;
 };

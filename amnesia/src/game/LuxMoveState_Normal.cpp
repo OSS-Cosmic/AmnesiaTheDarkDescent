@@ -823,6 +823,10 @@ void cLuxMoveState_Normal::FootSound(eLuxFootSound aType)
 		sMaterialStep = pGravityMat ? pGravityMat->GetSurfaceData()->GetStepType() : "rock";
 	}
 	
+	// Surfaces (or water areas) without a step type would otherwise give "step_walk_"
+	if(sMaterialStep.empty())
+		sMaterialStep = "rock";
+
 	///////////////////////
 	//Get Sound data name
 	tString sSoundDataName="";

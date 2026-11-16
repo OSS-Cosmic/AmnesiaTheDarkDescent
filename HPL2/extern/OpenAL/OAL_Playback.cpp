@@ -419,7 +419,7 @@ void OAL_Source_Log ( int alSourceId, int alMessageType,  const char* asMessage,
 	if (asMessage == NULL)
 		return;	
 	va_start(ap, asMessage);
-	vsprintf(text, asMessage, ap);
+	vsnprintf(text, sizeof(text), asMessage, ap);
 	va_end(ap);
 
 	sMessage.append(text);
@@ -429,7 +429,7 @@ void OAL_Source_Log ( int alSourceId, int alMessageType,  const char* asMessage,
 	
 	char sBuffer[255];
 
-	sprintf(sBuffer, "./OAL/OAL_Source_%d.log", alSourceId);
+	snprintf(sBuffer, sizeof(sBuffer), "./OAL/OAL_Source_%d.log", alSourceId);
     string sFileName(sBuffer);
 	
     FILE* fSourceLog = fopen(sFileName.c_str(),"a");

@@ -211,6 +211,9 @@ public:
 
 	void SetSanityDrainDisabled(bool abX){ mbSanityDrainDisabled = abX;}
 	bool GetSanityDrainDisabled(){ return mbSanityDrainDisabled;}
+	/** Blocks every sanity loss (darkness, enemies, script damage), unlike SetSanityDrainDisabled which only stops the darkness drain. */
+	void SetGlobalSanityDrainDisabled(bool abX){ mbGlobalSanityDrainDisabled = abX;}
+	bool GetGlobalSanityDrainDisabled(){ return mbGlobalSanityDrainDisabled;}
 
 	float GetInteractionMoveSpeedMul(){ return mfInteractionMoveSpeedMul;}
 	void SetInteractionMoveSpeedMul(float afX){ mfInteractionMoveSpeedMul = afX;}
@@ -260,6 +263,15 @@ public:
 
 	bool GetShowCrosshair() { return mbShowCrossHair; }
 	void SetShowCrosshair(bool abX) { mbShowCrossHair = abX; }
+
+	/** Field of view from the options menu (degrees, vertical). Effects still multiply it. */
+	void SetFOVDegrees(float afDegrees);
+	float GetFOVDegrees();
+	/** FOV from game.cfg (or 70 if it has none); used when the profile has no FOV of its own. */
+	float GetDefaultFOVDegrees(){ return mfDefaultFOVDegrees; }
+
+	static const float kfMinFOVDegrees;
+	static const float kfMaxFOVDegrees;
 
 	eLuxFocusIconStyle GetFocusIconStyle() { return mFocusIconStyle; }
 	void SetFocusIconStyle(eLuxFocusIconStyle aX) { mFocusIconStyle = aX; }
@@ -349,6 +361,7 @@ private:
 	bool mbJumpDisabled;
 	bool mbCrouchDisabled;
 	bool mbSanityDrainDisabled;
+	bool mbGlobalSanityDrainDisabled;
 
 	float mfEventMoveSpeedMul;
 	float mfEventRunSpeedMul;
@@ -422,6 +435,7 @@ private:
 	float mfDefaultMass;
 
 	float mfFOV;
+	float mfDefaultFOVDegrees;
 
 	float mfTerrorIncSpeed;
 	float mfTerrorDecSpeed;

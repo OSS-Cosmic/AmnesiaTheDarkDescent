@@ -250,6 +250,9 @@ kGuiCallbackDeclaredFuncEnd(cLuxMainMenu_StartGame, PressStartGame);
 
 bool cLuxMainMenu_StartGame::PressCancel(iWidget* apWidget, const cGuiMessageData& aData)
 {
+	// Hard mode may have been picked before cancelling; don't let it leak into the next game
+	gpBase->mbHardMode = false;
+
 	ExitCallback(NULL, cGuiMessageData(0));
 	return true; 
 }

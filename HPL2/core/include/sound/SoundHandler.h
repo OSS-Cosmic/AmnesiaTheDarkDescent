@@ -252,6 +252,13 @@ namespace hpl {
 		tSoundEntryList* GetEntryList();
 		
 		bool CheckSoundIsBlocked(const cVector3f& avSoundPosition);
+
+		/**
+		 * Blocks (or unblocks) every sound whose file name contains asName (case insensitive).
+		 * Blocked sounds are not started by Play().
+		 */
+		void SetSoundBlocked(const tString& asName, bool abBlocked);
+		bool IsSoundBlocked(const tString& asName);
 	
 	private:
 		cSoundEntry* GetEntry(const tString& asName);
@@ -262,6 +269,7 @@ namespace hpl {
 		tSoundEntryList m_lstSoundEntries;
 
 		//tSoundEntryList m_lstSoundEntriesPool;
+		tStringVec mvBlockedSoundNames;
 		
 		bool mbSilent;
 

@@ -23,6 +23,7 @@
 
 #include "LuxEnemyMover.h"
 #include "LuxEnemyPathfinder.h"
+#include "LuxProp_SwingDoor.h"
 
 #include "LuxMap.h"
 #include "LuxMapHelper.h"
@@ -1635,7 +1636,7 @@ void iLuxEnemy::UpdateCanSeePlayer(float afTimeStep)
 	// Check range
 	float fMaxRange = mfSightRange;
 
-	if(bLanternOn) mfSightRange *= 1.5f;
+	if(bLanternOn) fMaxRange *= 1.5f;
 	
 	if(	bLanternOn==false && 
 		pPlayer->GetHelperLightLevel()->GetNormalLightLevel() < mfPlayerInDarknessLightLevel && 
@@ -1744,6 +1745,81 @@ void iLuxEnemy::UpdatePlayerInRange(float afTimeStep)
 
 //-----------------------------------------------------------------------
 
+bool iLuxEnemy::PlayerIsInAttackContact()
+{
+	cLuxPlayer *pPlayer = gpBase->mpPlayer;
+	if(pPlayer->IsDead() || TriggersDisabled()) return false;
+
+	iCharacterBody *pPlayerBody = pPlayer->GetCharacterBody();
+
+	// Touching (with a little margin, the bodies push each other apart)
+	float fContactDist = mpCharBody->GetSize().x * 0.5f + pPlayerBody->GetSize().x * 0.5f + 0.25f;
+	if(DistToPlayer2D() > fContactDist) return false;
+
+	// Same floor (not on a ledge above / below)
+	if(AbsHeightDistToPlayer() > mpCharBody->GetSize().y * 0.5f) return false;
+
+	// Nothing in between (thin wall, closed door). Characters are skipped by the test.
+	return gpBase->mpMapHelper->CheckLineOfSight(mpCharBody->GetPosition(), pPlayerBody->GetPosition(), false);
+}
+
+//-----------------------------------------------------------------------
+
+void iLuxEnemy::TurnToPlayerBeforeAttackHit()
+{
+	// When the player is pressed against the enemy they are often to its side (the bodies slide
+	// along each other) and the attack shape is in front of the enemy, so the swing would miss.
+	if(mpCurrentAnimation==NULL || mpCurrentAnimation->IsBeforeSpecialEvent()==false) return;
+	if(gpBase->mpPlayer->IsDead()) return;
+
+	mpMover->TurnToPos(gpBase->mpPlayer->GetCharacterBody()->GetFeetPosition());
+}
+
+//-----------------------------------------------------------------------
+
+bool iLuxEnemy::StuckDoorIsCleared()
+{
+	iLuxEntity *pEntity = mpMap->GetEntityByID(mlStuckDoorID);
+	if(pEntity==NULL || pEntity->GetEntityType() != eLuxEntityType_Prop) return true;
+
+	iLuxProp *pProp = static_cast<iLuxProp*>(pEntity);
+	if(pProp->GetPropType() != eLuxPropType_SwingDoor) return true;
+
+	cLuxProp_SwingDoor *pDoor = static_cast<cLuxProp_SwingDoor*>(pProp);
+	return pDoor->IsBroken() || pDoor->GetClosed()==false;
+}
+
+//-----------------------------------------------------------------------
+
+void iLuxEnemy::OnBreakDoorHit()
+{
+	iLuxEntity *pEntity = mpMap->GetEntityByID(mlStuckDoorID);
+	if(pEntity==NULL || pEntity->GetEntityType() != eLuxEntityType_Prop) return;
+
+	iLuxProp *pProp = static_cast<iLuxProp*>(pEntity);
+	if(pProp->GetPropType() != eLuxPropType_SwingDoor) return;
+
+	//Unbreakable door that is unlocked (e.g. the padlock was broken and a script unlocked it)
+	//but still closed: the hit swings it open. A closed door is held shut by its hinge, so hits
+	//can never open it, and it can never break either. Breakable doors are left alone.
+	cLuxProp_SwingDoor *pDoor = static_cast<cLuxProp_SwingDoor*>(pProp);
+	if(pDoor->IsBroken()==false && pDoor->CanBeBroken()==false && pDoor->GetLocked()==false && pDoor->GetClosed())
+	{
+		pDoor->SetClosed(false, true);
+	}
+}
+
+//-----------------------------------------------------------------------
+
+void iLuxEnemy::OnStuckDoorCleared()
+{
+	mbStuckAtDoor = false;
+	mlStuckDoorID = -1;
+	mpMover->ResetStuckCounter();
+}
+
+//-----------------------------------------------------------------------
+
 void iLuxEnemy::UpdateCheckStuckAtDoor(float afTimeStep)
 {
 	if(mpMover->GetStuckCounter() < 0.1f)
@@ -1784,11 +1860,14 @@ void iLuxEnemy::UpdateCheckStuckAtDoor(float afTimeStep)
 
 		iLuxProp *pProp = static_cast<iLuxProp*>(pEntity);
 		if(pProp->GetPropType() != eLuxPropType_SwingDoor) continue;
+
+		//A broken door keeps its (disabled) bodies, do not get stuck on it again.
+		if(static_cast<cLuxProp_SwingDoor*>(pProp)->IsBroken()) continue;
 		
 		for(int i=0; i<pProp->GetBodyNum(); ++i)
 		{
 			iPhysicsBody *pBody = pProp->GetBody(i);
-			if(pBody->GetMass()==0) continue;
+			if(pBody->GetMass()==0 || pBody->IsActive()==false) continue;
 			
 			//////////////////////
 			//Check BV intersection

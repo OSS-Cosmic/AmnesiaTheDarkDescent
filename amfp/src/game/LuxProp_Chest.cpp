@@ -332,7 +332,7 @@ kBeginSerialize(cLuxProp_Chest_SaveData, iLuxProp_SaveData)
 
 kSerializeVar(mbLocked, eSerializeType_Bool)
 
-kSerializeVar(mlCoinsNeeded, eSerializeType_Float32)
+kSerializeVar(mlCoinsNeeded, eSerializeType_Int32)
 
 kEndSerialize()
 

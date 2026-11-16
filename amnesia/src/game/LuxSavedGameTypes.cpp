@@ -1114,6 +1114,7 @@ void cLuxPlayer_SaveData::FromPlayer(cLuxPlayer *apPlayer)
 	kCopyFromVar(apPlayer, mbJumpDisabled);
 	kCopyFromVar(apPlayer, mbCrouchDisabled);
 	kCopyFromVar(apPlayer, mbSanityDrainDisabled);
+	kCopyFromVar(apPlayer, mbGlobalSanityDrainDisabled);
 
 	kCopyFromVar(apPlayer, mfInteractionMoveSpeedMul);
 	kCopyFromVar(apPlayer, mfEventMoveSpeedMul);
@@ -1291,7 +1292,8 @@ void cLuxPlayer_SaveData::ToPlayer(cLuxMap *apMap,cLuxPlayer *apPlayer)
 
 	kCopyToVar(apPlayer, mbJumpDisabled);
 	kCopyToVar(apPlayer, mbCrouchDisabled);
-	kCopyFromVar(apPlayer, mbSanityDrainDisabled);
+	kCopyToVar(apPlayer, mbSanityDrainDisabled);
+	kCopyToVar(apPlayer, mbGlobalSanityDrainDisabled);
 
 	kCopyToVar(apPlayer, mfInteractionMoveSpeedMul);
 	kCopyToVar(apPlayer, mfEventMoveSpeedMul);
@@ -1413,6 +1415,7 @@ kSerializeVar(mfWaterSpeedMul, eSerializeType_Float32)
 kSerializeVar(mbJumpDisabled, eSerializeType_Bool)
 kSerializeVar(mbCrouchDisabled, eSerializeType_Bool)
 kSerializeVar(mbSanityDrainDisabled, eSerializeType_Bool)
+kSerializeVar(mbGlobalSanityDrainDisabled, eSerializeType_Bool)
 
 kSerializeVar(mbCrouching, eSerializeType_Bool)
 

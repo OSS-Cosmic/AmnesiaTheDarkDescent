@@ -417,8 +417,13 @@ void cLuxPlayerHands::SetCurrentHandObject(iLuxHandObject *apObject)
 	else if(apObject)
 	{
 		CreateAndAttachHandObject(pMap, apObject);
-		PlayAnim(apObject->GetAnimDraw(),false);
+
+		// Start the draw animation at full weight (no fade from the previous pose) and pose
+		// the hands right away, otherwise they are shown in the old pose for a frame and jerk.
+		mpHandsEntity->PlayName(apObject->GetAnimDraw(), false, true);
+		msCurrentAnim = apObject->GetAnimDraw();
 		mpHandsEntity->SetVisible(true);
+		mpHandsEntity->UpdateLogic(0);
 
 		mHandState = eLuxHandsState_Draw;
 	}
@@ -577,8 +582,26 @@ iLuxHandObject* cLuxPlayerHands::LoadHandObject(const tString& asName)
 
 	/////////////////////
 	// Get file name
-	tString sFile = cString::SetFileExt(asName, "ho");
-	sFile = "/models/hand_objects/"+asName+"/"+sFile;
+	tString sFileName = cString::SetFileExt(asName, "ho");
+	tString sFile = "/models/hand_objects/"+asName+"/"+sFileName;
+
+	// Some mods put hand objects in models/hand_object (no 's'). Files are found by name and
+	// closest folder match, so the base game's hand_objects version would win; prefer the mod's.
+	{
+		tString sAltFile = "/models/hand_object/"+asName+"/"+sFileName;
+		const tWString& sAltPath = pResources->GetFileSearcher()->GetFilePath(sAltFile);
+		if(sAltPath != _W(""))
+		{
+			tString sLowAltPath = cString::ToLowerCase(cString::To8Char(cString::ReplaceCharToW(sAltPath, _W("\\"), _W("/"))));
+			tString sLowWanted = cString::ToLowerCase(sAltFile);
+			if(	sLowAltPath.size() >= sLowWanted.size() &&
+				sLowAltPath.compare(sLowAltPath.size() - sLowWanted.size(), sLowWanted.size(), sLowWanted) == 0)
+			{
+				Log("Hand object '%s' found in 'models/hand_object' instead of 'models/hand_objects', using that one.\n", asName.c_str());
+				sFile = sAltFile;
+			}
+		}
+	}
 
 	/////////////////////
 	// Load XML document

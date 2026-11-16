@@ -250,7 +250,7 @@ The Linux toolchain is premake5 `5.0.0-beta8`, a C/C++ compiler, GNU Make, Pytho
 
 ### Shader compilers
 
-Engine shaders are Slang (`.slang`, with a stage suffix such as `.vert.slang`, `.frag.slang`, `.comp.slang`, `.rgen.slang`). [`premake/slang.lua`](premake/slang.lua) compiles each to SPIR-V with a prebuilt `slangc`, which Premake downloads at configuration time into `build-premake/_deps/slang-prebuilt/`. The pinned version is `SLANG_VERSION = "2026.17"` in that file. Override the download with `--slangc=/path/to/slangc`.
+Engine shaders are Slang (`.slang`, with a stage suffix such as `.vert.slang`, `.frag.slang`, `.comp.slang`, `.rgen.slang`). [`premake/slang.lua`](premake/slang.lua) compiles each to SPIR-V with a prebuilt `slangc`, which Premake downloads at configuration time into `build-premake/_deps/slang-prebuilt/`. The pinned version is `SLANG_VERSION = "2026.22"` in that file. Override the download with `--slangc=/path/to/slangc`.
 
 There is no glslang step for engine shaders. `glslang-tools` and `spirv-tools` are in the `Dockerfile` for the FidelityFX SDK's own shader compilation; `--glslang=PATH` and `--spirv-val=PATH` are forwarded to that SDK's CMake wrapper only.
 
@@ -352,7 +352,7 @@ The compiler-only `RID3D12ShaderFixtures` target builds Slang-to-DXIL fixtures u
 msbuild build-premake\Amnesia.sln /t:RID3D12ShaderFixtures /p:Configuration=Debug /p:Platform=x64
 ```
 
-The pinned Slang 2026.17 distribution used by [`premake/slang.lua`](premake/slang.lua) emits DXIL directly, so no external DXC or `dxil.dll` is required for these fixtures; the generated `.dxil` files carry the standard `DXBC` container magic and DXIL entry-point/shader-model metadata. This target adds no DXIL loading, root signatures, PSOs, or rendering: it is compilation infrastructure only. The production engine continues to load its SPIR-V shader artifacts unchanged, and the existing SPIR-V build rules for the `Amnesia` project are unaffected by enabling this target.
+The pinned Slang 2026.22 distribution used by [`premake/slang.lua`](premake/slang.lua) emits DXIL directly, so no external DXC or `dxil.dll` is required for these fixtures; the generated `.dxil` files carry the standard `DXBC` container magic and DXIL entry-point/shader-model metadata. This target adds no DXIL loading, root signatures, PSOs, or rendering: it is compilation infrastructure only. The production engine continues to load its SPIR-V shader artifacts unchanged, and the existing SPIR-V build rules for the `Amnesia` project are unaffected by enabling this target.
 
 #### Agility SDK integration
 
