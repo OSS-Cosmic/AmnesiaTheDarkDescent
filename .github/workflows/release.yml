@@ -1,0 +1,166 @@
+name: release
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Tagged version shared by Amnesia and AMFP, e.g. v1'
+        required: true
+        default: 'v'
+      itch_channel_suffix:
+        description: 'Appended to the itch.io channel names, e.g. "-beta" for a test push'
+        required: false
+        default: ''
+      push_amnesia_itch:
+        description: 'Push Amnesia: The Dark Descent to itch.io'
+        type: boolean
+        default: true
+      push_amfp_itch:
+        description: 'Push Amnesia: A Machine for Pigs to itch.io'
+        type: boolean
+        default: true
+
+env:
+  AMNESIA_ITCH_TARGET: mpollind/amnesia-the-dark-descent-redux
+  AMFP_ITCH_TARGET: mpollind/amfp-redux
+
+jobs:
+  linux:
+    uses: ./.github/workflows/linux-build.yml
+    with:
+      config: release
+      name_suffix: -${{ github.event.inputs.tag }}
+      build_version: ${{ github.event.inputs.tag }}
+
+  windows:
+    uses: ./.github/workflows/windows-build.yml
+    with:
+      config: release
+      name_suffix: -${{ github.event.inputs.tag }}
+      build_version: ${{ github.event.inputs.tag }}
+
+  publish:
+    needs: [linux, windows]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout release resources
+        uses: actions/checkout@v4
+
+      # The build workflows upload one artifact per game per platform:
+      #   {linux,win}-x86_64-release-<tag>        (TDD)
+      #   amfp-{linux,win}-x86_64-release-<tag>   (AMFP)
+      - name: Download build artifacts
+        uses: actions/download-artifact@v8
+        with:
+          pattern: '*-x86_64-release-${{ github.event.inputs.tag }}'
+          path: artifacts
+
+      # Unpack into per-game, per-platform trees. butler pushes a directory,
+      # not an archive, so that it can compute an incremental patch against
+      # the previous build on the channel.
+      - name: Stage payloads
+        env:
+          TAG: ${{ github.event.inputs.tag }}
+        run: |
+          set -euo pipefail
+          mkdir -p release
+
+          # Tell the itch app which executables to offer; without this it guesses.
+          write_manifest() {
+            local dir="$1" ext="$2" game="$3"
+            cat > "${dir}/.itch.toml" <<TOML
+          [[actions]]
+          name = "play"
+          path = "${game}${ext}"
+
+          [[actions]]
+          name = "Level Editor"
+          path = "LevelEditor${ext}"
+
+          [[actions]]
+          name = "Model Editor"
+          path = "ModelEditor${ext}"
+
+          [[actions]]
+          name = "Material Editor"
+          path = "MaterialEditor${ext}"
+
+          [[actions]]
+          name = "Particle Editor"
+          path = "ParticleEditor${ext}"
+          TOML
+          }
+
+          # stage_game <stage dir> <artifact prefix> <executable> <resources dir>
+          stage_game() {
+            local stage="$1" prefix="$2" game="$3" resources="$4"
+            local linux_name="${prefix}linux-x86_64-release-${TAG}"
+            local win_name="${prefix}win-x86_64-release-${TAG}"
+
+            mkdir -p "${stage}/linux" "${stage}/windows"
+            tar -xzf "artifacts/${linux_name}/${linux_name}.tar.gz" -C "${stage}/linux"
+            unzip -q "artifacts/${win_name}/${win_name}.zip" -d "${stage}/windows"
+
+            write_manifest "${stage}/linux" "" "${game}"
+            write_manifest "${stage}/windows" ".exe" "${game}"
+
+            # Ship repository assets at their game-relative path. Copying the
+            # release into an installed game overlays these files directly; do
+            # not nest them under an extra resources/ directory. Each game only
+            # gets its own overlay, and the overlay is optional.
+            if [[ -d "${resources}" ]]; then
+              cp -a "${resources}/." "${stage}/linux/"
+              cp -a "${resources}/." "${stage}/windows/"
+            fi
+
+            tar -C "${stage}/linux" -zcf "release/${game}-linux-x86_64-${TAG}.tar.gz" .
+            (cd "${stage}/windows" && zip -qr "${GITHUB_WORKSPACE}/release/${game}-win-x86_64-${TAG}.zip" .)
+          }
+
+          stage_game stage/amnesia ""      Amnesia     amnesia/resources
+          stage_game stage/amfp    "amfp-" AmnesiaAMFP amfp/resources
+          ls -l release
+
+      - name: Install butler
+        if: ${{ inputs.push_amnesia_itch || inputs.push_amfp_itch }}
+        run: |
+          set -euo pipefail
+          curl -fsSL -o /tmp/butler.zip \
+            "https://broth.itch.zone/butler/linux-amd64/LATEST/archive/default"
+          unzip -q -o /tmp/butler.zip -d "${HOME}/.butler"
+          chmod +x "${HOME}/.butler/butler"
+          echo "${HOME}/.butler" >> "$GITHUB_PATH"
+
+      - name: Push Amnesia to itch.io
+        if: ${{ inputs.push_amnesia_itch }}
+        env:
+          BUTLER_API_KEY: ${{ secrets.ITCH_API_KEY }}
+          TAG: ${{ github.event.inputs.tag }}
+          SUFFIX: ${{ github.event.inputs.itch_channel_suffix }}
+        run: |
+          set -euo pipefail
+          butler push stage/amnesia/linux   "${AMNESIA_ITCH_TARGET}:linux${SUFFIX}"   --userversion "$TAG"
+          butler push stage/amnesia/windows "${AMNESIA_ITCH_TARGET}:windows${SUFFIX}" --userversion "$TAG"
+          butler status "${AMNESIA_ITCH_TARGET}"
+
+      - name: Push AMFP to itch.io
+        if: ${{ inputs.push_amfp_itch }}
+        env:
+          BUTLER_API_KEY: ${{ secrets.ITCH_API_KEY }}
+          TAG: ${{ github.event.inputs.tag }}
+          SUFFIX: ${{ github.event.inputs.itch_channel_suffix }}
+        run: |
+          set -euo pipefail
+          butler push stage/amfp/linux   "${AMFP_ITCH_TARGET}:linux${SUFFIX}"   --userversion "$TAG"
+          butler push stage/amfp/windows "${AMFP_ITCH_TARGET}:windows${SUFFIX}" --userversion "$TAG"
+          butler status "${AMFP_ITCH_TARGET}"
+
+      - name: Publish GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.event.inputs.tag }}
+          name: "Release: ${{ github.event.inputs.tag }}"
+          prerelease: true
+          files: release/*

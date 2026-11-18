@@ -6,7 +6,6 @@ import bindless;
 import Fog;
 import Translucent.WaterCommon;
 import Utils.Color.ColorHelpers;
-import StandardEnvironmentBindings;
 import LegacyEffectMath;
 
 [vk::binding(0,2)] Texture2D<float4> sceneColorInput;
@@ -112,7 +111,7 @@ float4 psMain(V v):SV_TARGET0
     if (gPushConstants.reflectionEnabled!=0u && reflectionAuthored) {
         float f=waterFresnelFinite(dot(eye,n),w.frenselBias,w.frenselPow)*waterReflectionFadeFinite(-mul(gPerFrame.viewMat,float4(v.p,1)).z,w.reflectionFadeStart,w.reflectionFadeEnd);
         if (gPushConstants.cubeMapTextureIndex!=kInvalidTextureIndex)
-            reflected=sampleEnvironmentCube(gPushConstants.cubeMapTextureIndex,reflect(-eye,n),0.0f).rgb;
+            reflected=gTexturesCube[NonUniformResourceIndex(gPushConstants.cubeMapTextureIndex)].SampleLevel(gMaterialSampler,reflect(-eye,n),0.0f).rgb;
         else {
             // Reflection captures use the same viewport framing at reduced
             // resolution. Normalized distorted UVs preserve retail sampling.
