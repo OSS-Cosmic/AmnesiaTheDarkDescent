@@ -98,8 +98,8 @@ public:
 	void LowerSanity(float afAmount, bool abUseEffect);
 
 	void Move(eCharDir aDir, float afMul);
-	void AddYaw(float afAmount);
-	void AddPitch(float afAmount);
+	void AddYaw(float afAmount, bool abFrameInput = false);
+	void AddPitch(float afAmount, bool abFrameInput = false);
 	void SetLean(float afMul);
 	void AddLean(float afAdd);
 	
@@ -412,7 +412,7 @@ private:
 	
 	tWString msFocusText;
 	tWString msLastFocusText;
-	float mfFocusTextAlpha;
+	cInterpolatedFloat mfFocusTextAlpha;
 
 	bool mbShowCrossHair;
 	bool mbScriptShowFocusIconAndCrossHair;

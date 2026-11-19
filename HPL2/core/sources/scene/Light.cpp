@@ -19,6 +19,7 @@
 
 #include "scene/Light.h"
 #include "scene/LightParameters.h"
+#include "scene/RenderInterpolation.h"
 
 #include "system/String.h"
 
@@ -513,6 +514,78 @@ namespace hpl {
 	void iLight::InvalidateResolved()
 	{
 		mbResolvedDirty = true;
+
+		//Every fade, flicker and script change ends up here: let render
+		//interpolation snapshot the new values at the end of the tick.
+		cRenderInterpolation::TouchEntity(this);
+	}
+
+	//-----------------------------------------------------------------------
+
+	bool iLight::OnRenderInterpSnapshot(bool abSnap)
+	{
+		bool bRenderableActive = iRenderable::OnRenderInterpSnapshot(abSnap);
+
+		const cLightTuningState& resolved = Resolved();
+
+		mInterpPrevColor = abSnap ? resolved.mDiffuseColor : mInterpCurrColor;
+		mInterpCurrColor = resolved.mDiffuseColor;
+
+		mfInterpPrevReach = abSnap ? resolved.mfReach : mfInterpCurrReach;
+		mfInterpCurrReach = resolved.mfReach;
+
+		mfInterpPrevIntensity = abSnap ? resolved.mfIntensity : mfInterpCurrIntensity;
+		mfInterpCurrIntensity = resolved.mfIntensity;
+
+		mbInterpLightActive =	(mInterpPrevColor == mInterpCurrColor) == false ||
+								mfInterpPrevReach != mfInterpCurrReach ||
+								mfInterpPrevIntensity != mfInterpCurrIntensity;
+
+		return bRenderableActive || mbInterpLightActive;
+	}
+
+	void iLight::OnRenderInterpApply(float afT)
+	{
+		iRenderable::OnRenderInterpApply(afT);
+
+		mbInterpLightApplied = false;
+		if(mbInterpLightActive == false) return;
+
+		//Resolve first so the cache holds everything else, then overwrite the
+		//interpolated values in place. The cache is not dirty, so every reader
+		//during rendering sees them.
+		Resolved();
+		const float fOldReach = mResolved.mfReach;
+		mResolved.mDiffuseColor = cRenderInterpolation::Lerp(mInterpPrevColor, mInterpCurrColor, afT);
+		mResolved.mfReach = cRenderInterpolation::Lerp(mfInterpPrevReach, mfInterpCurrReach, afT);
+		mResolved.mfIntensity = cRenderInterpolation::Lerp(mfInterpPrevIntensity, mfInterpCurrIntensity, afT);
+		mbInterpLightApplied = true;
+
+		if(mResolved.mfReach != fOldReach)
+		{
+			//Reach is part of the light volume, invalidate caches keyed on transform count.
+			mbUpdateBoundingVolume = true;
+			mlCount++;
+			OnResolvedTuningChanged();
+		}
+	}
+
+	void iLight::OnRenderInterpRestore()
+	{
+		iRenderable::OnRenderInterpRestore();
+
+		if(mbInterpLightApplied == false) return;
+		mbInterpLightApplied = false;
+
+		//Back to the exact values (resolved again on the next read).
+		const float fOldReach = mResolved.mfReach;
+		mbResolvedDirty = true;
+		if(Resolved().mfReach != fOldReach)
+		{
+			mbUpdateBoundingVolume = true;
+			mlCount++;
+			OnResolvedTuningChanged();
+		}
 	}
 
 	//-----------------------------------------------------------------------

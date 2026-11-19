@@ -68,6 +68,9 @@ namespace hpl {
 		cSubMeshEntity(const tString &asName,cMeshEntity *apMeshEntity, cSubMesh * apSubMesh,cMaterialManager* apMaterialManager);
 		~cSubMeshEntity();
 
+		// True when this sub mesh is skinned on the CPU into its own vertex buffer.
+		bool IsSkinned(){ return mpDynVtxBuffer != NULL; }
+
 		cMaterial *GetMaterial();
 
 		void UpdateGraphicsForFrame(float afFrameTime);
@@ -124,6 +127,10 @@ namespace hpl {
 		bool mbUpdateBody;
 
 		bool mbGraphicsUpdated;
+		// Render frame the dynamic vertex buffer was last skinned in. The TLAS
+		// build skins before the BLAS rebuild, the render list asks again later
+		// in the same frame; skin only once.
+		int mlSkinnedRenderFrame;
 
 		char mlStaticNullMatrixCount;
 		void *mpUserData;

@@ -961,6 +961,25 @@ struct NrdIntegration::Impl {
     // Drives antilag and accumulation speed. Left at 0 NRD derives a fixed step
     // from frameIndex, which desyncs the denoiser from a variable frame rate.
     commonSettings.timeDeltaBetweenFrames = frame.timeDeltaMs;
+
+    // History lengths in seconds, not frames (NRDSettings.h: "Always
+    // accumulate in seconds not in frames"). With render interpolation the
+    // frame rate is uncapped; a fixed 30-frame history shrinks to ~0.1 s at
+    // 250 FPS and the noise visibly boils. Floored at NRD's 60 FPS defaults
+    // so low frame rates keep their current behaviour.
+    {
+      const float fps =
+          frame.timeDeltaMs > 0.0f ? 1000.0f / frame.timeDeltaMs : 60.0f;
+      const uint32_t maxFrames = std::clamp<uint32_t>(
+          nrd::GetMaxAccumulatedFrameNum(0.5f, fps), 30u,
+          nrd::REBLUR_MAX_HISTORY_FRAME_NUM);
+      const uint32_t maxFastFrames = std::clamp<uint32_t>(
+          nrd::GetMaxAccumulatedFrameNum(0.1f, fps), 6u, maxFrames - 1);
+      reblurSettings.maxAccumulatedFrameNum = maxFrames;
+      reblurSettings.maxFastAccumulatedFrameNum = maxFastFrames;
+      relaxSettings.diffuseMaxAccumulatedFrameNum = maxFrames;
+      relaxSettings.diffuseMaxFastAccumulatedFrameNum = maxFastFrames;
+    }
     commonSettings.accumulationMode =
         historyReset ? nrd::AccumulationMode::CLEAR_AND_RESTART
                      : nrd::AccumulationMode::CONTINUE;

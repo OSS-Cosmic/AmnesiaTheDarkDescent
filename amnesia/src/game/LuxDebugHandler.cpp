@@ -1027,6 +1027,13 @@ void cLuxDebugHandler::CreateGuiWindow()
 		pCheckBox->AddCallback(eGuiMessage_CheckChange,this, kGuiCallback(ChangeDebugText));
 		vGroupPos.y += 22;
 
+		//Render interpolation
+		pCheckBox = mpGuiSet->CreateWidgetCheckBox(vGroupPos, vSize, _W("Render interpolation"), pGroup);
+		pCheckBox->SetChecked(cRenderInterpolation::IsEnabled(), false);
+		pCheckBox->SetUserValue(30);
+		pCheckBox->AddCallback(eGuiMessage_CheckChange,this, kGuiCallback(ChangeDebugText));
+		vGroupPos.y += 22;
+
 		//Print Container debug info
 		pButton = mpGuiSet->CreateWidgetButton(vGroupPos,vSize,_W("Print Container Debug Info"),pGroup);
 		pButton->AddCallback(eGuiMessage_ButtonPressed,this, kGuiCallback(PressPrinfContDebugInfo));
@@ -1464,6 +1471,11 @@ bool cLuxDebugHandler::ChangeDebugText(iWidget* apWidget, const cGuiMessageData&
 	else if(lNum == 14)  gpBase->mpPlayer->SetFreeCamSpeed( cMath::Max((float)aData.mlVal/ 100.0f, 0.001f) );
 
 	else if(lNum == 17)  SetFastForward(bActive);
+	else if(lNum == 30)
+	{
+		cRenderInterpolation::SetEnabled(bActive);
+		gpBase->mpConfigHandler->mbRenderInterpolation = bActive;
+	}
 
 	return true;
 }

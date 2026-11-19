@@ -200,7 +200,7 @@ void cLuxJournalStateData::Update(float afTimeStep)
 
 void cLuxJournalStateData::OnDraw(float afFrameTime)
 {
-	float fAlpha = mfAlpha * mpJournal->mfAlpha;
+	float fAlpha = mfAlpha * mpJournal->mfAlpha.Get();
 
 	///////////////////////
 	//Note open
@@ -606,7 +606,7 @@ void cLuxJournal::OnDraw(float afFrameTime)
 	//Fade
 	if(mbOpenedFromInventory)
 	{
-		mpGuiSet->DrawGfx(mpWhiteGfx,mvGuiSetStartPos+cVector3f(0,0,20),mvGuiSetSize,cColor(0, 1.0f - mfAlpha*mfAlpha));
+		mpGuiSet->DrawGfx(mpWhiteGfx,mvGuiSetStartPos+cVector3f(0,0,20),mvGuiSetSize,cColor(0, 1.0f - mfAlpha.Get()*mfAlpha.Get()));
 	}
 
 	////////////////////////

@@ -38,6 +38,7 @@
 #include "scene/World.h"
 
 #include "scene/ParticleSystem.h"
+#include "scene/RenderInterpolation.h"
 
 
 namespace hpl {
@@ -129,6 +130,8 @@ namespace hpl {
 
 		mlAxisDrawUpdateCount = -1;
 
+		mlRenderInterpTick = -1;
+
 		mbApplyTransformToBV = false; 
 
 		mBoundingVolume.SetSize(0);
@@ -193,10 +196,46 @@ namespace hpl {
 
 	//-----------------------------------------------------------------------
 
-	//Seems like this fucntion is never called any more...
+	void iParticleEmitter::SaveRenderInterpState()
+	{
+		for(unsigned int i = 0; i < mlNumOfParticles; ++i)
+		{
+			cParticle *pParticle = mvParticles[i];
+			pParticle->mvRenderPrevPos = pParticle->mvPos;
+			pParticle->mvRenderPrevSize = pParticle->mvSize;
+			pParticle->mRenderPrevColor = pParticle->mColor;
+			pParticle->mfRenderPrevSpin = pParticle->mfSpin;
+			pParticle->mbRenderSnap = false;
+		}
+
+		mlRenderInterpTick = cRenderInterpolation::IsInsideTick() ? cRenderInterpolation::GetTick() : -1;
+	}
+
+	void iParticleEmitter::FixSpawnedRenderInterpState()
+	{
+		for(unsigned int i = 0; i < mlNumOfParticles; ++i)
+		{
+			cParticle *pParticle = mvParticles[i];
+			if(pParticle->mbRenderSnap == false) continue;
+
+			//Newly (re)spawned: no history, show where it is.
+			pParticle->mvRenderPrevPos = pParticle->mvPos;
+			pParticle->mvRenderPrevSize = pParticle->mvSize;
+			pParticle->mRenderPrevColor = pParticle->mColor;
+			pParticle->mfRenderPrevSpin = pParticle->mfSpin;
+			pParticle->mbRenderSnap = false;
+		}
+	}
+
+	//-----------------------------------------------------------------------
+
+	//Called every tick by cParticleSystem::UpdateLogic
 	void iParticleEmitter::UpdateLogic(float afTimeStep)
 	{
 		if(IsActive()==false) return;
+
+		//Remember the state before this update, so drawing can interpolate between them.
+		SaveRenderInterpState();
 
 		//////////////////////////////
 		// Update sleep
@@ -228,6 +267,8 @@ namespace hpl {
 		}
 
 		UpdateMotion(afTimeStep);
+
+		FixSpawnedRenderInterpState();
 
 		SetTransformUpdated();
 	}
@@ -328,6 +369,11 @@ namespace hpl {
 												 float *apColArray, float *apUvArray)
 	{
 		//if(mbUpdateGfx == false) return;
+
+		//////////////////////////////
+		// Render interpolation (between the state before and after the last tick)
+		const bool bInterp = cRenderInterpolation::ShouldInterpolate(mlRenderInterpTick);
+		const float fT = bInterp ? cRenderInterpolation::GetAlpha() : 1.0f;
 
 		float *pPosArray = apPosArray;
 		float *pColArray = apColArray;
@@ -483,14 +529,14 @@ namespace hpl {
 					cParticle *pParticle = mvParticles[i];
 
 					//This is not the fastest thing possible...
-					cVector3f vParticlePos = pParticle->mvPos;	
+					cVector3f vParticlePos = bInterp ? cRenderInterpolation::Lerp(pParticle->mvRenderPrevPos, pParticle->mvPos, fT) : pParticle->mvPos;
 
 					if(mCoordSystem == eParticleEmitterCoordSystem_Local){
 						vParticlePos = cMath::MatrixMul(mpParentSystem->GetWorldMatrix(), vParticlePos);
 					}
 
 					cVector3f vPos = cMath::MatrixMul(apFrustum->GetViewMatrix(), vParticlePos);
-					cColor finalColor = pParticle->mColor * colorMul;
+					cColor finalColor = (bInterp ? cRenderInterpolation::Lerp(pParticle->mRenderPrevColor, pParticle->mColor, fT) : pParticle->mColor) * colorMul;
 
 					SetPos(&pPosArray[i*lVtxQuadSize + 0*lVtxStride], vPos + vAdd[0]);
 					SetCol(&pColArray[i*16 + 0*4], finalColor);
@@ -530,7 +576,7 @@ namespace hpl {
 					cParticle *pParticle = mvParticles[i];
 
 					//This is not the fastest thing possible
-					cVector3f vParticlePos = pParticle->mvPos;
+					cVector3f vParticlePos = bInterp ? cRenderInterpolation::Lerp(pParticle->mvRenderPrevPos, pParticle->mvPos, fT) : pParticle->mvPos;
 
 
 					if(mCoordSystem == eParticleEmitterCoordSystem_Local){
@@ -542,12 +588,14 @@ namespace hpl {
 
 					// NEW
 
-					cVector3f vParticleSize = pParticle->mvSize;
-					cColor finalColor = pParticle->mColor * colorMul;
+					cVector2f vSize2D = bInterp ? cRenderInterpolation::Lerp(pParticle->mvRenderPrevSize, pParticle->mvSize, fT) : pParticle->mvSize;
+					cVector3f vParticleSize = vSize2D;
+					cColor finalColor = (bInterp ? cRenderInterpolation::Lerp(pParticle->mRenderPrevColor, pParticle->mColor, fT) : pParticle->mColor) * colorMul;
 
 					if ( mbUsePartSpin )
 					{
-						cMatrixf mtxRotationMatrix = cMath::MatrixRotateZ(pParticle->mfSpin);
+						float fSpin = bInterp ? cRenderInterpolation::LerpAngle(pParticle->mfRenderPrevSpin, pParticle->mfSpin, fT) : pParticle->mfSpin;
+						cMatrixf mtxRotationMatrix = cMath::MatrixRotateZ(fSpin);
 
 
 						SetPos(&pPosArray[i*lVtxQuadSize + 0*lVtxStride], vPos + cMath::MatrixMul(mtxRotationMatrix, vAdd[0]*vParticleSize));
@@ -597,6 +645,12 @@ namespace hpl {
 
 					cVector3f vParticlePos1 = pParticle->mvPos;
 					cVector3f vParticlePos2 = pParticle->mvLastPos;
+					if(bInterp)
+					{
+						//Move the whole streak, keep its length.
+						vParticlePos1 = cRenderInterpolation::Lerp(pParticle->mvRenderPrevPos, pParticle->mvPos, fT);
+						vParticlePos2 = vParticlePos1 - (pParticle->mvPos - pParticle->mvLastPos);
+					}
 
 					if(mCoordSystem == eParticleEmitterCoordSystem_Local){
 						vParticlePos1 = cMath::MatrixMul(mpParentSystem->GetWorldMatrix(), vParticlePos1);
@@ -622,12 +676,13 @@ namespace hpl {
 						vDirX.Normalize();
 					}
 
-					vDirX = vDirX * mvDrawSize.x * pParticle->mvSize.x;
-					vDirY = vDirY * mvDrawSize.y * pParticle->mvSize.y;
+					cVector2f vLineSize = bInterp ? cRenderInterpolation::Lerp(pParticle->mvRenderPrevSize, pParticle->mvSize, fT) : pParticle->mvSize;
+					vDirX = vDirX * mvDrawSize.x * vLineSize.x;
+					vDirY = vDirY * mvDrawSize.y * vLineSize.y;
 
 					if(apFrustum->GetInvertsCullMode()) vDirY = vDirY*-1;
 
-					cColor finalColor = pParticle->mColor * colorMul;
+					cColor finalColor = (bInterp ? cRenderInterpolation::Lerp(pParticle->mRenderPrevColor, pParticle->mColor, fT) : pParticle->mColor) * colorMul;
 					
 					SetPos(&pPosArray[i*lVtxQuadSize + 0*lVtxStride], vPos2 + vDirY*-1 + vDirX);
 					SetCol(&pColArray[i*16 + 0*4], finalColor);
@@ -671,7 +726,7 @@ namespace hpl {
 					cParticle *pParticle = mvParticles[i];
 
 					//This is not the fastest thing possible
-					cVector3f vParticlePos = pParticle->mvPos;
+					cVector3f vParticlePos = bInterp ? cRenderInterpolation::Lerp(pParticle->mvRenderPrevPos, pParticle->mvPos, fT) : pParticle->mvPos;
 
 
 					if(mCoordSystem == eParticleEmitterCoordSystem_Local){
@@ -679,14 +734,14 @@ namespace hpl {
 					}
 
 					cVector3f vPos = vParticlePos;//cMath::MatrixMul(apCamera->GetViewMatrix(), vParticlePos);
-					cVector2f &vSize = pParticle->mvSize;
+					cVector2f vSize = bInterp ? cRenderInterpolation::Lerp(pParticle->mvRenderPrevSize, pParticle->mvSize, fT) : pParticle->mvSize;
 
 					vAdd[0] = mvRight	* vSize.x	 +	mvForward * vSize.y;
 					vAdd[1] = mvRight * -vSize.x	 +	mvForward * vSize.y;
 					vAdd[2] = mvRight * -vSize.x	 +	mvForward * -vSize.y;
 					vAdd[3] = mvRight	* vSize.x	 +	mvForward * -vSize.y;
 
-					cColor finalColor = pParticle->mColor * colorMul;
+					cColor finalColor = (bInterp ? cRenderInterpolation::Lerp(pParticle->mRenderPrevColor, pParticle->mColor, fT) : pParticle->mColor) * colorMul;
 
 					SetPos(&pPosArray[i*lVtxQuadSize + 0*lVtxStride], vPos + vAdd[0]);
 					SetCol(&pColArray[i*16 + 0*4], finalColor);

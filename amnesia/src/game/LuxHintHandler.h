@@ -95,7 +95,7 @@ private:
 
 	cLinearOscillation mHintOscill;
 
-	float mfAlpha;
+	cInterpolatedFloat mfAlpha;
 	float mfShowTextCount;
 	tWString msCurrentText;
 

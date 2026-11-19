@@ -18,6 +18,7 @@
  */
 
 #include "scene/Scene.h"
+#include "scene/RenderInterpolation.h"
 
 #include "scene/Viewport.h"
 #include "scene/Camera.h"
@@ -237,6 +238,14 @@ namespace hpl {
 	{
 		//Increase the frame count (do this at top, so render count is valid until this Render is called again!)
 		iRenderer::IncRenderFrameCount();
+
+		//Present the world between the last two ticks (restored again when leaving).
+		//Nested inside the engine loop's own Begin/EndRender, this is a no-op.
+		struct cInterpRenderScope
+		{
+			cInterpRenderScope(){ cRenderInterpolation::BeginRender(); }
+			~cInterpRenderScope(){ cRenderInterpolation::EndRender(); }
+		} interpScope;
 
 		cGraphics::FrameContext* cntx = mpGraphics->GetActiveSet();
 

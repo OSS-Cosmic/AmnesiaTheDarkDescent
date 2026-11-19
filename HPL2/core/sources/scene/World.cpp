@@ -73,6 +73,7 @@
 #include "scene/LightSpot.h"
 #include "scene/LightBox.h"
 #include "scene/MeshEntity.h"
+#include "scene/SubMeshEntity.h"
 #include "scene/Node3D.h"
 #include "scene/ParticleEmitter.h"
 #include "scene/ParticleSystem.h"
@@ -1157,6 +1158,17 @@ void cWorld::BuildTlas(cGraphics::FrameContext *cntx, cFrustum *apFrustum) {
     if (!pVB || pVB->GetIndexNum() <= 0)
       return;
     auto *vb = static_cast<cVertexBuffer *>(pVB);
+
+    // Skin now, so the BLAS is rebuilt from this frame's pose. The render list
+    // skins later in the frame (a no-op then); without this the ray-traced
+    // geometry of animated meshes is one frame behind the raster pose, which
+    // with render interpolation (new bones every frame) shows as boiling
+    // shadows and GI on characters.
+    {
+      cSubMeshEntity *pSubMesh = static_cast<cSubMeshEntity *>(pObject);
+      if (pSubMesh->IsSkinned())
+        pSubMesh->UpdateGraphicsForFrame(0.0f);
+    }
 
     // BuildBlas submits the VB geometry first (internal SubmitToGPU), so the BLAS
     // + the submitObject payload (below) see the post-realloc index count.

@@ -745,6 +745,9 @@ namespace hpl {
 		apParticle->mvLastPos = apParticle->mvPos;
 		apParticle->mvLastCollidePos = apParticle->mvPos;
 
+		//No render interpolation history for a fresh particle.
+		apParticle->mbRenderSnap = true;
+
 
 		////////////////////////////////////
 		//Start Velocity

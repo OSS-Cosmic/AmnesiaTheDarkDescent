@@ -299,9 +299,9 @@ private:
 
 	std::vector<cWidgetLabel*> mvTopMenuLabels;
 	bool mbTopMenuVisible;
-	float mfTopMenuAlpha;
+	cInterpolatedFloat mfTopMenuAlpha;
 	
-	float mfMenuFadeAlpha;
+	cInterpolatedFloat mfMenuFadeAlpha;
 	
 	bool mbRecreateGui;
 	bool mbExiting;

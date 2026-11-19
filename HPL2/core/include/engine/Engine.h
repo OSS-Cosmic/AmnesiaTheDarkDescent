@@ -161,6 +161,29 @@ public:
   void SetLimitFPS(bool abX) { mbLimitFPS = abX; }
   bool GetLimitFPS() { return mbLimitFPS; }
 
+  /**
+   * How far (0-1) the current frame is between the last two logic ticks.
+   * Rendering shows the world interpolated by this amount.
+   */
+  double GetRenderAlpha() { return mdRenderAlpha; }
+
+  /**
+   * Logic ticks still to run this frame, counting the one running now (1
+   * outside of ticks). With a low frame rate several ticks run back to back
+   * per frame, input that is read once per frame can be spread over them.
+   */
+  int GetLogicTicksLeftThisFrame() {
+    int lLeft = mlTicksThisFrame - mlUpdatesOnCurrentFrame;
+    return lLeft > 0 ? lLeft : 1;
+  }
+
+  /**
+   * Optional frame rate cap (0 = off). Helps frame pacing when running far
+   * above the refresh rate without vsync.
+   */
+  void SetFrameRateLimit(int alFPS);
+  int GetFrameRateLimit() { return mlFrameRateLimit; }
+
   void SetWaitIfAppOutOfFocus(bool abX) { mbWaitIfAppOutOfFocus = abX; }
   bool GetWaitIfAppOutOfFocus() { return mbWaitIfAppOutOfFocus; }
 
@@ -198,6 +221,7 @@ public:
 
 private:
   void UpdateFrameTimer();
+  void WaitForFrameLimit();
 
   void CheckAndBroadcastFocusChange();
   void CheckAndBroadcastDeviceChange();
@@ -230,6 +254,17 @@ private:
   iTimer *mpFrameTimer = nullptr;
 
   bool mbLimitFPS = true;
+
+  // Fixed timestep loop state
+  double mdAccumulator = 0;
+  double mdCurrentTime = 0;
+  double mdRenderAlpha = 1;
+  int mlTicksThisFrame = 0;
+  int mlUpdatesOnCurrentFrame = 0;
+
+  int mlFrameRateLimit = 0;
+  double mdFrameLimitPeriod = 0;
+  double mdNextFrameDeadline = 0;
 
   tScriptVarMap m_mapLocalVars;
   tScriptVarMap m_mapGlobalVars;

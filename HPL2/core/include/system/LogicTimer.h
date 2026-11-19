@@ -77,6 +77,8 @@ namespace hpl {
 		double GetLocalTimeAdd(){ return mlLocalTimeAdd;}
 
 		void SetSpeedMul(float afX){ mfSpeedMul = afX;}
+		double GetSpeedMul(){ return mfSpeedMul;}
+		int GetMaxUpdates(){ return mlMaxUpdates;}
 		
 	private:
 		void Update();

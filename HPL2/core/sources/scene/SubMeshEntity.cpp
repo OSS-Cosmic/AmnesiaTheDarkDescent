@@ -29,6 +29,7 @@
 #include "graphics/Material.h"
 #include "graphics/Mesh.h"
 #include "graphics/SubMesh.h"
+#include "graphics/Renderer.h"
 
 #include "graphics/Animation.h"
 #include "graphics/AnimationTrack.h"
@@ -59,6 +60,7 @@ namespace hpl {
 		mpMaterialManager = apMaterialManager;
 
 		mbGraphicsUpdated = false;
+		mlSkinnedRenderFrame = -1;
 
 		if(mpMeshEntity->GetMesh()->GetSkeleton())
 		{
@@ -198,7 +200,15 @@ namespace hpl {
 			{
 				return;
 			}
-			
+
+			//Already skinned with this frame's bones (MarkSubMeshesForReskin resets the stamp).
+			const int lRenderFrame = iRenderer::GetRenderFrameCount();
+			if(mbGraphicsUpdated && mlSkinnedRenderFrame == lRenderFrame)
+			{
+				return;
+			}
+			mlSkinnedRenderFrame = lRenderFrame;
+
 			mbGraphicsUpdated = true;
 
 			const float *pBindPos = mpSubMesh->GetVertexBuffer()->GetFloatArray(eVertexBufferElement_Position);

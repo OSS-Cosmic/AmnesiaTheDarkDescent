@@ -500,25 +500,25 @@ void cLuxMainMenu::OnDraw(float afFrameTime)
 	//the menu-backdrop post-effect); just draw the exit fade + top-menu backing.
 	if(gpBase->mpMapHandler->MapIsLoaded())
 	{
-		if(	mfMenuFadeAlpha > 0 && mbExiting && mExitMessage != eLuxMainMenuExit_ReturnToGame )
+		if(	mfMenuFadeAlpha.Get() > 0 && mbExiting && mExitMessage != eLuxMainMenuExit_ReturnToGame )
 		{
-			mpGuiSet->DrawGfx(	mpBlackFade,cVector3f(0,0,50), mvScreenSize, cColor(1 ,mfMenuFadeAlpha));
+			mpGuiSet->DrawGfx(	mpBlackFade,cVector3f(0,0,50), mvScreenSize, cColor(1 ,mfMenuFadeAlpha.Get()));
 		}
 
 		//Top Menu background
 		mpGuiSet->DrawGfx(	mpTopBackground,cVector3f(0,mvTopMenuStartPos.y,0.5f),
 							cVector2f(mvScreenSize.x, mvScreenSize.y - mvTopMenuStartPos.y),
-							cColor(1 ,0.5f*mfTopMenuAlpha));
+							cColor(1 ,0.5f*mfTopMenuAlpha.Get()));
 	}
 	/////////////////////////////////
 	//Startup main menu: live 3D background world in this viewport.
 	else
 	{
-		if(mfMenuFadeAlpha > 0)
-			mpGuiSet->DrawGfx(	mpBlackFade,cVector3f(0,0,50), mvScreenSize, cColor(1 ,mfMenuFadeAlpha));
+		if(mfMenuFadeAlpha.Get() > 0)
+			mpGuiSet->DrawGfx(	mpBlackFade,cVector3f(0,0,50), mvScreenSize, cColor(1 ,mfMenuFadeAlpha.Get()));
 
 		if(mpLogoGfx)
-			mpGuiSet->DrawGfx( mpLogoGfx, mvLogoPos, mvLogoSize, cColor(1, mfTopMenuAlpha) );
+			mpGuiSet->DrawGfx( mpLogoGfx, mvLogoPos, mvLogoSize, cColor(1, mfTopMenuAlpha.Get()) );
 	}
 }
 
@@ -1470,9 +1470,9 @@ kGuiCallbackDeclaredFuncEnd(cLuxMainMenu, TopMenuTextPress);
 bool cLuxMainMenu::TopMenuTextDraw(iWidget* apWidget, const cGuiMessageData& aData)
 {
 	if(apWidget->HasFocus())
-		apWidget->SetDefaultFontColor(cColor(232.0f/255.0f, 201.0f/255.0f, 28.0f/255.0f, mfTopMenuAlpha));
+		apWidget->SetDefaultFontColor(cColor(232.0f/255.0f, 201.0f/255.0f, 28.0f/255.0f, mfTopMenuAlpha.Get()));
 	else
-		apWidget->SetDefaultFontColor(cColor(1.0f, mfTopMenuAlpha));
+		apWidget->SetDefaultFontColor(cColor(1.0f, mfTopMenuAlpha.Get()));
 
 	return true;
 }
@@ -1881,7 +1881,7 @@ kGuiCallbackDeclaredFuncEnd(cLuxMainMenu, ClickedSaveGamePopup);
 
 bool cLuxMainMenu::HardModeTextDraw(iWidget* apWidget, const cGuiMessageData& aData)
 {
-	apWidget->SetDefaultFontColor(cColor(mfDescriptionAlpha, mfTopMenuAlpha));
+	apWidget->SetDefaultFontColor(cColor(mfDescriptionAlpha, mfTopMenuAlpha.Get()));
 	return false;
 }
 kGuiCallbackDeclaredFuncEnd(cLuxMainMenu, HardModeTextDraw);

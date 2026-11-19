@@ -96,8 +96,10 @@ public:
 
 	void Update(float afTimeStep);
 
-	float AddAndGetYawAdd(float afX);
-	float AddAndGetPitchAdd(float afX);
+	// abFrameInput: called from per frame mouse look (between ticks). The sway is
+	// then not added (it is a per tick effect), but the input is still collected.
+	float AddAndGetYawAdd(float afX, bool abFrameInput = false);
+	float AddAndGetPitchAdd(float afX, bool abFrameInput = false);
 
 private:
 	void SetSwayActive(bool abX);

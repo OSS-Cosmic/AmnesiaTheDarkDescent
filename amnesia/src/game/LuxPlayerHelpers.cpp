@@ -356,21 +356,22 @@ void cLuxPlayerCamDirEffects::Update(float afTimeStep)
 
 //-----------------------------------------------------------------------
 
-float cLuxPlayerCamDirEffects::AddAndGetYawAdd(float afX)
+float cLuxPlayerCamDirEffects::AddAndGetYawAdd(float afX, bool abFrameInput)
 {
 	float fYaw = afX;
-	if(mlstPrevAdd.empty()==false) fYaw = mvSwayAdd.x * mfSwayAlpha + afX *(1-mfSwayAlpha);
+	if(mlstPrevAdd.empty()==false) fYaw = (abFrameInput ? 0.0f : mvSwayAdd.x * mfSwayAlpha) + afX *(1-mfSwayAlpha);
 
-	if(mfSwayAlpha>0) mvNextAdd.x  = afX;
+	//Accumulated: with per frame mouse look this is called several times per tick.
+	if(mfSwayAlpha>0) mvNextAdd.x += afX;
 	return fYaw;
 }
 
-float cLuxPlayerCamDirEffects::AddAndGetPitchAdd(float afX)
+float cLuxPlayerCamDirEffects::AddAndGetPitchAdd(float afX, bool abFrameInput)
 {
 	float fPitch = afX;
-	if(mlstPrevAdd.empty()==false) fPitch = mvSwayAdd.y*mfSwayAlpha + afX *(1-mfSwayAlpha);
+	if(mlstPrevAdd.empty()==false) fPitch = (abFrameInput ? 0.0f : mvSwayAdd.y*mfSwayAlpha) + afX *(1-mfSwayAlpha);
 
-	if(mfSwayAlpha>0) mvNextAdd.y  = afX;
+	if(mfSwayAlpha>0) mvNextAdd.y += afX;
 	return fPitch;
 }
 

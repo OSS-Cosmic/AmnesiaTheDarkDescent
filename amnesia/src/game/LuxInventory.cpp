@@ -550,7 +550,7 @@ bool cLuxInventory_Slot::OnDraw(iWidget* apWidget, const cGuiMessageData& aData)
 		cVector3f vItemPos = apWidget->GetGlobalPosition() + cVector3f((vSize-pItem->GetImage()->GetImageSize()))*0.5f;
 		vItemPos.z += 0.1f;
 
-		mpInventory->mpGuiSet->DrawGfx(	pItem->GetImage(), vItemPos,-1,cColor(1,mpInventory->mfAlpha) );
+		mpInventory->mpGuiSet->DrawGfx(	pItem->GetImage(), vItemPos,-1,cColor(1,mpInventory->mfAlpha.Get()) );
 
 		/////////////////////////////////////////////////////
 		// Draw "outline" - TODO: this looks really bad right now
@@ -563,7 +563,7 @@ bool cLuxInventory_Slot::OnDraw(iWidget* apWidget, const cGuiMessageData& aData)
 			float fPulseAlpha = fMin + (1.0f-fMin)*(cos(mpInventory->mfTimer*fFreq)*0.5f+0.5f);
 			
 			for(int i=0; i<2; ++i)
-				mpInventory->mpGuiSet->DrawGfx(pItem->GetImage(), vItemPos+cVector3f(0,0,0.1f),-1, cColor(fPulseAlpha*mfGlowAlpha*mpInventory->mfAlpha, 1), eGuiMaterial_Additive);
+				mpInventory->mpGuiSet->DrawGfx(pItem->GetImage(), vItemPos+cVector3f(0,0,0.1f),-1, cColor(fPulseAlpha*mfGlowAlpha*mpInventory->mfAlpha.Get(), 1), eGuiMaterial_Additive);
 		}
 
 		///////////////
@@ -574,7 +574,7 @@ bool cLuxInventory_Slot::OnDraw(iWidget* apWidget, const cGuiMessageData& aData)
 			cVector3f vPos = apWidget->GetGlobalPosition() + cVector3f(vSize.x,0,0) + mpInventory->mvLayout_ItemCountOffset;
 
 			mpInventory->mpGuiSet->DrawFont(mpInventory->mpFontDefault, vPos,mpInventory->mvLayout_FontSize_ItemCount,
-											cColor(1,mpInventory->mfAlpha),eFontAlign_Center, eGuiMaterial_FontNormal,
+											cColor(1,mpInventory->mfAlpha.Get()),eFontAlign_Center, eGuiMaterial_FontNormal,
 											_W("x%d"), pItem->GetCount());
 		}
 	}
@@ -886,7 +886,7 @@ void cLuxInventory::OnDraw(float afFrameTime)
 	//Fade
 	if(mbExitToJournal || mbEnterFromJournal)
 	{
-		mpGuiSet->DrawGfx(mpWhiteGfx,mvGuiSetStartPos+cVector3f(0,0,20),mvGuiSetSize,cColor(0, 1.0f - mfAlpha*mfAlpha));
+		mpGuiSet->DrawGfx(mpWhiteGfx,mvGuiSetStartPos+cVector3f(0,0,20),mvGuiSetSize,cColor(0, 1.0f - mfAlpha.Get()*mfAlpha.Get()));
 	}
 
 	////////////////////////
@@ -900,7 +900,7 @@ void cLuxInventory::OnDraw(float afFrameTime)
 			vPickedItemPos += mpCurrentWidget->GetGlobalPosition() + mpCurrentWidget->GetSize()*0.5f;
 
 		vPickedItemPos.z = 40.0f;		
-		mpGuiSet->DrawGfx(mpPickedItem->GetImage(),vPickedItemPos,-1,cColor(1, mfAlpha*0.8f));
+		mpGuiSet->DrawGfx(mpPickedItem->GetImage(),vPickedItemPos,-1,cColor(1, mfAlpha.Get()*0.8f));
 	}
 
 	////////////////////////
@@ -929,7 +929,7 @@ void cLuxInventory::OnDraw(float afFrameTime)
 	{
 		if(msMessageText != _W(""))
 		{
-			float fAlpha = mfMessageTextAlpha*mfAlpha;
+			float fAlpha = mfMessageTextAlpha*mfAlpha.Get();
 			mpGuiSet->DrawFont(msMessageText, mpFontDefault, mvLayout_PopUpMessageCenter,mvLayout_FontSize_Message, 
 								cColor(1,fAlpha),eFontAlign_Center);
 			
@@ -942,7 +942,7 @@ void cLuxInventory::OnDraw(float afFrameTime)
 	//Draw text
 	const cVector3f& vHeaderCenter = mvLayout_ItemHeaderCenter;
     if(msHeaderText != _W(""))
-		mpGuiSet->DrawFont(msHeaderText, mpFontHeader, vHeaderCenter,mvLayout_FontSize_Header,cColor(1,mfAlpha),eFontAlign_Center);
+		mpGuiSet->DrawFont(msHeaderText, mpFontHeader, vHeaderCenter,mvLayout_FontSize_Header,cColor(1,mfAlpha.Get()),eFontAlign_Center);
 	
 	if(msNormalText != _W(""))
 		DrawDescTextRow(msNormalText, cColor(1,1));
@@ -967,7 +967,7 @@ void cLuxInventory::OnDraw(float afFrameTime)
 	if(mfOldDescTextAlpha > 0)
 	{
 		if(msOldHeaderText != _W(""))
-			mpGuiSet->DrawFont(msOldHeaderText, mpFontHeader, vHeaderCenter,mvLayout_FontSize_Header,cColor(1,mfAlpha*mfOldDescTextAlpha),eFontAlign_Center);
+			mpGuiSet->DrawFont(msOldHeaderText, mpFontHeader, vHeaderCenter,mvLayout_FontSize_Header,cColor(1,mfAlpha.Get()*mfOldDescTextAlpha),eFontAlign_Center);
 
 		if(msOldNormalText != _W(""))
 			DrawDescTextRow(msOldNormalText, cColor(1,mfOldDescTextAlpha));
@@ -1458,7 +1458,7 @@ void cLuxInventory::AppDeviceWasRemoved()
 void cLuxInventory::DrawDescTextRow(const tWString& asText, const cColor& aCol)
 {
 	cColor finalCol = aCol;
-	finalCol.a *= mfAlpha;
+	finalCol.a *= mfAlpha.Get();
 
 	const cVector3f& vMessageBodyCenter = mvLayout_ItemDescCenter;
 	tWStringVec vRows;
@@ -1965,13 +1965,13 @@ bool cLuxInventory::OilOnDraw(iWidget* apWidget, const cGuiMessageData& aData)
 	cVector3f vLiquidPosAdd2 = cVector3f(  cos(mfOilMovementT*0.2f) * apWidget->GetSize().x*0.3f, 
 											sin(mfOilMovementT*0.15f) * apWidget->GetSize().y*0.15f, 0.6f);
 	
-	mpGuiSet->DrawGfx(mpOilLiquid, vLiquidPos + vLiquidPosAdd1, vLiguidSize, cColor(1,0.75f*mfAlpha));
-	mpGuiSet->DrawGfx(mpOilLiquid, vLiquidPos + vLiquidPosAdd2, vLiguidSize, cColor(1,0.25f*mfAlpha));
+	mpGuiSet->DrawGfx(mpOilLiquid, vLiquidPos + vLiquidPosAdd1, vLiguidSize, cColor(1,0.75f*mfAlpha.Get()));
+	mpGuiSet->DrawGfx(mpOilLiquid, vLiquidPos + vLiquidPosAdd2, vLiguidSize, cColor(1,0.25f*mfAlpha.Get()));
 
 	//////////////////////////////
 	// Draw bubbles
 	for(int i=0; i<3; ++i)
-		mpGuiSet->DrawGfx(mpOilBubble[i], mvOilBubblePos[i], mpOilBubble[i]->GetActiveSize(), cColor(1, mfAlpha));
+		mpGuiSet->DrawGfx(mpOilBubble[i], mvOilBubblePos[i], mpOilBubble[i]->GetActiveSize(), cColor(1, mfAlpha.Get()));
 
 
 	///////////////////////////////
@@ -1980,7 +1980,7 @@ bool cLuxInventory::OilOnDraw(iWidget* apWidget, const cGuiMessageData& aData)
 	
 	///////////////////////////////
 	// Draw frame
-	DrawElementAtCenter(vOilCenter+cVector3f(0,0,1), mpRemainingOilFG, mfAlpha);
+	DrawElementAtCenter(vOilCenter+cVector3f(0,0,1), mpRemainingOilFG, mfAlpha.Get());
 	
 	//mpGuiSet->DrawFont(	mpFontDefault, mvLayout_OilLabelCenter,
 	//					mvLayout_FontSize_Label, cColor(1,mfAlpha), eFontAlign_Center, eGuiMaterial_FontNormal, 
@@ -2064,7 +2064,7 @@ bool cLuxInventory::TinderboxOnDraw(iWidget* apWidget, const cGuiMessageData& aD
 
 	const cVector3f& vTinderboxCenter = mvLayout_TinderboxesCenter;
 	mpGuiSet->DrawFont( mpFontDefault, vTinderboxCenter+cVector3f(0,-vCountFontSize.y*0.5f,1), 
-						vCountFontSize, cColor(1,mfAlpha), eFontAlign_Center, eGuiMaterial_FontNormal, 
+						vCountFontSize, cColor(1,mfAlpha.Get()), eFontAlign_Center, eGuiMaterial_FontNormal, 
 						_W("x %d"), gpBase->mpPlayer->GetTinderboxes());
 
 	//mpGuiSet->DrawFont(	mpFontDefault, mvLayout_TinderboxesLabelCenter,
@@ -2094,7 +2094,7 @@ kGuiCallbackDeclaredFuncEnd(cLuxInventory, TinderboxOnUpdate);
 
 bool cLuxInventory::JournalOnDraw(iWidget* apWidget, const cGuiMessageData& aData)
 {
-	float fAlpha = mvAlphaFader[eLuxInventoryFader_Journal].mfAlpha * mfAlpha;
+	float fAlpha = mvAlphaFader[eLuxInventoryFader_Journal].mfAlpha * mfAlpha.Get();
 
 	cVector2f vSizeAdd = (mpJournalMouseOverGfx->GetActiveSize() - apWidget->GetSize()) * 0.5f;
 
@@ -2178,7 +2178,7 @@ bool cLuxInventory::ItemSlotsOnDraw(iWidget* apWidget, const cGuiMessageData& aD
 
 		// Get line color
 		cColor lineColor = mLayout_SlotsGridColor;
-		lineColor.a *= mfAlpha;
+		lineColor.a *= mfAlpha.Get();
 
 		// Draw crossed lines
 		for(int i=1;i<mlLayout_SlotsRows;++i)
@@ -2273,7 +2273,7 @@ void cLuxInventory::StatusWidgetDraw(const cVector3f& avPos, int alStatusIdx, cG
 	float fPulseAmp = 1.0f - fPulseMid;
 	float fGlowAlpha = fPulseMid + fPulseAmp*(cos(mfTimer*mvPulseFreq[alStatusIdx]));
 
-	DrawElementAtCenter(avPos+cVector3f(0,0,0.1f), pGlow, mfAlpha*fGlowAlpha, pGlow->GetActiveSize(), false);
+	DrawElementAtCenter(avPos+cVector3f(0,0,0.1f), pGlow, mfAlpha.Get()*fGlowAlpha, pGlow->GetActiveSize(), false);
 }
 
 //-----------------------------------------------------------------------
@@ -2343,7 +2343,7 @@ bool cLuxInventory::InventoryDrawFocus(iWidget* apWidget, const cGuiMessageData&
 	{
 		cVector3f vCursorPos = mpCurrentWidget->GetGlobalPosition() + mpCurrentWidget->GetSize()*0.5f;
 		vCursorPos.z = mpGuiSet->GetMouseZ()-1.0f;
-		mpGuiSet->DrawGfx(mpGuiSet->GetCurrentPointer(), vCursorPos, -1, cColor(1.0f, mfAlpha));
+		mpGuiSet->DrawGfx(mpGuiSet->GetCurrentPointer(), vCursorPos, -1, cColor(1.0f, mfAlpha.Get()));
 	}
 
 	return true;
@@ -2383,18 +2383,18 @@ void cLuxInventory::DrawFrame(cGuiGfxElement** apGfxCorners, cGuiGfxElement** ap
 	{
 		// Draw Upper left corner
 		mpGuiSet->DrawGfx(apGfxCorners[0], 
-							vPos, -1, cColor(1,mfAlpha));
+							vPos, -1, cColor(1,mfAlpha.Get()));
 
 		// Draw Left border
 		mpGuiSet->DrawGfx(apGfxBorders[3], 
 							vPos + cVector3f(0, apGfxCorners[0]->GetActiveSize().y, 0), 
 							cVector2f( apGfxCorners[0]->GetActiveSize().x, avSize.y),
-							cColor(1,mfAlpha));
+							cColor(1,mfAlpha.Get()));
 
 		// Draw Lower left corner
 		mpGuiSet->DrawGfx(apGfxCorners[3],
 							vPos + cVector3f(0, apGfxCorners[0]->GetActiveSize().y+ avSize.y, 0),
-							-1, cColor(1,mfAlpha));
+							-1, cColor(1,mfAlpha.Get()));
 
 	}
 
@@ -2408,13 +2408,13 @@ void cLuxInventory::DrawFrame(cGuiGfxElement** apGfxCorners, cGuiGfxElement** ap
 							vPos, 
 							cVector2f(avSize.x, 
 										apGfxCorners[0]->GetActiveSize().y),
-							cColor(1,mfAlpha));
+							cColor(1,mfAlpha.Get()));
 
 		// Draw Lower border
 		mpGuiSet->DrawGfx(apGfxBorders[2], 
 							vPos+cVector3f(0, apGfxCorners[0]->GetActiveSize().y + avSize.y,0), 
 							cVector2f(avSize.x, apGfxCorners[3]->GetActiveSize().y),
-							cColor(1,mfAlpha));
+							cColor(1,mfAlpha.Get()));
 	}
 
 	// Move vPos to the right
@@ -2425,18 +2425,18 @@ void cLuxInventory::DrawFrame(cGuiGfxElement** apGfxCorners, cGuiGfxElement** ap
 		// Draw Upper right corner
 		mpGuiSet->DrawGfx(apGfxCorners[1],
 							vPos,
-							-1,cColor(1,mfAlpha));
+							-1,cColor(1,mfAlpha.Get()));
 
 		// Draw Right border
 		mpGuiSet->DrawGfx(apGfxBorders[1], 
 							vPos + cVector3f(0, apGfxCorners[1]->GetActiveSize().y, 0), 
 							cVector2f( apGfxCorners[1]->GetActiveSize().x, avSize.y),
-							cColor(1,mfAlpha));
+							cColor(1,mfAlpha.Get()));
 
 		// Draw Lower right corner
 		mpGuiSet->DrawGfx(apGfxCorners[2],
 							vPos + cVector3f(0, apGfxCorners[1]->GetActiveSize().y + avSize.y, 0),
-							-1, cColor(1,mfAlpha));
+							-1, cColor(1,mfAlpha.Get()));
 	}
 
 }

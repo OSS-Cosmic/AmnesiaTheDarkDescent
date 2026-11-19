@@ -1221,6 +1221,11 @@ bool cLuxBase::InitEngine()
 	// (no map is loaded yet — applied on map load / via SetGamma).
 
 	mpEngine->SetLimitFPS(mpMainConfig->GetBool("Engine","LimitFPS", false));
+	mpEngine->SetFrameRateLimit(mpConfigHandler->mlFrameRateLimit);
+	mpEngine->GetGraphics()->SetMaxFramesAhead(mpConfigHandler->mlMaxFramesAhead);
+	if(mpConfigHandler->mlMaxFramesAhead >= 0)
+		Log("MaxFramesAhead is %d: the CPU waits for the GPU to limit input lag.\n", mpConfigHandler->mlMaxFramesAhead);
+	cRenderInterpolation::SetEnabled(mpConfigHandler->mbRenderInterpolation);
 	mpEngine->SetWaitIfAppOutOfFocus(mpMainConfig->GetBool("Engine","SleepWhenOutOfFocus", true));
 	if(std::getenv("HPL_DIAGNOSTIC_SKIP_PREMENU")) mpEngine->SetWaitIfAppOutOfFocus(false);
 

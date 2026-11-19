@@ -82,8 +82,15 @@ namespace hpl {
 		inline void SetPrevPosition(const cVector3f& avPos) { mvPrevPosition = avPos; }
 		inline const cVector3f& GetPrevPosition() const { return mvPrevPosition; }
 		
-		inline void SetSmoothPosition(const cVector3f& avPos) { mvSmoothPosition = avPos;}
+		inline void SetSmoothPosition(const cVector3f& avPos)
+		{
+			//Keep the previous tick's position for render interpolation
+			mvRenderPrevSmoothPosition = mbSmoothPositionValid ? mvSmoothPosition : avPos;
+			mbSmoothPositionValid = true;
+			mvSmoothPosition = avPos;
+		}
 		inline const cVector3f& GetSmoothPosition() const { return mvSmoothPosition;}
+		inline const cVector3f& GetRenderPrevSmoothPosition() const { return mvRenderPrevSmoothPosition;}
 
 		void SetInvMass(float afInvMass){ mfInvMass = afInvMass; }
 		inline float GetInvMass() const { return mfInvMass; }
@@ -94,6 +101,8 @@ namespace hpl {
 		cVector3f mvPosition;
 		cVector3f mvPrevPosition;
 		cVector3f mvSmoothPosition;
+		cVector3f mvRenderPrevSmoothPosition;
+		bool mbSmoothPositionValid;
 		float mfInvMass;
 	};
 

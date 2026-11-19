@@ -18,6 +18,7 @@
  */
 
 #include "scene/RopeEntity.h"
+#include "scene/RenderInterpolation.h"
 
 #include "math/Math.h"
 
@@ -227,6 +228,10 @@ namespace hpl {
 		vTexCoords[0].y *= mfLengthTileAmount;
 		vTexCoords[1].y *= mfLengthTileAmount;
 
+		//Render interpolation between the last two physics ticks
+		const bool bInterp = cRenderInterpolation::ShouldInterpolate(mpRope->GetRenderInterpTick());
+		const float fT = cRenderInterpolation::GetAlpha();
+
 		cVerletParticleIterator it = mpRope->GetParticleIterator();
 		int lCount=0;
 		cVector3f vPrevPos;
@@ -238,13 +243,15 @@ namespace hpl {
 			cVerletParticle *pPart = it.Next();
 
 			if(lCount == 1){
-				vPrevPos = pPart->GetSmoothPosition();
+				vPrevPos = bInterp ? cRenderInterpolation::Lerp(pPart->GetRenderPrevSmoothPosition(), pPart->GetSmoothPosition(), fT) :
+									 pPart->GetSmoothPosition();
 				continue; 
 			}
 
 			/////////////////////////
 			//Calculate properties
-			cVector3f vPos = pPart->GetSmoothPosition();
+			cVector3f vPos = bInterp ? cRenderInterpolation::Lerp(pPart->GetRenderPrevSmoothPosition(), pPart->GetSmoothPosition(), fT) :
+									   pPart->GetSmoothPosition();
 			cVector3f vDelta = vPos - vPrevPos;
 			float fLength = vDelta.Length();
 			// Coincident particles: pick an arbitrary up axis instead of dividing by zero

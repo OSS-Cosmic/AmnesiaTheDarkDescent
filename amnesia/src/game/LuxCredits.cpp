@@ -117,10 +117,10 @@ void cLuxCredits::Reset()
 
 	mbActive = false;
 
-	mfYPos =600;
+	mfYPos.Snap(600);
 	mlState =0;
 	mfTime =0;
-	mfFadeAlpha =0;
+	mfFadeAlpha.Snap(0);
 
 	mKeyBuffer.Clear();
 }
@@ -292,9 +292,10 @@ void cLuxCredits::OnDraw(float afFrameTime)
 
 	//////////////////////////////////////////////
 	// Fade
-	if(mfFadeAlpha > 0)
+	float fFadeAlpha = mfFadeAlpha.Get();
+	if(fFadeAlpha > 0)
 	{
-		mpGuiSet->DrawGfx(mpBlackGfx, mvGuiSetStartPos+cVector3f(0,0,20), mvGuiSetSize, cColor(1, mfFadeAlpha));
+		mpGuiSet->DrawGfx(mpBlackGfx, mvGuiSetStartPos+cVector3f(0,0,20), mvGuiSetSize, cColor(1, fFadeAlpha));
 	}
 	
 	//////////////////////////////////////////////

@@ -99,10 +99,10 @@ private:
 	tWStringVec mvTextRows;
 
 	bool mbActive;
-	float mfYPos;
+	cInterpolatedFloat mfYPos;
 	int mlState;
 	float mfTime;
-	float mfFadeAlpha;
+	cInterpolatedFloat mfFadeAlpha;
 
 };
 

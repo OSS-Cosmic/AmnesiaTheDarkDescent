@@ -316,6 +316,7 @@ public:
 
   FrameDeferral graphicsDefer;
   RITimeline graphicsTimeline;
+  int mlMaxFramesAhead = -1;
 
   // Per-pass GPU timing + debug-utils labels.
   RIGpuProfiler profiler;
@@ -417,6 +418,15 @@ public:
 
   void CloseAndSubmitActiveSet();
   void BeginActiveSet();
+
+  /**
+   * How many submitted frames the CPU may be ahead of the GPU before it waits
+   * (input lag). -1 = no extra limit (frames in flight decide), 1 = at most
+   * one frame queued, 0 = the CPU waits for the GPU every frame (least lag,
+   * lowest frame rate).
+   */
+  void SetMaxFramesAhead(int alX) { mlMaxFramesAhead = alX; }
+  int GetMaxFramesAhead() const { return mlMaxFramesAhead; }
 
   void DestroyRenderObjects();
   void Dispose();

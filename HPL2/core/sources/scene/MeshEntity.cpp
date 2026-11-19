@@ -52,6 +52,8 @@
 
 #include "engine/Engine.h"
 
+#include "scene/RenderInterpolation.h"
+
 namespace hpl {
 
 	//////////////////////////////////////////////////////////////////////////
@@ -107,6 +109,10 @@ namespace hpl {
 
 		mbUpdatedBones = false;
 		mbHasUpdatedAnimation = true;
+
+		mbInterpBonesValid = false;
+		mbInterpBonesActive = false;
+		mlInterpHierarchyState = 0;
 
 		////////////////////////////////////////////////
 		//Create sub entities
@@ -758,7 +764,13 @@ namespace hpl {
 
 		/////////////////////////////////////////
 		/// Final things
-		if(mpMesh->GetSkeleton()) mbBoneMatricesNeedUpdate = true;
+		if(mpMesh->GetSkeleton())
+		{
+			mbBoneMatricesNeedUpdate = true;
+
+			//Bones are snapshotted for render interpolation at the end of the tick.
+			cRenderInterpolation::TouchEntity(this);
+		}
 	}
 
 	//-----------------------------------------------------------------------
@@ -1320,27 +1332,258 @@ namespace hpl {
 
 		///////////////////////////////////
 		//Update the bone matrices
+		if(mpMesh->GetSkeleton()) CalculateBoneMatrices(mvBoneMatrices);
+	}
+
+	//-----------------------------------------------------------------------
+
+	void cMeshEntity::CalculateBoneMatrices(std::vector<cMatrixf> &avDest)
+	{
 		cSkeleton *pSkeleton = mpMesh->GetSkeleton();
-		if(pSkeleton)
+		if(pSkeleton == NULL) return;
+
+		if(mlInvWorldMatrixTransformCount != GetTransformUpdateCount())
 		{
-			if(mlInvWorldMatrixTransformCount != GetTransformUpdateCount())
+			mlInvWorldMatrixTransformCount = GetTransformUpdateCount();
+			m_mtxInvWorldMatrix = cMath::MatrixInverse(GetWorldMatrix());
+		}
+
+		avDest.resize(pSkeleton->GetBoneNum());
+
+		for(int i=0; i< pSkeleton->GetBoneNum(); i++)
+		{
+			cBone *pBone = pSkeleton->GetBoneByIndex(i);
+			cNode3D* pState = mvBoneStates[i];
+
+			//Transform the movement of the bone into the
+			//Bind pose's local space.
+			cMatrixf mtxLocal = cMath::MatrixMul(m_mtxInvWorldMatrix,pState->GetWorldMatrix());
+
+			avDest[i] = cMath::MatrixMul(mtxLocal,pBone->GetInvWorldTransform());
+		}
+	}
+
+	//-----------------------------------------------------------------------
+
+	void cMeshEntity::OnRenderInterpResolve()
+	{
+		UpdateWorldTransform();
+
+		//Resolve all bone and node world matrices now, while the entity has its real transform.
+		for(size_t i = 0; i < mvBoneStates.size(); ++i) mvBoneStates[i]->UpdateWorldTransform();
+		for(size_t i = 0; i < mvNodeStates.size(); ++i) mvNodeStates[i]->UpdateWorldTransform();
+	}
+
+	//-----------------------------------------------------------------------
+
+	void cMeshEntity::BuildInterpBoneHierarchy()
+	{
+		const int lNum = (int)mvBoneStates.size();
+		mvInterpBoneParent.assign(lNum, -1);
+		mvInterpBoneOrder.clear();
+		mvInterpTempBones.resize(lNum);
+
+		std::vector<int> vDepth(lNum, 0);
+
+		for(int i = 0; i < lNum; ++i)
+		{
+			cNode3D *pParent = mvBoneStates[i]->GetParent();
+			if(pParent == mpBoneStateRoot) continue;
+
+			int lParentIdx = -1;
+			for(int j = 0; j < lNum; ++j)
 			{
-				mlInvWorldMatrixTransformCount = GetTransformUpdateCount();
-				m_mtxInvWorldMatrix = cMath::MatrixInverse(GetWorldMatrix());
+				if(mvBoneStates[j] == pParent)
+				{
+					lParentIdx = j;
+					break;
+				}
 			}
-			
-			for(int i=0; i< pSkeleton->GetBoneNum(); i++)
+
+			//Not connected the usual way, use the plain matrix interpolation instead.
+			if(lParentIdx < 0 || lParentIdx == i)
 			{
-				cBone *pBone = pSkeleton->GetBoneByIndex(i);
-				cNode3D* pState = mvBoneStates[i];
-                
-				//Transform the movement of the bone into the
-				//Bind pose's local space.
-				cMatrixf mtxLocal = cMath::MatrixMul(m_mtxInvWorldMatrix,pState->GetWorldMatrix());
-				
-				mvBoneMatrices[i] = cMath::MatrixMul(mtxLocal,pBone->GetInvWorldTransform());
+				mlInterpHierarchyState = -1;
+				return;
+			}
+			mvInterpBoneParent[i] = lParentIdx;
+		}
+
+		//Depth of each bone (guards against loops)
+		for(int i = 0; i < lNum; ++i)
+		{
+			int lDepth = 0;
+			int lIdx = mvInterpBoneParent[i];
+			while(lIdx >= 0)
+			{
+				++lDepth;
+				if(lDepth > lNum)
+				{
+					mlInterpHierarchyState = -1;
+					return;
+				}
+				lIdx = mvInterpBoneParent[lIdx];
+			}
+			vDepth[i] = lDepth;
+		}
+
+		//Parents first
+		for(int lDepth = 0; (int)mvInterpBoneOrder.size() < lNum; ++lDepth)
+		{
+			for(int i = 0; i < lNum; ++i)
+			{
+				if(vDepth[i] == lDepth) mvInterpBoneOrder.push_back(i);
 			}
 		}
+
+		mlInterpHierarchyState = 1;
+	}
+
+	//-----------------------------------------------------------------------
+
+	void cMeshEntity::SaveInterpBoneLocals(std::vector<cMatrixf> &avDest, cMatrixf &a_mtxRoot)
+	{
+		avDest.resize(mvBoneStates.size());
+		for(size_t i = 0; i < mvBoneStates.size(); ++i)
+		{
+			avDest[i] = mvBoneStates[i]->GetLocalMatrix();
+		}
+		a_mtxRoot = mpBoneStateRoot ? mpBoneStateRoot->GetLocalMatrix() : cMatrixf::Identity;
+	}
+
+	//-----------------------------------------------------------------------
+
+	void cMeshEntity::MarkSubMeshesForReskin()
+	{
+		//Sub meshes skip skinning while the ragdoll sleeps, make sure they pick up the
+		//new bone matrices (interpolated, or the exact ones put back afterwards).
+		for(size_t i = 0; i < mvSubMeshes.size(); ++i)
+		{
+			mvSubMeshes[i]->mbGraphicsUpdated = false;
+			mvSubMeshes[i]->mlSkinnedRenderFrame = -1;
+		}
+	}
+
+	//-----------------------------------------------------------------------
+
+	bool cMeshEntity::OnRenderInterpSnapshot(bool abSnap)
+	{
+		mbInterpBonesActive = false;
+
+		if(mpMesh->GetSkeleton() == NULL || mvBoneStates.empty()) return false;
+
+		if(mlInterpHierarchyState == 0) BuildInterpBoneHierarchy();
+
+		///////////////////////////////
+		// Pose as it is after this tick
+		if(abSnap || mbInterpBonesValid == false)
+		{
+			CalculateBoneMatrices(mvInterpCurrBones);
+			mvInterpPrevBones = mvInterpCurrBones;
+
+			SaveInterpBoneLocals(mvInterpCurrLocal, m_mtxInterpCurrRootLocal);
+			mvInterpPrevLocal = mvInterpCurrLocal;
+			m_mtxInterpPrevRootLocal = m_mtxInterpCurrRootLocal;
+
+			mbInterpBonesValid = true;
+		}
+		else
+		{
+			mvInterpPrevBones.swap(mvInterpCurrBones);
+			CalculateBoneMatrices(mvInterpCurrBones);
+
+			mvInterpPrevLocal.swap(mvInterpCurrLocal);
+			m_mtxInterpPrevRootLocal = m_mtxInterpCurrRootLocal;
+			SaveInterpBoneLocals(mvInterpCurrLocal, m_mtxInterpCurrRootLocal);
+
+			if(	mvInterpPrevBones.size() == mvInterpCurrBones.size() &&
+				mvInterpPrevLocal.size() == mvInterpCurrLocal.size())
+			{
+				mbInterpBonesActive = cRenderInterpolation::MatrixEqual(m_mtxInterpPrevRootLocal, m_mtxInterpCurrRootLocal) == false;
+				for(size_t i = 0; i < mvInterpCurrBones.size() && mbInterpBonesActive == false; ++i)
+				{
+					if(cRenderInterpolation::MatrixEqual(mvInterpPrevBones[i], mvInterpCurrBones[i]) == false)
+						mbInterpBonesActive = true;
+				}
+			}
+			else
+			{
+				mvInterpPrevBones = mvInterpCurrBones;
+				mvInterpPrevLocal = mvInterpCurrLocal;
+				m_mtxInterpPrevRootLocal = m_mtxInterpCurrRootLocal;
+			}
+		}
+
+		///////////////////////////////
+		// The skinning data is now up to date, no need to calculate it again when rendering.
+		mvBoneMatrices = mvInterpCurrBones;
+		mbBoneMatricesNeedUpdate = false;
+		mlBoneMatricesTransformCount = GetTransformUpdateCount();
+
+		return mbInterpBonesActive;
+	}
+
+	//-----------------------------------------------------------------------
+
+	void cMeshEntity::OnRenderInterpApply(float afT)
+	{
+		if(mpMesh->GetSkeleton() == NULL || mbInterpBonesValid == false) return;
+
+		if(mbInterpBonesActive)
+		{
+			cSkeleton *pSkeleton = mpMesh->GetSkeleton();
+			const size_t lNum = mvBoneStates.size();
+
+			if(	mlInterpHierarchyState == 1 && mvInterpPrevLocal.size() == lNum && mvInterpCurrLocal.size() == lNum &&
+				mvBoneMatrices.size() == lNum && (size_t)pSkeleton->GetBoneNum() == lNum)
+			{
+				//Interpolate every bone in its parent's space and rebuild the skeleton.
+				cMatrixf mtxRoot = cRenderInterpolation::InterpolateMatrix(m_mtxInterpPrevRootLocal, m_mtxInterpCurrRootLocal, afT);
+
+				for(size_t k = 0; k < mvInterpBoneOrder.size(); ++k)
+				{
+					int i = mvInterpBoneOrder[k];
+					cMatrixf mtxLocal = cRenderInterpolation::InterpolateMatrix(mvInterpPrevLocal[i], mvInterpCurrLocal[i], afT);
+
+					int lParent = mvInterpBoneParent[i];
+					const cMatrixf &mtxParent = lParent >= 0 ? mvInterpTempBones[lParent] : mtxRoot;
+
+					mvInterpTempBones[i] = cMath::MatrixMul(mtxParent, mtxLocal);
+					mvBoneMatrices[i] = cMath::MatrixMul(mvInterpTempBones[i], pSkeleton->GetBoneByIndex(i)->GetInvWorldTransform());
+				}
+			}
+			else
+			{
+				for(size_t i = 0; i < mvBoneMatrices.size() && i < mvInterpCurrBones.size(); ++i)
+				{
+					mvBoneMatrices[i] = cRenderInterpolation::InterpolateMatrix(mvInterpPrevBones[i], mvInterpCurrBones[i], afT);
+				}
+			}
+
+			MarkSubMeshesForReskin();
+		}
+
+		//The bone matrices are relative to the entity, so they stay valid for the interpolated
+		//entity transform too. Make sure UpdateGraphicsForFrame does not recalculate them from
+		//the interpolated transform (that would undo the interpolation).
+		mbBoneMatricesNeedUpdate = false;
+		mlBoneMatricesTransformCount = GetTransformUpdateCount();
+	}
+
+	//-----------------------------------------------------------------------
+
+	void cMeshEntity::OnRenderInterpRestore()
+	{
+		if(mpMesh->GetSkeleton() == NULL || mbInterpBonesValid == false) return;
+
+		if(mbInterpBonesActive)
+		{
+			mvBoneMatrices = mvInterpCurrBones;
+			MarkSubMeshesForReskin();
+		}
+
+		mbBoneMatricesNeedUpdate = false;
+		mlBoneMatricesTransformCount = GetTransformUpdateCount();
 	}
 
 	//-----------------------------------------------------------------------

@@ -215,7 +215,16 @@ namespace hpl {
 		void SetUserData(void* apData) { mpUserData = apData; }
 		void* GetUserData() { return mpUserData; }
 
+	protected:
+		//Render interpolation of skeletal animation (bone matrices).
+		void OnRenderInterpResolve();
+		bool OnRenderInterpSnapshot(bool abSnap);
+		void OnRenderInterpApply(float afT);
+		void OnRenderInterpRestore();
+
 	private:
+		void CalculateBoneMatrices(std::vector<cMatrixf> &avDest);
+
 		float GetAnimationWeightMul();
 
 		void CreateNodes();
@@ -265,6 +274,26 @@ namespace hpl {
 		tNodeStateVec mvTempBoneStates;
 
 		std::vector<cMatrixf> mvBoneMatrices;
+
+		//Render interpolation of the skeleton. The pose is interpolated per bone in its
+		//parent's space (local matrices) and the hierarchy is rebuilt, so joints never
+		//stretch or shear, even for fast swings and lunges.
+		std::vector<cMatrixf> mvInterpPrevBones;	//skinning matrices (fallback)
+		std::vector<cMatrixf> mvInterpCurrBones;	//skinning matrices after the last tick
+		std::vector<cMatrixf> mvInterpPrevLocal;	//bone local poses
+		std::vector<cMatrixf> mvInterpCurrLocal;
+		cMatrixf m_mtxInterpPrevRootLocal;
+		cMatrixf m_mtxInterpCurrRootLocal;
+		std::vector<int> mvInterpBoneParent;		//index of parent bone, -1 = root node
+		std::vector<int> mvInterpBoneOrder;			//parents before children
+		std::vector<cMatrixf> mvInterpTempBones;
+		int mlInterpHierarchyState;					//0 = not built, 1 = ok, -1 = can not be used
+		bool mbInterpBonesValid;
+		bool mbInterpBonesActive;
+
+		void BuildInterpBoneHierarchy();
+		void SaveInterpBoneLocals(std::vector<cMatrixf> &avDest, cMatrixf &a_mtxRoot);
+		void MarkSubMeshesForReskin();
 
 		bool mbSkeletonPhysics;
 		bool mbSkeletonPhysicsFading;

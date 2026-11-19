@@ -81,6 +81,7 @@ public:
 	
 	void OnStart();
 	void Update(float afTimeStep);
+	void OnFrameInput(float afFrameTime);
 	void Reset();
 	void OnPostRender(float afFrameTime);
 
@@ -117,6 +118,9 @@ public:
 	void ResetSmoothMousePos();
 	cVector2f GetSmoothMousePos(const cVector2f& avRelPosMouse);
 
+	// True when mouse look runs every rendered frame (OnFrameInput) instead of every tick.
+	bool FrameMouseLookActive();
+
 #ifdef USE_GAMEPAD
 	bool IsGamepadPresent();
 
@@ -143,6 +147,13 @@ private:
 	void UpdateLoadScreenInput();
 
 	bool CurrentStateSendsInputToGui();
+
+	cVector2f GetFrameSmoothMouseDelta(const cVector2f& avDelta, float afFrameTime);
+	void ResetFrameSmoothMouse();
+
+	// Player states where the mouse moves a door, lever, wheel or slider. Those
+	// are updated per tick, so mouse input read per frame is handed out per tick.
+	bool MouseDrivesInteraction();
 
 	void CreateActions();
 
@@ -177,6 +188,19 @@ private:
 	tVector2fList mlstSmoothMousePos;
 
 	cVector2l mvLastAbsMousePos;
+
+	class cFrameMouseSample
+	{
+	public:
+		cVector2f mvVelocity;
+		float mfDuration;
+	};
+	std::list<cFrameMouseSample> mlstFrameMouseSamples;
+	bool mbFrameLookWasActive;
+
+	cVector2f mvInteractMousePending;
+
+	cVector2l mvLastFrameGuiMousePos;
 
 #ifdef USE_GAMEPAD
 	float mfGamepadWalkSensitivity;

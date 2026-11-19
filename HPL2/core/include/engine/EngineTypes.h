@@ -71,6 +71,8 @@ namespace hpl {
 		eUpdateableMessage_AppDeviceWasPlugged,
 		eUpdateableMessage_AppDeviceWasRemoved,
 
+		eUpdateableMessage_OnFrameInput,
+
 		eUpdateableMessage_LastEnum
 	};
 
