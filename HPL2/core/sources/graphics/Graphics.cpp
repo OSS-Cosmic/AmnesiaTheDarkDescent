@@ -1507,6 +1507,18 @@ void cGraphics::BeginActiveSet() {
 
   FrameContext *cntx = GetActiveSet();
 
+  // Optional render-ahead limit: wait until the GPU is at most
+  // mlMaxFramesAhead submitted frames behind, so input reaches the screen
+  // sooner (the command ring alone allows RI_NUMBER_FRAMES_FLIGHT).
+  if (mlMaxFramesAhead >= 0) {
+    const uint64_t pending = graphicsTimeline.pending();
+    if (pending > (uint64_t)mlMaxFramesAhead) {
+      const uint64_t target = pending - (uint64_t)mlMaxFramesAhead;
+      if (graphicsTimeline.completed(&device) < target)
+        graphicsTimeline.wait(&device, target);
+    }
+  }
+
   graphicsCmdRing.advance();
   primary = graphicsCmdRing.acquire(&device, 1);
   if (device.accelerationStructureEnabled)

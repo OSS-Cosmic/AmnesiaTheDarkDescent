@@ -172,7 +172,7 @@ private:
 	eLuxPreMenuState mCurrentState;
 	int mlCurrentSectionIdx;
 	float mfTimer;
-	float mfAlphaFade;
+	cInterpolatedFloat mfAlphaFade;
 
 	bool mbExitPreMenu;
 	

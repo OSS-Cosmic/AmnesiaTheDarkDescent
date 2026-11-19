@@ -486,7 +486,7 @@ void cLuxPreMenu::OnDraw(float afFrameTime)
 {
 	///////////////////////////////////////
 	// Draw fade rect and background
-	mpGuiSet->DrawGfx(mpBlackFade, mvGuiSetStartPos + cVector3f(0,0,2), mvGuiSetSize, cColor(1, mfAlphaFade));
+	mpGuiSet->DrawGfx(mpBlackFade, mvGuiSetStartPos + cVector3f(0,0,2), mvGuiSetSize, cColor(1, mfAlphaFade.Get()));
 	mpGuiSet->DrawGfx(mpBlackFade, mvGuiSetStartPos - cVector3f(0,0,2), mvGuiSetSize, cColor(1, 1));
 
 	if(mpCurrentBackground)

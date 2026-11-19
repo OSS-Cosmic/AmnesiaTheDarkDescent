@@ -49,6 +49,10 @@ namespace hpl {
 		mvMouseRelPos = cVector2l(0,0);
 		mvMouseAbsPos = cVector2l(0,0);
 
+		mvTickRelAccum = cVector2l(0,0);
+		mvFrameRelAccum = cVector2l(0,0);
+		mbFrameRelRead = false;
+
 		mbWheelUpMoved = false;
 		mbWheelDownMoved = false;
 
@@ -157,9 +161,50 @@ namespace hpl {
 		
 		int lX,lY; 
 		SDL_GetRelativeMouseState(&lX, &lY);
-		mvMouseRelPos = cVector2l(lX,lY);
+		cVector2l vRel(lX,lY);
 
-		
+		//Movement since the previous tick (including what FrameUpdate sampled in between)
+		mvMouseRelPos = mvTickRelAccum + vRel;
+		mvTickRelAccum = cVector2l(0,0);
+
+		mvFrameRelAccum += vRel;
+	}
+
+	//-----------------------------------------------------------------------
+
+	void cMouseSDL::FrameUpdate()
+	{
+		//Let the first tick update flush old movement first
+		if(mbFirstTime) return;
+
+		//Nobody used the movement last frame: drop it so it does not pile up (e.g. while in a menu).
+		if(mbFrameRelRead == false) mvFrameRelAccum = cVector2l(0,0);
+		mbFrameRelRead = false;
+
+		//Update SDL's state without taking any events from the queue (the engine pump handles those).
+		SDL_PumpEvents();
+
+		int lX,lY;
+		SDL_GetRelativeMouseState(&lX, &lY);
+		cVector2l vRel(lX,lY);
+
+		mvTickRelAccum += vRel;
+		mvFrameRelAccum += vRel;
+
+		//Newest absolute position (for cursors)
+		int lAbsX,lAbsY;
+		SDL_GetMouseState(&lAbsX, &lAbsY);
+		mvMouseAbsPos = cVector2l(lAbsX,lAbsY);
+	}
+
+	//-----------------------------------------------------------------------
+
+	cVector2l cMouseSDL::GetFrameRelPosition()
+	{
+		cVector2l vPos = mvFrameRelAccum;
+		mvFrameRelAccum = cVector2l(0,0);
+		mbFrameRelRead = true;
+		return vPos;
 	}
 	
 	//-----------------------------------------------------------------------

@@ -1,90 +1,1419 @@
 <MapDelta Version="1" Target="maps/main/ch01/11_study.map">
+    <Modify Category="StaticObjects" ID="0" Name="wall_door_way02_1">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="1" Name="wall_default02_1">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="2" Name="wall_default02_2">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="4" Name="wall_default02_3">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="5" Name="wall_default02_4">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="10" Name="wall_door_way02_2">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="11" Name="wall_door_way02_3">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="13" Name="wall_default02_5">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="14" Name="wall_default02_6">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="18" Name="wall_default02_7">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="19" Name="wall_default02_8">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="20" Name="wall_default02_9">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="27" Name="wall_default02_10">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="28" Name="wall_default02_11">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="30" Name="wall_short02_1">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="31" Name="wall_short02_2">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="32" Name="wall_short02_3">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="60" Name="wall_door_way02_4">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="61" Name="wall_default02_12">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="62" Name="wall_default02_13">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="63" Name="wall_default02_14">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="64" Name="wall_default02_15">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="66" Name="wall_default02_16">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="67" Name="wall_default02_17">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="68" Name="wall_default02_18">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="69" Name="wall_default02_19">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="70" Name="wall_short02_10">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="71" Name="wall_short02_11">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="72" Name="wall_default02_20">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="73" Name="wall_default02_21">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="75" Name="wall_default02_22">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="76" Name="wall_default02_23">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="77" Name="wall_door_way02_5">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="78" Name="wall_door_frame_1">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="79" Name="wall_door_frame_2">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="80" Name="wall_door_way02_6">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="81" Name="wall_door_way02_7">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="85" Name="wall_default02_24">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="97" Name="wall_default02_27">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="99" Name="wall_default02_29">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="103" Name="wall_door_way02_8">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="104" Name="wall_door_frame_3">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="105" Name="wall_default02_30">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="107" Name="wall_default02_31">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="108" Name="wall_default02_32">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="110" Name="wall_short02_13">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="115" Name="wall_short02_14">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="117" Name="wall_default02_33">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="119" Name="wall_default02_34">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="120" Name="wall_short02_8">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="122" Name="wall_door_way02_9">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="123" Name="wall_short02_15">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="124" Name="wall_default02_35">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="126" Name="wall_default02_36">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="127" Name="wall_default02_37">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="128" Name="wall_default02_38">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="129" Name="wall_default02_39">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
     <Modify Category="StaticObjects" ID="132" Name="wall_default02_40">
-        <SetAttr Rotation="2.89291 -1.5708 -2.89291" />
+        <SetAttr Rotation="2.89291 -1.5708 -2.89291" TwoSidedShadow="true" />
     </Modify>
     <Modify Category="StaticObjects" ID="133" Name="wall_door_way02_10">
-        <SetAttr Rotation="-3.14159 -1.5708 -3.14159" />
+        <SetAttr Rotation="-3.14159 -1.5708 -3.14159" TwoSidedShadow="true" />
     </Modify>
     <Modify Category="StaticObjects" ID="134" Name="wall_short02_16">
-        <SetAttr Rotation="-3.14159 -1.5708 -3.14159" />
+        <SetAttr Rotation="-3.14159 -1.5708 -3.14159" TwoSidedShadow="true" />
     </Modify>
     <Modify Category="StaticObjects" ID="135" Name="wall_short02_17">
-        <SetAttr Rotation="-2.03444 1.5708 -2.03444" />
+        <SetAttr Rotation="-2.03444 1.5708 -2.03444" TwoSidedShadow="true" />
     </Modify>
     <Modify Category="StaticObjects" ID="136" Name="wall_door_way02_11">
-        <SetAttr Rotation="-2.03444 1.5708 -2.03444" />
+        <SetAttr Rotation="-2.03444 1.5708 -2.03444" TwoSidedShadow="true" />
     </Modify>
     <Modify Category="StaticObjects" ID="137" Name="wall_default02_41">
-        <SetAttr Rotation="-2.00103 1.5708 -2.00103" />
+        <SetAttr Rotation="-2.00103 1.5708 -2.00103" TwoSidedShadow="true" />
     </Modify>
     <Modify Category="StaticObjects" ID="138" Name="wall_door_frame_4">
-        <SetAttr Rotation="-2.53518e-06 1.5708 -2.53518e-06" />
+        <SetAttr Rotation="-2.53518e-06 1.5708 -2.53518e-06" TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="140" Name="wall_default02_42">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="141" Name="wall_default02_43">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="143" Name="wall_short02_12">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="146" Name="wall_default02_25">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="147" Name="wall_default02_26">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="148" Name="wall_short02_4">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="150" Name="wall_default02_28">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="151" Name="wall_default02_44">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="152" Name="wall_short02_5">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="155" Name="wall_door_way02_12">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="156" Name="wall_default02_46">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="158" Name="wall_door_frame_5">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="160" Name="wall_door_frame_6">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="162" Name="wall_default02_47">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="163" Name="wall_door_way02_13">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="166" Name="wall_default02_49">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="167" Name="wall_default02_50">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="170" Name="wall_default02_51">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="171" Name="wall_default02_52">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="174" Name="wall_default02_53">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="175" Name="wall_default02_54">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="176" Name="wall_default02_55">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="177" Name="wall_short02_20">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="178" Name="wall_default02_45">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="186" Name="wall_default02_61">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="187" Name="wall_default02_62">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="189" Name="wall_default02_63">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="191" Name="wall_default02_65">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="193" Name="wall_default02_67">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="194" Name="wall_default02_68">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="197" Name="wall_default02_71">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="202" Name="wall_default02_75">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="204" Name="wall_default02_77">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="205" Name="wall_default02_78">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="206" Name="wall_short02_19">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="214" Name="wall_short02_6">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="215" Name="wall_short02_9">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="216" Name="wall_short02_21">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="219" Name="wall_welder02_convex_2">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="220" Name="wall_welder02_convex_3">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="222" Name="wall_door_frame_7">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="256" Name="ceiling_corner_concave_short_1">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="257" Name="ceiling_corner_concave_short_2">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="258" Name="ceiling_corner_concave_short_3">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="259" Name="ceiling_corner_convex_short_1">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="261" Name="ceiling_concave_short_1">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="267" Name="ceiling_concave_1">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="268" Name="ceiling_concave_2">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="269" Name="ceiling_concave_3">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="270" Name="ceiling_concave_4">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="271" Name="ceiling_concave_5">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="272" Name="ceiling_concave_6">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="273" Name="ceiling_concave_7">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="275" Name="ceiling_concave_8">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="277" Name="ceiling_concave_9">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="283" Name="wall_welder02_convex_4">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="284" Name="wall_welder02_convex_5">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="285" Name="wall_welder02_convex_6">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="286" Name="wall_welder02_convex_7">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="293" Name="carpets_carpet04_1">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="294" Name="carpets_carpet04_2">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="295" Name="carpets_carpet04_3">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="296" Name="carpets_carpet04_4">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="299" Name="carpets_carpet04_5">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="301" Name="carpets_carpet04_6">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="308" Name="carpets_carpet04_7">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="310" Name="carpets_carpet04_8">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="322" Name="ceiling_concave_11">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="323" Name="ceiling_concave_12">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="324" Name="ceiling_concave_13">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="325" Name="ceiling_corner_concave_short_4">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="326" Name="ceiling_concave_14">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="327" Name="ceiling_concave_15">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="330" Name="ceiling_concave_short_2">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="331" Name="ceiling_concave_16">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="332" Name="ceiling_corner_concave_short_5">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="333" Name="ceiling_concave_short_3">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="337" Name="ceiling_corner_convex_short_2">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="338" Name="ceiling_corner_convex_short_3">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="341" Name="ceiling_corner_convex_short_4">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="342" Name="ceiling_concave_short_4">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="344" Name="ceiling_concave_10">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="345" Name="ceiling_concave_17">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="346" Name="ceiling_concave_18">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="347" Name="ceiling_concave_19">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="348" Name="ceiling_concave_20">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="349" Name="ceiling_concave_short_5">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="350" Name="ceiling_corner_concave_short_6">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="351" Name="ceiling_corner_concave_short_7">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="352" Name="ceiling_concave_21">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="353" Name="ceiling_concave_short_6">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="354" Name="ceiling_concave_short_7">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="358" Name="ceiling_concave_22">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="359" Name="ceiling_concave_23">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="363" Name="ceiling_concave_26">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="364" Name="ceiling_concave_27">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="365" Name="ceiling_concave_short_8">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="379" Name="curtains_curtain01_open_1">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="380" Name="curtains_curtain01_open_2">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="381" Name="curtains_curtain01_open_3">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="382" Name="curtains_curtain01_open_4">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="384" Name="curtains_curtain01_closed_1">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="385" Name="curtains_curtain01_closed_2">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="386" Name="curtains_curtain01_closed_3">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="387" Name="curtains_curtain01_open_5">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="388" Name="curtains_curtain01_open_6">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="389" Name="curtains_curtain01_open_7">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="390" Name="curtains_curtain01_open_8">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="391" Name="curtains_curtain01_open_9">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="435" Name="carpets_carpet01_1">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="440" Name="carpets_carpet03_1">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="449" Name="carpets_carpet02_2">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="623" Name="carpets_carpet03_2">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="624" Name="carpets_carpet02_3">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="661" Name="moist_wall01_1">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="662" Name="moist_wall01_2">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="663" Name="moist_wall01_3">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="665" Name="moist_wall02_1">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="670" Name="paper_pile_1">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="683" Name="dirt_floor02_1">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="684" Name="dirt_floor02_2">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="688" Name="dirt_floor01_1">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="689" Name="dirt_floor01_2">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="692" Name="wall_short02_22">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="693" Name="wall_short02_23">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="932" Name="dirt_floor01_3">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="933" Name="moist_wall01_4">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="934" Name="moist_wall01_5">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="936" Name="web_spider01_1">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="1224" Name="wall_welder02_convex_8">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="1225" Name="wall_welder02_convex_9">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="1226" Name="wall_welder02_convex_10">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="1227" Name="wall_welder02_convex_11">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="1228" Name="wall_welder02_convex_12">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="1230" Name="wall_welder02_convex_14">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="1231" Name="wall_welder02_convex_15">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="1232" Name="wall_welder02_convex_16">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="1233" Name="wall_welder02_convex_17">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="1234" Name="wall_welder02_convex_18">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="1235" Name="wall_welder02_convex_19">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="1236" Name="wall_welder02_convex_20">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="1237" Name="wall_welder02_convex_21">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="1239" Name="wall_welder02_convex_23">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="1240" Name="wall_welder02_convex_24">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="1241" Name="wall_welder02_convex_25">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="1242" Name="wall_welder02_convex_26">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="1243" Name="wall_welder02_convex_27">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="1244" Name="wall_welder02_convex_28">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="1245" Name="wall_welder02_convex_29">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="1246" Name="wall_welder02_convex_30">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="1247" Name="wall_welder02_convex_31">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="1248" Name="wall_welder02_convex_32">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="1250" Name="moist_wall01_6">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="1251" Name="moist_wall01_7">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="1252" Name="moist_wall02_2">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="1253" Name="moist_wall02_3">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="1254" Name="moist_wall01_8">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="1470" Name="wall_welder02_convex_33">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="1471" Name="wall_welder02_convex_34">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="1538" Name="wall_short02_24">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="1539" Name="wall_short02_25">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="1545" Name="carpets_carpet01_2">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="1549" Name="carpets_carpet02_4">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="1551" Name="carpets_carpet03_3">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="1596" Name="dirt_floor01_4">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="1606" Name="dirt_floor01_5">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="1607" Name="dirt_floor01_6">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="1702" Name="pool_wine01_1">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="1710" Name="pool_wine01_2">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="1712" Name="dirt_floor02_3">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="1714" Name="dirt_floor02_4">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="1752" Name="pool_wine01_3">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="1753" Name="pool_wine01_4">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="1754" Name="pool_wine01_5">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="1755" Name="pool_wine01_6">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="1770" Name="pool_wine02_3">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="1771" Name="pool_wine02_4">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="1829" Name="pool_wine02_5">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="1909" Name="pool_wine02_6">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="2022" Name="carpets_carpet03_4">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="2023" Name="carpets_carpet02_1">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="2025" Name="carpets_carpet01_3">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="2133" Name="wall_default_extension_1">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="2134" Name="wall_default_extension_2">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="2135" Name="wall_default_extension_3">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="2136" Name="wall_default_extension_4">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="2137" Name="wall_default_extension_5">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="2138" Name="wall_default_extension_6">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="2140" Name="wall_default_extension_7">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="2141" Name="wall_default_extension_8">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="2142" Name="wall_default_extension_9">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="2144" Name="wall_default_extension_10">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="2145" Name="wall_default_extension_11">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="2146" Name="wall_default_extension_12">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="2165" Name="special_outside_wall_1">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="2166" Name="special_outside_wall_2">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="2167" Name="special_outside_wall_3">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="2168" Name="special_outside_wall_4">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="2177" Name="special_wall_outside_detail01_1">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="2178" Name="special_wall_outside_detail01_2">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="2179" Name="special_wall_outside_detail01_3">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="2180" Name="special_wall_outside_detail01_4">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="2182" Name="special_wall_outside_detail01_6">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="2189" Name="special_outside_wall_12">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="2190" Name="special_outside_wall_13">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="2192" Name="special_outside_wall_15">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="2193" Name="special_outside_wall_16">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="2195" Name="special_outside_wall_18">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="2202" Name="special_outside_wall_19">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="2203" Name="special_outside_wall_20">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="2205" Name="special_outside_wall_22">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="2206" Name="special_outside_wall_23">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="2208" Name="special_outside_wall_25">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="2209" Name="special_outside_wall_26">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="2210" Name="special_outside_wall_27">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="2211" Name="special_outside_wall_28">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="2213" Name="special_outside_wall_30">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="2215" Name="special_wall_outside_detail01_7">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="2216" Name="special_wall_outside_detail01_8">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="2217" Name="special_wall_outside_detail01_9">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="2219" Name="special_outside_wall_31">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="2220" Name="special_outside_wall_32">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="2221" Name="special_outside_wall_33">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="2222" Name="special_outside_wall_34">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="2223" Name="special_outside_wall_35">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="2224" Name="special_outside_wall_36">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="2225" Name="wall_short02_18">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="2226" Name="special_outside_wall_37">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="2227" Name="special_outside_wall_38">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="2228" Name="special_outside_wall_39">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="2229" Name="special_outside_wall_40">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="2230" Name="special_outside_wall_41">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="2372" Name="special_outside_wall_66">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="2373" Name="special_outside_wall_69">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="2374" Name="special_outside_wall_watchtower_1">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="2380" Name="tree_pine_lowpoly_1">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="2381" Name="tree_pine_lowpoly_2">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="2382" Name="tree_pine_lowpoly_3">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="2383" Name="tree_pine_lowpoly_4">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="2387" Name="tree_pine_lowpoly_8">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="2432" Name="tree_pine_lowpoly_11">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="2433" Name="tree_pine_lowpoly_12">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="2434" Name="tree_pine_lowpoly_13">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="2435" Name="tree_pine_lowpoly_14">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="2452" Name="special_outside_wall_124">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="2455" Name="special_outside_wall_127">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="2458" Name="special_outside_wall_130">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="2461" Name="special_outside_wall_17">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="2464" Name="special_outside_wall_135">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="2467" Name="special_outside_wall_138">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="2489" Name="tree_pine_lowpoly_16">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="2490" Name="special_outside_wall_5">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="2492" Name="special_outside_wall_42">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="2493" Name="special_outside_wall_43">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="2494" Name="special_outside_wall_44">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="2495" Name="special_outside_wall_45">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="2496" Name="special_outside_wall_46">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="2497" Name="special_outside_wall_47">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="2498" Name="special_outside_wall_48">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="2499" Name="special_outside_wall_49">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="2500" Name="special_outside_wall_50">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="2501" Name="special_outside_wall_51">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="2502" Name="special_outside_wall_125">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="2503" Name="special_outside_wall_128">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="2504" Name="special_outside_wall_131">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="2505" Name="special_outside_wall_52">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="2506" Name="special_outside_wall_136">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="2507" Name="special_outside_wall_139">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="2508" Name="special_outside_wall_53">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="2510" Name="special_outside_wall_55">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="2511" Name="special_outside_wall_56">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="2512" Name="special_outside_wall_57">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="2513" Name="special_outside_wall_58">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="2514" Name="special_outside_wall_59">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="2515" Name="special_outside_wall_60">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="2516" Name="special_outside_wall_61">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="2517" Name="special_outside_wall_62">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="2518" Name="special_outside_wall_63">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="2519" Name="special_outside_wall_64">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="2520" Name="special_outside_wall_126">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="2521" Name="special_outside_wall_129">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="2522" Name="special_outside_wall_132">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="2523" Name="special_outside_wall_65">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="2524" Name="special_outside_wall_137">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="2525" Name="special_outside_wall_140">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="2526" Name="special_outside_wall_67">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="2528" Name="special_outside_wall_70">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="2529" Name="special_outside_wall_71">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="2530" Name="special_outside_wall_74">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="2531" Name="special_outside_wall_75">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="2532" Name="special_outside_wall_76">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="2533" Name="special_outside_wall_77">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="2534" Name="special_outside_wall_79">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="2535" Name="special_outside_wall_80">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="2536" Name="special_outside_wall_81">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="2537" Name="special_outside_wall_82">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="2538" Name="special_outside_wall_133">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="2539" Name="special_outside_wall_134">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="2540" Name="special_outside_wall_141">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="2541" Name="special_outside_wall_83">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="2542" Name="special_outside_wall_142">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="2543" Name="special_outside_wall_143">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="2544" Name="special_outside_wall_84">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="2546" Name="special_outside_wall_86">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="2547" Name="special_outside_wall_87">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="2548" Name="special_outside_wall_88">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="2549" Name="special_outside_wall_89">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="2550" Name="special_outside_wall_90">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="2551" Name="special_outside_wall_91">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="2552" Name="special_outside_wall_92">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="2553" Name="special_outside_wall_93">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="2554" Name="special_outside_wall_94">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="2555" Name="special_outside_wall_95">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="2556" Name="special_outside_wall_144">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="2557" Name="special_outside_wall_145">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="2558" Name="special_outside_wall_146">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="2559" Name="special_outside_wall_96">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="2560" Name="special_outside_wall_147">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="2561" Name="special_outside_wall_148">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="2562" Name="special_outside_wall_68">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="2563" Name="special_outside_wall_54">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="2564" Name="special_outside_wall_85">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="2565" Name="special_outside_wall_97">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="2566" Name="special_outside_wall_98">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="2567" Name="special_outside_wall_99">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="2568" Name="special_outside_wall_100">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="2569" Name="special_outside_wall_101">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="2570" Name="special_outside_wall_102">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="2571" Name="special_outside_wall_103">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="2573" Name="tree_pine_lowpoly_9">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="2578" Name="tree_pine_lowpoly_19">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="2666" Name="curtains_curtain01_open_10">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="2670" Name="curtains_curtain01_open_11">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="2731" Name="special_outside_wall_149">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="2732" Name="special_outside_wall_72">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="2733" Name="special_outside_wall_73">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="2734" Name="special_outside_wall_150">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="2735" Name="special_outside_wall_151">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="2736" Name="special_outside_wall_78">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="2737" Name="special_outside_wall_104">
+        <SetAttr TwoSidedShadow="true" />
     </Modify>
     <Modify Category="StaticObjects" ID="2738" Name="special_outside_wall_105">
-        <SetAttr Rotation="-2.53518e-06 -1.5708 -2.53518e-06" />
+        <SetAttr Rotation="-2.53518e-06 -1.5708 -2.53518e-06" TwoSidedShadow="true" />
     </Modify>
     <Modify Category="StaticObjects" ID="2739" Name="special_outside_wall_152">
-        <SetAttr Rotation="-2.53518e-06 -1.5708 -2.53518e-06" />
+        <SetAttr Rotation="-2.53518e-06 -1.5708 -2.53518e-06" TwoSidedShadow="true" />
     </Modify>
     <Modify Category="StaticObjects" ID="2740" Name="special_outside_wall_106">
-        <SetAttr Rotation="-2.53518e-06 -1.5708 -2.53518e-06" />
+        <SetAttr Rotation="-2.53518e-06 -1.5708 -2.53518e-06" TwoSidedShadow="true" />
     </Modify>
     <Modify Category="StaticObjects" ID="2741" Name="special_outside_wall_107">
-        <SetAttr Rotation="-2.53518e-06 -1.5708 -2.53518e-06" />
+        <SetAttr Rotation="-2.53518e-06 -1.5708 -2.53518e-06" TwoSidedShadow="true" />
     </Modify>
     <Modify Category="StaticObjects" ID="2742" Name="special_outside_wall_153">
-        <SetAttr Rotation="-2.53518e-06 -1.5708 -2.53518e-06" />
+        <SetAttr Rotation="-2.53518e-06 -1.5708 -2.53518e-06" TwoSidedShadow="true" />
     </Modify>
     <Modify Category="StaticObjects" ID="2743" Name="special_outside_wall_108">
-        <SetAttr Rotation="-2.53518e-06 -1.5708 -2.53518e-06" />
+        <SetAttr Rotation="-2.53518e-06 -1.5708 -2.53518e-06" TwoSidedShadow="true" />
     </Modify>
     <Modify Category="StaticObjects" ID="2744" Name="special_outside_wall_109">
-        <SetAttr Rotation="-2.53518e-06 -1.5708 -2.53518e-06" />
+        <SetAttr Rotation="-2.53518e-06 -1.5708 -2.53518e-06" TwoSidedShadow="true" />
     </Modify>
     <Modify Category="StaticObjects" ID="2745" Name="special_outside_wall_110">
-        <SetAttr Rotation="-2.53518e-06 -1.5708 -2.53518e-06" />
+        <SetAttr Rotation="-2.53518e-06 -1.5708 -2.53518e-06" TwoSidedShadow="true" />
     </Modify>
     <Modify Category="StaticObjects" ID="2746" Name="special_outside_wall_111">
-        <SetAttr Rotation="-2.53518e-06 -1.5708 -2.53518e-06" />
+        <SetAttr Rotation="-2.53518e-06 -1.5708 -2.53518e-06" TwoSidedShadow="true" />
     </Modify>
     <Modify Category="StaticObjects" ID="2747" Name="special_outside_wall_112">
-        <SetAttr Rotation="-2.53518e-06 -1.5708 -2.53518e-06" />
+        <SetAttr Rotation="-2.53518e-06 -1.5708 -2.53518e-06" TwoSidedShadow="true" />
     </Modify>
     <Modify Category="StaticObjects" ID="2748" Name="special_outside_wall_113">
-        <SetAttr Rotation="-2.53518e-06 -1.5708 -2.53518e-06" />
+        <SetAttr Rotation="-2.53518e-06 -1.5708 -2.53518e-06" TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="2750" Name="special_outside_wall_154">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="2751" Name="special_outside_wall_114">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="2752" Name="special_outside_wall_115">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="2753" Name="special_outside_wall_155">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="2754" Name="special_outside_wall_156">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="2755" Name="special_outside_wall_116">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="2756" Name="special_outside_wall_117">
+        <SetAttr TwoSidedShadow="true" />
     </Modify>
     <Modify Category="StaticObjects" ID="2757" Name="special_outside_wall_118">
-        <SetAttr Rotation="-2.53518e-06 -1.5708 -2.53518e-06" />
+        <SetAttr Rotation="-2.53518e-06 -1.5708 -2.53518e-06" TwoSidedShadow="true" />
     </Modify>
     <Modify Category="StaticObjects" ID="2758" Name="special_outside_wall_157">
-        <SetAttr Rotation="-2.53518e-06 -1.5708 -2.53518e-06" />
+        <SetAttr Rotation="-2.53518e-06 -1.5708 -2.53518e-06" TwoSidedShadow="true" />
     </Modify>
     <Modify Category="StaticObjects" ID="2759" Name="special_outside_wall_119">
-        <SetAttr Rotation="-2.53518e-06 -1.5708 -2.53518e-06" />
+        <SetAttr Rotation="-2.53518e-06 -1.5708 -2.53518e-06" TwoSidedShadow="true" />
     </Modify>
     <Modify Category="StaticObjects" ID="2760" Name="special_outside_wall_120">
-        <SetAttr Rotation="-2.53518e-06 -1.5708 -2.53518e-06" />
+        <SetAttr Rotation="-2.53518e-06 -1.5708 -2.53518e-06" TwoSidedShadow="true" />
     </Modify>
     <Modify Category="StaticObjects" ID="2761" Name="special_outside_wall_158">
-        <SetAttr Rotation="-2.53518e-06 -1.5708 -2.53518e-06" />
+        <SetAttr Rotation="-2.53518e-06 -1.5708 -2.53518e-06" TwoSidedShadow="true" />
     </Modify>
     <Modify Category="StaticObjects" ID="2762" Name="special_outside_wall_121">
-        <SetAttr Rotation="-2.53518e-06 -1.5708 -2.53518e-06" />
+        <SetAttr Rotation="-2.53518e-06 -1.5708 -2.53518e-06" TwoSidedShadow="true" />
     </Modify>
     <Modify Category="StaticObjects" ID="2763" Name="special_outside_wall_122">
-        <SetAttr Rotation="-2.53518e-06 -1.5708 -2.53518e-06" />
+        <SetAttr Rotation="-2.53518e-06 -1.5708 -2.53518e-06" TwoSidedShadow="true" />
     </Modify>
     <Modify Category="StaticObjects" ID="2764" Name="special_outside_wall_123">
-        <SetAttr Rotation="-2.53518e-06 -1.5708 -2.53518e-06" />
+        <SetAttr Rotation="-2.53518e-06 -1.5708 -2.53518e-06" TwoSidedShadow="true" />
     </Modify>
     <Modify Category="StaticObjects" ID="2765" Name="special_outside_wall_159">
-        <SetAttr Rotation="-2.53518e-06 -1.5708 -2.53518e-06" />
+        <SetAttr Rotation="-2.53518e-06 -1.5708 -2.53518e-06" TwoSidedShadow="true" />
     </Modify>
     <Modify Category="StaticObjects" ID="2766" Name="special_outside_wall_160">
-        <SetAttr Rotation="-2.53518e-06 -1.5708 -2.53518e-06" />
+        <SetAttr Rotation="-2.53518e-06 -1.5708 -2.53518e-06" TwoSidedShadow="true" />
     </Modify>
     <Modify Category="StaticObjects" ID="2767" Name="special_outside_wall_161">
-        <SetAttr Rotation="-2.53518e-06 -1.5708 -2.53518e-06" />
+        <SetAttr Rotation="-2.53518e-06 -1.5708 -2.53518e-06" TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="2847" Name="ceiling_welder_wood_middle_1">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="2848" Name="ceiling_welder_wood_edge_1">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="2849" Name="ceiling_welder_wood_middle_2">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="2850" Name="ceiling_welder_wood_middle_3">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="2851" Name="ceiling_welder_wood_edge_2">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="2853" Name="ceiling_welder_wood_edge_3">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="2854" Name="ceiling_welder_wood_middle_4">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="2855" Name="ceiling_welder_wood_middle_5">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="2856" Name="ceiling_welder_wood_middle_6">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="2857" Name="ceiling_welder_wood_edge_4">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="2859" Name="ceiling_welder_wood_edge_5">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="2860" Name="ceiling_welder_wood_middle_7">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="2861" Name="ceiling_welder_wood_middle_8">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="2862" Name="ceiling_welder_wood_middle_9">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="2863" Name="ceiling_welder_wood_edge_6">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="2865" Name="ceiling_welder_wood_edge_7">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="2866" Name="ceiling_welder_wood_middle_10">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="2867" Name="ceiling_welder_wood_middle_11">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="2868" Name="ceiling_welder_wood_middle_12">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="2869" Name="ceiling_welder_wood_edge_8">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="2871" Name="ceiling_welder_wood_edge_9">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="2872" Name="ceiling_welder_wood_middle_13">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="2873" Name="ceiling_welder_wood_middle_14">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="2874" Name="ceiling_welder_wood_middle_15">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="2875" Name="ceiling_welder_wood_edge_10">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="2928" Name="pool_wine01_7">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="2958" Name="cobweb_4">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="2960" Name="cobweb_5">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="3142" Name="net_3way_2">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="3143" Name="net_2way_flat_1">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="3144" Name="net_6way_concave_1">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="3145" Name="net_6way_concave_2">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="3146" Name="net_6way_concave_3">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="3147" Name="net_6way_concave_4">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="3148" Name="net_3way_3">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="3149" Name="net_2way_flat_2">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="3150" Name="net_2way_flat_3">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="3151" Name="net_2way_flat_4">
+        <SetAttr TwoSidedShadow="true" />
+    </Modify>
+    <Modify Category="StaticObjects" ID="3152" Name="net_2way_flat_5">
+        <SetAttr TwoSidedShadow="true" />
     </Modify>
     <Modify Category="Decals" ID="3169" Name="chalk_hieroglyphs_1">
         <SetAttr Material="textures/decals/filth_rust.mat" />

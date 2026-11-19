@@ -35,6 +35,12 @@ namespace hpl {
 
 		virtual void OnStart(){}
 
+		/**
+		 * Called once per rendered frame, right before OnDraw, after the latest input was read.
+		 * Use for things that should react to input every frame (mouse look, GUI cursor).
+		 */
+		virtual void OnFrameInput(float afFrameTime){}
+
 		virtual void OnDraw(float afFrameTime){}
 		virtual void OnPostRender(float afFrameTime){}
 		
@@ -108,6 +114,8 @@ namespace hpl {
 					AppDeviceWasPlugged();break;
 				case eUpdateableMessage_AppDeviceWasRemoved:
 					AppDeviceWasRemoved();break;
+				case eUpdateableMessage_OnFrameInput:
+					OnFrameInput(afX);break;
 			};
 		}
 		

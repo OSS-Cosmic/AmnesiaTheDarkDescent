@@ -112,6 +112,13 @@ namespace hpl
 	
 	//-----------------------------------------------------------------------
 	
+	void cInput::FrameUpdate()
+	{
+		if(mpMouse) mpMouse->FrameUpdate();
+	}
+
+	//-----------------------------------------------------------------------
+
 	cAction * cInput::CreateAction(const tString& asName, int alId)
 	{
 		cAction *pAction = hplNew( cAction, (asName, alId,this) );

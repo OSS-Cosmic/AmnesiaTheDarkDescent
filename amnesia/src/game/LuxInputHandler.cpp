@@ -342,6 +342,11 @@ cLuxInputHandler::cLuxInputHandler() : iLuxUpdateable("LuxInputHandler")
 	// Variable init
 	mState = eLuxInputState_Game;
 	mfMouseActiveAt = -1;
+
+	mpPlayer = NULL;
+	mbFrameLookWasActive = false;
+	mvLastFrameGuiMousePos = cVector2l(-1,-1);
+	mvInteractMousePending = 0;
 }
 
 //-----------------------------------------------------------------------
@@ -512,6 +517,163 @@ void cLuxInputHandler::Update(float afTimeStep)
 
 //-----------------------------------------------------------------------
 
+void cLuxInputHandler::OnFrameInput(float afFrameTime)
+{
+	if(mpPlayer == NULL) return;
+
+	///////////////////////////////////
+	// GUI cursor follows the mouse every frame, not just every tick.
+	if(CurrentStateSendsInputToGui())
+	{
+		cVector2l vAbsPos = mpInput->GetMouse()->GetAbsPosition();
+		if(vAbsPos != mvLastFrameGuiMousePos)
+		{
+			mvLastFrameGuiMousePos = vAbsPos;
+			gpBase->mpEngine->GetGui()->SendMousePos(vAbsPos, cVector2l(0,0));
+		}
+	}
+
+	///////////////////////////////////
+	// Mouse look, applied every frame. The camera is not interpolated for this part,
+	// so turning has no added latency at all.
+	if(FrameMouseLookActive() == false)
+	{
+		mbFrameLookWasActive = false;
+		return;
+	}
+
+	cVector2l vMouseRel = mpInput->GetMouse()->GetFrameRelPosition();
+
+	if(mbFrameLookWasActive == false)
+	{
+		//Just became active: start fresh.
+		mbFrameLookWasActive = true;
+		ResetFrameSmoothMouse();
+	}
+
+	//No rounding to whole counts here (unlike the per tick code), so small, slow
+	//movements are never lost.
+	cVector2f vRelPos = cVector2f((float)vMouseRel.x, (float)vMouseRel.y) * mfMouseSensitivity;
+	vRelPos = vRelPos / (1.7f * Interface<cWindow>::Get()->GetSizeF().y);
+
+	//Mouse lean: the mouse leans instead of turning.
+	if(mpInput->IsTriggerd(eLuxAction_Lean))
+	{
+		mpPlayer->AddLean(vRelPos.x);
+		ResetFrameSmoothMouse();
+		return;
+	}
+
+	if(mbSmoothMouse) vRelPos = GetFrameSmoothMouseDelta(vRelPos, afFrameTime);
+
+	if(mbInvertMouse) vRelPos.y = -vRelPos.y;
+
+	if(MouseDrivesInteraction())
+	{
+		//Handed out per tick in UpdateGamePlayerInput.
+		mvInteractMousePending += vRelPos;
+		return;
+	}
+	mvInteractMousePending = 0;
+
+	if(vRelPos.x != 0) mpPlayer->AddYaw(-vRelPos.x, true);
+	if(vRelPos.y != 0) mpPlayer->AddPitch(-vRelPos.y, true);
+}
+
+//-----------------------------------------------------------------------
+
+bool cLuxInputHandler::FrameMouseLookActive()
+{
+	if(gpBase->mpConfigHandler->mbFrameRateMouseLook == false) return false;
+	if(mpPlayer == NULL || mState != eLuxInputState_Game) return false;
+
+	//Same conditions as the tick input uses to reach UpdateGamePlayerInput's mouse look
+	if(gpBase->mpMessageHandler->IsPauseMessageActive() || gpBase->mpEffectHandler->GetPlayerIsPaused()) return false;
+	if(mpPlayer->IsDead() || mpPlayer->IsActive() == false) return false;
+
+	return true;
+}
+
+//-----------------------------------------------------------------------
+
+bool cLuxInputHandler::MouseDrivesInteraction()
+{
+	if(mpPlayer == NULL) return false;
+
+	switch(mpPlayer->GetCurrentState())
+	{
+	case eLuxPlayerState_InteractSlide:
+	case eLuxPlayerState_InteractLever:
+	case eLuxPlayerState_InteractWheel:
+	case eLuxPlayerState_InteractSwingDoor:
+		return true;
+	default:
+		return false;
+	}
+}
+
+//-----------------------------------------------------------------------
+
+void cLuxInputHandler::ResetFrameSmoothMouse()
+{
+	mlstFrameMouseSamples.clear();
+}
+
+//-----------------------------------------------------------------------
+
+/**
+ * Time based version of GetSmoothMousePos. The tick smoothing averages the last
+ * MaxSmoothMousePos tick samples, each one weighted PrevSmoothMousePosMul times less than
+ * the one after it. Here the same weighting is applied to mouse *velocity* over the same
+ * amount of time, so it feels identical at 60 fps and stays correct at 300 fps.
+ */
+cVector2f cLuxInputHandler::GetFrameSmoothMouseDelta(const cVector2f& avDelta, float afFrameTime)
+{
+	const float fTickTime = gpBase->mpEngine->GetStepSize();
+
+	if(mlMaxSmoothMousePos <= 1 || mfPrevSmoothMousePosMul <= 0.0f || fTickTime <= 0.0f) return avDelta;
+
+	float fDt = afFrameTime;
+	if(fDt < 0.0001f) fDt = 0.0001f;
+
+	cFrameMouseSample sample;
+	sample.mvVelocity = avDelta / fDt;
+	sample.mfDuration = fDt;
+	mlstFrameMouseSamples.push_front(sample);
+
+	const float fWindow = (float)mlMaxSmoothMousePos * fTickTime;
+
+	cVector2f vVelSum(0,0);
+	float fWeightSum = 0;
+	float fAge = 0;
+
+	std::list<cFrameMouseSample>::iterator it = mlstFrameMouseSamples.begin();
+	for(; it != mlstFrameMouseSamples.end(); ++it)
+	{
+		if(fAge >= fWindow) break;
+
+		float fDuration = it->mfDuration;
+		if(fAge + fDuration > fWindow) fDuration = fWindow - fAge;
+
+		float fMidAge = fAge + fDuration * 0.5f;
+		float fWeight = pow(mfPrevSmoothMousePosMul, fMidAge / fTickTime) * fDuration;
+
+		vVelSum += it->mvVelocity * fWeight;
+		fWeightSum += fWeight;
+
+		fAge += it->mfDuration;
+	}
+
+	//Remove samples that are too old to matter
+	mlstFrameMouseSamples.erase(it, mlstFrameMouseSamples.end());
+
+	if(fWeightSum <= 0) return avDelta;
+
+	return (vVelSum / fWeightSum) * fDt;
+}
+
+//-----------------------------------------------------------------------
+
 void cLuxInputHandler::Reset()
 {
 
@@ -551,6 +713,7 @@ void cLuxInputHandler::ChangeState(eLuxInputState aState)
 
 	//Reset some stuff
 	mlstSmoothMousePos.clear();	//Every state needs new smoothing!
+	ResetFrameSmoothMouse();
 
 	mvLastAbsMousePos = mpInput->GetMouse()->GetAbsPosition();
 }
@@ -1112,25 +1275,47 @@ void cLuxInputHandler::UpdateGamePlayerInput()
 	// Head
 
 	// Mouse
-	cVector2l vMouseRelPos = mpInput->GetMouse()->GetRelPosition();
-	cVector2f vMouseRelPosFloat = cVector2f((float)vMouseRelPos.x, (float)vMouseRelPos.y)*mfMouseSensitivity;
-	cVector2l vAbsRel = cMath::RoundToInt(vMouseRelPosFloat);
-	cVector2f vRelPos = cVector2f((float)vAbsRel.x,(float)vAbsRel.y) / (1.7f * Interface<cWindow>::Get()->GetSizeF().y);
-	cVector2f vFinalPos;
+	cVector2f vFinalPos(0,0);
 
-	//Check if position should be smoothed.
-	if(mbSmoothMouse)	vFinalPos = GetSmoothMousePos(vRelPos);
-	else				vFinalPos = vRelPos;
-
-	//Invert the Y-axis
-	if(mbInvertMouse)
+	//When mouse look runs every frame (OnFrameInput) the tick only adds gamepad look,
+	//but AddYaw/AddPitch are still called below so per tick effects (sanity sway) keep working.
+	if(FrameMouseLookActive() == false)
 	{
-		vFinalPos.y = -vFinalPos.y;
+		cVector2l vMouseRelPos = mpInput->GetMouse()->GetRelPosition();
+		cVector2f vMouseRelPosFloat = cVector2f((float)vMouseRelPos.x, (float)vMouseRelPos.y)*mfMouseSensitivity;
+		cVector2l vAbsRel = cMath::RoundToInt(vMouseRelPosFloat);
+		cVector2f vRelPos = cVector2f((float)vAbsRel.x,(float)vAbsRel.y) / (1.7f * Interface<cWindow>::Get()->GetSizeF().y);
+
+		//Check if position should be smoothed.
+		if(mbSmoothMouse)	vFinalPos = GetSmoothMousePos(vRelPos);
+		else				vFinalPos = vRelPos;
+
+		//Invert the Y-axis
+		if(mbInvertMouse)
+		{
+			vFinalPos.y = -vFinalPos.y;
+		}
+
+		if(mpInput->IsTriggerd(eLuxAction_Lean))
+		{
+			mpPlayer->AddLean(vRelPos.x);
+		}
 	}
 
-	if(mpInput->IsTriggerd(eLuxAction_Lean))
+	//Doors, levers, wheels and sliders are moved per tick. With a low frame rate
+	//several ticks run per frame, so spread the mouse movement over them instead
+	//of giving it all to the first one.
+	if(MouseDrivesInteraction())
 	{
-		mpPlayer->AddLean(vRelPos.x);
+		mvInteractMousePending += vFinalPos;
+		int lTicksLeft = gpBase->mpEngine->GetLogicTicksLeftThisFrame();
+		cVector2f vShare = mvInteractMousePending / (float)lTicksLeft;
+		mvInteractMousePending -= vShare;
+		vFinalPos = vShare;
+	}
+	else
+	{
+		mvInteractMousePending = 0;
 	}
 
 #ifdef USE_GAMEPAD
@@ -1144,8 +1329,8 @@ void cLuxInputHandler::UpdateGamePlayerInput()
 		if(mpPad->HatIsInState(eGamepadHat_0, eGamepadHatState_Up) || mpPad->HatIsInState(eGamepadHat_0, eGamepadHatState_Down))
 #endif
 		{
-			if(mpInput->IsTriggerd(eLuxAction_ZoomOut))	mpPlayer->Scroll( gpBase->mpEngine->GetFrameTime() * 8.0f);
-			if(mpInput->IsTriggerd(eLuxAction_ZoomIn))	mpPlayer->Scroll(-gpBase->mpEngine->GetFrameTime() * 8.0f);
+			if(mpInput->IsTriggerd(eLuxAction_ZoomOut))	mpPlayer->Scroll( gpBase->mpEngine->GetStepSize() * 8.0f);
+			if(mpInput->IsTriggerd(eLuxAction_ZoomIn))	mpPlayer->Scroll(-gpBase->mpEngine->GetStepSize() * 8.0f);
 		}
 
 		//////////////////////////////////////////
@@ -1170,7 +1355,7 @@ void cLuxInputHandler::UpdateGamePlayerInput()
 		{
 			if(mpInput->IsTriggerd(eLuxAction_Rotate))
 			{
-				mpPlayer->Scroll(-gpBase->mpEngine->GetFrameTime() * 6.0f * vAnalogLookAxis.y);
+				mpPlayer->Scroll(-gpBase->mpEngine->GetStepSize() * 6.0f * vAnalogLookAxis.y);
 
 #if USE_SDL2
 				vAnalogLookAxis = cVector2f(mpPad->GetAxisValue(eGamepadAxis_LeftX), mpPad->GetAxisValue(eGamepadAxis_LeftY));

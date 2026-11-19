@@ -236,6 +236,9 @@ private:
 
 	struct OverlayPushConstants { uint32_t overlayMode; };
 	uint32_t m_overlayMode = kDefaultOverlayMode;
+	// Exponentially smoothed frame time fed to every NRD instance, so one
+	// hitch does not collapse the seconds-based history length for a frame.
+	float m_smoothFrameTimeMs = 1000.0f / 60.0f;
 };
 
 } // namespace hpl

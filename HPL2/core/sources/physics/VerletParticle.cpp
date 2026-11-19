@@ -89,6 +89,8 @@ namespace hpl {
 		mvPosition = 0;
 		mvPrevPosition = 0;
 		mvSmoothPosition = 0;
+		mvRenderPrevSmoothPosition = 0;
+		mbSmoothPositionValid = false;
 		mfInvMass = 1;
 	}
 
@@ -99,6 +101,8 @@ namespace hpl {
 		mvPosition = avPos;
 		mvPrevPosition = avPos;
 		mvSmoothPosition = avPos;
+		mvRenderPrevSmoothPosition = avPos;
+		mbSmoothPositionValid = false;
 		mfInvMass = afInvMass;
 	}
 

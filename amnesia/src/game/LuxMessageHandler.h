@@ -89,13 +89,13 @@ private:
 	bool mbShowEffectSubtitles;
 
 	bool mbPauseMessageActive;
-	float mfPauseMessageAlpha;
+	cInterpolatedFloat mfPauseMessageAlpha;
 
-	float mfMessageAlpha;
+	cInterpolatedFloat mfMessageAlpha;
 	float mfMessageTime;
 
 	bool mbQuestMessageActive;
-	float mfQuestMessageAlpha;
+	cInterpolatedFloat mfQuestMessageAlpha;
 	float mfQuestMessageTime;
 
 	cLinearOscillation mQuestOscill;

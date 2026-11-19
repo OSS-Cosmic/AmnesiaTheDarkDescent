@@ -1518,14 +1518,14 @@ float __stdcall cLuxScriptHandler::GetPlayerLampOil()
 
 float __stdcall cLuxScriptHandler::GetPlayerSpeed()
 {
-	return gpBase->mpPlayer->GetCharacterBody()->GetVelocity(1.0f/60.0f).Length();
+	return gpBase->mpPlayer->GetCharacterBody()->GetVelocity(gpBase->mpEngine->GetStepSize()).Length();
 }
 
 //-----------------------------------------------------------------------
 
 float __stdcall cLuxScriptHandler::GetPlayerYSpeed()
 {
-	return gpBase->mpPlayer->GetCharacterBody()->GetVelocity(1.0f/60.0f).y;
+	return gpBase->mpPlayer->GetCharacterBody()->GetVelocity(gpBase->mpEngine->GetStepSize()).y;
 }
 
 //-----------------------------------------------------------------------

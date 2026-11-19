@@ -712,11 +712,11 @@ void cLuxPlayer::Move(eCharDir aDir, float afMul)
 
 //-----------------------------------------------------------------------
 
-void cLuxPlayer::AddYaw(float afAmount)
+void cLuxPlayer::AddYaw(float afAmount, bool abFrameInput)
 {
 	if (mbFreeCameraActive)
 	{
-		mpCamera->AddYaw(mpCamDirEffects->AddAndGetYawAdd(afAmount * 2.0f));
+		mpCamera->AddYaw(mpCamDirEffects->AddAndGetYawAdd(afAmount * 2.0f, abFrameInput));
 		return;
 	}
 
@@ -727,17 +727,17 @@ void cLuxPlayer::AddYaw(float afAmount)
 		if(mvMoveStates[mMoveState]->OnAddYaw(afAmount))
 		{
 			//must do like this or else limits will fail!
-			mpCamera->AddYaw( mpCamDirEffects->AddAndGetYawAdd(afAmount * 2.0f) );
+			mpCamera->AddYaw( mpCamDirEffects->AddAndGetYawAdd(afAmount * 2.0f, abFrameInput) );
 			mpCharBody->SetYaw(mpCamera->GetYaw());
 		}
 	}
 }
 
-void cLuxPlayer::AddPitch(float afAmount)
+void cLuxPlayer::AddPitch(float afAmount, bool abFrameInput)
 {
 	if (mbFreeCameraActive)
 	{
-		mpCamera->AddPitch(mpCamDirEffects->AddAndGetPitchAdd(afAmount * 2.0f));
+		mpCamera->AddPitch(mpCamDirEffects->AddAndGetPitchAdd(afAmount * 2.0f, abFrameInput));
 		return;
 	}
 
@@ -747,7 +747,7 @@ void cLuxPlayer::AddPitch(float afAmount)
 	{
 		if(mvMoveStates[mMoveState]->OnAddPitch(afAmount))
 		{
-			mpCamera->AddPitch( mpCamDirEffects->AddAndGetPitchAdd(afAmount * 2.0f) );
+			mpCamera->AddPitch( mpCamDirEffects->AddAndGetPitchAdd(afAmount * 2.0f, abFrameInput) );
 		}
 	}
 }
@@ -873,6 +873,9 @@ void cLuxPlayer::PlaceAtStartNode(cLuxNode_PlayerStart *apNode)
 	mpCamera->SetYaw(apNode->GetAngle());
 	mpCamera->SetPitch(0);
 	mpCharBody->Update(0.001f);
+
+	//Placed, not moved: do not smear the jump over a frame.
+	cRenderInterpolation::SnapAll();
 }
 
 //-----------------------------------------------------------------------
@@ -1196,15 +1199,15 @@ void cLuxPlayer::DrawHud(float afFrameTime)
 		mpFocusFont->GetWordWrapRows(500, 22, 22, msFocusText,&vRows);
         
 		for(size_t i=0; i<vRows.size(); ++i)
-			gpBase->mpGameHudSet->DrawFont(vRows[i],mpFocusFont,cVector3f(400, fFocusTextY+i*24,1),22,cColor(1,mfFocusTextAlpha),	eFontAlign_Center);
+			gpBase->mpGameHudSet->DrawFont(vRows[i],mpFocusFont,cVector3f(400, fFocusTextY+i*24,1),22,cColor(1,mfFocusTextAlpha.Get()),	eFontAlign_Center);
 	}
-	else if(mfFocusTextAlpha >0)
+	else if(mfFocusTextAlpha.Get() >0)
 	{
 		tWStringVec vRows;
 		mpFocusFont->GetWordWrapRows(500, 22, 22, msLastFocusText,&vRows);
 
 		for(size_t i=0; i<vRows.size(); ++i)
-			gpBase->mpGameHudSet->DrawFont(vRows[i],mpFocusFont,cVector3f(400, fFocusTextY+i*24,1),22,cColor(1,mfFocusTextAlpha),	eFontAlign_Center);
+			gpBase->mpGameHudSet->DrawFont(vRows[i],mpFocusFont,cVector3f(400, fFocusTextY+i*24,1),22,cColor(1,mfFocusTextAlpha.Get()),	eFontAlign_Center);
 	}
 }
 

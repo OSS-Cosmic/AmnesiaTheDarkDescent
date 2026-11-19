@@ -264,7 +264,7 @@ private:
 	//////////////
 	// Variables
 	bool mbActive;
-	float mfAlpha;
+	cInterpolatedFloat mfAlpha;
 
 	bool mbForceInstantExit;
 	bool mbOpenedFromInventory;

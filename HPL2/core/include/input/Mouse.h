@@ -48,6 +48,19 @@ namespace hpl {
 		 * \return 
 		 */
 		virtual cVector2l GetRelPosition()=0;
+
+		/**
+		 * Samples the newest mouse state once per rendered frame (between fixed ticks)
+		 * without consuming any input events. Updates the absolute position and
+		 * collects relative movement for GetFrameRelPosition().
+		 */
+		virtual void FrameUpdate(){}
+		/**
+		 * Relative movement since the last call, for consumers that run every frame
+		 * (mouse look). Movement nobody asked for during a frame is thrown away, so
+		 * nothing piles up while e.g. a menu is open. Independent from GetRelPosition().
+		 */
+		virtual cVector2l GetFrameRelPosition(){ return cVector2l(0,0); }
 		/**
 		 * \param eMouseButton The button to change to string.
 		 * \return The name of the button as a string. 

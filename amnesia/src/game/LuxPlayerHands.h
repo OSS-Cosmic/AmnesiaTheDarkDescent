@@ -74,6 +74,7 @@ public:
 	void OnStart();
 	void Update(float afTimeStep);
 	void PostUpdate(float afTimeStep);
+	void OnDraw(float afFrameTime);
 	void Reset();
 
 	void OnMapEnter(cLuxMap *apMap);
@@ -142,6 +143,13 @@ private:
 
 	int mlMaxCamRotations;
 	tVector3fList mlstCamRotations;
+
+	// Per frame hand sway (render interpolation on): the hands lag behind the
+	// camera rotation with this time constant, applied as the camera's view
+	// model offset.
+	float mfSwayTimeConst;
+	cVector3f mvSwayRotation;
+	bool mbSwayValid;
 
 	eLuxHandsState mHandState;
 	tString msCurrentAnim;

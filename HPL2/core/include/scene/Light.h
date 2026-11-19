@@ -351,6 +351,22 @@ namespace hpl {
 		// A subclass cache that keys off the resolved tuning -- the spot's
 		// projection and frustum, which otherwise only invalidate on SetRadius.
 		virtual void OnResolvedTuningChanged() {}
+
+		// Render interpolation of fades and flicker. The resolved colour, reach
+		// and intensity (what the renderers read) are interpolated between the
+		// last two ticks, whichever backend tuning produced them.
+		bool OnRenderInterpSnapshot(bool abSnap) override;
+		void OnRenderInterpApply(float afT) override;
+		void OnRenderInterpRestore() override;
+
+		cColor mInterpPrevColor;
+		cColor mInterpCurrColor;
+		float mfInterpPrevReach = 0;
+		float mfInterpCurrReach = 0;
+		float mfInterpPrevIntensity = 0;
+		float mfInterpCurrIntensity = 0;
+		bool mbInterpLightActive = false;
+		bool mbInterpLightApplied = false;
         virtual void ExtraXMLProperties(tinyxml2::XMLElement *apMainElem){}
 		virtual void UpdateBoundingVolume()=0;
 		

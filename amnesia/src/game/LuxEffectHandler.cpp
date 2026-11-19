@@ -323,22 +323,23 @@ void cLuxEffect_EmotionFlash::Update(float afTimeStep)
 void cLuxEffect_EmotionFlash::OnDraw(float afFrameTime)
 {
 	float fIntensity = gpBase->mpEffectHandler->GetFlashIntensity();
-	gpBase->mpGameHudSet->DrawGfx(mpWhiteGfx,gpBase->mvHudVirtualStartPos + cVector3f(0,0,3.2f),gpBase->mvHudVirtualSize,cColor(mfAlpha * fIntensity, 1));
+	gpBase->mpGameHudSet->DrawGfx(mpWhiteGfx,gpBase->mvHudVirtualStartPos + cVector3f(0,0,3.2f),gpBase->mvHudVirtualSize,cColor(mfAlpha.Get() * fIntensity, 1));
 
-	if(mfTextAlpha > 0)
+	const float fTextAlpha = mfTextAlpha.Get();
+	if(fTextAlpha > 0)
 	{
 		float fStartY = 300 - (mvFontSize.y+2.0f) * 0.5f * (float)mvTextRows.size();
 
 		if(mvTextRows.size() == 1)
 		{
-			gpBase->mpGameHudSet->DrawFont(mvTextRows[0], mpFont, cVector3f(400,fStartY, 4), mvFontSize, cColor(0, mfTextAlpha), eFontAlign_Center);
+			gpBase->mpGameHudSet->DrawFont(mvTextRows[0], mpFont, cVector3f(400,fStartY, 4), mvFontSize, cColor(0, fTextAlpha), eFontAlign_Center);
 		}
 		else
 		{
 			float fY = fStartY;
 			for(size_t i=0; i<mvTextRows.size(); ++i)
 			{
-				gpBase->mpGameHudSet->DrawFont(mvTextRows[i], mpFont, cVector3f(150,fY, 4), mvFontSize, cColor(0, mfTextAlpha), eFontAlign_Left);
+				gpBase->mpGameHudSet->DrawFont(mvTextRows[i], mpFont, cVector3f(150,fY, 4), mvFontSize, cColor(0, fTextAlpha), eFontAlign_Left);
 				fY += mvFontSize.y + 2.0f;
 			}
 		}
@@ -751,9 +752,10 @@ void cLuxEffect_Fade::Update(float afTimeStep)
 
 void cLuxEffect_Fade::OnDraw(float afFrameTime)
 {
-	if(mfAlpha <=0) return;
+	const float fAlpha = mfAlpha.Get();
+	if(fAlpha <=0) return;
 
-	gpBase->mpGameHudSet->DrawGfx(mpWhiteGfx,gpBase->mvHudVirtualStartPos+cVector3f(0,0,3.2f),gpBase->mvHudVirtualSize,cColor(1-mfAlpha, 1));
+	gpBase->mpGameHudSet->DrawGfx(mpWhiteGfx,gpBase->mvHudVirtualStartPos+cVector3f(0,0,3.2f),gpBase->mvHudVirtualSize,cColor(1-fAlpha, 1));
 }
 
 //-----------------------------------------------------------------------
@@ -911,7 +913,7 @@ void cLuxEffect_ScreenImage::OnDraw(float afFrameTime)
 {
     if ( gpBase->mpGameHudSet && mpTextureGfx )
     {
-        mpGuiSet->DrawGfx(mpTextureGfx, mvPosition, mfScale, cColor(1.0f,mfCurrentFade));
+        mpGuiSet->DrawGfx(mpTextureGfx, mvPosition, mfScale, cColor(1.0f,mfCurrentFade.Get()));
     }
 }
 
@@ -1008,7 +1010,7 @@ void cLuxEffect_SanityGainFlash::OnDraw(float afFrameTime)
 
 void cLuxEffect_SanityGainFlash::DrawFlash(cGuiSet *apSet ,float afTimeStep)
 {
-	apSet->DrawGfx(mpWhiteGfx,gpBase->mvHudVirtualStartPos+cVector3f(0,0,3.2f),gpBase->mvHudVirtualSize,mColor*mfAlpha);
+	apSet->DrawGfx(mpWhiteGfx,gpBase->mvHudVirtualStartPos+cVector3f(0,0,3.2f),gpBase->mvHudVirtualSize,mColor*mfAlpha.Get());
 }
 
 //-----------------------------------------------------------------------
@@ -1096,7 +1098,7 @@ void cLuxEffect_Flash::Update(float afTimeStep)
 void cLuxEffect_Flash::OnDraw(float afFrameTime)
 {
 	float fIntensity = gpBase->mpEffectHandler->GetFlashIntensity();
-	gpBase->mpGameHudSet->DrawGfx(mpWhiteGfx,gpBase->mvHudVirtualStartPos+cVector3f(0,0,3.2f),gpBase->mvHudVirtualSize,cColor(mfAlpha * fIntensity, 1));
+	gpBase->mpGameHudSet->DrawGfx(mpWhiteGfx,gpBase->mvHudVirtualStartPos+cVector3f(0,0,3.2f),gpBase->mvHudVirtualSize,cColor(mfAlpha.Get() * fIntensity, 1));
 }	
 
 

@@ -18,6 +18,7 @@
  */
 
 #include "graphics/Renderer.h"
+#include "scene/RenderInterpolation.h"
 #include "system/LowLevelSystem.h"
 #include "graphics/Graphics.h"
 #include "resources/Resources.h"
@@ -159,7 +160,7 @@ namespace hpl {
 		mpCurrentSettings = NULL;
 		mpCurrentRenderList = NULL;
 		mfTempAlpha = 0;
-		mfTimeCount = 0;
+		mdTimeCount = 0;
 	}
 
 	iRenderer::~iRenderer() {}
@@ -174,6 +175,15 @@ namespace hpl {
 	
 	void iRenderer::Update(float afTimeStep)
 	{
-		mfTimeCount += afTimeStep;
+		mdTimeCount += afTimeStep;
+	}
+
+	//-----------------------------------------------------------------------
+
+	float iRenderer::GetTimeCount()
+	{
+		//Same offset as the interpolated world (the frame shows a moment between the last two ticks).
+		double dOffset = cRenderInterpolation::GetRenderGameTime() - cRenderInterpolation::GetGameTime();
+		return (float)(mdTimeCount + dOffset);
 	}
 }

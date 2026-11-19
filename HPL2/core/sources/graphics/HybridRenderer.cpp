@@ -1026,6 +1026,12 @@ void cHybridRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
     return;
   }
   cViewport::HybridViewportState &state = *pState;
+  {
+    // Clamp before blending so a load stall (seconds-long frame) cannot drag
+    // the average far off; 10% blend settles within ~20 frames.
+    const float frameMs = std::clamp(afFrameTime * 1000.0f, 1.0f, 100.0f);
+    m_smoothFrameTimeMs += (frameMs - m_smoothFrameTimeMs) * 0.1f;
+  }
   if (viewport->ConsumeTemporalHistoryReset())
     state.indirectHistoryReset = true;
   // The opaque temporal block below consumes and clears this flag before the
@@ -2689,7 +2695,7 @@ void cHybridRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
       // Past the far plane a pixel is sky; NrdPack already writes NRD_INF into
       // viewZ there, and this keeps the two consistent.
       nrdFrame.denoisingRange = apFrustum->GetFarPlane();
-      nrdFrame.timeDeltaMs = afFrameTime * 1000.0f;
+      nrdFrame.timeDeltaMs = m_smoothFrameTimeMs;
 
       NrdDenoiseInputs nrdInputs = {};
       nrdInputs.normalRoughness = state.nrdNormalRoughnessView.Get();
@@ -3298,9 +3304,9 @@ void cHybridRenderer::Draw(cGraphics::FrameContext *cntx, cViewport *viewport,
       waterFrame.nrd.cameraJitter[1] = temporalFrame.jitterPixels[1];
       waterFrame.nrd.cameraJitterPrev[0] = temporalFrame.prevJitterPixels[0];
       waterFrame.nrd.cameraJitterPrev[1] = temporalFrame.prevJitterPixels[1];
-      waterFrame.nrd.frameIndex = perFrame.totalFrames;
+      waterFrame.nrd.frameIndex = mpGraphics->frameIndex;
       waterFrame.nrd.denoisingRange = apFrustum->GetFarPlane();
-      waterFrame.nrd.timeDeltaMs = afFrameTime * 1000.0f;
+      waterFrame.nrd.timeDeltaMs = m_smoothFrameTimeMs;
       m_waterReflection.BeginFrame(*state.waterReflection, waterFrame);
 
       // Shared by every producer invocation: the per-frame UBO, optional TLAS,

@@ -136,7 +136,12 @@ public:
   static eShadowMapQuality GetShadowMapQuality() { return mShadowMapQuality; }
   static void SetShadowMapQuality(eShadowMapQuality quality) { mShadowMapQuality = quality; }
 
-  float GetTimeCount() { return mfTimeCount; }
+  /**
+   * Simulated time in seconds (follows the game speed), at the point in time
+   * the current (interpolated) frame represents, so shader animation is
+   * smooth at any frame rate.
+   */
+  float GetTimeCount();
 
   virtual bool LoadData() = 0;
   virtual void DestroyData() = 0;
@@ -165,7 +170,7 @@ protected:
   static int mlRenderFrameCount;
   static bool mbRefractionEnabled;
   static eShadowMapQuality mShadowMapQuality;
-  float mfTimeCount;
+  double mdTimeCount;
 
   // Static variables
 };

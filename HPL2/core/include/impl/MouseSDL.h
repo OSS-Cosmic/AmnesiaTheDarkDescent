@@ -49,6 +49,9 @@ namespace hpl {
 		 */
 		cVector2l GetRelPosition();
 
+		void FrameUpdate();
+		cVector2l GetFrameRelPosition();
+
 		void Reset();
 		
 	private:
@@ -56,6 +59,10 @@ namespace hpl {
 
 		cVector2l mvMouseAbsPos;
 		cVector2l mvMouseRelPos;
+
+		cVector2l mvTickRelAccum;
+		cVector2l mvFrameRelAccum;
+		bool mbFrameRelRead;
 
 		std::vector<bool> mvMButtonArray;
 

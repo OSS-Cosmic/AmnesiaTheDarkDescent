@@ -88,7 +88,7 @@ namespace hpl {
 		bool GetVisibleVar(){ return mbIsVisible;}
 		virtual void OnChangeVisible(){}
 		
-		virtual void SetIlluminationAmount(float afX){ mfIlluminationAmount = afX;}
+		virtual void SetIlluminationAmount(float afX);
 		inline float GetIlluminationAmount()const { return mfIlluminationAmount;}
 		
 		void SetCoverageAmount(float afX);
@@ -137,6 +137,16 @@ namespace hpl {
 		inline int GetDecalListCount() const { return mlDecalListCount; }
 
 	protected:
+		bool OnRenderInterpSnapshot(bool abSnap) override;
+		void OnRenderInterpApply(float afT) override;
+		void OnRenderInterpRestore() override;
+
+		float mfInterpPrevCoverage;
+		float mfInterpCurrCoverage;
+		float mfInterpPrevIllumination;
+		float mfInterpCurrIllumination;
+		bool mbInterpFadeActive;
+
 		uint64_t mUniqueCookie;
 
 		cMatrixf m_mtxInvModel;

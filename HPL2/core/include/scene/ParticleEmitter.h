@@ -104,7 +104,7 @@ namespace hpl {
 	class cParticle
 	{
 	public:
-		cParticle(){}
+		cParticle() : mfSpin(0), mfRenderPrevSpin(0), mbRenderSnap(true) {}
 
 		cVector3f mvPos;
 		cVector3f mvLastPos;
@@ -151,7 +151,12 @@ namespace hpl {
 		int mlHighFreqPoints;
 		std::vector<cVector3f> mvBeamPoints;
 
-		// ---
+		// Render interpolation: state before the last update
+		cVector3f mvRenderPrevPos;
+		cVector2f mvRenderPrevSize;
+		cColor mRenderPrevColor;
+		float mfRenderPrevSpin;
+		bool mbRenderSnap;
 
 	};
 
@@ -248,6 +253,10 @@ namespace hpl {
 
 		void SwapRemove(unsigned int alIndex);
 		cParticle* CreateParticle();
+
+		void SaveRenderInterpState();
+		void FixSpawnedRenderInterpState();
+		int mlRenderInterpTick;
 
 		virtual void UpdateMotion(float afTimeStep)=0;
 		virtual void SetParticleDefaults(cParticle *apParticle)=0;

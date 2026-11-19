@@ -87,6 +87,10 @@ void cLuxConfigHandler::LoadMainConfig()
 	mbFullscreen =		gpBase->mpMainConfig->GetBool("Screen","FullScreen", false);
 	mbVSync =			gpBase->mpMainConfig->GetBool("Screen","Vsync", false);
 	mbAdaptiveVSync =	gpBase->mpMainConfig->GetBool("Screen","AdaptiveVsync", false);
+	mbRenderInterpolation =	gpBase->mpMainConfig->GetBool("Screen","RenderInterpolation", true);
+	mbFrameRateMouseLook =	gpBase->mpMainConfig->GetBool("Screen","FrameRateMouseLook", true);
+	mlFrameRateLimit =		gpBase->mpMainConfig->GetInt("Screen","FrameRateLimit", 0);
+	mlMaxFramesAhead =		gpBase->mpMainConfig->GetInt("Graphics","MaxFramesAhead", -1);
 
 	mbFastPhysicsLoad=	gpBase->mpMainConfig->GetBool("MapLoad","FastPhysicsLoad", false);
 	mbFastStaticLoad=	gpBase->mpMainConfig->GetBool("MapLoad","FastStaticLoad", false);
@@ -162,6 +166,10 @@ void cLuxConfigHandler::SaveMainConfig()
 	gpBase->mpMainConfig->SetInt("Screen","Height", mvScreenSize.y);
 	gpBase->mpMainConfig->SetBool("Screen","FullScreen", mbFullscreen);
 	gpBase->mpMainConfig->SetBool("Screen","Vsync", mbVSync);
+	gpBase->mpMainConfig->SetBool("Screen","RenderInterpolation", mbRenderInterpolation);
+	gpBase->mpMainConfig->SetBool("Screen","FrameRateMouseLook", mbFrameRateMouseLook);
+	gpBase->mpMainConfig->SetInt("Screen","FrameRateLimit", gpBase->mpEngine->GetFrameRateLimit());
+	gpBase->mpMainConfig->SetInt("Graphics","MaxFramesAhead", mlMaxFramesAhead);
 
 	gpBase->mpMainConfig->SetString("Graphics", "RendererBackend", RendererBackendToString(mRendererBackend));
 

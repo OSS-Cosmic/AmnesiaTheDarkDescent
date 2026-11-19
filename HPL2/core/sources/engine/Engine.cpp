@@ -21,12 +21,15 @@
 
 #include "engine/Engine.h"
 
+#include <cmath>
+
 #include "ai/AI.h"
 #include "graphics/Graphics.h"
 #include "gui/Gui.h"
 #include "haptic/Haptic.h"
 #include "physics/Physics.h"
 #include "resources/Resources.h"
+#include "scene/RenderInterpolation.h"
 #include "scene/Scene.h"
 #include "sound/Sound.h"
 #include "system/System.h"
@@ -450,6 +453,16 @@ void cEngine::Run() {
   bool bBufferSwap = false;
   bool bSwappedOnce = false;
 
+  // Fixed timestep: logic runs in steps of GetStepSize(), rendering runs as
+  // often as possible and shows the world interpolated between the last two
+  // ticks (see scene/RenderInterpolation.h).
+  // Longest frame time that is simulated, so a hitch does not cause a burst
+  // of catch-up ticks (spiral of death).
+  const double kMaxFrameTime = 0.25;
+  mdAccumulator = 0.0;
+  mdCurrentTime = cPlatform::GetApplicationTimeX();
+  mdNextFrameDeadline = mdCurrentTime;
+
   // cMemoryManager::SetLogCreation(true);
 
   mpGraphics->BeginActiveSet();
@@ -477,6 +490,22 @@ void cEngine::Run() {
     }
 
     //////////////////////////
+    // Frame time since the last loop
+    const double fixedDelta = (double)GetStepSize();
+    cRenderInterpolation::SetFixedDelta(fixedDelta);
+
+    const double newTime = cPlatform::GetApplicationTimeX();
+    double frameTime = newTime - mdCurrentTime;
+    if (frameTime < 0.0)
+      frameTime = 0.0;
+    if (frameTime > kMaxFrameTime)
+      frameTime = kMaxFrameTime;
+    mdCurrentTime = newTime;
+
+    mlTicksThisFrame = 0;
+    mlUpdatesOnCurrentFrame = 0;
+
+    //////////////////////////
     // Check if paused
     if (GetPaused()) {
       cPlatform::Sleep(10);
@@ -484,15 +513,43 @@ void cEngine::Run() {
       bIsUpdated = true;
 
       mpUpdater->RunMessage(eUpdateableMessage_OnPauseUpdate, 1.0f / 100.0f);
+
+      // Nothing is simulated while paused, show the exact state.
+      mdAccumulator = 0.0;
+      mdRenderAlpha = 1.0;
+      cRenderInterpolation::SetFrameAlpha(1.0);
     } else {
       //////////////////////////
       // Update logic.
-      while (mpLogicTimer->WantUpdate() && !GetGameIsDone()) {
+      const double speedMul = mpLogicTimer->GetSpeedMul();
+      mdAccumulator += frameTime * speedMul;
+
+      int maxUpdates = mpLogicTimer->GetMaxUpdates();
+      if (maxUpdates < 1)
+        maxUpdates = 1;
+      if (speedMul > 1.0)
+        maxUpdates = (int)(maxUpdates * speedMul);
+
+      // Count the ticks that will run this frame, so render interpolation
+      // knows which ticks are the last two (the only ones it uses).
+      {
+        double tempAccumulator = mdAccumulator;
+        while (tempAccumulator >= fixedDelta && mlTicksThisFrame < maxUpdates) {
+          tempAccumulator -= fixedDelta;
+          ++mlTicksThisFrame;
+        }
+      }
+
+      while (mdAccumulator >= fixedDelta &&
+             mlUpdatesOnCurrentFrame < maxUpdates && !GetGameIsDone()) {
         /////////////////////////////////////////////
         // Run Update callback in updater
+        cRenderInterpolation::BeginTick(mlUpdatesOnCurrentFrame >=
+                                        mlTicksThisFrame - 2);
         mpUpdater->RunMessage(eUpdateableMessage_PreUpdate, GetStepSize());
         mpUpdater->RunMessage(eUpdateableMessage_Update, GetStepSize());
         mpUpdater->RunMessage(eUpdateableMessage_PostUpdate, GetStepSize());
+        cRenderInterpolation::EndTick();
         bIsUpdated = true;
 
         if (mpInput->isQuitMessagePosted()) {
@@ -522,8 +579,30 @@ void cEngine::Run() {
 
         // Increase game time.
         mfGameTime += GetStepSize();
+        mdAccumulator -= fixedDelta;
+        ++mlUpdatesOnCurrentFrame;
       }
-      mpLogicTimer->EndUpdateLoop();
+
+      // Hit the update cap: throw away the time that could not be simulated.
+      if (mdAccumulator >= fixedDelta && mlUpdatesOnCurrentFrame >= maxUpdates)
+        mdAccumulator = std::fmod(mdAccumulator, fixedDelta);
+
+      // Alpha = how far into the next tick the frame is. The time spent
+      // running this frame's ticks is added, since the clock was read before
+      // they ran (otherwise frames with a tick look "older" than frames
+      // without one, felt as micro stutter at high frame rates). It is not
+      // taken from the accumulator, the next frame's delta includes it.
+      double timeSpentInTicks = 0.0;
+      if (mlUpdatesOnCurrentFrame > 0) {
+        timeSpentInTicks =
+            (cPlatform::GetApplicationTimeX() - mdCurrentTime) * speedMul;
+        if (timeSpentInTicks < 0.0)
+          timeSpentInTicks = 0.0;
+      }
+      mdRenderAlpha = (mdAccumulator + timeSpentInTicks) / fixedDelta;
+      if (mdRenderAlpha > 1.0)
+        mdRenderAlpha = 1.0;
+      cRenderInterpolation::SetFrameAlpha(mdRenderAlpha);
     }
 
     // if(GetGameIsDone()) Log("1\n");
@@ -554,11 +633,23 @@ void cEngine::Run() {
 
     ////////////////////////////////////
     // Render frame
-    // While throttling, behave as if FPS were limited (render only on update
-    // frames). Skip entirely when the window can't be presented to (minimized).
-    if (bCanRender && (mbLimitFPS == false || bIsUpdated)) {
+    // With render interpolation every frame shows a new state, so render
+    // every loop. Without it, LimitFPS renders only frames that ran a tick.
+    // Skip entirely when the window can't be presented to (minimized).
+    const bool bRenderEveryFrame =
+        mbLimitFPS == false || cRenderInterpolation::IsEnabled();
+    if (bCanRender && (bRenderEveryFrame || bIsUpdated)) {
       // Get the the from the last frame.
       UpdateFrameTimer();
+
+      // Read the newest mouse state right before drawing, so things driven
+      // every frame (mouse look, GUI cursor) use input as fresh as possible.
+      mpInput->FrameUpdate();
+      mpUpdater->RunMessage(eUpdateableMessage_OnFrameInput, mfFrameTime);
+
+      // Everything drawn this frame (including headless evaluators run from
+      // OnDraw) sees the interpolated world. Game logic never does.
+      cRenderInterpolation::BeginRender();
 
       // On draw callback sending that to gui, etc
       START_TIMING(OnDraw)
@@ -574,6 +665,8 @@ void cEngine::Run() {
       mpUpdater->RunMessage(eUpdateableMessage_OnPostRender, mfFrameTime);
       STOP_TIMING(PostRender)
 
+      cRenderInterpolation::EndRender();
+
       START_TIMING(FlushRender)
       // IMPORTANT: CHECK IF THIS IS PROBLEMATIC
       STOP_TIMING(FlushRender)
@@ -584,6 +677,8 @@ void cEngine::Run() {
       fNumOfTimes++;
       bIsUpdated = false;
       bBufferSwap = true;
+
+      WaitForFrameLimit();
     }
 
     // if(GetGameIsDone()) Log("4\n");
@@ -626,7 +721,46 @@ bool cEngine::GetGameIsDone() {
 }
 //-----------------------------------------------------------------------
 
-void cEngine::ResetLogicTimer() { mpLogicTimer->Reset(); }
+void cEngine::ResetLogicTimer() {
+  mpLogicTimer->Reset();
+  // Throw away the time that passed (loading etc), it is not simulated.
+  mdAccumulator = 0.0;
+  mdCurrentTime = cPlatform::GetApplicationTimeX();
+}
+
+//-----------------------------------------------------------------------
+
+void cEngine::SetFrameRateLimit(int alFPS) {
+  mlFrameRateLimit = alFPS > 0 ? alFPS : 0;
+  mdFrameLimitPeriod = mlFrameRateLimit > 0 ? 1.0 / (double)mlFrameRateLimit : 0.0;
+  mdNextFrameDeadline = cPlatform::GetApplicationTimeX();
+}
+
+//-----------------------------------------------------------------------
+
+void cEngine::WaitForFrameLimit() {
+  if (mdFrameLimitPeriod <= 0.0)
+    return;
+
+  double now = cPlatform::GetApplicationTimeX();
+
+  // Keep a fixed cadence (deadline += period) so frames are evenly spaced.
+  // If we fell behind by more than a frame (load, hitch), start over from now
+  // instead of trying to catch up with a burst of frames.
+  mdNextFrameDeadline += mdFrameLimitPeriod;
+  if (mdNextFrameDeadline < now - mdFrameLimitPeriod ||
+      mdNextFrameDeadline > now + mdFrameLimitPeriod)
+    mdNextFrameDeadline = now + mdFrameLimitPeriod;
+
+  // Sleep while there is plenty of time left (Sleep has ~1 ms granularity)...
+  while (mdNextFrameDeadline - now > 0.002) {
+    cPlatform::Sleep(1);
+    now = cPlatform::GetApplicationTimeX();
+  }
+  // ...and spin the last bit for accuracy.
+  while (now < mdNextFrameDeadline)
+    now = cPlatform::GetApplicationTimeX();
+}
 
 void cEngine::SetUpdatesPerSec(int alUpdatesPerSec) {
   mpLogicTimer->SetUpdatesPerSec(alUpdatesPerSec);

@@ -74,6 +74,15 @@ public:
 	bool mbFullscreen;
 	bool mbVSync;
 	bool mbAdaptiveVSync;
+	// Render interpolation: logic runs at a fixed rate, frames show the world
+	// interpolated between the last two ticks (uncapped, smooth frame rate).
+	bool mbRenderInterpolation;
+	// Mouse look every rendered frame instead of every logic tick.
+	bool mbFrameRateMouseLook;
+	// Optional frame rate cap, 0 = off.
+	int mlFrameRateLimit;
+	// Frames the CPU may queue ahead of the GPU (-1 = driver/swapchain default).
+	int mlMaxFramesAhead;
 	hpl::eRendererBackend mRendererBackend;
 	int mlTextureQuality;
 	int mlTextureFilter;

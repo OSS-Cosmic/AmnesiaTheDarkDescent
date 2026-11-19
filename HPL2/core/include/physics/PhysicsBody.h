@@ -73,6 +73,10 @@ namespace hpl {
 	class iPhysicsBody : public iEntity3D
 	{
 	public:
+		//Not drawn, its world matrix must never be touched by render interpolation
+		//(the transform callback pushes matrices to the physics engine).
+		bool IsRenderInterpolated(){ return false; }
+
 		iPhysicsBody(const tString &asName, iPhysicsWorld *apWorld,iCollideShape *apShape);
 		virtual ~iPhysicsBody();
 

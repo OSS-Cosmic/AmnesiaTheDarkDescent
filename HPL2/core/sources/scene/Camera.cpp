@@ -18,6 +18,7 @@
  */
 
 #include "scene/Camera.h"
+#include "scene/RenderInterpolation.h"
 
 #include "system/LowLevelSystem.h"
 
@@ -73,13 +74,27 @@ namespace hpl {
 
 		mfYawLimitMin =0;
 		mfYawLimitMax =0;
-		
+
+		mlInterpTick = -1;
+		mbInterpApplied = false;
+		mbInterpSnapPending = false;
+		m_mtxViewModelOffset = cMatrixf::Identity;
+		m_mtxInterpTickEndView = cMatrixf::Identity;
+		m_mtxInterpPrevTickEndView = cMatrixf::Identity;
+		mlInterpTickEndViewTick = -10;
+		mlInterpPrevTickEndViewTick = -10;
+		InterpGetState(mInterpTickStart);
+		mInterpTickEnd = mInterpTickStart;
+		mInterpSaved = mInterpTickStart;
+
+		cRenderInterpolation::AddCamera(this);
 	}
 
 	//-----------------------------------------------------------------------
 
 	cCamera::~cCamera()
 	{
+		cRenderInterpolation::RemoveCamera(this);
 	}
 
 	//-----------------------------------------------------------------------
@@ -535,6 +550,190 @@ namespace hpl {
 
 	//-----------------------------------------------------------------------
 	
+	//////////////////////////////////////////////////////////////////////////
+	// RENDER INTERPOLATION
+	//////////////////////////////////////////////////////////////////////////
+
+	//-----------------------------------------------------------------------
+
+	void cCamera::SnapRenderInterpolation()
+	{
+		mlInterpTick = -1;
+
+		//If called during a tick, that tick must not be interpolated either.
+		mbInterpSnapPending = true;
+	}
+
+	//-----------------------------------------------------------------------
+
+	void cCamera::InterpBeginTick()
+	{
+		InterpGetState(mInterpTickStart);
+	}
+
+	//-----------------------------------------------------------------------
+
+	void cCamera::InterpEndTick(int alTick, bool abSnap, float afSnapDistance)
+	{
+		InterpGetState(mInterpTickEnd);
+
+		//Views used to move view model entities (hands) along with the camera
+		m_mtxInterpPrevTickEndView = m_mtxInterpTickEndView;
+		mlInterpPrevTickEndViewTick = mlInterpTickEndViewTick;
+		m_mtxInterpTickEndView = GetViewMatrix();
+		mlInterpTickEndViewTick = alTick;
+		if(abSnap || mbInterpSnapPending)
+		{
+			mlInterpPrevTickEndViewTick = -10;
+		}
+
+		if(abSnap || mbInterpSnapPending)
+		{
+			mbInterpSnapPending = false;
+			mlInterpTick = -1;
+			return;
+		}
+
+		////////////////////////////
+		//Teleport or big jump in rotation, do not interpolate.
+		cVector3f vDelta = mInterpTickEnd.mvPosition - mInterpTickStart.mvPosition;
+		if( vDelta.SqrLength() > afSnapDistance * afSnapDistance ||
+				cMath::Abs(mInterpTickEnd.mfYaw - mInterpTickStart.mfYaw) > kPif ||
+				cMath::Abs(mInterpTickEnd.mfPitch - mInterpTickStart.mfPitch) > kPif ||
+				cMath::Abs(mInterpTickEnd.mfRoll - mInterpTickStart.mfRoll) > kPif)
+		{
+			mlInterpTick = -1;
+			return;
+		}
+
+		mlInterpTick = alTick;
+	}
+
+	//-----------------------------------------------------------------------
+
+	void cCamera::InterpApply(float afT, int alCurrentTick)
+	{
+		mbInterpApplied = false;
+
+		if(mlInterpTick != alCurrentTick || afT >= 1.0f)
+		{
+			return;
+		}
+
+		InterpGetState(mInterpSaved);
+
+		////////////////////////////
+		// The current state minus the part of the last tick's change that "has not happened yet".
+		// Anything changed after the tick (mouse look done every frame) is kept as is.
+		const float fBack = 1.0f - afT;
+
+		cInterpState renderState = mInterpSaved;
+		renderState.mvPosition = mInterpSaved.mvPosition - (mInterpTickEnd.mvPosition - mInterpTickStart.mvPosition) * fBack;
+		renderState.mfYaw = mInterpSaved.mfYaw - (mInterpTickEnd.mfYaw - mInterpTickStart.mfYaw) * fBack;
+		renderState.mfPitch = mInterpSaved.mfPitch - (mInterpTickEnd.mfPitch - mInterpTickStart.mfPitch) * fBack;
+		renderState.mfRoll = mInterpSaved.mfRoll - (mInterpTickEnd.mfRoll - mInterpTickStart.mfRoll) * fBack;
+		renderState.mfFOV = mInterpSaved.mfFOV - (mInterpTickEnd.mfFOV - mInterpTickStart.mfFOV) * fBack;
+		renderState.mfAspect = mInterpSaved.mfAspect - (mInterpTickEnd.mfAspect - mInterpTickStart.mfAspect) * fBack;
+
+		//Keep inside limits, a frame look change may have pushed the current pitch to the limit.
+		if(mfPitchLimitMin != 0 || mfPitchLimitMax != 0)
+		{
+			renderState.mfPitch = cMath::Clamp(renderState.mfPitch, mfPitchLimitMin, mfPitchLimitMax);
+		}
+		if(mfYawLimitMin != 0 || mfYawLimitMax != 0)
+		{
+			renderState.mfYaw = cMath::Clamp(renderState.mfYaw, mfYawLimitMin, mfYawLimitMax);
+		}
+
+		//Matrix rotation mode: undo the rest of the tick's rotation.
+		if(mRotateMode == eCameraRotateMode_Matrix &&
+				cRenderInterpolation::MatrixEqual(mInterpTickStart.m_mtxRotation, mInterpTickEnd.m_mtxRotation) == false)
+		{
+			cMatrixf mtxTickRot = cRenderInterpolation::InterpolateMatrix(mInterpTickStart.m_mtxRotation, mInterpTickEnd.m_mtxRotation, afT);
+			//view rotation: R_render = R_interp * inv(R_tickEnd) * R_now   (rotations, so inverse = transpose)
+			cMatrixf mtxUndo = cMath::MatrixMul(mtxTickRot, mInterpTickEnd.m_mtxRotation.GetTranspose());
+			renderState.m_mtxRotation = cMath::MatrixMul(mtxUndo, mInterpSaved.m_mtxRotation);
+		}
+
+		InterpSetState(renderState);
+		mbInterpApplied = true;
+	}
+
+	//-----------------------------------------------------------------------
+
+	cVector3f cCamera::GetRenderPitchYawRoll()
+	{
+		cVector3f vAngles(mfPitch, mfYaw, mfRoll);
+
+		float fT = cRenderInterpolation::GetAlpha();
+		if(cRenderInterpolation::IsEnabled() == false || mlInterpTick != cRenderInterpolation::GetTick() || fT >= 1.0f)
+		{
+			return vAngles;
+		}
+
+		const float fBack = 1.0f - fT;
+		vAngles.x -= (mInterpTickEnd.mfPitch - mInterpTickStart.mfPitch) * fBack;
+		vAngles.y -= (mInterpTickEnd.mfYaw - mInterpTickStart.mfYaw) * fBack;
+		vAngles.z -= (mInterpTickEnd.mfRoll - mInterpTickStart.mfRoll) * fBack;
+
+		if(mfPitchLimitMin != 0 || mfPitchLimitMax != 0)
+		{
+			vAngles.x = cMath::Clamp(vAngles.x, mfPitchLimitMin, mfPitchLimitMax);
+		}
+
+		return vAngles;
+	}
+
+	//-----------------------------------------------------------------------
+
+	void cCamera::InterpRestore()
+	{
+		if(mbInterpApplied == false)
+		{
+			return;
+		}
+		mbInterpApplied = false;
+
+		InterpSetState(mInterpSaved);
+	}
+
+	//-----------------------------------------------------------------------
+
+	void cCamera::InterpGetState(cInterpState &aState)
+	{
+		aState.mvPosition = mvPosition;
+		aState.mfPitch = mfPitch;
+		aState.mfYaw = mfYaw;
+		aState.mfRoll = mfRoll;
+		aState.mfFOV = mfFOV;
+		aState.mfAspect = mfAspect;
+		aState.m_mtxRotation = m_mtxMatrixRotation;
+	}
+
+	void cCamera::InterpSetState(const cInterpState &aState)
+	{
+		//Written directly (no setters): no limits, no node update, exact restore.
+		bool bProjChanged = mfFOV != aState.mfFOV || mfAspect != aState.mfAspect;
+
+		mvPosition = aState.mvPosition;
+		mfPitch = aState.mfPitch;
+		mfYaw = aState.mfYaw;
+		mfRoll = aState.mfRoll;
+		mfFOV = aState.mfFOV;
+		mfAspect = aState.mfAspect;
+		m_mtxMatrixRotation = aState.m_mtxRotation;
+
+		mbViewUpdated = true;
+		mbMoveUpdated = true;
+		mbFrustumUpdated = true;
+		if(bProjChanged)
+		{
+			mbProjectionUpdated = true;
+		}
+	}
+
+	//-----------------------------------------------------------------------
+
 	//////////////////////////////////////////////////////////////////////////
 	// PRIVATE METHODS
 	//////////////////////////////////////////////////////////////////////////

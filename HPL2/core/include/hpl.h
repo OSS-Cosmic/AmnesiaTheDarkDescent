@@ -121,6 +121,7 @@
 #include "scene/Viewport.h"
 #include "scene/World.h"
 #include "scene/Camera.h"
+#include "scene/RenderInterpolation.h"
 #include "scene/RenderableSet.h"
 #include "scene/MeshEntity.h"
 #include "scene/Light.h"

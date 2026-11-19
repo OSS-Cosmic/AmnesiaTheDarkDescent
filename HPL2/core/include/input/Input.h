@@ -62,6 +62,12 @@ namespace hpl {
 		 * Updates the input, called by cEngine
 		 */
 		void Update(float afTimeStep);
+
+		/**
+		 * Called by the engine once per rendered frame, right before drawing.
+		 * Samples the newest mouse state (see iMouse::FrameUpdate).
+		 */
+		void FrameUpdate();
 		
 		/**
 		 * Create and add a new action. The Name must be unique, and the Id is optional

@@ -45,6 +45,7 @@ namespace hpl {
 	//-----------------------------------------
 
 	class cNode3D;
+	class cCamera;
 
 	//-----------------------------------------
 
@@ -118,8 +119,57 @@ namespace hpl {
 		inline int GetIteratorCount(){ return mlIteratorCount;}
 		inline void SetIteratorCount(const int alX){ mlIteratorCount = alX;}
 
+		/**
+		 * Makes the next render interpolation snapshot of this entity (and its
+		 * subclass state) start fresh, so a teleport is not smeared over a frame.
+		 */
+		void SnapRenderInterpolation();
+
+		/**
+		 * Return false for entities that are never drawn (physics bodies, sounds...),
+		 * so render interpolation does not spend time on them.
+		 */
+		virtual bool IsRenderInterpolated(){ return true; }
+
+		/**
+		 * View model mode: this entity (and everything attached to it) is interpolated relative
+		 * to the camera and drawn relative to the camera as it is rendered (incl. per frame mouse
+		 * look). Use for things glued to the view, like the player's hands. NULL turns it off.
+		 */
+		void SetRenderInterpCamera(cCamera *apCamera);
+		cCamera *GetRenderInterpCamera(){ return mpInterpCamera; }
+		/** The view model camera of this entity or the first ancestor that has one. */
+		cCamera *FindRenderInterpCamera();
+
 	protected:
 		virtual void OnTransformUpdated(){}
+
+		////////////////////////////////////
+		// Render interpolation hooks (see scene/RenderInterpolation.h)
+
+		/**
+		 * Called after a tick for every touched entity. Store the state that should be
+		 * interpolated. abSnap means the history is invalid (teleport / first time).
+		 * Return true if there is non-transform state that differs between the two
+		 * last ticks and should be interpolated.
+		 */
+		virtual bool OnRenderInterpSnapshot(bool abSnap){ return false; }
+		/** Write the interpolated (non-transform) render state. Called after the transform was applied. */
+		virtual void OnRenderInterpApply(float afT){}
+		/** Put the exact simulation state back. Called after the transform was restored. */
+		virtual void OnRenderInterpRestore(){}
+		/**
+		 * Make sure all cached world transforms owned by this entity are up to date
+		 * (so nothing is lazily computed from an interpolated parent during rendering).
+		 */
+		virtual void OnRenderInterpResolve(){ UpdateWorldTransform(); }
+
+		/**
+		 * Writes a world matrix directly (used by render interpolation). Bumps the
+		 * transform count and runs callbacks, but does not touch children or the
+		 * local matrix.
+		 */
+		void SetRenderWorldMatrix(const cMatrixf& a_mtxWorld);
 		
 		cNode3D* mpParentNode;
 
@@ -150,8 +200,16 @@ namespace hpl {
 		tNode3DList mlstNodeChildren;
 		
 		int mlIteratorCount;
-	private:
+
 		void UpdateWorldTransform();
+
+	private:
+		friend class cRenderInterpolation;
+
+		int mlInterpTouchIdx;
+		int mlInterpActiveIdx;
+		bool mbInterpSnap;
+		cCamera *mpInterpCamera;
 	};
 
 };

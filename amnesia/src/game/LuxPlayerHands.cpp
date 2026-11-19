@@ -51,6 +51,26 @@ cLuxPlayerHands::cLuxPlayerHands(cLuxPlayer *apPlayer) : iLuxPlayerHelper(apPlay
 	mlMaxCamRotations = gpBase->mpGameCfg->GetInt("Player_General", "HandsRotationSmoothNum", 0);
 	mfPosAddMul = gpBase->mpGameCfg->GetFloat("Player_General", "HandsPosAddMul", 0);
 
+	// Time constant equal to the per tick rotation smoothing (the weighted
+	// average of the last HandsRotationSmoothNum tick rotations).
+	mfSwayTimeConst = 0;
+	if(mlMaxCamRotations > 1)
+	{
+		float fN = (float)mlMaxCamRotations;
+		float fWeightSum = 0;
+		float fAgeSum = 0;
+		for(size_t i = 1; i <= mlMaxCamRotations; ++i)
+		{
+			float fWeight = (float)i / fN;
+			fWeight *= fWeight;
+			fWeightSum += fWeight;
+			fAgeSum += fWeight * (fN - (float)i);
+		}
+		mfSwayTimeConst = (fAgeSum / fWeightSum) * gpBase->mpEngine->GetStepSize();
+	}
+	mvSwayRotation = 0;
+	mbSwayValid = false;
+
 	mpHandsMesh = NULL;
 
 }
@@ -257,6 +277,49 @@ void cLuxPlayerHands::PostUpdate(float afTimeStep)
 
 //-----------------------------------------------------------------------
 
+static float WrapAngleDelta(float afX)
+{
+	while(afX > kPif) afX -= k2Pif;
+	while(afX < -kPif) afX += k2Pif;
+	return afX;
+}
+
+void cLuxPlayerHands::OnDraw(float afFrameTime)
+{
+	if(mpHandsEntity==NULL || cRenderInterpolation::IsEnabled()==false) return;
+
+	cCamera *pCam = mpPlayer->GetCamera();
+	cVector3f vTarget = pCam->GetRenderPitchYawRoll();
+
+	float fDelta = afFrameTime;
+	if(fDelta < 0) fDelta = 0;
+	if(fDelta > 0.25f) fDelta = 0.25f;
+
+	if(mbSwayValid==false || mfSwayTimeConst <= 0)
+	{
+		mvSwayRotation = vTarget;
+		mbSwayValid = true;
+	}
+	else
+	{
+		float fFollow = 1.0f - expf(-fDelta / mfSwayTimeConst);
+		cVector3f vDiff(WrapAngleDelta(vTarget.x - mvSwayRotation.x),
+						WrapAngleDelta(vTarget.y - mvSwayRotation.y),
+						WrapAngleDelta(vTarget.z - mvSwayRotation.z));
+
+		if(cMath::Abs(vDiff.x) > kPi2f || cMath::Abs(vDiff.y) > kPi2f || cMath::Abs(vDiff.z) > kPi2f)
+			mvSwayRotation = vTarget;
+		else
+			mvSwayRotation = vTarget - vDiff * (1.0f - fFollow);
+	}
+
+	cMatrixf mtxCam = cMath::MatrixRotate(vTarget, eEulerRotationOrder_ZXY);
+	cMatrixf mtxSway = cMath::MatrixRotate(mvSwayRotation, eEulerRotationOrder_ZXY);
+	pCam->SetViewModelOffset(cMath::MatrixMul(mtxSway, mtxCam.GetTranspose()));
+}
+
+//-----------------------------------------------------------------------
+
 void cLuxPlayerHands::OnMapEnter(cLuxMap *apMap)
 {
 	//////////////////////////
@@ -270,6 +333,7 @@ void cLuxPlayerHands::OnMapEnter(cLuxMap *apMap)
 	}
 
 	mlstCamRotations.clear();
+	mbSwayValid = false;
 }
 
 //-----------------------------------------------------------------------
@@ -424,6 +488,7 @@ void cLuxPlayerHands::SetCurrentHandObject(iLuxHandObject *apObject)
 		msCurrentAnim = apObject->GetAnimDraw();
 		mpHandsEntity->SetVisible(true);
 		mpHandsEntity->UpdateLogic(0);
+		mpHandsEntity->SnapRenderInterpolation();
 
 		mHandState = eLuxHandsState_Draw;
 	}
@@ -468,6 +533,10 @@ void cLuxPlayerHands::CreateHandEntity(cLuxMap *apMap)
 	mpHandsEntity->Stop();
 	mpHandsEntity->SetRenderFlagBit(eRenderableFlag_ShadowCaster,false);
 	mpHandsEntity->SetRenderFlagBit(eRenderableFlag_VisibleInReflection,false);
+
+	//View model: the hands (and the lantern and lights attached to them) are drawn glued to the
+	//camera as it is rendered, so they follow per frame mouse look without lagging behind.
+	mpHandsEntity->SetRenderInterpCamera(mpPlayer->GetCamera());
 }
 
 void cLuxPlayerHands::DestroyHandEntity(cLuxMap *apMap)
@@ -529,27 +598,42 @@ void cLuxPlayerHands::UpdatePlayerHandsPos(float afTimeStep)
 	cCamera *pCam = mpPlayer->GetCamera();
 
 	cVector3f vRotation(pCam->GetPitch(), pCam->GetYaw(), pCam->GetRoll());
-	mlstCamRotations.push_back(vRotation);
-	if(mlstCamRotations.size() > mlMaxCamRotations) mlstCamRotations.pop_front();
-	
-	////////////////////////////////////////
-	// Iterate all of the saved rotations and calculate a new
-	cVector3f vFinalRot = 0;
-	float fWeightTotal =0;
-	float fCount = 1.0f;
+	cVector3f vFinalRot = vRotation;
 
-	tVector3fListIt it = mlstCamRotations.begin();
-	for(; it != mlstCamRotations.end(); ++it)
+	if(cRenderInterpolation::IsEnabled())
 	{
-		float fWeight = fCount / ((float)mlstCamRotations.size());
-		fWeight *= fWeight; //Exp increase...
-		++fCount;
-
-		vFinalRot += *it * fWeight;
-		fWeightTotal += fWeight;
+		////////////////////////////////////////
+		// Sway is added every frame (OnDraw), the hands follow the camera exactly here.
+		mlstCamRotations.clear();
 	}
+	else
+	{
+		pCam->SetViewModelOffset(cMatrixf::Identity);
+		mbSwayValid = false;
 
-	vFinalRot = vFinalRot / fWeightTotal;
+		mlstCamRotations.push_back(vRotation);
+		if(mlstCamRotations.size() > mlMaxCamRotations) mlstCamRotations.pop_front();
+
+		////////////////////////////////////////
+		// Iterate all of the saved rotations and calculate a new
+		vFinalRot = 0;
+		float fWeightTotal =0;
+		float fCount = 1.0f;
+
+		tVector3fListIt it = mlstCamRotations.begin();
+		for(; it != mlstCamRotations.end(); ++it)
+		{
+			float fWeight = fCount / ((float)mlstCamRotations.size());
+			fWeight *= fWeight; //Exp increase...
+			++fCount;
+
+			vFinalRot += *it * fWeight;
+			fWeightTotal += fWeight;
+		}
+
+		if(fWeightTotal > 0)	vFinalRot = vFinalRot / fWeightTotal;
+		else					vFinalRot = vRotation;
+	}
 	
 	////////////////////////////////////////
 	// Set hand matrix

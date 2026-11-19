@@ -193,10 +193,10 @@ void cLuxHintHandler::DrawHintText(float afFrameTime, cGuiSet *apGuiSet)
 {
 	if(gpBase->mbPTestActivated) return;
 
-	if(mbActive==false || mfAlpha<=0) return;
+	if(mbActive==false || mfAlpha.Get()<=0) return;
 
 	float fX = mHintOscill.val*0.5f;
-	cColor hintCol(1,fX,fX, mfAlpha);
+	cColor hintCol(1,fX,fX, mfAlpha.Get());
 	apGuiSet->DrawFont(mpFont, cVector3f(400,mfYPos,20),mvFontSize,hintCol, eFontAlign_Center, eGuiMaterial_FontNormal,
 		_W(" %ls"), kTranslate("Hints", "HINT:").c_str());
 
@@ -206,14 +206,14 @@ void cLuxHintHandler::DrawHintText(float afFrameTime, cGuiSet *apGuiSet)
 	mpFont->GetWordWrapRows(fMaxWidth,15, mvFontSize, msCurrentText, &vRows);
     if(vRows.size()==1)
 	{
-		apGuiSet->DrawFont(mpFont, cVector3f(400,fStartY,20),mvFontSize,cColor(1,mfAlpha), eFontAlign_Center, eGuiMaterial_FontNormal,
+		apGuiSet->DrawFont(mpFont, cVector3f(400,fStartY,20),mvFontSize,cColor(1,mfAlpha.Get()), eFontAlign_Center, eGuiMaterial_FontNormal,
 							_W(" %ls"), msCurrentText.c_str());
 	}
 	else
 	{
 		for(size_t i=0; i<vRows.size(); ++i)
 		{
-			apGuiSet->DrawFont(mpFont, cVector3f(400-fMaxWidth*0.5f, fStartY + (float)i* (mvFontSize.y+2.0f), 20),mvFontSize,cColor(1,mfAlpha), eFontAlign_Left, eGuiMaterial_FontNormal,
+			apGuiSet->DrawFont(mpFont, cVector3f(400-fMaxWidth*0.5f, fStartY + (float)i* (mvFontSize.y+2.0f), 20),mvFontSize,cColor(1,mfAlpha.Get()), eFontAlign_Left, eGuiMaterial_FontNormal,
 								_W(" %ls"), vRows[i].c_str());
 		}
 	}
@@ -223,7 +223,7 @@ void cLuxHintHandler::DrawHintText(float afFrameTime, cGuiSet *apGuiSet)
 	// Draw all the icons
 	for(size_t i = 0; i < mvHintIcons.size(); ++i)
 	{
-		apGuiSet->DrawGfx(mvHintIcons[i].mpGuiIcon, mvHintIcons[i].mvPosition, mvHintIcons[i].mvSize, cColor(1,mfAlpha), eGuiMaterial_Alpha);
+		apGuiSet->DrawGfx(mvHintIcons[i].mpGuiIcon, mvHintIcons[i].mvPosition, mvHintIcons[i].mvSize, cColor(1,mfAlpha.Get()), eGuiMaterial_Alpha);
 	}
 #endif
 }
